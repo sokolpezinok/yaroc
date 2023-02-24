@@ -1,9 +1,8 @@
 import paho.mqtt.client as mqtt
 from typing import Any
 from datetime import datetime
-import time
 import logging
-from connector import Connector
+from .connector import Connector
 
 
 class SimpleMqttConnector(Connector):
@@ -44,7 +43,7 @@ class SimpleMqttConnector(Connector):
     def send(
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
     ):
-        message = f"{code};{card_number};{mode};{sitime};{now}"
+        message = f"{code};{card_number};{mode};{sitime};{now-sitime}"
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
@@ -55,15 +54,3 @@ class SimpleMqttConnector(Connector):
         else:
             # TODO: store message_info to inquire later
             logging.info(f"Message sent, id = {message_info.mid}")
-        # work with message_info
-
-
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-mqtt_connector = SimpleMqttConnector("spe/47")
-for i in range(10):
-    mqtt_connector.send(46283, datetime.now(), datetime.now(), 53 + i, 18)
-    time.sleep(2)

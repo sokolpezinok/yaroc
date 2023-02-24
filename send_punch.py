@@ -2,6 +2,7 @@ from sportident import SIReaderSRR
 from time import sleep
 from datetime import datetime
 import sys
+import logging
 from connectors.mqtt import SimpleMqttConnector
 
 
@@ -20,6 +21,11 @@ except:
     print("Failed to connect to an SI station on any of the available serial ports.")
     exit()
 
+logging.basicConfig(
+    encoding="utf-8",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 mqtt_connector = SimpleMqttConnector(TOPIC)
 print("Insert SI-card to be read")
@@ -30,9 +36,11 @@ while True:
         continue
 
     data = srr_group.get_data()
-    print("Punch!")
     for punch in data["punches"]:
         now = datetime.now()
-        (time, code) = punch
+        (code, time) = punch
         card_number = data["card_number"]
+        logging.info(
+            f"{card_number} punched {code} at {time}, received after {now-time}"
+        )
         mqtt_connector.send(card_number, time, now, code, BEACON_CONTROL)

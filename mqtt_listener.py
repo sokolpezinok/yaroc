@@ -1,6 +1,7 @@
 import paho.mqtt.client as mqtt
 import logging
 
+
 def on_connect(client, userdata, flags, rc):
     del userdata, flags
     logging.info(f"Connected with result code {rc}")
