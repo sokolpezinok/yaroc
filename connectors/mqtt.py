@@ -42,7 +42,7 @@ class SimpleMqttConnector(Connector):
 
     def send(
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
-    ):
+    ) -> mqtt.MQTTMessageInfo:
         message = f"{code};{card_number};{mode};{sitime};{now-sitime}"
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
@@ -54,3 +54,4 @@ class SimpleMqttConnector(Connector):
         else:
             # TODO: store message_info to inquire later
             logging.info(f"Message sent, id = {message_info.mid}")
+        return message_info
