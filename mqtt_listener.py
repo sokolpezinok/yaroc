@@ -24,7 +24,9 @@ def on_message(client, userdata, msg):
 
     if len(split_message) == 4:
         with open("/home/lukas/gps.log", "a") as f:
-            f.write(f"{split_message[0]},{split_message[1]} ({split_message[2]} meter alt.) at {split_message[3]}\n")
+            f.write(
+                f"{split_message[0]},{split_message[1]} ({split_message[2]} meter alt.) at {split_message[3]}\n"
+            )
 
     logging.info(f"{msg.topic} {message}")
 

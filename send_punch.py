@@ -5,6 +5,11 @@ import sys
 import logging
 from connectors.mqtt import SimpleMqttConnector
 
+logging.basicConfig(
+    encoding="utf-8",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 BEACON_CONTROL = 18
 TOPIC = "spe/47"
@@ -16,16 +21,12 @@ try:
     else:
         # Find serial port automatically
         si = SIReaderSRR()
-    print("Connected to station on port " + si.port)
+    logging.info(f"Connected to station on port {si.port}")
 except:
-    print("Failed to connect to an SI station on any of the available serial ports.")
+    logging.error(
+        "Failed to connect to an SI station on any of the available serial ports."
+    )
     exit()
-
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 
 mqtt_connector = SimpleMqttConnector(TOPIC)
 print("Insert SI-card to be read")
@@ -43,4 +44,4 @@ while True:
         logging.info(
             f"{card_number} punched {code} at {time}, received after {now-time}"
         )
-        mqtt_connector.send(card_number, time, now, code, BEACON_CONTROL)
+        mqtt_connector.send_punch(card_number, time, now, code, BEACON_CONTROL)

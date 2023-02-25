@@ -20,8 +20,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
+
 def sendAt(command, back, timeout):
-    rec_buff = b''
+    rec_buff = b""
     ser.write((command + "\r\n").encode())
     time.sleep(timeout)
     if ser.inWaiting():
@@ -55,7 +56,7 @@ def getGpsPosition():
                 response = res.split("+CGNSINF:")
                 if len(response) >= 2:
                     sendAt("AT+CGNSPWR=0", "OK", 3)
-                    raw_coords = response[1].split(',')
+                    raw_coords = response[1].split(",")
                     coords = list(map(float, raw_coords[3:6]))
                     message = f"{coords[0]};{coords[1]};{coords[2]};{datetime.now()}"
                     log_message = f"{coords[0]},{coords[1]} ({coords[2]} alt, at {datetime.now()})"
@@ -66,7 +67,7 @@ def getGpsPosition():
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.connect(("127.0.0.1", 12345))
                     try:
-                        sock.sendall(bytes(message, encoding='utf-8'))
+                        sock.sendall(bytes(message, encoding="utf-8"))
                     finally:
                         sock.close()
                     return True
