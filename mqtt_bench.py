@@ -1,4 +1,5 @@
 import logging
+import paho.mqtt.client as mqtt
 from datetime import datetime
 import time
 from connectors.mqtt import SimpleMqttConnector
@@ -19,4 +20,9 @@ if __name__ == "__main__":
         time.sleep(2)
 
     for message_info in handles:
-        message_info.wait_for_publish(1)
+        while not mqtt_connector.client.is_connected():
+            time.sleep(2)
+
+        if message_info.rc == mqtt.MQTT_ERR_SUCCESS:
+            message_info.wait_for_publish(1)
+

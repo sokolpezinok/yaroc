@@ -1,4 +1,5 @@
 import paho.mqtt.client as mqtt
+from datetime import datetime
 import logging
 
 
@@ -15,6 +16,12 @@ def on_message(client, userdata, msg):
     del client, userdata
     # TODO: calculate latency
     message = msg.payload.decode("utf-8")
+    split_message = message.split(";")
+    if len(split_message) == 5:
+        sitime = datetime.fromisoformat(split_message[3])
+        total_latency = datetime.now() - sitime
+        message = f"{split_message[0]};{split_message[1]};{split_message[2]};{sitime};{total_latency};{split_message[4]}"
+
     logging.info(f"{msg.topic} {message}")
 
 

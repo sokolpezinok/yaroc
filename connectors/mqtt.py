@@ -11,7 +11,11 @@ class SimpleMqttConnector(Connector):
     def __init__(self, topic: str, name: None | str = None):
         def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
             del client, userdata, flags
-            logging.info("Connected with result code " + str(rc))
+            logging.info(f"Connected with result code {str(rc)}")
+
+        def on_disconnect(client: mqtt.Client, userdata: Any, rc):
+            del client, userdata
+            logging.error(f"Disconnected with result code {str(rc)}")
 
         def on_publish(client: mqtt.Client, userdata: Any, mid: int):
             del client, userdata
@@ -33,8 +37,9 @@ class SimpleMqttConnector(Connector):
         self.topic = topic
 
         self.client.on_connect = on_connect
+        self.client.on_disconnect = on_disconnect
         self.client.on_publish = on_publish
-        self.client.connect("broker.hivemq.com", 1883, 60)
+        self.client.connect("broker.hivemq.com", 1883, 35)
         self.client.loop_start()
 
     def __del__(self):
@@ -43,7 +48,7 @@ class SimpleMqttConnector(Connector):
     def send(
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
     ) -> mqtt.MQTTMessageInfo:
-        message = f"{code};{card_number};{mode};{sitime};{now-sitime}"
+        message = f"{code};{card_number};{mode};{sitime.isoformat()};{now-sitime}"
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
