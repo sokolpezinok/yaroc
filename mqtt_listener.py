@@ -22,6 +22,10 @@ def on_message(client, userdata, msg):
         total_latency = datetime.now() - sitime
         message = f"{split_message[0]};{split_message[1]};{split_message[2]};{sitime};{total_latency};{split_message[4]}"
 
+    if len(split_message) == 4:
+        with open("/home/lukas/gps.log", "a") as f:
+            f.write(f"{split_message[0]},{split_message[1]} ({split_message[2]} meter alt.) at {split_message[3]}\n")
+
     logging.info(f"{msg.topic} {message}")
 
 

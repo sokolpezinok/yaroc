@@ -34,6 +34,7 @@ if __name__ == "__main__":
                 if len(raw_coords) == 4:
                     coords = list(map(float, raw_coords[:3]))
                     timestamp = datetime.fromisoformat(raw_coords[3])
+                    logging.info("Sending GPS coordinates")
                     mqtt_connector.send_coords(
                         coords[0], coords[1], coords[2], timestamp
                     )
