@@ -4,5 +4,5 @@ from datetime import datetime
 
 class Connector(ABC):
     @abstractmethod
-    def send(self, card_number: int, sitime: datetime, now: datetime, code: int):
+    def send_punch(self, card_number: int, sitime: datetime, now: datetime, code: int):
         pass
