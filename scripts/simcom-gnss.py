@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Works for SIMCom modules with GNSS capabilities
+#TODO: https://pypi.org/project/attila/
 
 import serial
 import time

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import logging
@@ -18,6 +19,12 @@ def on_message(client, userdata, msg):
     message = msg.payload.decode("utf-8")
     split_message = message.split(";")
     if len(split_message) == 5:
+        if split_message[0].endswith('0'):
+            with open("/home/lukas/mqtt.log", "a") as f:
+                f.write(
+                    f"{split_message[0]} {datetime.now()}, dated {split_message[3]}\n"
+                )
+
         sitime = datetime.fromisoformat(split_message[3])
         total_latency = datetime.now() - sitime
         message = f"{split_message[0]};{split_message[1]};{split_message[2]};{sitime};{total_latency};{split_message[4]}"
