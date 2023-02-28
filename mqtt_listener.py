@@ -41,6 +41,7 @@ def on_message(client, userdata, msg):
                 f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
                 f"{split_message[2]}. Latency {total_latency}s.\n"
             )
+
     if len(split_message) == 2:
         orig_time = datetime.fromisoformat(split_message[1])
         total_latency = datetime.now() - orig_time
@@ -49,6 +50,7 @@ def on_message(client, userdata, msg):
             f.write(
                 f"{split_message[1]}: CSQ {csq}, {-114 + 2*csq} dBm, latency {total_latency}\n"
             )
+        message = f"{split_message[0]};{split_message[1]};{total_latency}"
 
     logging.info(f"{msg.topic} {message}")
 

@@ -104,6 +104,13 @@ def sendMqttMessages(messages):
     sendAt('AT+SMCONF="TOPIC","spe/47"', "OK", 0.1)
     sendAt("AT+SMCONN", "OK", 25)
 
+    csq = getCsq()
+    if csq is not None:
+        messages.append(f"{csq};{datetime.now()}")
+        logging.info(f"CSQ {csq} at {datetime.now()}")
+        with open("/home/lukas/events.log", "a") as f:
+            f.write(f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm\n")
+
     for message in messages:
         raw_message = message.encode()
         sendAt(f'AT+SMPUB="spe/47",{len(raw_message)},1,0', ">", 1)
@@ -128,13 +135,6 @@ try:
         logging.info(log_message)
         with open("/home/lukas/events.log", "a") as f:
             f.write(f"{log_message}\n")
-
-    csq = getCsq()
-    if csq is not None:
-        messages.append(f"{csq};{datetime.now()}")
-        logging.info(f"CSQ {csq} at {datetime.now()}")
-        with open("/home/lukas/events.log", "a") as f:
-            f.write(f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm\n")
 
     sendMqttMessages(messages)
 except:
