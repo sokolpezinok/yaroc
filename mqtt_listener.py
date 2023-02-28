@@ -15,25 +15,39 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     del client, userdata
-    # TODO: calculate latency
     message = msg.payload.decode("utf-8")
     split_message = message.split(";")
     if len(split_message) == 5:
         sitime = datetime.fromisoformat(split_message[3])
         total_latency = datetime.now() - sitime
 
-        if split_message[0].endswith('0'):
+        if split_message[0].endswith("0"):
             with open("/home/lukas/mqtt.log", "a") as f:
                 f.write(
-                    f"{split_message[0]} {datetime.now()}, dated {split_message[3]}, latency {total_latency}\n"
+                    f"{split_message[0]} {datetime.now()}, dated {split_message[3]}, "
+                    f"latency {total_latency}\n"
                 )
 
-        message = f"{split_message[0]};{split_message[1]};{split_message[2]};{sitime};{total_latency};{split_message[4]}"
+        message = (
+            f"{split_message[0]};{split_message[1]};{split_message[2]};"
+            f"{sitime};{total_latency};{split_message[4]}"
+        )
 
     if len(split_message) == 4:
-        with open("/home/lukas/gps.log", "a") as f:
+        orig_time = datetime.fromisoformat(split_message[3])
+        total_latency = datetime.now() - orig_time
+        with open("/home/lukas/events.log", "a") as f:
             f.write(
-                f"{split_message[0]},{split_message[1]} ({split_message[2]} meter alt.) at {split_message[3]}\n"
+                f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
+                f"{split_message[2]}. Latency {total_latency}s.\n"
+            )
+    if len(split_message) == 2:
+        orig_time = datetime.fromisoformat(split_message[1])
+        total_latency = datetime.now() - orig_time
+        csq = int(split_message[0])
+        with open("/home/lukas/events.log", "a") as f:
+            f.write(
+                f"{split_message[1]}: CSQ {csq}, {-114 + 2*csq} dBm, latency {total_latency}\n"
             )
 
     logging.info(f"{msg.topic} {message}")
