@@ -18,7 +18,7 @@ time_count = 0
 
 logging.basicConfig(
     encoding="utf-8",
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
@@ -58,7 +58,6 @@ def getGpsPosition():
         (answer, res) = sendAt("AT+CGNSINF", "+CGNSINF: ", 13)
         if 1 == answer:
             if "0.000000" in res or ",,,,,,,," in res:
-                logging.debug(res)
                 logging.warning("GPS is not ready")
             else:
                 response = res.split("+CGNSINF:")
@@ -94,6 +93,7 @@ def checkStart():
 
 
 def sendMqttMessages(messages):
+    time.sleep(5)
     sendAt("AT+CPSI?", "OK", 0.5)
     sendAt("AT+CGREG?", "+CGREG: 0,1", 0.2)
     sendAt('AT+CNCFG=0,1,"trial-nbiot.corp"', "OK", 2)
@@ -102,7 +102,7 @@ def sendMqttMessages(messages):
     sendAt('AT+SMCONF="KEEPTIME",60', "OK", 0.1)
     sendAt('AT+SMCONF="CLIENTID","47"', "OK", 0.1)
     sendAt('AT+SMCONF="TOPIC","spe/47"', "OK", 0.1)
-    sendAt("AT+SMCONN", "OK", 10)
+    sendAt("AT+SMCONN", "OK", 25)
 
     for message in messages:
         raw_message = message.encode()
@@ -118,7 +118,8 @@ try:
     checkStart()
     messages = []
     # coords = getGpsPosition()
-    coords = [48.28525, 17.271205, 195.89]
+    # Note: turn off GPS as it's killing other functionality
+    coords = None
     if coords is not None:
         messages.append(f"{coords[0]};{coords[1]};{coords[2]};{datetime.now()}")
         log_message = (
