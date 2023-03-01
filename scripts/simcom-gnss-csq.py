@@ -95,7 +95,12 @@ def checkStart():
 def sendMqttMessages(messages):
     time.sleep(5)
     sendAt("AT+CPSI?", "OK", 0.5)
-    sendAt("AT+CGREG?", "+CGREG: 0,1", 0.2)
+    (answer, res) = sendAt("AT+CGREG?", "+CGREG: 0,1", 0.2)
+    if answer != 1:
+        logging.warning("Not connected yet")
+        getCsq()
+        time.sleep(5)
+        return
     sendAt('AT+CNCFG=0,1,"trial-nbiot.corp"', "OK", 2)
     sendAt("AT+CNACT=0,1", "OK", 2)
     sendAt('AT+SMCONF="URL",18.193.153.59,1883', "OK", 0.1)
@@ -113,9 +118,9 @@ def sendMqttMessages(messages):
 
     for message in messages:
         raw_message = message.encode()
-        sendAt(f'AT+SMPUB="spe/47",{len(raw_message)},1,0', ">", 1)
+        sendAt(f'AT+SMPUB="spe/47",{len(raw_message)},1,0', ">", 5)
         ser.write(raw_message)
-        time.sleep(10)
+        time.sleep(5)
 
     sendAt("AT+SMDISC", "OK", 1)
     sendAt("AT+CNACT=0,0", "OK", 1)
