@@ -34,13 +34,16 @@ def on_message(client, userdata, msg):
         )
 
     if len(split_message) == 4:
-        orig_time = datetime.fromisoformat(split_message[3])
-        total_latency = datetime.now() - orig_time
-        with open("/home/lukas/events.log", "a") as f:
-            f.write(
-                f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
-                f"{split_message[2]}. Latency {total_latency}s.\n"
-            )
+        try:
+            orig_time = datetime.fromisoformat(split_message[3])
+            total_latency = datetime.now() - orig_time
+            with open("/home/lukas/events.log", "a") as f:
+                f.write(
+                    f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
+                    f"{split_message[2]}. Latency {total_latency}s.\n"
+                )
+        except:
+            logging.error("Failed to parse time")
 
     if len(split_message) == 2:
         orig_time = datetime.fromisoformat(split_message[1])
