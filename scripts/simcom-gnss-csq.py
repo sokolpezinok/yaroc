@@ -28,33 +28,35 @@ logging.basicConfig(
 )
 
 
-def send_at(command: str, queries=[str]):
+def send_at(command: str, queries=[str]) -> ([str], [str]):
+    res = []
     try:
         opt_response = atrunenv.exec(command)
     except ATRuntimeError as err:
         logging.error(f"Runtime error {err}")
-        return None
+        return (res, None)
     except ATScriptSyntaxError as err:
         logging.error(f"Syntax error {err}")
-        return None
+        return (res, None)
     except ATSerialPortError:
         logging.error("Failed to open serial port")
-        return None
+        return (res, None)
     except:
-        return None
+        return (res, None)
 
+    if opt_response is None:
+        return (res, None)
     logging.debug(f"{opt_response.full_response}: {opt_response.response}")
-    if opt_response is None or opt_response.response is None:
-        return None
+    if opt_response.response is None:
+        return (res, None)
     response = opt_response
-    res = []
     for query in queries:
         res.append(response.get_collectable(query))
-    return res
+    return (opt_response.full_response, res)
 
 
 def getCsq():
-    ret = send_at('AT+CSQ;;CSQ;;0;;5;;["CSQ: ?{rssi::[0-9]+},99"]', ["rssi"])
+    (_, ret) = send_at('AT+CSQ;;CSQ;;0;;5;;["CSQ: ?{rssi::[0-9]+},99"]', ["rssi"])
     if ret is None:
         return 0
     return int(ret[0])
@@ -66,7 +68,7 @@ def getGpsPosition():
     send_at("AT+CGNSPWR=1;;OK;;0;;0.1")
     send_at("AT+CGNSCOLD;;OK;;200;;1")
     for _ in range(10):
-        (answer, res) = send_at("AT+CGNSINF", "+CGNSINF: ")
+        (response, res) = send_at("AT+CGNSINF", "+CGNSINF: ")
         if 1 == answer:
             if "0.000000" in res or ",,,,,,,," in res:
                 logging.warning("GPS is not ready")
@@ -98,7 +100,7 @@ def checkStart():
 
 def sendMqttMessages(messages):
     send_at("AT+CPSI?;;OK;;0;;1")
-    res = send_at("AT+CGREG?;;CGREG: 0,1;;")
+    (_, res) = send_at("AT+CGREG?;;CGREG: 0,1;;")
     if res is None:
         logging.warning("Not connected yet")
         csq = getCsq()
@@ -112,7 +114,7 @@ def sendMqttMessages(messages):
     send_at('AT+SMCONF="CLIENTID","47";;OK')
     send_at('AT+SMCONF="TOPIC","spe/47";;OK')
     send_at("AT+SMCONN;;OK;;3000;;25")
-    send_at(";;;;20000;;1")
+    send_at(";;;;5000;;1")
 
     csq = getCsq()
     if csq is not None:
