@@ -113,8 +113,13 @@ def sendMqttMessages(messages):
     send_at('AT+SMCONF="KEEPTIME",60;;OK')
     send_at('AT+SMCONF="CLIENTID","47";;OK')
     send_at('AT+SMCONF="TOPIC","spe/47";;OK')
-    send_at("AT+SMCONN;;OK;;3000;;25")
+    send_at("AT+SMCONN;;OK;;1000;;25")
     send_at(";;;;5000;;1")
+
+    for _ in range(10):
+        _, res = send_at("AT;;OK;;5000;;1")
+        if res is not None:
+            break
 
     csq = getCsq()
     if csq is not None:
@@ -126,7 +131,10 @@ def sendMqttMessages(messages):
     for message in messages:
         send_at(f'AT+SMPUB="spe/47",{len(message)},1,0;;>;;0;;1')
         send_at(f"{message};;;;1000;;20")
-        send_at(";;;;2000;;10")
+        for _ in range(10):
+            _, res = send_at("AT;;OK;;5000;;1")
+            if res is not None:
+                break
 
     send_at("AT+SMDISC;;OK;;2000;;5")
     send_at("AT+CNACT=0,0;;OK")
