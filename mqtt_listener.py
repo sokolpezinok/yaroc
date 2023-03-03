@@ -51,7 +51,7 @@ def on_message(client, userdata, msg):
         csq = int(split_message[0])
         with open("/home/lukas/events.log", "a") as f:
             f.write(
-                f"{split_message[1]}: CSQ {csq}, {-114 + 2*csq} dBm, latency {total_latency}\n"
+                f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm, at {orig_time}, latency {total_latency}\n"
             )
         message = f"{split_message[0]};{split_message[1]};{total_latency}"
 
