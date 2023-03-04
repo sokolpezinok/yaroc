@@ -57,9 +57,9 @@ def send_at(command: str, queries=[str]) -> ([str], [str]):
 
 def getCsq():
     (_, ret) = send_at('AT+CSQ;;CSQ;;0;;5;;["CSQ: ?{rssi::[0-9]+},99"]', ["rssi"])
-    if ret is None:
-        return 0
-    return int(ret[0])
+    if ret is not None:
+        return int(ret[0])
+    return ret
 
 
 def getGpsPosition():
@@ -108,6 +108,11 @@ def sendMqttMessages(messages):
         time.sleep(5)
         return
     send_at('AT+CNCFG=0,1,"trial-nbiot.corp";;OK')
+    for _ in range(5):
+        _, res = send_at("AT;;OK;;2000;;1")
+        if res is not None:
+            break
+
     send_at("AT+CNACT=0,1;;OK;;200;;30")
     send_at('AT+SMCONF="URL",18.193.153.59,1883;;OK;;1000')
     send_at('AT+SMCONF="KEEPTIME",60;;OK')
@@ -116,25 +121,28 @@ def sendMqttMessages(messages):
     send_at("AT+SMCONN;;OK;;1000;;25")
     send_at(";;;;5000;;1")
 
-    for _ in range(10):
+    for _ in range(40):
         _, res = send_at("AT;;OK;;5000;;1")
         if res is not None:
             break
 
-    csq = getCsq()
-    if csq is not None:
-        messages.append(f"{csq};{datetime.now()}")
-        logging.info(f"CSQ {csq} at {datetime.now()}")
-        with open("/home/lukas/events.log", "a") as f:
-            f.write(f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm\n")
+    for _ in range(5):
+        csq = getCsq()
+        appendage = []
+        if csq is not None:
+            appendage.append(f"{csq};{datetime.now()}")
+            logging.info(f"CSQ {csq} at {datetime.now()}")
+            with open("/home/lukas/events.log", "a") as f:
+                f.write(f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm\n")
 
-    for message in messages:
-        send_at(f'AT+SMPUB="spe/47",{len(message)},1,0;;>;;0;;1')
-        send_at(f"{message};;;;1000;;20")
-        for _ in range(10):
-            _, res = send_at("AT;;OK;;5000;;1")
-            if res is not None:
-                break
+        for message in messages + appendage:
+            send_at(f'AT+SMPUB="spe/47",{len(message)},1,0;;>;;0;;1')
+            send_at(f"{message};;;;1000;;20")
+            for _ in range(10):
+                _, res = send_at("AT;;OK;;5000;;1")
+                if res is not None:
+                    break
+        time.sleep(20)
 
     send_at("AT+SMDISC;;OK;;2000;;5")
     send_at("AT+CNACT=0,0;;OK")
