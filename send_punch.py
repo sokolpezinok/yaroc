@@ -48,14 +48,14 @@ while True:
             f"{card_number} punched {code} at {time}, received after {now-time}"
         )
         mqtt_connector.send_punch(card_number, time, now, code, BEACON_CONTROL)
-    if isinstance(data['start'], datetime):
-        time = data['start']
+    if isinstance(data["start"], datetime):
+        time = data["start"]
         logging.info(
             f"{card_number} punched start (8) at {time}, received after {now-time}"
         )
         mqtt_connector.send_punch(card_number, time, now, 8, START)
-    if isinstance(data['finish'], datetime):
-        time = data['finish']
+    if isinstance(data["finish"], datetime):
+        time = data["finish"]
         logging.info(
             f"{card_number} punched start (8) at {time}, received after {now-time}"
         )

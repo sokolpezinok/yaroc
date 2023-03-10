@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import requests
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import logging
@@ -20,16 +21,36 @@ def on_message(client, userdata, msg):
     if len(split_message) == 5:
         sitime = datetime.fromisoformat(split_message[3])
         total_latency = datetime.now() - sitime
+        now = datetime.now()
+        code = int(split_message[0])
 
-        if split_message[0].endswith("0"):
+        if code % 10 == 0:
             with open("/home/lukas/mqtt.log", "a") as f:
                 f.write(
-                    f"{split_message[0]} {datetime.now()}, dated {split_message[3]}, "
+                    f"{code:03} {now}, dated {split_message[3]}, "
                     f"latency {total_latency}\n"
                 )
 
+        data = {
+            "control1": split_message[0],
+            "sinumber1": split_message[1],
+            "stationmode1": split_message[2],
+            "date1": sitime.strftime("%Y-%m-%d"),
+            "sitime1": sitime.strftime("%H:%M:%S"),
+            "ms1": sitime.strftime("%f")[:3],
+            "roctime1": split_message[4][:19],
+            "macaddr": "b827eb1d3c4f",
+            "1": "f",
+            "length": str(118 + sum(map(len, split_message[:3]))),
+        }
+
+        response = requests.post(
+            "https://roc.olresultat.se/ver7.1/sendpunches_v2.php", data=data
+        )
+        # TODO: check response
+
         message = (
-            f"{split_message[0]};{split_message[1]};{split_message[2]};"
+            f"{code:03};{split_message[1]};{split_message[2]};"
             f"{sitime};{total_latency};{split_message[4]}"
         )
 
