@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from sportident import SIReaderSRR
 from time import sleep
 from datetime import datetime
@@ -11,6 +12,8 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
+START = 3
+FINISH = 4
 BEACON_CONTROL = 18
 TOPIC = "spe/47"
 
@@ -37,11 +40,23 @@ while True:
         continue
 
     data = srr_group.get_data()
+    now = datetime.now()
+    card_number = data["card_number"]
     for punch in data["punches"]:
-        now = datetime.now()
         (code, time) = punch
-        card_number = data["card_number"]
         logging.info(
             f"{card_number} punched {code} at {time}, received after {now-time}"
         )
         mqtt_connector.send_punch(card_number, time, now, code, BEACON_CONTROL)
+    if isinstance(data['start'], datetime):
+        time = data['start']
+        logging.info(
+            f"{card_number} punched start (8) at {time}, received after {now-time}"
+        )
+        mqtt_connector.send_punch(card_number, time, now, 8, START)
+    if isinstance(data['finish'], datetime):
+        time = data['finish']
+        logging.info(
+            f"{card_number} punched start (8) at {time}, received after {now-time}"
+        )
+        mqtt_connector.send_punch(card_number, time, now, 10, FINISH)
