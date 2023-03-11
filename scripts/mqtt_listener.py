@@ -44,10 +44,13 @@ def on_message(client, userdata, msg):
             "length": str(118 + sum(map(len, split_message[:3]))),
         }
 
-        response = requests.post(
-            "https://roc.olresultat.se/ver7.1/sendpunches_v2.php", data=data
-        )
-        # TODO: check response
+        try:
+            response = requests.post(
+                "https://roc.olresultat.se/ver7.1/sendpunches_v2.php", data=data
+            )
+            logging.debug(f"Got response {response.status_code}: {response.text}")
+        except requests.exceptions.RequestException as e:
+            logging.error(e)
 
         message = (
             f"{code:03};{split_message[1]};{split_message[2]};"

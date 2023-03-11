@@ -49,22 +49,15 @@ class SimpleMqttConnector(Connector):
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
     ) -> mqtt.MQTTMessageInfo:
         message = f"{code};{card_number};{mode};{sitime.isoformat()};{now}"
-        message_info = self.client.publish(self.topic, message, qos=1)
-        if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
-            logging.error("Message not sent: no connection")
-            # TODO: add to unsent messages
-        elif message_info.rc == mqtt.MQTT_ERR_QUEUE_SIZE:
-            # this should never happen as the queue size is huuuge
-            logging.error("Message not sent: queue full")
-        else:
-            # TODO: store message_info to inquire later
-            logging.info(f"Message sent, id = {message_info.mid}")
-        return message_info
+        return self._send(message)
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime
     ) -> mqtt.MQTTMessageInfo:
         message = f"{lat};{lon};{alt};{timestamp}"
+        return self._send(message)
+
+    def _send(self, message: str):
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
