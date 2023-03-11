@@ -31,7 +31,7 @@ except:
     )
     exit()
 
-mqtt_connector = SimpleMqttConnector(TOPIC)
+mqtt_connector = SimpleMqttConnector(TOPIC, "SendPunch")
 print("Insert SI-card to be read")
 counter = 0
 while True:
@@ -46,18 +46,18 @@ while True:
     data = srr_group.get_data()
     now = datetime.now()
     card_number = data["card_number"]
-    code, time = 0, datetime.now()
+
+    messages = []
     for punch in data["punches"]:
         (code, time) = punch
-        mode = BEACON_CONTROL
+        messages.append((code, time, BEACON_CONTROL))
     if isinstance(data["start"], datetime):
-        time = data["start"]
-        code, mode = 8, START
+        messages.append((8, data["start"], START))
     if isinstance(data["finish"], datetime):
-        time = data["finish"]
-        code, mode = 10, FINISH
+        messages.append((10, data["finish"], FINISH))
 
-    logging.info(
-        f"{card_number} punched {code} at {time}, received after {now-time}"
-    )
-    mqtt_connector.send_punch(card_number, time, now, code, BEACON_CONTROL)
+    for (code, time, mode) in messages:
+        logging.info(
+            f"{card_number} punched {code} at {time}, received after {now-time}"
+        )
+        mqtt_connector.send_punch(card_number, time, now, code, mode)
