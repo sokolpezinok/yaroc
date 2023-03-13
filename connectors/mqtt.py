@@ -57,7 +57,7 @@ class SimpleMqttConnector(Connector):
         message = f"{lat};{lon};{alt};{timestamp}"
         return self._send(message)
 
-    def _send(self, message: str):
+    def _send(self, message: str) -> mqtt.MQTTMessageInfo:
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")

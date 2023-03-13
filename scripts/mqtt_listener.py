@@ -20,8 +20,8 @@ def on_message(client, userdata, msg):
     split_message = message.split(";")
     if len(split_message) == 5:
         sitime = datetime.fromisoformat(split_message[3])
-        total_latency = datetime.now() - sitime
         now = datetime.now()
+        total_latency = now - sitime
         code = int(split_message[0])
 
         with open("/home/lukas/mqtt.log", "a") as f:
@@ -93,8 +93,4 @@ client.on_message = on_message
 
 client.connect("broker.hivemq.com", 1883, 60)
 
-# Blocking call that processes network traffic, dispatches callbacks and
-# handles reconnecting.
-# Other loop*() functions are available that give a threaded interface and a
-# manual interface.
 client.loop_forever()

@@ -56,7 +56,7 @@ while True:
     if isinstance(data["finish"], datetime):
         messages.append((10, data["finish"], FINISH))
 
-    for (code, time, mode) in messages:
+    for code, time, mode in messages:
         logging.info(
             f"{card_number} punched {code} at {time}, received after {now-time}"
         )
