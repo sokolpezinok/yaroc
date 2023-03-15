@@ -8,7 +8,7 @@ PUNCH = int(0).to_bytes(1, "big")
 
 
 class MeosConnector(Connector):
-    """Class for a simple MQTT reporting"""
+    """Class for sending punches to MeOS"""
 
     def __init__(self, host: str, port: int):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
