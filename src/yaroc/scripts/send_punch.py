@@ -6,7 +6,7 @@ from time import sleep
 
 from sportident import SIReaderSRR
 
-from connectors.mqtt import SimpleMqttConnector
+from ..connectors.mqtt import SimpleMqttConnector
 
 logging.basicConfig(
     encoding="utf-8",
