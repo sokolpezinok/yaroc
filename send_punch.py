@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-from sportident import SIReaderSRR
-from time import sleep
-from datetime import datetime
-import sys
 import logging
+import sys
+from datetime import datetime
+from time import sleep
+
+from sportident import SIReaderSRR
+
 from connectors.mqtt import SimpleMqttConnector
 
 logging.basicConfig(

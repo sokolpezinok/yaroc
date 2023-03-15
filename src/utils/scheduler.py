@@ -1,17 +1,15 @@
-#!/usr/bin/env python3
 import logging
-import math
 import sched
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any, Optional, TypeVar, Generic
+from typing import Any, Generic, Optional, TypeVar
 
-FIRST_BACKOFF = 1.0
 PRIORITY = 1
 
 
 class UnsentMessage:
+    # TODO: make backoff a timedelta
     def __init__(self, argument: tuple[Any], deadline: datetime, backoff: float):
         self.argument = argument
         self.deadline = deadline
@@ -30,14 +28,17 @@ class BackoffSender(Generic[T]):
 
     The class is thread-safe
     """
+
     def __init__(
         self,
         send_function: Callable[[Any], T],
-        max_duration: timedelta,
+        first_backoff: float,
         multiplier: float,
+        max_duration: timedelta,
     ):
         self.scheduler = sched.scheduler(time.time)
         self.send_function = send_function
+        self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
 
@@ -69,7 +70,7 @@ class BackoffSender(Generic[T]):
             wrapped_function,
             kwargs={
                 "unsent_message": UnsentMessage(
-                    argument, datetime.now() + self.max_duration, FIRST_BACKOFF
+                    argument, datetime.now() + self.max_duration, self.first_backoff
                 )
             },
         )
@@ -82,28 +83,3 @@ class BackoffSender(Generic[T]):
         )
         while True:
             self.scheduler.run()
-
-
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
-
-stats = {1: 0, 2: 0, 3: 0, 4: 0}
-
-
-def f(x: int):
-    stats[x] += 1
-    if stats[x] == x:
-        logging.info(x + 1)
-    else:
-        raise Exception(f"Failed arg={x} for the {stats[x]}th time")
-
-
-b = BackoffSender(f, timedelta(minutes=0.3), math.sqrt(2.0))
-b.send(argument=(2,))
-time.sleep(0.5)
-b.send(argument=(4,))
-b.loop()

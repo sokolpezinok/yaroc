@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 # Works for SIMCom modules with GNSS capabilities
 
+import logging
 import sys
-from attila.atre import ATRuntimeEnvironment
-from attila.exceptions import (
-    ATRuntimeError,
-    ATScriptSyntaxError,
-    ATSerialPortError,
-)
 import time
 from datetime import datetime
-import logging
+
+from attila.atre import ATRuntimeEnvironment
+from attila.exceptions import (ATRuntimeError, ATScriptSyntaxError,
+                               ATSerialPortError)
 
 atrunenv = ATRuntimeEnvironment(False)
 atrunenv.configure_communicator("/dev/ttyUSB2", 9600, 30, "\r\n")

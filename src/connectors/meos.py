@@ -1,8 +1,8 @@
-from datetime import datetime, time
-import socket
 import logging
-from .connector import Connector
+import socket
+from datetime import datetime, time
 
+from .connector import Connector
 
 PUNCH = int(0).to_bytes(1, "big")
 

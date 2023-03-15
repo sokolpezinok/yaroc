@@ -1,0 +1,25 @@
+[project]
+name = "yaroc"  # Required
+version = "0.1"
+authors = [
+  {name = "Lukáš Poláček", email = "lukas@polacek.email" } # Optional
+]
+description = "Yet Another ROC"
+keywords = ["orienteering", "online control"]
+requires-python = ">=3.7"
+
+dependencies = [
+    "sportident",
+    "paho-mqtt"
+]
+
+[project.optional-dependencies] # Optional
+dev = ["black", "mypy", "isort"]
+test = ["pytest"]
+
+# [project.scripts]  # Optional
+# mqtt-listener = "scripts/mqtt_listener:main"
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
