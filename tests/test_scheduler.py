@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta
 
-from utils.scheduler import BackoffSender
+from yaroc.utils.scheduler import BackoffSender
 
 
 class TestScheduler(unittest.TestCase):

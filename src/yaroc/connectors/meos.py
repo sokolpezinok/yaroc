@@ -4,7 +4,9 @@ from datetime import datetime, time
 
 from .connector import Connector
 
-PUNCH = int(0).to_bytes(1, "big")
+ENDIAN = "little"
+PUNCH = int(0).to_bytes(1, ENDIAN)
+CODE_DAY = int(0).to_bytes(4, ENDIAN)
 
 
 class MeosConnector(Connector):
@@ -17,22 +19,17 @@ class MeosConnector(Connector):
     def __del__(self):
         self._socket.close()
 
-    def _serialize(self, card_number: int, si_daytime: time, code: int) -> bytes:
-        # Test case:
-        # card_number = 46283
-        # si_daytime = time(hour=7, minute=3, second=20)
-        # code = 31
-        # b'\x00\x1f\x00\xcb\xb4\x00\x00\x00\x00\x00\x000\xe0\x03\x00'
-
+    @staticmethod
+    def _serialize(card_number: int, si_daytime: time, code: int) -> bytes:
         total_seconds = (
             (si_daytime.hour * 60) + si_daytime.minute
         ) * 60 + si_daytime.second
         result = (
             PUNCH
-            + code.to_bytes(2, "little")
-            + card_number.to_bytes(4, "little")
-            + int(0).to_bytes(4, "little")
-            + (total_seconds * 10).to_bytes(4, "little")
+            + code.to_bytes(2, ENDIAN)
+            + card_number.to_bytes(4, ENDIAN)
+            + CODE_DAY
+            + (total_seconds * 10).to_bytes(4, ENDIAN)
         )
         return result
 
@@ -40,7 +37,7 @@ class MeosConnector(Connector):
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
     ):
         del mode, now
-        return self._send(self._serialize(card_number, sitime.time(), code))
+        return self._send(MeosConnector._serialize(card_number, sitime.time(), code))
 
     def _send(self, message: bytes):
         try:
