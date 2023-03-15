@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import LiveObjects
-from connector import Connector
+from .connector import Connector
 
 
 class LiveObjectsConnector(Connector):
