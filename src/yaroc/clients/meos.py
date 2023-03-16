@@ -2,14 +2,14 @@ import logging
 import socket
 from datetime import datetime, time
 
-from .connector import Connector
+from .client import Client
 
 ENDIAN = "little"
 PUNCH = int(0).to_bytes(1, ENDIAN)
 CODE_DAY = int(0).to_bytes(4, ENDIAN)
 
 
-class MeosConnector(Connector):
+class MeosClient(Client):
     """Class for sending punches to MeOS"""
 
     def __init__(self, host: str, port: int):
@@ -37,7 +37,7 @@ class MeosConnector(Connector):
         self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
     ):
         del mode, now
-        return self._send(MeosConnector._serialize(card_number, sitime.time(), code))
+        return self._send(MeosClient._serialize(card_number, sitime.time(), code))
 
     def _send(self, message: bytes):
         try:

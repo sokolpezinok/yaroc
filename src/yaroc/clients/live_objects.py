@@ -2,10 +2,10 @@ from datetime import datetime
 
 import LiveObjects
 
-from .connector import Connector
+from .client import Client
 
 
-class LiveObjectsConnector(Connector):
+class LiveObjectsClient(Client):
     """Class for LiveObjects communication"""
 
     def __init__(self):

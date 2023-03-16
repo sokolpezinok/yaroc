@@ -4,10 +4,10 @@ from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
 
-from .connector import Connector
+from .client import Client
 
 
-class SimpleMqttConnector(Connector):
+class SimpleMqttClient(Client):
     """Class for a simple MQTT reporting"""
 
     def __init__(self, topic: str, name: Optional[str] = None):

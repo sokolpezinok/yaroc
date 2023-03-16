@@ -1,12 +1,12 @@
 import unittest
 from datetime import time
 
-from yaroc.connectors.meos import MeosConnector
+from yaroc.clients.meos import MeosClient
 
 
 class TestMeos(unittest.TestCase):
     def test_serialization(self):
-        message = MeosConnector._serialize(
+        message = MeosClient._serialize(
             46283, time(hour=7, minute=3, second=20), code=31
         )
         self.assertEqual(

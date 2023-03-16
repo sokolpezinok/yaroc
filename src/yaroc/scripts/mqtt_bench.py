@@ -6,7 +6,7 @@ from datetime import datetime
 
 import paho.mqtt.client as mqtt
 
-from ..connectors.mqtt import SimpleMqttConnector
+from ..clients.mqtt import SimpleMqttClient
 
 logging.basicConfig(
     encoding="utf-8",
@@ -14,7 +14,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-mqtt_connector = SimpleMqttConnector("spe/47", name="benchmark")
+mqtt_client = SimpleMqttClient("spe/47", name="benchmark")
 
 
 def process_gps_coords():
@@ -35,7 +35,7 @@ def process_gps_coords():
                 coords = list(map(float, raw_coords[:3]))
                 timestamp = datetime.fromisoformat(raw_coords[3])
                 logging.info("Sending GPS coordinates")
-                mqtt_connector.send_coords(coords[0], coords[1], coords[2], timestamp)
+                mqtt_client.send_coords(coords[0], coords[1], coords[2], timestamp)
         else:
             logging.debug("Nothing")
             conn.close()
@@ -48,14 +48,14 @@ thread.start()
 
 handles = []
 for i in range(1000):
-    message_info = mqtt_connector.send_punch(
+    message_info = mqtt_client.send_punch(
         46283, datetime.now(), datetime.now(), (i + 1) % 1000, 18
     )
     handles.append(message_info)
     time.sleep(5)
 
 for message_info in handles:
-    while not mqtt_connector.client.is_connected():
+    while not mqtt_client.client.is_connected():
         time.sleep(2)
 
     if message_info.rc == mqtt.MQTT_ERR_SUCCESS:

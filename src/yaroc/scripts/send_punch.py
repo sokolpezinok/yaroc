@@ -5,7 +5,7 @@ from time import sleep
 
 from sportident import SIReaderSRR
 
-from ..connectors.mqtt import SimpleMqttConnector
+from ..clients.mqtt import SimpleMqttClient
 
 logging.basicConfig(
     encoding="utf-8",
@@ -32,7 +32,7 @@ except:
     )
     exit()
 
-mqtt_connector = SimpleMqttConnector(TOPIC, "SendPunch")
+mqtt_client = SimpleMqttClient(TOPIC, "SendPunch")
 print("Insert SI-card to be read")
 counter = 0
 while True:
@@ -41,7 +41,7 @@ while True:
         sleep(1)
         counter += 1
         if counter % 30 == 0:
-            mqtt_connector.send_coords(48.390237, 17.093895, 196, datetime.now())
+            mqtt_client.send_coords(48.390237, 17.093895, 196, datetime.now())
         continue
 
     data = srr_group.get_data()
@@ -61,4 +61,4 @@ while True:
         logging.info(
             f"{card_number} punched {code} at {time}, received after {now-time}"
         )
-        mqtt_connector.send_punch(card_number, time, now, code, mode)
+        mqtt_client.send_punch(card_number, time, now, code, mode)
