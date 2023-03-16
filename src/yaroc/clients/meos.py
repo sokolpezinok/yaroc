@@ -14,8 +14,9 @@ class MeosClient(Client):
     """Class for sending punches to MeOS"""
 
     def __init__(self, host: str, port: int):
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((host, port))
+        self.address = (host, port)
+        self._connect()
+
         self._backoff_sender = BackoffSender(
             self._send, self._on_publish, 0.2, 2.0, timedelta(minutes=10)
         )
@@ -49,8 +50,27 @@ class MeosClient(Client):
         message = MeosClient._serialize(card_number, sitime.time(), code)
         self._backoff_sender.send((message,))
 
+    def _connect(self):
+        try:
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except OSError as msg:
+            self._socket = None
+            return
+        self._socket.connect(self.address)
+
     def _send(self, message: bytes):
-        return self._socket.sendall(message)
+        try:
+            if self._socket is None:
+                raise Exception("Not connected")
+
+            ret = self._socket.sendall(message)
+            if ret is None:
+                return
+            raise Exception("Failed sending")
+        except socket.error as err:
+            self._socket.close()
+            self._connect()
+            raise err
 
     def _on_publish(self, message: bytes):
         del message
