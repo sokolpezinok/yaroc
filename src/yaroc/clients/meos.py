@@ -1,6 +1,5 @@
 import logging
 import socket
-import threading
 from datetime import datetime, time, timedelta
 
 from ..utils.scheduler import BackoffSender
@@ -23,11 +22,6 @@ class MeosClient(Client):
 
     def __del__(self):
         self._socket.close()
-
-    def loop_start(self):
-        self.thread = threading.Thread(target=self._backoff_sender.loop)
-        self.thread.daemon = True
-        self.thread.start()
 
     @staticmethod
     def _serialize(card_number: int, si_daytime: time, code: int) -> bytes:

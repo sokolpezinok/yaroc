@@ -65,6 +65,7 @@ class BackoffSender(Generic[T]):
                         wrapped_function,
                         (unsent_message,),
                     )
+                    self.scheduler.run(False)
                 else:
                     logging.info(f"Message expired, args = {unsent_message.argument}")
 
@@ -79,10 +80,4 @@ class BackoffSender(Generic[T]):
             },
         )
         logging.debug("Scheduled")
-
-    def loop(self):
-        # Schedule a job far away, so that the scheduler loops "forever"
-        self.scheduler.enter(
-            timedelta(days=7).total_seconds(), PRIORITY, (lambda: 0), ()
-        )
-        self.scheduler.run()
+        self.scheduler.run(False)

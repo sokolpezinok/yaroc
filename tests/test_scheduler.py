@@ -13,12 +13,13 @@ class TestScheduler(unittest.TestCase):
 
         def f(x: int):
             stats[x] += 1
-            if stats[x] == x:
-                finished[x] = datetime.now()
-            else:
+            if stats[x] < x:
                 raise Exception(f"Failed arg={x} for the {stats[x]}th time")
 
-        b = BackoffSender(f, 0.1, 2.0, timedelta(minutes=0.1))
+        def mark_finish(x: int):
+            finished[x] = datetime.now()
+
+        b = BackoffSender(f, mark_finish, 0.1, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
         print(start)
         b.send(argument=(2,))
