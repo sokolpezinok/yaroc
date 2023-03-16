@@ -1,7 +1,9 @@
 import logging
 import socket
-from datetime import datetime, time
+import threading
+from datetime import datetime, time, timedelta
 
+from ..utils.scheduler import BackoffSender
 from .client import Client
 
 ENDIAN = "little"
@@ -15,9 +17,17 @@ class MeosClient(Client):
     def __init__(self, host: str, port: int):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.connect((host, port))
+        self._backoff_sender = BackoffSender(
+            self._send, self._on_publish, 0.2, 2.0, timedelta(minutes=10)
+        )
 
     def __del__(self):
         self._socket.close()
+
+    def loop_start(self):
+        self.thread = threading.Thread(target=self._backoff_sender.loop)
+        self.thread.daemon = True
+        self.thread.start()
 
     @staticmethod
     def _serialize(card_number: int, si_daytime: time, code: int) -> bytes:
@@ -34,14 +44,20 @@ class MeosClient(Client):
         return result
 
     def send_punch(
-        self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
+        self,
+        card_number: int,
+        sitime: datetime,
+        now: datetime,
+        code: int,
+        mode: int,
     ):
         del mode, now
-        return self._send(MeosClient._serialize(card_number, sitime.time(), code))
+        message = MeosClient._serialize(card_number, sitime.time(), code)
+        self._backoff_sender.send((message,))
 
     def _send(self, message: bytes):
-        try:
-            return self._socket.sendall(message)
-        except Exception as e:
-            logging.error(e)
-            return e
+        return self._socket.sendall(message)
+
+    def _on_publish(self, message: bytes):
+        del message
+        logging.info("Published!")

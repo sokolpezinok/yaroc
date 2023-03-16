@@ -7,7 +7,8 @@ import time
 from datetime import datetime
 
 from attila.atre import ATRuntimeEnvironment
-from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
+from attila.exceptions import (ATRuntimeError, ATScriptSyntaxError,
+                               ATSerialPortError)
 
 atrunenv = ATRuntimeEnvironment(False)
 atrunenv.configure_communicator("/dev/ttyUSB2", 9600, 30, "\r\n")

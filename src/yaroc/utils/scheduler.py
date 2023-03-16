@@ -32,12 +32,14 @@ class BackoffSender(Generic[T]):
     def __init__(
         self,
         send_function: Callable[[Any], T],
+        callback: Callable[[Any], Any],
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
     ):
         self.scheduler = sched.scheduler(time.time)
         self.send_function = send_function
+        self.callback = callback
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
@@ -45,7 +47,9 @@ class BackoffSender(Generic[T]):
     def send(self, argument: tuple[Any]):
         def wrapped_function(unsent_message: UnsentMessage) -> Optional[T]:
             try:
-                return self.send_function(*unsent_message.argument)
+                ret = self.send_function(*unsent_message.argument)
+                self.callback(*unsent_message.argument)
+                return ret
             except Exception as e:
                 logging.error(e)
                 cur_backoff = unsent_message.backoff
@@ -81,5 +85,4 @@ class BackoffSender(Generic[T]):
         self.scheduler.enter(
             timedelta(days=7).total_seconds(), PRIORITY, (lambda: 0), ()
         )
-        while True:
-            self.scheduler.run()
+        self.scheduler.run()
