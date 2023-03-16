@@ -65,6 +65,7 @@ class BackoffSender(Generic[T]):
                         wrapped_function,
                         (unsent_message,),
                     )
+                    logging.debug(f"Scheduled, queue length={len(self.scheduler.queue)}")
                     self.scheduler.run(False)
                 else:
                     logging.info(f"Message expired, args = {unsent_message.argument}")

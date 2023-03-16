@@ -1,3 +1,5 @@
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta
 
@@ -21,10 +23,18 @@ class TestScheduler(unittest.TestCase):
 
         b = BackoffSender(f, mark_finish, 0.1, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
-        print(start)
         b.send(argument=(2,))
+
+        b.scheduler.enter(timedelta(days=7).total_seconds(), 1, (lambda: 0), ())
+        thread = threading.Thread(target=b.scheduler.run)
+        thread.daemon = True
+        thread.start()
+
+        # TODO: a sleep here breaks the test. This is a hard to fix problem, probably requires a
+        # redesign.
+        # time.sleep(0.13)
         b.send(argument=(4,))
-        b.scheduler.run()
+        thread.join(2)
 
         self.assertAlmostEqual(
             finished[2].timestamp(),
