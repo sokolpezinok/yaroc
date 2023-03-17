@@ -48,9 +48,7 @@ thread.start()
 
 handles = []
 for i in range(1000):
-    message_info = mqtt_client.send_punch(
-        46283, datetime.now(), datetime.now(), (i + 1) % 1000, 18
-    )
+    message_info = mqtt_client.send_punch(46283, datetime.now(), datetime.now(), (i + 1) % 1000, 18)
     handles.append(message_info)
     time.sleep(5)
 

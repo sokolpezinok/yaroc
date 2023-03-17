@@ -26,3 +26,6 @@ send-punch = "yaroc.scripts.send_punch:main"
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100

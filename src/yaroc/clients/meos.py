@@ -26,9 +26,7 @@ class MeosClient(Client):
 
     @staticmethod
     def _serialize(card_number: int, si_daytime: time, code: int) -> bytes:
-        total_seconds = (
-            (si_daytime.hour * 60) + si_daytime.minute
-        ) * 60 + si_daytime.second
+        total_seconds = ((si_daytime.hour * 60) + si_daytime.minute) * 60 + si_daytime.second
         result = (
             PUNCH
             + code.to_bytes(2, ENDIAN)

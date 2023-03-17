@@ -25,10 +25,7 @@ def on_message(client, userdata, msg):
         code = int(split_message[0])
 
         with open("/home/lukas/mqtt.log", "a") as f:
-            f.write(
-                f"{code:03} {now}, dated {split_message[3]}, "
-                f"latency {total_latency}\n"
-            )
+            f.write(f"{code:03} {now}, dated {split_message[3]}, " f"latency {total_latency}\n")
 
         data = {
             "control1": split_message[0],

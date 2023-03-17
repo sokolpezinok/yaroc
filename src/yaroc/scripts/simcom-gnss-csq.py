@@ -7,8 +7,7 @@ import time
 from datetime import datetime
 
 from attila.atre import ATRuntimeEnvironment
-from attila.exceptions import (ATRuntimeError, ATScriptSyntaxError,
-                               ATSerialPortError)
+from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
 
 atrunenv = ATRuntimeEnvironment(False)
 atrunenv.configure_communicator("/dev/ttyUSB2", 9600, 30, "\r\n")
@@ -154,9 +153,7 @@ try:
     coords = None
     if coords is not None:
         messages.append(f"{coords[0]};{coords[1]};{coords[2]};{datetime.now()}")
-        log_message = (
-            f"{datetime.now()}: {coords[0]},{coords[1]}, " f"altitude {coords[2]}"
-        )
+        log_message = f"{datetime.now()}: {coords[0]},{coords[1]}, " f"altitude {coords[2]}"
         logging.info(log_message)
         with open("/home/lukas/events.log", "a") as f:
             f.write(f"{log_message}\n")

@@ -27,9 +27,7 @@ try:
         si = SIReaderSRR()
     logging.info(f"Connected to station on port {si.port}")
 except:
-    logging.error(
-        "Failed to connect to an SI station on any of the available serial ports."
-    )
+    logging.error("Failed to connect to an SI station on any of the available serial ports.")
     exit()
 
 mqtt_client = SimpleMqttClient(TOPIC, "SendPunch")
@@ -58,7 +56,5 @@ while True:
         messages.append((10, data["finish"], FINISH))
 
     for code, time, mode in messages:
-        logging.info(
-            f"{card_number} punched {code} at {time}, received after {now-time}"
-        )
+        logging.info(f"{card_number} punched {code} at {time}, received after {now-time}")
         mqtt_client.send_punch(card_number, time, now, code, mode)

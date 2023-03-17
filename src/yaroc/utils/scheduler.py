@@ -58,14 +58,9 @@ class BackoffSender(Generic[T]):
             logging.error(e)
             cur_backoff = unsent_message.backoff
             unsent_message.new_backoff(self.multiplier)
-            if (
-                datetime.now() + timedelta(seconds=cur_backoff)
-                < unsent_message.deadline
-            ):
+            if datetime.now() + timedelta(seconds=cur_backoff) < unsent_message.deadline:
                 logging.info(f"Retrying after {cur_backoff} seconds")
-                self.queue.put(
-                    (datetime.now() + timedelta(seconds=cur_backoff), unsent_message)
-                )
+                self.queue.put((datetime.now() + timedelta(seconds=cur_backoff), unsent_message))
             else:
                 logging.info(f"Message expired, args = {unsent_message.argument}")
 
@@ -92,9 +87,7 @@ class BackoffSender(Generic[T]):
         self.queue.put(
             (
                 datetime.now(),
-                UnsentMessage(
-                    argument, datetime.now() + self.max_duration, self.first_backoff
-                ),
+                UnsentMessage(argument, datetime.now() + self.max_duration, self.first_backoff),
             )
         )
         logging.debug("Scheduled")
