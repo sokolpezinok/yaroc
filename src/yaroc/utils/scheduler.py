@@ -11,7 +11,7 @@ PRIORITY = 1
 
 class UnsentMessage:
     # TODO: make backoff a timedelta
-    def __init__(self, argument: tuple[Any], deadline: datetime, backoff: float):
+    def __init__(self, argument: Any, deadline: datetime, backoff: float):
         self.argument = argument
         self.deadline = deadline
         self.backoff = backoff
@@ -51,8 +51,8 @@ class BackoffSender(Generic[T]):
 
     def wrapped_function(self, unsent_message: UnsentMessage) -> Optional[T]:
         try:
-            ret = self.send_function(*unsent_message.argument)
-            self.callback(*unsent_message.argument)
+            ret = self.send_function(unsent_message.argument)
+            self.callback(unsent_message.argument)
             return ret
         except Exception as e:
             logging.error(e)
@@ -83,7 +83,7 @@ class BackoffSender(Generic[T]):
     def close(self, timeout=None):
         self.thread.join(timeout)
 
-    def send(self, argument: tuple[Any]):
+    def send(self, argument: Any):
         self.queue.put(
             (
                 datetime.now(),

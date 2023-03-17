@@ -22,9 +22,9 @@ class TestScheduler(unittest.TestCase):
 
         b = BackoffSender(f, mark_finish, 0.04, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
-        b.send((2,))
+        b.send(2)
         time.sleep(0.13)
-        b.send((4,))
+        b.send(4)
         b.close(0.6)
 
         self.assertAlmostEqual(

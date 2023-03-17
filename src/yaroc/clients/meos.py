@@ -47,7 +47,7 @@ class MeosClient(Client):
     ):
         del mode, now
         message = MeosClient._serialize(card_number, sitime.time(), code)
-        self._backoff_sender.send((message,))
+        self._backoff_sender.send(message)
 
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)
