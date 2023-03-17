@@ -22,7 +22,8 @@ class MeosClient(Client):
         )
 
     def __del__(self):
-        self._socket.close()
+        if self._socket is not None:
+            self._socket.close()
 
     @staticmethod
     def _serialize(card_number: int, si_daytime: time, code: int) -> bytes:
@@ -48,10 +49,13 @@ class MeosClient(Client):
         message = MeosClient._serialize(card_number, sitime.time(), code)
         self._backoff_sender.send((message,))
 
+    def close(self, timeout=10):
+        self._backoff_sender.close(timeout)
+
     def _connect(self):
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        except OSError as msg:
+        except OSError:
             self._socket = None
             return
         self._socket.connect(self.address)
@@ -66,7 +70,8 @@ class MeosClient(Client):
                 return
             raise Exception("Failed sending")
         except socket.error as err:
-            self._socket.close()
+            if self._socket is not None:
+                self._socket.close()
             self._connect()
             raise err
 
