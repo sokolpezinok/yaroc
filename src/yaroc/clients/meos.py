@@ -2,7 +2,7 @@ import logging
 import socket
 from datetime import datetime, time, timedelta
 
-from ..utils.scheduler import BackoffSender
+from ..utils.backoff import BackoffSender
 from .client import Client
 
 ENDIAN = "little"
