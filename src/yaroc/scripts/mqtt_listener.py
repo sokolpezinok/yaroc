@@ -2,7 +2,10 @@ import logging
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
-import requests
+from requests.adapters import PoolManager, Retry
+
+retries = Retry(backoff_factor=1.0)
+http = PoolManager(retries=retries)
 
 
 def on_connect(client, userdata, flags, rc):
@@ -41,11 +44,14 @@ def on_message(client, userdata, msg):
         }
 
         try:
-            response = requests.post(
-                "https://roc.olresultat.se/ver7.1/sendpunches_v2.php", data=data
+            response = http.request(
+                "POST",
+                "https://roc.olresultat.se/ver7.1/sendpunches_v2.php",
+                encode_multipart=False,
+                fields=data,
             )
-            logging.debug(f"Got response {response.status_code}: {response.text}")
-        except requests.exceptions.RequestException as e:
+            logging.debug(f"Got response {response.status}: {response.data}")
+        except Exception as e:
             logging.error(e)
 
         message = (
