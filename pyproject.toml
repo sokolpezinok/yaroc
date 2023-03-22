@@ -2,13 +2,14 @@
 name = "yaroc"  # Required
 version = "0.1"
 authors = [
-  {name = "Lukáš Poláček", email = "lukas@polacek.email" } # Optional
+  {name = "Lukáš Poláček", email = "lukas@polacek.email" }
 ]
 description = "Yet Another ROC"
 keywords = ["orienteering", "online control"]
 requires-python = ">=3.7"
 
 dependencies = [
+    "dbus-python",
     "paho-mqtt",
     "requests",
     "sportident",
