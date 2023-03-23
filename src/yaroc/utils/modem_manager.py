@@ -1,4 +1,6 @@
 import dbus
+import logging
+from typing import List
 
 MODEM_MANAGER = "org.freedesktop.ModemManager1"
 
@@ -8,16 +10,17 @@ class ModemManager:
         self.bus = dbus.SystemBus()
         self.modem_manager = self.bus.get_object(MODEM_MANAGER, "/org/freedesktop/ModemManager1")
 
-    def get_modems(self):
+    def get_modems(self) -> List[dbus.ObjectPath]:
+        # TODO: add filtering options
         object_interface = dbus.Interface(self.modem_manager, "org.freedesktop.DBus.ObjectManager")
         modems = []
         for p in object_interface.GetManagedObjects():
             if isinstance(p, dbus.ObjectPath):
-                modems += [str(p)]
+                modems.append(p)
         return modems
 
-    def send_sms(self, modem: str, number: str, text: str):
-        modem_obj = self.bus.get_object(MODEM_MANAGER, modem)
+    def create_sms(self, modem: dbus.ObjectPath, number: str, text: str) -> dbus.ObjectPath:
+        modem_obj = self.bus.get_object(MODEM_MANAGER, str(modem))
         messaging_interface = dbus.Interface(
             modem_obj, "org.freedesktop.ModemManager1.Modem.Messaging"
         )
@@ -27,6 +30,14 @@ class ModemManager:
                 "number": dbus.String(number, variant_level=1),
             }
         )
-        sms = self.bus.get_object(MODEM_MANAGER, sms_path)
-        sms_interface = dbus.Interface(sms, "org.freedesktop.ModemManager1.Sms")
-        sms_interface.Send()
+        return sms_path
+
+    def send_sms(self, sms_path) -> bool:
+        try:
+            sms = self.bus.get_object(MODEM_MANAGER, sms_path)
+            sms_interface = dbus.Interface(sms, "org.freedesktop.ModemManager1.Sms")
+            sms_interface.Send()
+            return True
+        except Exception as err:
+            logging.error(err)
+            return False
