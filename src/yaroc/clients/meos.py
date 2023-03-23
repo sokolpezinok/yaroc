@@ -1,11 +1,12 @@
 import logging
 import socket
 from datetime import datetime, time, timedelta
+from typing import Literal
 
 from ..utils.backoff import BackoffSender
 from .client import Client
 
-ENDIAN = "little"
+ENDIAN: Literal["little", "big"] = "little"
 PUNCH = int(0).to_bytes(1, ENDIAN)
 CODE_DAY = int(0).to_bytes(4, ENDIAN)
 

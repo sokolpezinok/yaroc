@@ -1,6 +1,7 @@
-import dbus
 import logging
 from typing import List
+
+import dbus
 
 MODEM_MANAGER = "org.freedesktop.ModemManager1"
 

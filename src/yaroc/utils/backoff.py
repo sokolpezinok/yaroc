@@ -63,6 +63,7 @@ class BackoffSender(Generic[T]):
                 self.queue.put((datetime.now() + timedelta(seconds=cur_backoff), unsent_message))
             else:
                 logging.info(f"Message expired, args = {unsent_message.argument}")
+            return None
 
     def _do_work(self):
         messages = []

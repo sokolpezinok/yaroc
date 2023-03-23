@@ -32,19 +32,13 @@ class MOP:
     STAT_DNS = 20
 
     @staticmethod
-    def meos_results(address: str, port: int) -> List[MeosResult]:
+    def _meos_results_xml(xml: ET.Element) -> List[MeosResult]:
         def parse_int(s: str | None) -> int | None:
             if s is None:
                 return None
             return int(s)
 
-        response = requests.get(
-            f"http://{address}:{port}/meos?difference=zero",
-        )
-        assert response.status_code == 200
-        xml = ET.XML(response.text)
         ET.indent(xml)
-
         NS = {"mop": "http://www.melin.nu/mop"}
         categories = {}
         for category in xml.findall("mop:cls", NS):
@@ -65,12 +59,24 @@ class MOP:
 
             rt = base.get("rt")
             if rt is not None and stat == MOP.STAT_OK:
-                total_time_10s = int(base.get("rt"))
-                total_time = timedelta(seconds=total_time_10s / 10.0)
+                total_time = timedelta(seconds=int(rt) / 10.0)
             else:
                 total_time = None
-            category = categories[base.get("cls")]
+            cat_id = base.get("cls")
+            assert cat_id is not None
             results.append(
-                MeosResult(name=name, card=card, stat=stat, category=category, time=total_time)
+                MeosResult(
+                    name=name, card=card, stat=stat, category=categories[cat_id], time=total_time
+                )
             )
         return results
+
+    @staticmethod
+    def meos_results(address: str, port: int) -> List[MeosResult]:
+        response = requests.get(
+            f"http://{address}:{port}/meos?difference=zero",
+        )
+        assert response.status_code == 200
+        xml = ET.XML(response.text)
+
+        return MOP._meos_results_xml(xml)
