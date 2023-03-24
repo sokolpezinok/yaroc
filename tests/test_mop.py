@@ -42,8 +42,13 @@ class TestMeos(unittest.TestCase):
         )
         self.assertEqual(
             results[1],
-            MeosResult(category=MeosCategory(name='C', id='2'), name='John Doe', card=2111071,
-                       stat=4, time=None),
+            MeosResult(
+                category=MeosCategory(name="C", id="2"),
+                name="John Doe",
+                card=2111071,
+                stat=4,
+                time=None,
+            ),
         )
 
 
