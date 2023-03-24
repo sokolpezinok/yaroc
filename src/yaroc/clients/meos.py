@@ -3,6 +3,7 @@ import socket
 from datetime import datetime, time, timedelta
 from typing import Literal
 
+# TODO: consider using https://pypi.org/project/backoff/
 from ..utils.backoff import BackoffSender
 from .client import Client
 
@@ -37,14 +38,13 @@ class MeosClient(Client):
 
     @staticmethod
     def _serialize_punch(card_number: int, si_daytime: time, code: int) -> bytes:
-        result = (
+        return (
             PUNCH
             + code.to_bytes(2, ENDIAN)
             + card_number.to_bytes(4, ENDIAN)
             + CODE_DAY
             + MeosClient._time_to_bytes(si_daytime)
         )
-        return result
 
     def send_punch(
         self,

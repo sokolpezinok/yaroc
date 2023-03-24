@@ -18,8 +18,12 @@ TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
     <input it="0" tstat="1" />
   </cmp>
   <cmp id="168" card="2111071">
-    <base org="22" cls="2" stat="4" st="-1" rt="0">John Doe</base>
+    <base org="22" cls="2" stat="20" st="-1" rt="0">John Doe</base>
     <input it="0" tstat="1" />
+  </cmp>
+  <cmp id="169" card="2211361">
+    <base org="22" cls="2" stat="4" st="372340" rt="0">Ronald Doe</base>
+    <input it="0" tstat="1"/>
   </cmp>
 </MOPComplete>
 """
@@ -46,6 +50,16 @@ class TestMeos(unittest.TestCase):
                 category=MeosCategory(name="C", id="2"),
                 name="John Doe",
                 card=2111071,
+                stat=20,
+                time=None,
+            ),
+        )
+        self.assertEqual(
+            results[2],
+            MeosResult(
+                category=MeosCategory(name="C", id="2"),
+                name="Ronald Doe",
+                card=2211361,
                 stat=4,
                 time=None,
             ),
