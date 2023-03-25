@@ -51,7 +51,7 @@ class MOP:
         for result in xml.findall("mop:cmp", NS):
             base = result.find("mop:base", NS)
             if base is None:
-                logging.error(f"No base element")
+                logging.error("No base element")
                 continue
             card, stat = parse_int(result.get("card")), parse_int(base.get("stat"))
             assert stat is not None

@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies] # Optional
-dev = ["black", "mypy", "isort"]
+dev = ["black", "mypy", "isort", "flake8", "Flake8-pyproject"]
 test = ["pytest"]
 
 [project.scripts]  # Optional
@@ -31,3 +31,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 100
+
+[tool.flake8]
+max-line-length = 100
