@@ -6,6 +6,7 @@ from time import sleep
 from sportident import SIReaderSRR
 
 from ..clients.mqtt import SimpleMqttClient
+from ..clients.meos import MeosClient
 
 logging.basicConfig(
     encoding="utf-8",
@@ -26,20 +27,25 @@ try:
         # Find serial port automatically
         si = SIReaderSRR()
     logging.info(f"Connected to station on port {si.port}")
-except:
+except Exception:
     logging.error("Failed to connect to an SI station on any of the available serial ports.")
     exit()
 
-mqtt_client = SimpleMqttClient(TOPIC, "SendPunch")
+
+client = "meos"
+if client == "meos":
+    client = MeosClient("192.168.88.165", 10000)
+elif client == "mqtt":
+    client = SimpleMqttClient(TOPIC, "SendPunch")
+else:
+    logging.error("")
+    sys.exit(1)
+
 print("Insert SI-card to be read")
-counter = 0
 while True:
     srr_group = si.poll_punch()
     if srr_group is None:
         sleep(1)
-        counter += 1
-        if counter % 30 == 0:
-            mqtt_client.send_coords(48.390237, 17.093895, 196, datetime.now())
         continue
 
     data = srr_group.get_data()
@@ -57,4 +63,4 @@ while True:
 
     for code, time, mode in messages:
         logging.info(f"{card_number} punched {code} at {time}, received after {now-time}")
-        mqtt_client.send_punch(card_number, time, now, code, mode)
+        client.send_punch(card_number, time, now, code, mode)
