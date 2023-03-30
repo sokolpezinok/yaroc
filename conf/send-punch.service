@@ -1,0 +1,12 @@
+[Unit]
+Description=YAROC Send Punches
+
+[Service]
+ExecStart=/home/pi/yaroc/.venv/bin/send-punch /dev/ttySI0
+WorkingDirectory=/home/pi
+User=pi
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
