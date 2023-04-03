@@ -1,1 +1,5 @@
-KERNEL=="ttyUSB*", DRIVERS=="cp210x", ATTRS{interface}=="SPORTident USB to UART Bridge Controller", SYMLINK+="ttySI%n"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="800a", GOTO="sportident"
+SUBSYSTEMS=="usb", GOTO="sportident_end"
+LABEL="sportident"
+ACTION=="add", KERNEL=="ttyUSB*", DRIVERS=="cp210x", SYMLINK+="ttySI%n"
+LABEL="sportident_end"
