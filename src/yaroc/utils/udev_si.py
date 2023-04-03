@@ -1,13 +1,28 @@
-import pyudev
-from sportident import SIReaderReadout, SIReaderSRR, SIReader, SIReaderControl
 import logging
 import queue
+import threading
+from typing import Callable
+
+import pyudev
+from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 logging.basicConfig(
     encoding="utf-8",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
+
+class SiWorker:
+    def __init__(self, si: SIReader, worker_fn: Callable[[SIReader], None]):
+        self.si = si
+        self.thread = threading.Thread(target=worker_fn, args=(self.si,))
+        self.thread.setDaemon(True)
+        self.thread.start()
+
+    def close(self, timeout: float | None = None):
+        self.si.disconnect()
+        self.thread.join(timeout)
 
 
 class UdevSIManager:
@@ -19,16 +34,17 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(self):
+    def __init__(self, worker_fn: Callable[[SIReader], None]):
         context = pyudev.Context()
         monitor = pyudev.Monitor.from_netlink(context)
         monitor.filter_by("tty")
         observer = pyudev.MonitorObserver(monitor, self._handle_udev_event)
         observer.start()
+        self.worker_fn = worker_fn
         self.queue = queue.Queue()
 
     def loop(self):
-        si_devices = {}
+        si_workers = {}
         while True:
             (action, device_node) = self.queue.get()
             if action == "add":
@@ -44,21 +60,19 @@ class UdevSIManager:
                     ):
                         si.disconnect()
                         si = SIReaderControl(device_node)
+                    si_workers[device_node] = SiWorker(si, self.worker_fn)
                     logging.info(f"Connected to {si.port}")
-                    si_devices[device_node] = si
 
-                except Exception:
-                    logging.error(f"Failed to connect to an SI station at {device_node}")
+                except Exception as err:
+                    logging.error(f"Failed to connect to an SI station at {device_node}: {err}")
             elif action == "remove":
-                if device_node in si_devices:
+                if device_node in si_workers:
                     logging.info(f"Removed device {device_node}")
-                    si_devices[device_node].disconnect()
-                    del si_devices[device_node]
+                    si_worker = si_workers[device_node]
+                    si_worker.close()
+                    del si_workers[device_node]
 
-    def close(self, timeout=None):
-        self.thread.join(timeout)
-
-    def _handle_udev_event(self, action, device):
+    def _handle_udev_event(self, action, device: pyudev.Device):
         try:
             is_sportident = (
                 device.properties["ID_USB_VENDOR_ID"] == "10c4"

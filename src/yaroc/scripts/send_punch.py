@@ -1,12 +1,11 @@
 import logging
 import sys
+import time
 from datetime import datetime
-from time import sleep
 
-from sportident import SIReaderSRR
-
-from ..clients.mqtt import SimpleMqttClient
 from ..clients.meos import MeosClient
+from ..clients.mqtt import SimpleMqttClient
+from ..utils.udev_si import UdevSIManager
 
 logging.basicConfig(
     encoding="utf-8",
@@ -19,20 +18,8 @@ FINISH = 4
 BEACON_CONTROL = 18
 TOPIC = "spe/47"
 
-try:
-    if len(sys.argv) > 1:
-        # Use command line argument as serial port name
-        si = SIReaderSRR(port=sys.argv[1])
-    else:
-        # Find serial port automatically
-        si = SIReaderSRR()
-    logging.info(f"Connected to station on port {si.port}")
-except Exception:
-    logging.error("Failed to connect to an SI station on any of the available serial ports.")
-    exit()
 
-
-client = "meos"
+client = "mqtt"
 if client == "meos":
     client = MeosClient("192.168.88.165", 10000)
 elif client == "mqtt":
@@ -41,26 +28,31 @@ else:
     logging.error("")
     sys.exit(1)
 
-print("Insert SI-card to be read")
-while True:
-    srr_group = si.poll_punch()
-    if srr_group is None:
-        sleep(1)
-        continue
 
-    data = srr_group.get_data()
-    now = datetime.now()
-    card_number = data["card_number"]
+def si_worker(si):
+    while True:
+        srr_group = si.poll_punch()
+        if srr_group is None:
+            time.sleep(1.0)
+            continue
 
-    messages = []
-    for punch in data["punches"]:
-        (code, time) = punch
-        messages.append((code, time, BEACON_CONTROL))
-    if isinstance(data["start"], datetime):
-        messages.append((8, data["start"], START))
-    if isinstance(data["finish"], datetime):
-        messages.append((10, data["finish"], FINISH))
+        data = srr_group.get_data()
+        now = datetime.now()
+        card_number = data["card_number"]
 
-    for code, time, mode in messages:
-        logging.info(f"{card_number} punched {code} at {time}, received after {now-time}")
-        client.send_punch(card_number, time, now, code, mode)
+        messages = []
+        for punch in data["punches"]:
+            (code, tim) = punch
+            messages.append((code, tim, BEACON_CONTROL))
+        if isinstance(data["start"], datetime):
+            messages.append((8, data["start"], START))
+        if isinstance(data["finish"], datetime):
+            messages.append((10, data["finish"], FINISH))
+
+        for code, tim, mode in messages:
+            logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
+            client.send_punch(card_number, time, now, code, mode)
+
+
+si_manager = UdevSIManager(si_worker)
+si_manager.loop()
