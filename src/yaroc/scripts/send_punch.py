@@ -2,6 +2,9 @@ import logging
 import sys
 import time
 from datetime import datetime
+from threading import Event
+
+from sportident import SIReader
 
 from ..clients.meos import MeosClient
 from ..clients.mqtt import SimpleMqttClient
@@ -29,8 +32,10 @@ else:
     sys.exit(1)
 
 
-def si_worker(si):
+def si_worker(si: SIReader, evnt: Event):
     while True:
+        if evnt.is_set():
+            return
         srr_group = si.poll_punch()
         if srr_group is None:
             time.sleep(1.0)

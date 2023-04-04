@@ -13,14 +13,19 @@ logging.basicConfig(
 )
 
 
+DEFAULT_TIMEOUT_MS = 3.0
+
+
 class SiWorker:
     def __init__(self, si: SIReader, worker_fn: Callable[[SIReader], None]):
         self.si = si
-        self.thread = threading.Thread(target=worker_fn, args=(self.si,))
+        self.event = threading.Event()
+        self.thread = threading.Thread(target=worker_fn, args=(self.si, self.event))
         self.thread.setDaemon(True)
         self.thread.start()
 
-    def close(self, timeout: float | None = None):
+    def close(self, timeout: float = DEFAULT_TIMEOUT_MS):
+        self.event.set()
         self.si.disconnect()
         self.thread.join(timeout)
 
@@ -42,12 +47,16 @@ class UdevSIManager:
         observer.start()
         self.worker_fn = worker_fn
         self.queue = queue.Queue()
+        for device in context.list_devices():
+            self._handle_udev_event("add", device)
 
     def loop(self):
         si_workers = {}
         while True:
             (action, device_node) = self.queue.get()
             if action == "add":
+                if device_node in si_workers:
+                    continue
                 logging.info(f"Inserted SportIdent device {device_node}")
                 try:
                     si = SIReaderReadout(device_node)
@@ -75,7 +84,8 @@ class UdevSIManager:
     def _handle_udev_event(self, action, device: pyudev.Device):
         try:
             is_sportident = (
-                device.properties["ID_USB_VENDOR_ID"] == "10c4"
+                device.subsystem == "tty"
+                and device.properties["ID_USB_VENDOR_ID"] == "10c4"
                 and device.properties["ID_MODEL_ID"] == "800a"
             )
         except Exception:
@@ -86,5 +96,5 @@ class UdevSIManager:
             device_node = device.device_node
             if action == "add":
                 self.queue.put((action, device_node))
-            if action == "remove":
+            elif action == "remove":
                 self.queue.put((action, device_node))
