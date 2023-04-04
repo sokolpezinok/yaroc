@@ -60,17 +60,26 @@ class UdevSIManager:
                 logging.info(f"Inserted SportIdent device {device_node}")
                 try:
                     si = SIReaderReadout(device_node)
+                    is_control = False
                     if si.get_type() == SIReader.M_SRR:
+                        is_control = True
                         si.disconnect()
                         si = SIReaderSRR(device_node)
                     elif (
                         si.get_type() == SIReader.M_CONTROL
                         or si.get_type() == SIReader.M_BC_CONTROL
                     ):
+                        is_control = True
                         si.disconnect()
                         si = SIReaderControl(device_node)
-                    si_workers[device_node] = SiWorker(si, self.worker_fn)
-                    logging.info(f"Connected to {si.port}")
+
+                    if is_control:
+                        si_workers[device_node] = SiWorker(si, self.worker_fn)
+                        logging.info(f"Connected to {si.port}")
+                    else:
+                        logging.warn(
+                            f"Station {si.port} not an SRR dongle or not set in autosend mode"
+                        )
 
                 except Exception as err:
                     logging.error(f"Failed to connect to an SI station at {device_node}: {err}")

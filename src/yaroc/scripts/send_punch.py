@@ -22,6 +22,7 @@ BEACON_CONTROL = 18
 TOPIC = "spe/47"
 
 
+# TODO: allow multiple clients
 client = "mqtt"
 if client == "meos":
     client = MeosClient("192.168.88.165", 10000)
@@ -36,27 +37,27 @@ def si_worker(si: SIReader, evnt: Event):
     while True:
         if evnt.is_set():
             return
-        srr_group = si.poll_punch()
-        if srr_group is None:
+
+        if si.poll_sicard():
+            card_data = si.read_sicard()
+        else:
             time.sleep(1.0)
             continue
 
-        data = srr_group.get_data()
         now = datetime.now()
-        card_number = data["card_number"]
-
+        card_number = card_data["card_number"]
         messages = []
-        for punch in data["punches"]:
+        for punch in card_data["punches"]:
             (code, tim) = punch
             messages.append((code, tim, BEACON_CONTROL))
-        if isinstance(data["start"], datetime):
-            messages.append((8, data["start"], START))
-        if isinstance(data["finish"], datetime):
-            messages.append((10, data["finish"], FINISH))
+        if isinstance(card_data["start"], datetime):
+            messages.append((8, card_data["start"], START))
+        if isinstance(card_data["finish"], datetime):
+            messages.append((10, card_data["finish"], FINISH))
 
         for code, tim, mode in messages:
             logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
-            client.send_punch(card_number, time, now, code, mode)
+            client.send_punch(card_number, tim, now, code, mode)
 
 
 si_manager = UdevSIManager(si_worker)
