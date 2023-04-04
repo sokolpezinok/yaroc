@@ -68,8 +68,8 @@ def on_message(client, userdata, msg):
                     f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
                     f"{split_message[2]}. Latency {total_latency}s.\n"
                 )
-        except:
-            logging.error("Failed to parse time")
+        except Exception as err:
+            logging.error(f"Failed to parse time: {err}")
 
     if len(split_message) == 2:
         orig_time = datetime.fromisoformat(split_message[1])
@@ -77,7 +77,8 @@ def on_message(client, userdata, msg):
         csq = int(split_message[0])
         with open("/home/lukas/events.log", "a") as f:
             f.write(
-                f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm, at {orig_time}, latency {total_latency}\n"
+                f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm, at {orig_time}, "
+                f"latency {total_latency}\n"
             )
         message = f"{split_message[0]};{split_message[1]};{total_latency}"
 
