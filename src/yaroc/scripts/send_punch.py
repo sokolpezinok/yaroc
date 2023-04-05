@@ -8,6 +8,7 @@ from sportident import SIReader
 from ..clients.client import Client
 from ..clients.meos import MeosClient
 from ..clients.mqtt import SimpleMqttClient
+from ..clients.roc import RocClient
 from ..utils.udev_si import UdevSIManager
 
 logging.basicConfig(
@@ -25,6 +26,7 @@ TOPIC = "spe/47"
 clients: list[Client] = []
 clients.append(MeosClient("192.168.88.165", 10000))
 clients.append(SimpleMqttClient(TOPIC, "SendPunch"))
+clients.append(RocClient(""))
 
 
 def si_worker(si: SIReader, finished: Event):

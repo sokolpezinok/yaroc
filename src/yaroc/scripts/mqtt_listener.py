@@ -4,8 +4,9 @@ from datetime import datetime
 import paho.mqtt.client as mqtt
 from requests.adapters import PoolManager, Retry
 
-retries = Retry(backoff_factor=1.0)
-http = PoolManager(retries=retries)
+from ..clients.roc import RocClient
+
+roc_client = RocClient("b827eb1d3c4f")
 
 
 def on_connect(client, userdata, flags, rc):
@@ -30,30 +31,7 @@ def on_message(client, userdata, msg):
         with open("/home/lukas/mqtt.log", "a") as f:
             f.write(f"{code:03} {now}, dated {split_message[3]}, " f"latency {total_latency}\n")
 
-        data = {
-            "control1": split_message[0],
-            "sinumber1": split_message[1],
-            "stationmode1": split_message[2],
-            "date1": sitime.strftime("%Y-%m-%d"),
-            "sitime1": sitime.strftime("%H:%M:%S"),
-            "ms1": sitime.strftime("%f")[:3],
-            "roctime1": split_message[4][:19],
-            "macaddr": "b827eb1d3c4f",
-            "1": "f",
-            "length": str(118 + sum(map(len, split_message[:3]))),
-        }
-
-        try:
-            response = http.request(
-                "POST",
-                "https://roc.olresultat.se/ver7.1/sendpunches_v2.php",
-                encode_multipart=False,
-                fields=data,
-            )
-            logging.debug(f"Got response {response.status}: {response.data}")
-        except Exception as e:
-            logging.error(e)
-
+        roc_client.send_punch(int(split_message[1]), sitime, now, code, int(split_message[2]))
         message = (
             f"{code:03};{split_message[1]};{split_message[2]};"
             f"{sitime};{total_latency};{split_message[4]}"
