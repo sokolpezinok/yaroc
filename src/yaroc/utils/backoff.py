@@ -43,7 +43,7 @@ class BackoffSender(Generic[T]):
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
-        self.queue = queue.Queue()
+        self.queue: queue.Queue[tuple[datetime, UnsentMessage]] = queue.Queue()
 
         self.thread = threading.Thread(target=self._do_work)
         self.thread.daemon = True

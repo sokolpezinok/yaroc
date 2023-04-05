@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Callable
+from typing import Callable, Dict
 
 import pyudev
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
@@ -16,15 +16,15 @@ DEFAULT_TIMEOUT_MS = 3.0
 
 
 class SiWorker:
-    def __init__(self, si: SIReader, worker_fn: Callable[[SIReader], None]):
+    def __init__(self, si: SIReader, worker_fn: Callable[[SIReader, threading.Event], None]):
         self.si = si
-        self.event = threading.Event()
-        self.thread = threading.Thread(target=worker_fn, args=(self.si, self.event))
+        self.finished = threading.Event()
+        self.thread = threading.Thread(target=worker_fn, args=(self.si, self.finished))
         self.thread.setDaemon(True)
         self.thread.start()
 
     def close(self, timeout: float = DEFAULT_TIMEOUT_MS):
-        self.event.set()
+        self.finished.set()
         self.si.disconnect()
         self.thread.join(timeout)
 
@@ -38,11 +38,11 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(self, worker_fn: Callable[[SIReader], None]):
+    def __init__(self, worker_fn: Callable[[SIReader, threading.Event], None]):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
-        self.si_workers = {}
+        self.si_workers: Dict[str, SiWorker] = {}
         self.worker_fn = worker_fn
         for device in context.list_devices():
             self._handle_udev_event("add", device)

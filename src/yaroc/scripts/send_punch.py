@@ -1,11 +1,11 @@
 import logging
-import sys
 import time
 from datetime import datetime
 from threading import Event
 
 from sportident import SIReader
 
+from ..clients.client import Client
 from ..clients.meos import MeosClient
 from ..clients.mqtt import SimpleMqttClient
 from ..utils.udev_si import UdevSIManager
@@ -22,20 +22,14 @@ BEACON_CONTROL = 18
 TOPIC = "spe/47"
 
 
-# TODO: allow multiple clients
-client = "mqtt"
-if client == "meos":
-    client = MeosClient("192.168.88.165", 10000)
-elif client == "mqtt":
-    client = SimpleMqttClient(TOPIC, "SendPunch")
-else:
-    logging.error("")
-    sys.exit(1)
+clients: list[Client] = []
+clients.append(MeosClient("192.168.88.165", 10000))
+clients.append(SimpleMqttClient(TOPIC, "SendPunch"))
 
 
-def si_worker(si: SIReader, evnt: Event):
+def si_worker(si: SIReader, finished: Event):
     while True:
-        if evnt.is_set():
+        if finished.is_set():
             return
 
         if si.poll_sicard():
@@ -57,7 +51,8 @@ def si_worker(si: SIReader, evnt: Event):
 
         for code, tim, mode in messages:
             logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
-            client.send_punch(card_number, tim, now, code, mode)
+            for client in clients:
+                client.send_punch(card_number, tim, now, code, mode)
 
 
 si_manager = UdevSIManager(si_worker)
