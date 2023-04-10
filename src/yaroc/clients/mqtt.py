@@ -27,22 +27,23 @@ class SimpleMqttClient(Client):
             del client, userdata
             logging.info(f"Published id={mid}")
 
+        self.topic_punches = topic_prefix + "/punches"
+        self.topic_coords = topic_prefix + "/coords"
+        self.topic_status = topic_prefix + "/status"
+
         if name is None:
             self.client = mqtt.Client()
-            # TODO: fix, it breaks protobuf messaging
-            # self.client.will_set(topic, "Disconnected", qos=1)
+            self.client.will_set(self.topic_status, "Disconnected", qos=1)
         else:
             name = str(name)
             self.client = mqtt.Client(client_id=name, clean_session=False)
-            # self.client.will_set(topic, f"Disconnected {name}", qos=1)
+            self.client.will_set(self.topic_status, f"Disconnected {name}", qos=1)
 
         # NB-IoT is slow to connect
         self.client._connect_timeout = 35
         self.client.message_retry_set(26)
         self.client.max_inflight_messages_set(100)  # bump from 20
         self.client.enable_logger()
-        self.topic_punches = topic_prefix + "/punches"
-        self.topic_coords = topic_prefix + "/coords"
 
         self.client.on_connect = on_connect
         self.client.on_disconnect = on_disconnect

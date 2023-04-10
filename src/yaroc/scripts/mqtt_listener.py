@@ -34,11 +34,11 @@ def on_message(client, userdata, msg):
         total_latency = now - si_time
 
         log_message = (
-            f"{punch.code:03} {now}, dated {si_time}, processed {process_time}"
-            f" latency {total_latency}\n"
+            f"{punch.code:03} dated {si_time}, processed {process_time},"
+            f" latency {total_latency}"
         )
         with open("/home/lukas/mqtt.log", "a") as f:
-            f.write(log_message)
+            f.write(f"{log_message}\n")
         logging.info(f"{msg.topic} {log_message}")
 
         # TODO: make this configurable
@@ -51,10 +51,10 @@ def on_message(client, userdata, msg):
         total_latency = datetime.now().astimezone() - orig_time
         log_message = (
             f"{orig_time}: {coords.latitude},{coords.longitude}, altitude "
-            f"{coords.altitude}. Latency {total_latency}s.\n"
+            f"{coords.altitude}. Latency {total_latency}s."
         )
         with open("/home/lukas/events.log", "a") as f:
-            f.write(log_message)
+            f.write(f"{log_message}\n")
         logging.info(f"{msg.topic} {log_message}")
         return
 
