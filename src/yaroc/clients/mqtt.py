@@ -6,7 +6,7 @@ from typing import Any, Optional
 import paho.mqtt.client as mqtt
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ..pb.punches_pb2 import Punch, Punches
+from ..pb.punches_pb2 import Punch
 from .client import Client
 
 
@@ -28,11 +28,12 @@ class SimpleMqttClient(Client):
 
         if name is None:
             self.client = mqtt.Client()
-            self.client.will_set(topic, "Disconnected", qos=1)
+            # TODO: fix, it breaks protobuf messaging
+            # self.client.will_set(topic, "Disconnected", qos=1)
         else:
             name = str(name)
             self.client = mqtt.Client(client_id=name, clean_session=False)
-            self.client.will_set(topic, f"Disconnected {name}", qos=1)
+            # self.client.will_set(topic, f"Disconnected {name}", qos=1)
 
         # NB-IoT is slow to connect
         self.client._connect_timeout = 35
@@ -70,9 +71,9 @@ class SimpleMqttClient(Client):
         self, lat: float, lon: float, alt: float, timestamp: datetime
     ) -> mqtt.MQTTMessageInfo:
         message = f"{lat};{lon};{alt};{timestamp}"
-        return self._send(message)
+        return self._send(message.encode('utf-8'))
 
-    def _send(self, message: str) -> mqtt.MQTTMessageInfo:
+    def _send(self, message: bytes) -> mqtt.MQTTMessageInfo:
         message_info = self.client.publish(self.topic, message, qos=1)
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")

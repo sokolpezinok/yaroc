@@ -2,10 +2,9 @@ import logging
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
-from google.protobuf import timestamp_pb2
 
 from ..clients.roc import RocClient
-from ..pb.punches_pb2 import Punch, Punches
+from ..pb.punches_pb2 import Punch
 
 roc_client = RocClient("b827eb1d3c4f")
 
@@ -24,9 +23,9 @@ def on_message(client, userdata, msg):
     print(msg.topic)
     if msg.topic == "yaroc/47/punches":
         punch = Punch.FromString(msg.payload)
-        si_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc)
-        process_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
+        si_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
+        process_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
+        now = datetime.now().astimezone()
         total_latency = now - si_time
 
         with open("/home/lukas/mqtt.log", "a") as f:

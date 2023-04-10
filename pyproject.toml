@@ -26,6 +26,7 @@ dev = [
   "flake8",
   "Flake8-pyproject",
   "types-paho-mqtt",
+  "types-protobuf",
   "types-requests"
 ]
 pylsp = [
