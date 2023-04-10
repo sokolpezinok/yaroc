@@ -20,7 +20,6 @@ logging.basicConfig(
 START = 3
 FINISH = 4
 BEACON_CONTROL = 18
-# TODO: this is just a topic prefix
 TOPIC = "yaroc/47"
 
 

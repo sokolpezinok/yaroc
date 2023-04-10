@@ -2,8 +2,10 @@ import logging
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.roc import RocClient
+from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punch
 
 roc_client = RocClient("b827eb1d3c4f")
@@ -18,39 +20,47 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe("yaroc/47/#", qos=1)
 
 
+def _prototime_to_datetime(prototime: Timestamp) -> datetime:
+    return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
+
+
 def on_message(client, userdata, msg):
     del client, userdata
     print(msg.topic)
     if msg.topic == "yaroc/47/punches":
         punch = Punch.FromString(msg.payload)
-        si_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
-        process_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
+        si_time = _prototime_to_datetime(punch.si_time)
+        process_time = _prototime_to_datetime(punch.si_time)
         now = datetime.now().astimezone()
         total_latency = now - si_time
 
+        log_message = (
+            f"{punch.code:03} {now}, dated {si_time}, processed {process_time}"
+            f" latency {total_latency}\n"
+        )
         with open("/home/lukas/mqtt.log", "a") as f:
-            f.write(
-                f"{punch.code:03} {now}, dated {si_time}, processed {process_time}"
-                f" latency {total_latency}\n"
-            )
+            f.write(log_message)
+        logging.info(f"{msg.topic} {log_message}")
 
+        # TODO: make this configurable
         # roc_client.send_punch(punch.card, si_time, now, punch.code, punch.mode)
+        return
+
+    if msg.topic == "yaroc/47/coords":
+        coords = Coordinates.FromString(msg.payload)
+        orig_time = _prototime_to_datetime(coords.time)
+        total_latency = datetime.now().astimezone() - orig_time
+        log_message = (
+            f"{orig_time}: {coords.latitude},{coords.longitude}, altitude "
+            f"{coords.altitude}. Latency {total_latency}s.\n"
+        )
+        with open("/home/lukas/events.log", "a") as f:
+            f.write(log_message)
+        logging.info(f"{msg.topic} {log_message}")
         return
 
     message = msg.payload.decode("utf-8")
     split_message = message.split(";")
-    if len(split_message) == 4:
-        try:
-            orig_time = datetime.fromisoformat(split_message[3])
-            total_latency = datetime.now() - orig_time
-            with open("/home/lukas/events.log", "a") as f:
-                f.write(
-                    f"{split_message[3]}: {split_message[0]},{split_message[1]}, altitude "
-                    f"{split_message[2]}. Latency {total_latency}s.\n"
-                )
-        except Exception as err:
-            logging.error(f"Failed to parse time: {err}")
-
     if len(split_message) == 2:
         orig_time = datetime.fromisoformat(split_message[1])
         total_latency = datetime.now() - orig_time
