@@ -16,6 +16,10 @@ class ModemManager:
         # TODO: add filtering options
         return list(self.modem_manager.GetManagedObjects())
 
+    def enable(self, modem_path: str):
+        modem = self.bus.get(MODEM_MANAGER, modem_path)
+        modem.Enable(True)
+
     def create_sms(self, modem_path: str, number: str, text: str) -> str:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
         sms_path = modem.Create(
@@ -26,7 +30,7 @@ class ModemManager:
         )
         return sms_path
 
-    def send_sms(self, sms_path) -> bool:
+    def send_sms(self, sms_path: str) -> bool:
         try:
             sms = self.bus.get(MODEM_MANAGER, sms_path)
             sms.Send()
@@ -34,3 +38,12 @@ class ModemManager:
         except Exception as err:
             logging.error(err)
             return False
+
+    def signal_setup(self, modem_path: str, rate_secs: int):
+        modem = self.bus.get(MODEM_MANAGER, modem_path)
+        modem["org.freedesktop.ModemManager1.Modem.Signal"].Setup(rate_secs)
+
+    def get_signal(self, modem_path: str) -> float:
+        modem = self.bus.get(MODEM_MANAGER, modem_path)
+        # TODO: return something else if LTE is not available
+        return modem.Lte["rssi"]
