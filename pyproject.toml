@@ -15,25 +15,27 @@ dependencies = [
   "paho-mqtt==1.6.*",
   "requests==2.28.*",
   "protobuf==4.22.*",
+  "psutil==5.9.*",
   "sportident",
 ]
 
 [project.optional-dependencies] # Optional
 dev = [
   "black",
-  "mypy",
-  "isort",
   "flake8",
+  "isort",
+  "mypy",
   "Flake8-pyproject",
   "types-paho-mqtt",
   "types-protobuf",
+  "types-psutil",
   "types-requests"
 ]
 pylsp = [
-  "python-lsp-black",
-  "pylsp-mypy",
-  "pyls-isort",
   "pyls-flake8",
+  "pyls-isort",
+  "pylsp-mypy",
+  "python-lsp-black",
 ]
 test = ["pytest"]
 

@@ -26,7 +26,6 @@ def _prototime_to_datetime(prototime: Timestamp) -> datetime:
 
 def on_message(client, userdata, msg):
     del client, userdata
-    print(msg.topic)
     if msg.topic == "yaroc/47/punches":
         punch = Punch.FromString(msg.payload)
         si_time = _prototime_to_datetime(punch.si_time)

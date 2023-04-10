@@ -48,7 +48,6 @@ class RocClient(Client):
                 encode_multipart=False,
                 fields=data,
             )
-            print(response.data)
             logging.debug(f"Got response {response.status}: {response.data}")
         except Exception as e:
             logging.error(e)
