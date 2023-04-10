@@ -7,6 +7,7 @@ from requests.adapters import PoolManager, Retry
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
+ROC_RECEIVEDATA = "https://roc.olresultat.se/ver7.1/receivedata.php"
 
 
 class RocClient(Client):
@@ -49,5 +50,36 @@ class RocClient(Client):
                 fields=data,
             )
             logging.debug(f"Got response {response.status}: {response.data}")
+        except Exception as e:
+            logging.error(e)
+
+    def minicallhome(
+        self,
+    ):
+        data = {
+            "function": "callhome",
+            "command": "setmini",
+            "macaddr": self.macaddr,
+            "failedcallhomes": "0",
+            "localipaddress": "192.168.1.14",
+            "codes": "",
+            "totaldatatx": "0",
+            "totaldatarx": "0",
+            "signaldBm": "0",
+            "temperature": "45",
+            "networktype": "101",  # LTE is 101, figure out the rest
+            "volts": "1.2",
+            "minFreq": "600",
+            "maxFreq": "1200",
+            "freq": "800",
+        }
+
+        try:
+            response = self.http.request(
+                "GET",
+                ROC_RECEIVEDATA,
+                fields=data,
+            )
+            logging.debug(f"Got response {response.status}: {response.data.decode('utf-8')}")
         except Exception as e:
             logging.error(e)
