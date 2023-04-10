@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime
+from math import floor
 from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
+from google.protobuf.timestamp_pb2 import Timestamp
 
+from ..pb.punches_pb2 import Punch, Punches
 from .client import Client
 
 
@@ -48,10 +51,20 @@ class SimpleMqttClient(Client):
         self.client.loop_stop()
 
     def send_punch(
-        self, card_number: int, sitime: datetime, now: datetime, code: int, mode: int
+        self, card_number: int, si_time: datetime, now: datetime, code: int, mode: int
     ) -> mqtt.MQTTMessageInfo:
-        message = f"{code};{card_number};{mode};{sitime.isoformat()};{now}"
-        return self._send(message)
+        del now
+        punch = Punch()
+        punch.card = card_number
+        punch.code = code
+        punch.mode = mode
+        si_timestamp = Timestamp()
+        si_timestamp.FromMilliseconds(floor(si_time.timestamp() * 1000))
+        punch.si_time.CopyFrom(si_timestamp)
+        process_time = Timestamp()
+        process_time.GetCurrentTime()
+        punch.process_time.CopyFrom(process_time)
+        return self._send(punch.SerializeToString())
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime

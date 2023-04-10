@@ -1,0 +1,14 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+
+message Punch {
+  uint32 code = 1;
+  uint32 card = 2;
+  google.protobuf.Timestamp si_time = 3;
+  google.protobuf.Timestamp process_time = 4;
+  uint32 mode = 5;
+}
+
+message Punches {
+  repeated Punch punches = 1;
+}

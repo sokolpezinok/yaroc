@@ -14,7 +14,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-mqtt_client = SimpleMqttClient("spe/47", name="benchmark")
+mqtt_client = SimpleMqttClient("yaroc/47/punches", name="benchmark")
 
 
 def process_gps_coords():
@@ -47,10 +47,10 @@ thread.daemon = True
 thread.start()
 
 handles = []
-for i in range(1000):
+for i in range(100):
     message_info = mqtt_client.send_punch(46283, datetime.now(), datetime.now(), (i + 1) % 1000, 18)
     handles.append(message_info)
-    time.sleep(5)
+    time.sleep(7)
 
 for message_info in handles:
     while not mqtt_client.client.is_connected():

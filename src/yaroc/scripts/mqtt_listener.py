@@ -1,10 +1,11 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
-from requests.adapters import PoolManager, Retry
+from google.protobuf import timestamp_pb2
 
 from ..clients.roc import RocClient
+from ..pb.punches_pb2 import Punch, Punches
 
 roc_client = RocClient("b827eb1d3c4f")
 
@@ -15,28 +16,30 @@ def on_connect(client, userdata, flags, rc):
 
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    client.subscribe("spe/47", qos=1)
+    client.subscribe("yaroc/47/#", qos=1)
 
 
 def on_message(client, userdata, msg):
     del client, userdata
-    message = msg.payload.decode("utf-8")
-    split_message = message.split(";")
-    if len(split_message) == 5:
-        sitime = datetime.fromisoformat(split_message[3])
-        now = datetime.now()
-        total_latency = now - sitime
-        code = int(split_message[0])
+    print(msg.topic)
+    if msg.topic == "yaroc/47/punches":
+        punch = Punch.FromString(msg.payload)
+        si_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc)
+        process_time = punch.si_time.ToDatetime().replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        total_latency = now - si_time
 
         with open("/home/lukas/mqtt.log", "a") as f:
-            f.write(f"{code:03} {now}, dated {split_message[3]}, " f"latency {total_latency}\n")
+            f.write(
+                f"{punch.code:03} {now}, dated {si_time}, processed {process_time}"
+                f" latency {total_latency}\n"
+            )
 
-        roc_client.send_punch(int(split_message[1]), sitime, now, code, int(split_message[2]))
-        message = (
-            f"{code:03};{split_message[1]};{split_message[2]};"
-            f"{sitime};{total_latency};{split_message[4]}"
-        )
+        # roc_client.send_punch(punch.card, si_time, now, punch.code, punch.mode)
+        return
 
+    message = msg.payload.decode("utf-8")
+    split_message = message.split(";")
     if len(split_message) == 4:
         try:
             orig_time = datetime.fromisoformat(split_message[3])

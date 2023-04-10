@@ -14,6 +14,7 @@ dependencies = [
   "pyudev==0.24.*", # note: Linux only
   "paho-mqtt==1.6.*",
   "requests==2.28.*",
+  "protobuf==4.22.*",
   "sportident",
 ]
 
@@ -46,6 +47,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 100
+exclude = ".git|.hg|.mypy_cache|.venv|_build|build|dist|_pb2.py"
 
 [tool.flake8]
 max-line-length = 100
+exclude = "**/*_pb2.py"
+
+[tool.isort]
+include_trailing_comma = true
+line_length = 100
+multi_line_output = 3
+skip_glob = "**/*_pb2.py?"
