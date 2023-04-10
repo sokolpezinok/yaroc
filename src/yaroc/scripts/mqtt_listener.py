@@ -7,6 +7,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from ..clients.roc import RocClient
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punch
+from ..pb.status_pb2 import Status
 
 roc_client = RocClient("b827eb1d3c4f")
 
@@ -26,11 +27,11 @@ def _prototime_to_datetime(prototime: Timestamp) -> datetime:
 
 def on_message(client, userdata, msg):
     del client, userdata
+    now = datetime.now().astimezone()
     if msg.topic == "yaroc/47/punches":
         punch = Punch.FromString(msg.payload)
         si_time = _prototime_to_datetime(punch.si_time)
         process_time = _prototime_to_datetime(punch.si_time)
-        now = datetime.now().astimezone()
         total_latency = now - si_time
 
         log_message = (
@@ -39,7 +40,7 @@ def on_message(client, userdata, msg):
         )
         with open("/home/lukas/mqtt.log", "a") as f:
             f.write(f"{log_message}\n")
-        logging.info(f"{msg.topic} {log_message}")
+        logging.info(log_message)
 
         # TODO: make this configurable
         # roc_client.send_punch(punch.card, si_time, now, punch.code, punch.mode)
@@ -48,30 +49,33 @@ def on_message(client, userdata, msg):
     if msg.topic == "yaroc/47/coords":
         coords = Coordinates.FromString(msg.payload)
         orig_time = _prototime_to_datetime(coords.time)
-        total_latency = datetime.now().astimezone() - orig_time
+        total_latency = now - orig_time
         log_message = (
             f"{orig_time}: {coords.latitude},{coords.longitude}, altitude "
             f"{coords.altitude}. Latency {total_latency}s."
         )
         with open("/home/lukas/events.log", "a") as f:
             f.write(f"{log_message}\n")
-        logging.info(f"{msg.topic} {log_message}")
+        logging.info(log_message)
         return
 
-    message = msg.payload.decode("utf-8")
-    split_message = message.split(";")
-    if len(split_message) == 2:
-        orig_time = datetime.fromisoformat(split_message[1])
-        total_latency = datetime.now() - orig_time
-        csq = int(split_message[0])
-        with open("/home/lukas/events.log", "a") as f:
-            f.write(
+    if msg.topic == "yaroc/47/status":
+        status = Status.FromString(msg.payload)
+        oneof = status.WhichOneof("msg")
+        if oneof == "disconnected":
+            logging.info(f"Disconnected {status.disconnected.client_name}")
+        elif oneof == "signal_strength":
+            signal_strength = status.signal_strength
+            orig_time = _prototime_to_datetime(signal_strength.time)
+            total_latency = now - orig_time
+            csq = signal_strength.csq
+            log_message = (
                 f"{datetime.now()}: CSQ {csq}, {-114 + 2*csq} dBm, at {orig_time}, "
-                f"latency {total_latency}\n"
+                f"latency {total_latency}"
             )
-        message = f"{split_message[0]};{split_message[1]};{total_latency}"
-
-    logging.info(f"{msg.topic} {message}")
+            with open("/home/lukas/events.log", "a") as f:
+                f.write(f"{log_message}\n")
+            logging.info(log_message)
 
 
 logging.basicConfig(

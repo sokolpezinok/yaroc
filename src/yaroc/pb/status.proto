@@ -1,0 +1,26 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+
+message Disconnected {
+  string client_name = 1;
+}
+
+message SignalStrength {
+  uint32 csq = 1;
+  google.protobuf.Timestamp time = 2;
+}
+
+message MiniCallHome {
+  string mac_address = 1;
+  uint32 freq = 4;
+  uint32 min_freq = 5;
+  uint32 max_freq = 6;
+}
+
+message Status {
+  oneof msg {
+    Disconnected disconnected = 1;
+    SignalStrength signal_strength = 2;
+    MiniCallHome mini_call_home = 3;
+  }
+}

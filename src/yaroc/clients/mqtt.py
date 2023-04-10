@@ -8,6 +8,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punch
+from ..pb.status_pb2 import Disconnected, SignalStrength, Status
 from .client import Client
 
 
@@ -31,13 +32,16 @@ class SimpleMqttClient(Client):
         self.topic_coords = topic_prefix + "/coords"
         self.topic_status = topic_prefix + "/status"
 
+        disconnected = Disconnected()
         if name is None:
+            disconnected.client_name = ""
             self.client = mqtt.Client()
-            self.client.will_set(self.topic_status, "Disconnected", qos=1)
         else:
-            name = str(name)
+            disconnected.client_name = str(name)
             self.client = mqtt.Client(client_id=name, clean_session=False)
-            self.client.will_set(self.topic_status, f"Disconnected {name}", qos=1)
+        status = Status()
+        status.disconnected.CopyFrom(disconnected)
+        self.client.will_set(self.topic_status, status.SerializeToString(), qos=1)
 
         # NB-IoT is slow to connect
         self.client._connect_timeout = 35
@@ -83,6 +87,14 @@ class SimpleMqttClient(Client):
         coords.altitude = alt
         coords.time.CopyFrom(SimpleMqttClient._datetime_to_prototime(timestamp))
         return self._send(self.topic_coords, coords.SerializeToString())
+
+    def send_signal_strength(self, csq: int, orig_time: datetime) -> mqtt.MQTTMessageInfo:
+        signal_strength = SignalStrength()
+        signal_strength.time.CopyFrom(SimpleMqttClient._datetime_to_prototime(orig_time))
+        signal_strength.csq = 20
+        status = Status()
+        status.signal_strength.CopyFrom(signal_strength)
+        return self._send(self.topic_status, status.SerializeToString())
 
     def _send(self, topic: str, message: bytes) -> mqtt.MQTTMessageInfo:
         message_info = self.client.publish(topic, message, qos=1)

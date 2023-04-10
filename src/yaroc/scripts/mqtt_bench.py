@@ -53,6 +53,7 @@ for i in range(1000):
     time.sleep(5)
 
 for message_info in handles:
+    # TODO: this is an implementation details, should go inside the mqtt_client
     while not mqtt_client.client.is_connected():
         time.sleep(2)
 
