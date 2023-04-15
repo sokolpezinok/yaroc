@@ -15,7 +15,7 @@ from .client import Client
 class SimpleMqttClient(Client):
     """Class for a simple MQTT reporting"""
 
-    def __init__(self, topic_prefix: str, name: Optional[str] = None):
+    def __init__(self, mac_address: str, name: Optional[str] = None):
         def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
             del client, userdata, flags
             logging.info(f"Connected with result code {str(rc)}")
@@ -28,9 +28,9 @@ class SimpleMqttClient(Client):
             del client, userdata
             logging.info(f"Published id={mid}")
 
-        self.topic_punches = topic_prefix + "/punches"
-        self.topic_coords = topic_prefix + "/coords"
-        self.topic_status = topic_prefix + "/status"
+        self.topic_punches = f"yaroc/{mac_address}/punches"
+        self.topic_coords = f"yaroc/{mac_address}/coords"
+        self.topic_status = f"yaroc/{mac_address}/status"
 
         disconnected = Disconnected()
         if name is None:

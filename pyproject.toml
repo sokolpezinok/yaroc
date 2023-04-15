@@ -66,4 +66,4 @@ exclude = "**/*_pb2.py"
 include_trailing_comma = true
 line_length = 100
 multi_line_output = 3
-skip_glob = "**/*_pb2.py?"
+skip_glob = "**/*_pb2.py,**/*_pb2.pyi"

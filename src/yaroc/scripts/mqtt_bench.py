@@ -7,6 +7,7 @@ from datetime import datetime
 import paho.mqtt.client as mqtt
 
 from ..clients.mqtt import SimpleMqttClient
+from ..utils.sys_info import eth_mac_addr
 
 logging.basicConfig(
     encoding="utf-8",
@@ -14,7 +15,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-mqtt_client = SimpleMqttClient("yaroc/47", name="benchmark")
+mac_addr = eth_mac_addr()
+assert mac_addr is not None
+mqtt_client = SimpleMqttClient(mac_addr, name="benchmark")
 
 
 def process_gps_coords():
@@ -53,7 +56,7 @@ for i in range(1000):
     time.sleep(5)
 
 for message_info in handles:
-    # TODO: this is an implementation details, should go inside the mqtt_client
+    # TODO: this is an implementation detail, should go inside the mqtt_client
     while not mqtt_client.client.is_connected():
         time.sleep(2)
 

@@ -25,7 +25,7 @@ class LiveObjectsClient(Client):
         self.lo.add_to_payload("sitime", sitime.strftime("%Y-%m-%d"))
         self.lo.add_to_payload("ms", sitime.strftime("%f")[:3])
         self.lo.add_to_payload("roctime", now.strftime("%Y-%m-%d %H:%M:%S"))
-        self.lo.add_to_payload("macaddr", "b827eb1d3c4f")
+        self.lo.add_to_payload("macaddr", "0123456789ab")
         self.lo.add_to_payload("length", length_of_number(card_number) + length_of_number(code))
         self.lo.add_to_payload("mode", mode)
         self.lo.send_data()

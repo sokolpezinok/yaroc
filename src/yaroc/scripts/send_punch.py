@@ -9,7 +9,7 @@ from ..clients.client import Client
 from ..clients.meos import MeosClient
 from ..clients.mqtt import SimpleMqttClient
 from ..clients.roc import RocClient
-from ..utils.sys_info import create_minicallhome
+from ..utils.sys_info import create_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
 
 logging.basicConfig(
@@ -21,13 +21,15 @@ logging.basicConfig(
 START = 3
 FINISH = 4
 BEACON_CONTROL = 18
-TOPIC = "yaroc/47"
 
+
+mac_addr = eth_mac_addr()
+assert mac_addr is not None
 
 clients: list[Client] = []
 # clients.append(MeosClient("192.168.88.165", 10000))
-clients.append(SimpleMqttClient(TOPIC, "SendPunch"))
-clients.append(RocClient("b827eb1d3c4f"))
+clients.append(SimpleMqttClient(mac_addr, "SendPunch"))
+clients.append(RocClient(mac_addr))
 
 
 def si_worker(si: SIReader, finished: Event):

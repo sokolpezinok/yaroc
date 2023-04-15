@@ -5,12 +5,12 @@ import psutil
 from ..pb.status_pb2 import MiniCallHome
 
 
-def macaddr() -> str | None:
+def eth_mac_addr() -> str | None:
     for name, addresses in psutil.net_if_addrs().items():
         if name.startswith("e"):
             for address in addresses:
                 if address.family == psutil.AF_LINK:
-                    return address.address
+                    return address.address.replace(":", "")
     return None
 
 
