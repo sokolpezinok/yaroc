@@ -96,7 +96,7 @@ class SimpleMqttClient(Client):
         status.signal_strength.CopyFrom(signal_strength)
         return self._send(self.topic_status, status.SerializeToString())
 
-    def send_minicallhome(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
+    def send_mini_call_home(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
         status = Status()
         status.mini_call_home.CopyFrom(mch)
         return self._send(self.topic_status, status.SerializeToString())

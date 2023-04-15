@@ -4,6 +4,7 @@ from datetime import datetime
 
 from requests.adapters import PoolManager, Retry
 
+from ..pb.status_pb2 import MiniCallHome
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
@@ -53,25 +54,23 @@ class RocClient(Client):
         except Exception as e:
             logging.error(e)
 
-    def minicallhome(
-        self,
-    ):
+    def send_mini_call_home(self, mch: MiniCallHome):
         data = {
             "function": "callhome",
             "command": "setmini",
             "macaddr": self.macaddr,
             "failedcallhomes": "0",
-            "localipaddress": "192.168.1.14",
+            "localipaddress": mch.local_ip,
             "codes": "",
-            "totaldatatx": "0",
-            "totaldatarx": "0",
-            "signaldBm": "0",
-            "temperature": "45",
-            "networktype": "101",  # LTE is 101, figure out the rest
-            "volts": "1.2",
-            "minFreq": "600",
-            "maxFreq": "1200",
-            "freq": "800",
+            "totaldatatx": str(mch.totaldatarx),
+            "totaldatarx": str(mch.totaldatatx),
+            "signaldBm": str(mch.signal_dbm),
+            "temperature": str(mch.cpu_temperature),
+            "networktype": str(mch.network_type),
+            "volts": str(mch.volts),
+            "freq": str(mch.freq),
+            "minFreq": str(mch.min_freq),
+            "maxFreq": str(mch.max_freq),
         }
 
         try:

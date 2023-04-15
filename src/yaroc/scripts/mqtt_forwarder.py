@@ -86,6 +86,8 @@ class MqttForwader:
                 f"at {orig_time}, latency {total_latency}"
             )
             logging.info(log_message)
+            for client in self.clients:
+                client.send_mini_call_home(mch)
 
     def _on_message(self, client, userdata, msg):
         del client, userdata
