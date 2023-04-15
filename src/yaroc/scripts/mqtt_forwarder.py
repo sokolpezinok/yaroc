@@ -77,6 +77,15 @@ class MqttForwader:
             # with open("/home/lukas/events.log", "a") as f:
             #     f.write(f"{log_message}\n")
             logging.info(log_message)
+        elif oneof == "mini_call_home":
+            mch = status.mini_call_home
+            orig_time = MqttForwader._prototime_to_datetime(mch.time)
+            total_latency = now - orig_time
+            log_message = (
+                f"{datetime.now()}: {mch.cpu_temperature}°C, {mch.signal_dbm} dBm, {mch.freq} MHz "
+                f"at {orig_time}, latency {total_latency}"
+            )
+            logging.info(log_message)
 
     def _on_message(self, client, userdata, msg):
         del client, userdata

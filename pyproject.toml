@@ -47,7 +47,7 @@ test = ["pytest"]
 
 [project.scripts]
 mqtt-bench = "yaroc.scripts.mqtt_bench:main"
-mqtt-listener = "yaroc.scripts.mqtt_listener:main"
+mqtt-forwarder = "yaroc.scripts.mqtt_forwarder:main"
 send-punch = "yaroc.scripts.send_punch:main"
 
 [build-system]

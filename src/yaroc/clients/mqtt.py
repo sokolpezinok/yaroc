@@ -8,7 +8,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punch
-from ..pb.status_pb2 import Disconnected, SignalStrength, Status
+from ..pb.status_pb2 import Disconnected, MiniCallHome, SignalStrength, Status
 from .client import Client
 
 
@@ -94,6 +94,11 @@ class SimpleMqttClient(Client):
         signal_strength.csq = 20
         status = Status()
         status.signal_strength.CopyFrom(signal_strength)
+        return self._send(self.topic_status, status.SerializeToString())
+
+    def send_minicallhome(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
+        status = Status()
+        status.mini_call_home.CopyFrom(mch)
         return self._send(self.topic_status, status.SerializeToString())
 
     def _send(self, topic: str, message: bytes) -> mqtt.MQTTMessageInfo:

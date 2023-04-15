@@ -1,4 +1,8 @@
+from math import floor
+
 import psutil
+
+from ..pb.status_pb2 import MiniCallHome
 
 
 def macaddr() -> str | None:
@@ -10,7 +14,20 @@ def macaddr() -> str | None:
     return None
 
 
-# TODO: either return the whole struct or use an own one
-def network_stats() -> tuple[int, int]:
-    counters = psutil.net_io_counters()
-    return (counters.bytes_sent, counters.bytes_recv)
+def create_minicallhome() -> MiniCallHome:
+    mch = MiniCallHome()
+    mch.time.GetCurrentTime()
+
+    cpu_freq = psutil.cpu_freq()
+    mch.freq = floor(cpu_freq.current)
+    mch.min_freq = floor(cpu_freq.min)
+    mch.max_freq = floor(cpu_freq.max)
+
+    net_counters = psutil.net_io_counters()
+    mch.totaldatarx = net_counters.bytes_recv
+    mch.totaldatatx = net_counters.bytes_sent
+
+    temperatures = psutil.sensors_temperatures()
+    cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
+    mch.cpu_temperature = cpu_temp.current
+    return mch

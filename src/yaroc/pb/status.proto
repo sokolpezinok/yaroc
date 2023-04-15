@@ -12,9 +12,17 @@ message SignalStrength {
 
 message MiniCallHome {
   string mac_address = 1;
+  string local_ip = 2;
+  float cpu_temperature = 3;
   uint32 freq = 4;
   uint32 min_freq = 5;
   uint32 max_freq = 6;
+  float volts = 7;
+  uint32 signal_dbm = 8;
+  uint32 network_type = 9;
+  uint64 totaldatarx = 10;
+  uint64 totaldatatx = 11;
+  google.protobuf.Timestamp time = 12;
 }
 
 message Status {
