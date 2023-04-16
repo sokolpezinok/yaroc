@@ -91,7 +91,7 @@ class SimpleMqttClient(Client):
     def send_signal_strength(self, csq: int, orig_time: datetime) -> mqtt.MQTTMessageInfo:
         signal_strength = SignalStrength()
         signal_strength.time.CopyFrom(SimpleMqttClient._datetime_to_prototime(orig_time))
-        signal_strength.csq = 20
+        signal_strength.csq = csq
         status = Status()
         status.signal_strength.CopyFrom(signal_strength)
         return self._send(self.topic_status, status.SerializeToString())
