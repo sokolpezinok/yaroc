@@ -27,7 +27,14 @@ def create_minicallhome() -> MiniCallHome:
     mch.totaldatarx = net_counters.bytes_recv
     mch.totaldatatx = net_counters.bytes_sent
 
-    temperatures = psutil.sensors_temperatures()
-    cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
-    mch.cpu_temperature = cpu_temp.current
+    raspberry_pi = False  # TODO: add detection
+    if raspberry_pi:
+        import gpiozero
+
+        mch.cpu_temperature = gpiozero.CPUTemperature().temperature
+    else:
+        temperatures = psutil.sensors_temperatures()
+        # TODO: make this more general than ThinkPad
+        cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
+        mch.cpu_temperature = cpu_temp.current
     return mch
