@@ -1,3 +1,4 @@
+import io
 from math import floor
 
 import psutil
@@ -14,6 +15,16 @@ def eth_mac_addr() -> str | None:
     return None
 
 
+def is_raspberrypi() -> bool:
+    detected = False
+    try:
+        with io.open("/sys/firmware/devicetree/base/model", "r") as m:
+            if "raspberry pi" in m.read().lower():
+                detected = True
+    finally:
+        return detected
+
+
 def create_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.GetCurrentTime()
@@ -27,8 +38,7 @@ def create_minicallhome() -> MiniCallHome:
     mch.totaldatarx = net_counters.bytes_recv
     mch.totaldatatx = net_counters.bytes_sent
 
-    raspberry_pi = False  # TODO: add detection
-    if raspberry_pi:
+    if is_raspberrypi():
         import gpiozero
 
         mch.cpu_temperature = gpiozero.CPUTemperature().temperature
