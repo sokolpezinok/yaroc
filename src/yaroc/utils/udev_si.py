@@ -51,7 +51,7 @@ class UdevSIManager:
         try:
             is_sportident = (
                 device.subsystem == "tty"
-                and device.properties["ID_USB_VENDOR_ID"] == "10c4"
+                and device.properties["ID_VENDOR_ID"] == "10c4"
                 and device.properties["ID_MODEL_ID"] == "800a"
             )
             return is_sportident
@@ -67,7 +67,7 @@ class UdevSIManager:
         if not self._is_sportident(device):
             return
         device_node = device.device_node
-        if device.action == "add":
+        if action == "add":
             if device_node in self.si_workers:
                 return
             logging.info(f"Inserted SportIdent device {device_node}")
