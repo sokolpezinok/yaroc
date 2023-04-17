@@ -4,8 +4,9 @@ from datetime import datetime, time, timedelta
 from typing import Literal
 
 from ..pb.status_pb2 import MiniCallHome
+
 # TODO: consider using https://pypi.org/project/backoff/
-from ..utils.backoff import BackoffSender
+from ..utils.backoff import BackoffSender, BackoffMessageInfo
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -54,10 +55,10 @@ class MeosClient(Client):
         now: datetime,
         code: int,
         mode: int,
-    ):
+    ) -> BackoffMessageInfo:
         del mode, now
         message = MeosClient._serialize_punch(card_number, sitime.time(), code)
-        self._backoff_sender.send(message)
+        return self._backoff_sender.send(message)
 
     def send_mini_call_home(self, mch: MiniCallHome):
         pass
@@ -91,9 +92,9 @@ class MeosClient(Client):
         start: time | None,
         finish: time | None,
         punches: list[tuple[int, time]],
-    ):
+    ) -> BackoffMessageInfo:
         message = MeosClient._serialize_card(card_number, start, finish, punches)
-        self._send(message)
+        return self._backoff_sender.send(message)
 
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)

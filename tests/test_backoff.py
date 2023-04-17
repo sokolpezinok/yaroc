@@ -19,13 +19,15 @@ class TestScheduler(unittest.TestCase):
 
         def mark_finish(x: int):
             finished[x] = datetime.now()
+            raise Exception()  # Callback throws in order to test robustness
 
         b = BackoffSender(f, mark_finish, 0.04, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
         b.send(2)
         time.sleep(0.13)
-        b.send(4)
-        b.close(0.6)
+        b.send(4).wait_for_publish(2)
+        published4 = datetime.now()
+        b.close(0.2)
 
         self.assertAlmostEqual(
             finished[2].timestamp(),
@@ -37,6 +39,7 @@ class TestScheduler(unittest.TestCase):
             (start + timedelta(seconds=0.41)).timestamp(),
             delta=0.004,
         )
+        self.assertAlmostEqual(finished[4].timestamp(), published4.timestamp(), delta=0.004)
 
 
 if __name__ == "__main__":

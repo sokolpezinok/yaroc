@@ -1,20 +1,51 @@
 import heapq
 import logging
 import queue
-import threading
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from threading import Condition, Thread
 from typing import Any, Generic, Optional, TypeVar
 
 PRIORITY = 1
 
 
+class BackoffMessageInfo:
+    def __init__(self):
+        self._published = False
+        self._condition = Condition()
+
+    def set_as_published(self):
+        with self._condition:
+            self._published = True
+            self._condition.notify_all()
+
+    def wait_for_publish(self, timeout=None):
+        timeout_time = None if timeout is None else time.time() + timeout
+        timeout_tenth = None if timeout is None else timeout / 10.0
+
+        def timed_out():
+            return False if timeout_time is None else time.time() > timeout_time
+
+        with self._condition:
+            while not self._published and not timed_out():
+                self._condition.wait(timeout_tenth)
+
+
+# TODO: make the type generic
 class UnsentMessage:
     # TODO: make backoff a timedelta
-    def __init__(self, argument: Any, deadline: datetime, backoff: float):
+    def __init__(
+        self,
+        argument: Any,
+        deadline: datetime,
+        backoff: float,
+        backoff_message_info: BackoffMessageInfo,
+    ):
         self.argument = argument
         self.deadline = deadline
         self.backoff = backoff
+        self.backoff_message_info = backoff_message_info
 
     def new_backoff(self, multiplier: float):
         self.backoff *= multiplier
@@ -33,27 +64,30 @@ class BackoffSender(Generic[T]):
     def __init__(
         self,
         send_function: Callable[[Any], T],
-        callback: Callable[[Any], Any],
+        on_publish: Callable[[Any], Any],
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
     ):
         self.send_function = send_function
-        self.callback = callback
+        self.on_publish = on_publish
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
         self.queue: queue.Queue[tuple[datetime, UnsentMessage]] = queue.Queue()
 
-        self.thread = threading.Thread(target=self._do_work)
+        self.thread = Thread(target=self._do_work)
         self.thread.daemon = True
         self.thread.start()
 
     def wrapped_function(self, unsent_message: UnsentMessage) -> Optional[T]:
         try:
             ret = self.send_function(unsent_message.argument)
-            self.callback(unsent_message.argument)
-            return ret
+            unsent_message.backoff_message_info.set_as_published()
+            try:
+                self.on_publish(unsent_message.argument)
+            finally:
+                return ret
         except Exception as e:
             logging.error(e)
             cur_backoff = unsent_message.backoff
@@ -85,10 +119,17 @@ class BackoffSender(Generic[T]):
         self.thread.join(timeout)
 
     def send(self, argument: Any):
+        backoff_message_info = BackoffMessageInfo()
         self.queue.put(
             (
                 datetime.now(),
-                UnsentMessage(argument, datetime.now() + self.max_duration, self.first_backoff),
+                UnsentMessage(
+                    argument,
+                    datetime.now() + self.max_duration,
+                    self.first_backoff,
+                    backoff_message_info,
+                ),
             )
         )
-        logging.debug("Scheduled")
+        logging.debug("Scheduled")  # TODO: add message ID
+        return backoff_message_info
