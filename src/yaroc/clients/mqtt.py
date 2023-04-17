@@ -1,7 +1,8 @@
 import logging
+import time
 from datetime import datetime
 from math import floor
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import paho.mqtt.client as mqtt
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -24,8 +25,11 @@ class SimpleMqttClient(Client):
             del client, userdata
             logging.error(f"Disconnected with result code {str(rc)}")
 
+        self._message_infos: Dict[int, mqtt.MQTTMessageInfo] = {}
+
         def on_publish(client: mqtt.Client, userdata: Any, mid: int):
             del client, userdata
+            del self._message_infos[mid]
             logging.info(f"Published id={mid}")
 
         self.topic_punches = f"yaroc/{mac_address}/punches"
@@ -101,8 +105,19 @@ class SimpleMqttClient(Client):
         status.mini_call_home.CopyFrom(mch)
         return self._send(self.topic_status, status.SerializeToString())
 
+    def wait_for_publish(self, timeout: float | None = None):
+        deadline = None if timeout is None else timeout + time.time()
+        for message_info in self._message_infos.values():
+            while not self.client.is_connected():
+                time.sleep(1.0)
+
+            if message_info.rc == mqtt.MQTT_ERR_SUCCESS:
+                remaining = None if deadline is None else deadline - time.time()
+                message_info.wait_for_publish(remaining)
+
     def _send(self, topic: str, message: bytes) -> mqtt.MQTTMessageInfo:
         message_info = self.client.publish(topic, message, qos=1)
+        self._message_infos[message_info.mid] = message_info
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
             # TODO: add to unsent messages
