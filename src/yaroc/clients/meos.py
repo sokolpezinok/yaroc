@@ -4,9 +4,8 @@ from datetime import datetime, time, timedelta
 from typing import Literal
 
 from ..pb.status_pb2 import MiniCallHome
-
 # TODO: consider using https://pypi.org/project/backoff/
-from ..utils.backoff import BackoffSender, BackoffMessageInfo
+from ..utils.backoff import BackoffMessageInfo, BackoffSender
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"

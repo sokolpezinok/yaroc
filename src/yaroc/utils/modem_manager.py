@@ -1,9 +1,19 @@
 import logging
+from enum import Enum
 
 from gi.repository import GLib
 from pydbus import SystemBus
 
 MODEM_MANAGER = ".ModemManager1"
+
+
+class SmsState(Enum):
+    Unknown = 0
+    Stored = 1
+    Receiving = 2
+    Received = 3
+    Sending = 4
+    Sent = 5
 
 
 class ModemManager:
@@ -38,6 +48,10 @@ class ModemManager:
         except Exception as err:
             logging.error(err)
             return False
+
+    def sms_state(self, sms_path: str) -> SmsState:
+        sms = self.bus.get(MODEM_MANAGER, sms_path)
+        return SmsState(sms.State)
 
     def signal_setup(self, modem_path: str, rate_secs: int):
         modem = self.bus.get(MODEM_MANAGER, modem_path)
