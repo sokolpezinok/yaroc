@@ -14,10 +14,16 @@ class MeosCategory:
 
 
 @dataclass
-class MeosResult:
-    category: MeosCategory
+class MeosCompetitor:
     name: str
     card: int | None
+    bib: int | None
+
+
+@dataclass
+class MeosResult:
+    competitor: MeosCompetitor
+    category: MeosCategory
     stat: int
     time: timedelta | None
 
@@ -32,12 +38,19 @@ class MOP:
     STAT_DNS = 20
 
     @staticmethod
-    def _meos_results_xml(xml: ET.Element) -> List[MeosResult]:
-        def parse_int(s: str | None) -> int | None:
-            if s is None:
-                return None
-            return int(s)
+    def _parse_int(s: str | None) -> int | None:
+        if s is None:
+            return None
+        return int(s)
 
+    @staticmethod
+    def _competitor_from_mop(cmp: ET.Element, base: ET.Element) -> MeosCompetitor:
+        card, bib = MOP._parse_int(cmp.get("card")), MOP._parse_int(base.get("bib"))
+        name = "" if base.text is None else base.text
+        return MeosCompetitor(name=name, card=card, bib=bib)
+
+    @staticmethod
+    def _results_from_meos_xml(xml: ET.Element) -> List[MeosResult]:
         ET.indent(xml)
         NS = {"mop": "http://www.melin.nu/mop"}
         categories = {}
@@ -48,14 +61,14 @@ class MOP:
             categories[id] = MeosCategory(name=name, id=id)
 
         results = []
-        for result in xml.findall("mop:cmp", NS):
-            base = result.find("mop:base", NS)
+        for cmp in xml.findall("mop:cmp", NS):
+            base = cmp.find("mop:base", NS)
             if base is None:
                 logging.error("No base element")
                 continue
-            card, stat = parse_int(result.get("card")), parse_int(base.get("stat"))
+            competitor = MOP._competitor_from_mop(cmp, base)
+            stat = MOP._parse_int(base.get("stat"))
             assert stat is not None
-            name = "" if base.text is None else base.text
 
             rt = base.get("rt")
             if rt is not None and stat == MOP.STAT_OK:
@@ -66,17 +79,40 @@ class MOP:
             assert cat_id is not None
             results.append(
                 MeosResult(
-                    name=name, card=card, stat=stat, category=categories[cat_id], time=total_time
+                    competitor=competitor, category=categories[cat_id], stat=stat, time=total_time
                 )
             )
         return results
 
     @staticmethod
-    def meos_results(address: str, port: int) -> List[MeosResult]:
+    def _competitors_from_meos_xml(xml: ET.Element) -> List[MeosCompetitor]:
+        ET.indent(xml)
+        NS = {"mop": "http://www.melin.nu/mop"}
+        competitors = []
+        for cmp in xml.findall("mop:cmp", NS):
+            base = cmp.find("mop:base", NS)
+            if base is None:
+                logging.error("No base element")
+                continue
+            competitors.append(MOP._competitor_from_mop(cmp, base))
+        return competitors
+
+    @staticmethod
+    def results(address: str, port: int) -> List[MeosResult]:
         response = requests.get(
             f"http://{address}:{port}/meos?difference=zero",
         )
         assert response.status_code == 200
         xml = ET.XML(response.text)
 
-        return MOP._meos_results_xml(xml)
+        return MOP._results_from_meos_xml(xml)
+
+    @staticmethod
+    def competitors(address: str, port: int) -> List[MeosCompetitor]:
+        response = requests.get(
+            f"http://{address}:{port}/meos?difference=zero",  # TODO: it could be asimpler call
+        )
+        assert response.status_code == 200
+        xml = ET.XML(response.text)
+
+        return MOP._competitors_from_meos_xml(xml)
