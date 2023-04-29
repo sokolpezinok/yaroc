@@ -57,7 +57,7 @@ def si_worker(si: SIReader, finished: Event):
         for code, tim, mode in messages:
             logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
             for client in clients:
-                client.send_punch(card_number, tim, now, code, mode)
+                client.send_punch(card_number, tim, code, mode)
 
 
 def periodic_mini_call_home():

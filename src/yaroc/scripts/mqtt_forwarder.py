@@ -35,7 +35,7 @@ class MqttForwader:
     def _handle_punch(self, payload: bytes, now: datetime):
         punch = Punch.FromString(payload)
         si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-        process_time = MqttForwader._prototime_to_datetime(punch.si_time)
+        process_time = MqttForwader._prototime_to_datetime(punch.process_time)
         total_latency = now - si_time
 
         log_message = (
@@ -47,7 +47,7 @@ class MqttForwader:
         logging.info(log_message)
 
         for client in self.clients:
-            client.send_punch(punch.card, si_time, now, punch.code, punch.mode)
+            client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
 
     def _handle_coords(self, payload: bytes, now: datetime):
         coords = Coordinates.FromString(payload)

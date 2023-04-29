@@ -16,7 +16,7 @@ assert mac_addr is not None
 mqtt_client = SimpleMqttClient(mac_addr, name="benchmark")
 
 for i in range(10):
-    mqtt_client.send_punch(46283, datetime.now(), datetime.now(), (i + 1) % 1000, 18)
+    mqtt_client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
     time.sleep(5)
 
 mqtt_client.wait_for_publish(60.0)

@@ -23,13 +23,15 @@ class RocClient(Client):
         self,
         card_number: int,
         sitime: datetime,
-        now: datetime,
         code: int,
         mode: int,
+        process_time: datetime | None = None,
     ):
         def length(x: int):
             return int(math.log10(x)) + 1
 
+        if process_time is None:
+            process_time = datetime.now()
         data = {
             "control1": str(code),
             "sinumber1": str(card_number),
@@ -37,7 +39,7 @@ class RocClient(Client):
             "date1": sitime.strftime("%Y-%m-%d"),
             "sitime1": sitime.strftime("%H:%M:%S"),
             "ms1": sitime.strftime("%f")[:3],
-            "roctime1": str(now)[:19],
+            "roctime1": str(process_time)[:19],
             "macaddr": self.macaddr,
             "1": "f",
             "length": str(118 + sum(map(length, [code, card_number, mode]))),

@@ -51,11 +51,11 @@ class MeosClient(Client):
         self,
         card_number: int,
         sitime: datetime,
-        now: datetime,
         code: int,
         mode: int,
+        process_time: datetime | None = None,
     ) -> BackoffMessageInfo:
-        del mode, now
+        del mode
         message = MeosClient._serialize_punch(card_number, sitime.time(), code)
         return self._backoff_sender.send(message)
 

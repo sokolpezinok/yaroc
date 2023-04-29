@@ -13,6 +13,47 @@ from ..pb.status_pb2 import Disconnected, MiniCallHome, SignalStrength, Status
 from .client import Client
 
 
+def _datetime_to_prototime(time: datetime) -> Timestamp:
+    ret = Timestamp()
+    ret.FromMilliseconds(floor(time.timestamp() * 1000))
+    return ret
+
+
+def create_punch_proto(
+    card_number: int, si_time: datetime, code: int, mode: int, process_time: datetime | None = None
+) -> Punch:
+    punch = Punch()
+    punch.card = card_number
+    punch.code = code
+    punch.mode = mode
+    punch.si_time.CopyFrom(_datetime_to_prototime(si_time))
+    timestamp = Timestamp()
+    if process_time is None:
+        timestamp.GetCurrentTime()
+    else:
+        timestamp.CopyFrom(_datetime_to_prototime(process_time))
+    punch.process_time.CopyFrom(timestamp)
+    return punch
+
+
+def create_coords_proto(lat: float, lon: float, alt: float, timestamp: datetime) -> Coordinates:
+    coords = Coordinates()
+    coords.latitude = lat
+    coords.longitude = lon
+    coords.altitude = alt
+    coords.time.CopyFrom(_datetime_to_prototime(timestamp))
+    return coords
+
+
+def create_signal_strength_proto(csq: int, orig_time: datetime) -> Status:
+    signal_strength = SignalStrength()
+    signal_strength.time.CopyFrom(_datetime_to_prototime(orig_time))
+    signal_strength.csq = csq
+    status = Status()
+    status.signal_strength.CopyFrom(signal_strength)
+    return status
+
+
 class SimpleMqttClient(Client):
     """Class for a simple MQTT reporting"""
 
@@ -62,42 +103,27 @@ class SimpleMqttClient(Client):
     def __del__(self):
         self.client.loop_stop()
 
-    @staticmethod
-    def _datetime_to_prototime(time: datetime) -> Timestamp:
-        ret = Timestamp()
-        ret.FromMilliseconds(floor(time.timestamp() * 1000))
-        return ret
-
     def send_punch(
-        self, card_number: int, si_time: datetime, now: datetime, code: int, mode: int
+        self,
+        card_number: int,
+        si_time: datetime,
+        code: int,
+        mode: int,
+        process_time: datetime | None = None,
     ) -> mqtt.MQTTMessageInfo:
-        del now
-        punch = Punch()
-        punch.card = card_number
-        punch.code = code
-        punch.mode = mode
-        punch.si_time.CopyFrom(SimpleMqttClient._datetime_to_prototime(si_time))
-        process_time = Timestamp()
-        process_time.GetCurrentTime()
-        punch.process_time.CopyFrom(process_time)
-        return self._send(self.topic_punches, punch.SerializeToString())
+        return self._send(
+            self.topic_punches,
+            create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
+        )
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime
     ) -> mqtt.MQTTMessageInfo:
-        coords = Coordinates()
-        coords.latitude = lat
-        coords.longitude = lon
-        coords.altitude = alt
-        coords.time.CopyFrom(SimpleMqttClient._datetime_to_prototime(timestamp))
+        coords = create_coords_proto(lat, lon, alt, timestamp)
         return self._send(self.topic_coords, coords.SerializeToString())
 
     def send_signal_strength(self, csq: int, orig_time: datetime) -> mqtt.MQTTMessageInfo:
-        signal_strength = SignalStrength()
-        signal_strength.time.CopyFrom(SimpleMqttClient._datetime_to_prototime(orig_time))
-        signal_strength.csq = csq
-        status = Status()
-        status.signal_strength.CopyFrom(signal_strength)
+        status = create_signal_strength_proto(csq, orig_time)
         return self._send(self.topic_status, status.SerializeToString())
 
     def send_mini_call_home(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
