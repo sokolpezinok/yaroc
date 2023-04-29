@@ -28,7 +28,7 @@ assert mac_addr is not None
 
 clients: list[Client] = []
 # clients.append(MeosClient("192.168.88.165", 10000))
-clients.append(SimpleMqttClient(mac_addr, "SendPunch"))
+clients.append(MqttClient(mac_addr, "SendPunch"))
 clients.append(RocClient(mac_addr))
 
 
