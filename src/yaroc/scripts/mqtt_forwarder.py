@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import paho.mqtt.client as mqtt
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -35,7 +35,7 @@ class MqttForwader:
     def _handle_punch(self, payload: bytes, now: datetime):
         punch = Punch.FromString(payload)
         si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-        process_time = MqttForwader._prototime_to_datetime(punch.process_time)
+        process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
         total_latency = now - si_time
 
         log_message = (

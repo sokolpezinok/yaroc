@@ -5,7 +5,7 @@ message Punch {
   uint32 code = 1;
   uint32 card = 2;
   google.protobuf.Timestamp si_time = 3;
-  google.protobuf.Timestamp process_time = 4;
+  uint32 process_time_ms = 4;
   uint32 mode = 5;
 }
 

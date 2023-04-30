@@ -27,12 +27,10 @@ def create_punch_proto(
     punch.code = code
     punch.mode = mode
     punch.si_time.CopyFrom(_datetime_to_prototime(si_time))
-    timestamp = Timestamp()
     if process_time is None:
-        timestamp.GetCurrentTime()
-    else:
-        timestamp.CopyFrom(_datetime_to_prototime(process_time))
-    punch.process_time.CopyFrom(timestamp)
+        process_time = datetime.now()
+    process_time_latency = process_time - si_time
+    punch.process_time_ms = round(1000 * process_time_latency.total_seconds())
     return punch
 
 

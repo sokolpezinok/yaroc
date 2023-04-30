@@ -7,18 +7,18 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Punch(_message.Message):
-    __slots__ = ["card", "code", "mode", "process_time", "si_time"]
+    __slots__ = ["card", "code", "mode", "process_time_ms", "si_time"]
     CARD_FIELD_NUMBER: _ClassVar[int]
     CODE_FIELD_NUMBER: _ClassVar[int]
     MODE_FIELD_NUMBER: _ClassVar[int]
-    PROCESS_TIME_FIELD_NUMBER: _ClassVar[int]
+    PROCESS_TIME_MS_FIELD_NUMBER: _ClassVar[int]
     SI_TIME_FIELD_NUMBER: _ClassVar[int]
     card: int
     code: int
     mode: int
-    process_time: _timestamp_pb2.Timestamp
+    process_time_ms: int
     si_time: _timestamp_pb2.Timestamp
-    def __init__(self, code: _Optional[int] = ..., card: _Optional[int] = ..., si_time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ..., process_time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ..., mode: _Optional[int] = ...) -> None: ...
+    def __init__(self, code: _Optional[int] = ..., card: _Optional[int] = ..., si_time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ..., process_time_ms: _Optional[int] = ..., mode: _Optional[int] = ...) -> None: ...
 
 class Punches(_message.Message):
     __slots__ = ["punches"]
