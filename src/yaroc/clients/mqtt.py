@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import datetime
 from math import floor
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 import paho.mqtt.client as mqtt
@@ -181,6 +182,7 @@ class SIM7020MqttClient(Client):
             logging.error("Failed to open serial port")
             raise err
 
+        self._lock = Lock()
         self._send_at("AT+CMEE=2;;OK;;300;;1")
         self._send_at("ATE0;;OK;;300;;1")
         if self._send_at("AT;;OK;;300;;1") is not None:
@@ -200,8 +202,8 @@ class SIM7020MqttClient(Client):
     def _send_at_queries(self, command: str, queries=[str]) -> Tuple[List[str], List[str] | None]:
         def _exec(command: str):
             try:
-                # Guard via a lock
-                return self.atrunenv.exec(command)
+                with self._lock:
+                    return self.atrunenv.exec(command)
             except ATRuntimeError as err:
                 logging.error(f"Runtime error {err}")
                 raise err
@@ -309,8 +311,9 @@ class SIM7020MqttClient(Client):
         mode: int,
         process_time: datetime | None = None,
     ) -> mqtt.MQTTMessageInfo:
-        if self._detect_mqtt_id() is None:
-            self._connect()
+        with self._lock:
+            if self._detect_mqtt_id() is None:
+                self._connect()
         return self._send(
             self.topic_punches,
             create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
@@ -332,8 +335,9 @@ class SIM7020MqttClient(Client):
             'AT+CENG?;;CENG:;;100;;2;;["CENG: ?{ceng::.*}"]', ["ceng"]
         )
         try:
-            ceng_split = answers[0].split(",")
-            mch.signal_dbm = int(ceng_split[6])
+            if opt_response is not None and len(answers) == 1:
+                ceng_split = answers[0].split(",")
+                mch.signal_dbm = int(ceng_split[6])
         except Exception as err:
             logging.error(f"Error getting signal dBm {err}")
 

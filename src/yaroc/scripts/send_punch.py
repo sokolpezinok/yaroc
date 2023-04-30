@@ -27,7 +27,7 @@ mac_addr = eth_mac_addr()
 assert mac_addr is not None
 
 clients: list[Client] = []
-clients.append(SIM7020MqttClient(mac_addr, "SendPunch", "/dev/ttyS0"))
+clients.append(SIM7020MqttClient(mac_addr, "/dev/ttyUSB0", "SendPunch"))
 if False:
     clients.append(MeosClient("192.168.88.165", 10000))
 if False:
