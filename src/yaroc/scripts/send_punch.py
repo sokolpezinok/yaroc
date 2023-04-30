@@ -7,7 +7,7 @@ from sportident import SIReader
 
 from ..clients.client import Client
 from ..clients.meos import MeosClient
-from ..clients.mqtt import SimpleMqttClient
+from ..clients.mqtt import SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..utils.sys_info import create_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
@@ -27,9 +27,11 @@ mac_addr = eth_mac_addr()
 assert mac_addr is not None
 
 clients: list[Client] = []
-# clients.append(MeosClient("192.168.88.165", 10000))
-clients.append(MqttClient(mac_addr, "SendPunch"))
-clients.append(RocClient(mac_addr))
+clients.append(SIM7020MqttClient(mac_addr, "SendPunch", "/dev/ttyS0"))
+if False:
+    clients.append(MeosClient("192.168.88.165", 10000))
+if False:
+    clients.append(RocClient(mac_addr))
 
 
 def si_worker(si: SIReader, finished: Event):
@@ -50,9 +52,9 @@ def si_worker(si: SIReader, finished: Event):
             (code, tim) = punch
             messages.append((code, tim, BEACON_CONTROL))
         if isinstance(card_data["start"], datetime):
-            messages.append((8, card_data["start"], START))
+            messages.append((1, card_data["start"], START))
         if isinstance(card_data["finish"], datetime):
-            messages.append((10, card_data["finish"], FINISH))
+            messages.append((2, card_data["finish"], FINISH))
 
         for code, tim, mode in messages:
             logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")

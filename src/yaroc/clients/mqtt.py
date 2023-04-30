@@ -57,6 +57,14 @@ def create_signal_strength_proto(csq: int, orig_time: datetime) -> Status:
     return status
 
 
+def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
+    return (
+        f"yaroc/{mac_address}/punches",
+        f"yaroc/{mac_address}/coords",
+        f"yaroc/{mac_address}/status",
+    )
+
+
 class MqttClient(Client):
     """Class for a simple MQTT reporting"""
 
@@ -76,9 +84,7 @@ class MqttClient(Client):
             del self._message_infos[mid]
             logging.info(f"Published id={mid}")
 
-        self.topic_punches = f"yaroc/{mac_address}/punches"
-        self.topic_coords = f"yaroc/{mac_address}/coords"
-        self.topic_status = f"yaroc/{mac_address}/status"
+        self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
 
         disconnected = Disconnected()
         if name is None:
@@ -164,10 +170,7 @@ class SIM7020MqttClient(Client):
 
     def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
         # TODO: detect "+CMQDISCON" messages
-        # TODO: refactor into common code
-        self.topic_punches = f"yaroc/{mac_address}/punches"
-        self.topic_coords = f"yaroc/{mac_address}/coords"
-        self.topic_status = f"yaroc/{mac_address}/status"
+        self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
 
         self.atrunenv = ATRuntimeEnvironment(False)
         self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
@@ -197,6 +200,7 @@ class SIM7020MqttClient(Client):
     def _send_at_queries(self, command: str, queries=[str]) -> Tuple[List[str], List[str] | None]:
         def _exec(command: str):
             try:
+                # Guard via a lock
                 return self.atrunenv.exec(command)
             except ATRuntimeError as err:
                 logging.error(f"Runtime error {err}")
@@ -236,7 +240,8 @@ class SIM7020MqttClient(Client):
 
     def _detect_mqtt_id(self) -> int | None:
         (answers, full_response) = self._send_at_queries(
-            f'AT+CMQNEW?;;\\+CMQNEW: [0-9],1,{BROKER_URL};;100;;3;;["CMQNEW: ?{{mqtt_id::[0-9]}},1"]',
+            f"AT+CMQNEW?;;\\+CMQNEW: [0-9],1,{BROKER_URL};;100;;3;;"
+            '["CMQNEW: ?{mqtt_id::[0-9]},1"]',
             ["mqtt_id"],
         )
         try:
