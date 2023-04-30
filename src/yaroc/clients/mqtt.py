@@ -127,7 +127,7 @@ class SimpleMqttClient(Client):
     def send_mini_call_home(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return self._send(self.topic_status, status.SerializeToString())
+        return self._send(self.topic_status, status.SerializeToString(), qos=0)
 
     def wait_for_publish(self, timeout: float | None = None):
         deadline = None if timeout is None else timeout + time.time()
@@ -139,8 +139,8 @@ class SimpleMqttClient(Client):
                 remaining = None if deadline is None else deadline - time.time()
                 message_info.wait_for_publish(remaining)
 
-    def _send(self, topic: str, message: bytes) -> mqtt.MQTTMessageInfo:
-        message_info = self.client.publish(topic, message, qos=1)
+    def _send(self, topic: str, message: bytes, qos: int = 1) -> mqtt.MQTTMessageInfo:
+        message_info = self.client.publish(topic, message, qos=qos)
         self._message_infos[message_info.mid] = message_info
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
