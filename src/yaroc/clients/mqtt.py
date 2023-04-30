@@ -183,6 +183,7 @@ class SIM7020MqttClient(Client):
             raise err
 
         self._lock = Lock()
+        self._atrunenv_lock = Lock()
         self._send_at("AT+CMEE=2;;OK;;300;;1")
         self._send_at("ATE0;;OK;;300;;1")
         if self._send_at("AT;;OK;;300;;1") is not None:
@@ -202,7 +203,7 @@ class SIM7020MqttClient(Client):
     def _send_at_queries(self, command: str, queries=[str]) -> Tuple[List[str], List[str] | None]:
         def _exec(command: str):
             try:
-                with self._lock:
+                with self._atrunenv_lock:
                     return self.atrunenv.exec(command)
             except ATRuntimeError as err:
                 logging.error(f"Runtime error {err}")
