@@ -170,7 +170,7 @@ class SIM7020MqttClient(Client):
         self.topic_status = f"yaroc/{mac_address}/status"
 
         self.atrunenv = ATRuntimeEnvironment(False)
-        self.atrunenv.configure_communicator(port, 9600, None, "\r", rtscts=False)
+        self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
         try:
             self.atrunenv.open_serial()
             logging.debug("Opened serial port")
@@ -178,17 +178,17 @@ class SIM7020MqttClient(Client):
             logging.error("Failed to open serial port")
             raise err
 
-        self._send_at("AT;;OK;;300;;1")
         self._send_at("AT+CMEE=2;;OK;;300;;1")
+        self._send_at("ATE0;;OK;;300;;1")
         if self._send_at("AT;;OK;;300;;1") is not None:
             logging.info("SIM7020 is ready")
 
-        disconnected = Disconnected()
+        self._disconnected = Disconnected()
         if name is None:
-            disconnected.client_name = ""
+            self._disconnected.client_name = ""
         else:
-            disconnected.client_name = str(name)
-        self._mqtt_id = self._connect(disconnected)
+            self._disconnected.client_name = str(name)
+        self._connect()
 
     def _send_at(self, command: str) -> List[str] | None:
         (_, opt_response) = self._send_at_queries(command, [])
@@ -220,15 +220,7 @@ class SIM7020MqttClient(Client):
 
         logging.debug(f"{opt_response.full_response}: {opt_response.response}")
         if opt_response.response is None:
-            try:
-                skipped_intro = command[command.index(";;") :]
-                logging.debug(f"Retrying with {skipped_intro}")
-                opt_response = _exec(skipped_intro)
-                logging.debug(f"{opt_response.full_response}: {opt_response.response}")
-                if opt_response.response is None:
-                    return error_res
-            except Exception:
-                return error_res
+            return error_res
 
         res = []
         for query in queries:
@@ -242,7 +234,19 @@ class SIM7020MqttClient(Client):
         if mqtt_id is not None:
             self._send_at(f"AT+CMQDISCON={mqtt_id};;OK;;200;;5")
 
-    def _connect(self, disconnected: Disconnected) -> int | None:
+    def _detect_mqtt_id(self) -> int | None:
+        (answers, full_response) = self._send_at_queries(
+            f'AT+CMQNEW?;;\\+CMQNEW: [0-9],1,{BROKER_URL};;100;;3;;["CMQNEW: ?{{mqtt_id::[0-9]}},1"]',
+            ["mqtt_id"],
+        )
+        try:
+            if len(answers) == 1:
+                return int(answers[0])
+            return None
+        except Exception:
+            return None
+
+    def _connect(self) -> int | None:
         self._send_at("AT+CENG?;;\\+CENG:.*;;200;;5")
         if self._send_at("AT+CGREG?;;CGREG: 0,1;;200;;2") is None:
             logging.warning("Not registered yet")
@@ -254,13 +258,8 @@ class SIM7020MqttClient(Client):
             return None
 
         self._send_at("AT+CMQTSYNC=1;;OK;;200;;1")
-        (answers, full_response) = self._send_at_queries(
-            'AT+CMQNEW?;;\\+CMQNEW: [0-9],1;;500;;3;;["CMQNEW: ?{mqtt_id::[0-9]},1"]', ["mqtt_id"]
-        )
-        is_new_session = False
-        if len(answers) == 1:
-            mqtt_id = int(answers[0])
-        else:
+        mqtt_id = self._detect_mqtt_id()
+        if mqtt_id is None:
             cmqnew = f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,100'
             is_new_session = True
             (answers, full_response) = self._send_at_queries(
@@ -272,10 +271,13 @@ class SIM7020MqttClient(Client):
             else:
                 logging.error("MQTT connection unsuccessful")
                 return None
+        else:
+            is_new_session = False
 
         if not is_new_session:
             opt_response = self._send_at(f'AT+CMQCON?;;CMQCON: {mqtt_id},1,"{BROKER_URL}";;200;;2')
             if opt_response is not None:
+                self._mqtt_id = mqtt_id
                 return mqtt_id
             self._disconnect(mqtt_id)
             # TODO: reconnect after diconnecting?
@@ -285,9 +287,10 @@ class SIM7020MqttClient(Client):
             # status = Status()
             # status.disconnected.CopyFrom(disconnected)
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{disconnected.client_name}",120,0,0;;OK;;1000;;35'
+                f'AT+CMQCON={mqtt_id},3,"{self._disconnected.client_name}",120,0,0;;OK;;1000;;35'
             )
             if opt_reponse is not None:
+                self._mqtt_id = mqtt_id
                 return mqtt_id
             else:
                 logging.error("MQTT connection unsuccessful")
@@ -301,6 +304,8 @@ class SIM7020MqttClient(Client):
         mode: int,
         process_time: datetime | None = None,
     ) -> mqtt.MQTTMessageInfo:
+        if self._detect_mqtt_id() is None:
+            self._connect()
         return self._send(
             self.topic_punches,
             create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
@@ -334,8 +339,7 @@ class SIM7020MqttClient(Client):
     def _send(self, topic: str, message: bytes, message_type: str, qos: int = 1):
         message_hex = message.hex()
         opt_response = self._send_at(
-            f'AT+CMQPUB=0,"{topic}",{qos},0,0,'
-            f'{len(message_hex)},"{message_hex}";;OK;;100;;45'
+            f'AT+CMQPUB=0,"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}";;OK;;100;;45'
         )
         if opt_response is None:
             # TODO: add to unsent messages if response is ERROR
