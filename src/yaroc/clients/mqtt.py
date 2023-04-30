@@ -242,6 +242,13 @@ class SIM7020MqttClient(Client):
             res.append(opt_response.get_collectable(query))
         return (res, opt_response.full_response)
 
+    def __del__(self):
+        self._disconnect(self._mqtt_id)
+
+    def _disconnect(self, mqtt_id: int | None):
+        if mqtt_id is not None:
+            self._send_at(f"AT+CMQDISCON={mqtt_id};;OK;;200;;5")
+
     def _connect(self, disconnected: Disconnected) -> int | None:
         self._send_at("AT+CENG?;;\\+CENG:.*;;200;;5")
         if self._send_at("AT+CGREG?;;CGREG: 0,1;;200;;2") is None:
@@ -277,7 +284,7 @@ class SIM7020MqttClient(Client):
             opt_response = self._send_at(f'AT+CMQCON?;;CMQCON: {mqtt_id},1,"{BROKER_URL}";;200;;2')
             if opt_response is not None:
                 return mqtt_id
-            self._send_at(f"AT+CMQDISCON={mqtt_id};;OK;;200;;5")
+            self._disconnect(mqtt_id)
             # TODO: reconnect after diconnecting?
             return None
         else:
