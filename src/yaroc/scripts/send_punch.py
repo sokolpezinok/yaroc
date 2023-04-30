@@ -1,5 +1,6 @@
 import logging
 import time
+import tomllib
 from datetime import datetime
 from threading import Event, Thread
 
@@ -23,14 +24,22 @@ FINISH = 4
 BEACON_CONTROL = 18
 
 
+with open("send-punch.toml", "rb") as f:
+    config = tomllib.load(f)
+
 mac_addr = eth_mac_addr()
 assert mac_addr is not None
 
+sim7020_conf = config["client"]["sim7020"]
+meos_conf = config["client"]["meos"]
+roc_conf = config["client"]["roc"]
+
 clients: list[Client] = []
-clients.append(SIM7020MqttClient(mac_addr, "/dev/ttyUSB0", "SendPunch"))
-if False:
-    clients.append(MeosClient("192.168.88.165", 10000))
-if False:
+if sim7020_conf.get("enable", True):
+    clients.append(SIM7020MqttClient(mac_addr, sim7020_conf["device"], "SendPunch"))
+if meos_conf.get("enable", True):
+    clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
+if roc_conf.get("enable", True):
     clients.append(RocClient(mac_addr))
 
 
