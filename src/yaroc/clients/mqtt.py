@@ -163,15 +163,7 @@ class SIM7020MqttClient(Client):
     """Class for an MQTT client using SIM7020's AT commands"""
 
     def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
-        def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
-            logging.info(f"Connected with result code {str(rc)}")
-
-        def on_disconnect(client: mqtt.Client, userdata: Any, rc):
-            logging.error(f"Disconnected with result code {str(rc)}")
-
-        def on_publish(client: mqtt.Client, userdata: Any, mid: int):
-            logging.info(f"Published id={mid}")
-
+        # TODO: detect "+CMQDISCON" messages
         # TODO: refactor into common code
         self.topic_punches = f"yaroc/{mac_address}/punches"
         self.topic_coords = f"yaroc/{mac_address}/coords"
@@ -187,6 +179,7 @@ class SIM7020MqttClient(Client):
             raise err
 
         self._send_at("AT;;OK;;300;;1")
+        self._send_at("AT+CMEE=2;;OK;;300;;1")
         if self._send_at("AT;;OK;;300;;1") is not None:
             logging.info("SIM7020 is ready")
 
@@ -261,7 +254,6 @@ class SIM7020MqttClient(Client):
             return None
 
         self._send_at("AT+CMQTSYNC=1;;OK;;200;;1")
-
         (answers, full_response) = self._send_at_queries(
             'AT+CMQNEW?;;\\+CMQNEW: [0-9],1;;500;;3;;["CMQNEW: ?{mqtt_id::[0-9]},1"]', ["mqtt_id"]
         )
@@ -276,6 +268,7 @@ class SIM7020MqttClient(Client):
             )
             if len(answers) == 1:
                 mqtt_id = int(answers[0])
+                logging.info(f"Connected to mqtt_id={mqtt_id}")
             else:
                 logging.error("MQTT connection unsuccessful")
                 return None
@@ -311,31 +304,41 @@ class SIM7020MqttClient(Client):
         return self._send(
             self.topic_punches,
             create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
+            "Punch",
         )
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime
     ) -> mqtt.MQTTMessageInfo:
         coords = create_coords_proto(lat, lon, alt, timestamp)
-        return self._send(self.topic_coords, coords.SerializeToString())
+        return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     def send_signal_strength(self, csq: int, orig_time: datetime):
         status = create_signal_strength_proto(csq, orig_time)
-        return self._send(self.topic_status, status.SerializeToString())
+        return self._send(self.topic_status, status.SerializeToString(), "SignalStrength")
 
     def send_mini_call_home(self, mch: MiniCallHome):
+        (answers, opt_response) = self._send_at_queries(
+            'AT+CENG?;;CENG:;;100;;2;;["CENG: ?{ceng::.*}"]', ["ceng"]
+        )
+        try:
+            ceng_split = answers[0].split(",")
+            mch.signal_dbm = int(ceng_split[6])
+        except Exception as err:
+            logging.error(f"Error getting signal dBm {err}")
+
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return self._send(self.topic_status, status.SerializeToString(), qos=0)
+        return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome", qos=0)
 
-    def _send(self, topic: str, message: bytes, qos: int = 1):
+    def _send(self, topic: str, message: bytes, message_type: str, qos: int = 1):
         message_hex = message.hex()
         opt_response = self._send_at(
-            f'AT+CMQPUB=0,"{self.topic_punches}",{qos},0,0,'
-            f'{len(message_hex)},"{message_hex}";;OK;;100;;30'
+            f'AT+CMQPUB=0,"{topic}",{qos},0,0,'
+            f'{len(message_hex)},"{message_hex}";;OK;;100;;45'
         )
         if opt_response is None:
             # TODO: add to unsent messages if response is ERROR
             logging.error("Message not sent: no connection")
         else:
-            logging.info("Message sent")
+            logging.info(f"{message_type} sent")

@@ -113,5 +113,5 @@ logging.basicConfig(
 )
 
 # TODO: either accept a list of mac addresses, or a map from mac address to clients
-forwarder = MqttForwader([RocClient("klj")])
+forwarder = MqttForwader([])
 forwarder.loop()

@@ -66,7 +66,7 @@ class RocClient(Client):
             "codes": "",
             "totaldatatx": str(mch.totaldatarx),
             "totaldatarx": str(mch.totaldatatx),
-            "signaldBm": str(mch.signal_dbm),
+            "signaldBm": str(-mch.signal_dbm),
             "temperature": str(mch.cpu_temperature),
             "networktype": str(mch.network_type),
             "volts": str(mch.volts),
