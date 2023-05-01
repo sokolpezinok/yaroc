@@ -171,23 +171,30 @@ class SIM7020MqttClient(Client):
 
         error_res: Tuple[List[str], List[str] | None] = ([], None)
         try:
-            opt_response = _exec(command)
+            response = _exec(command)
         except Exception:
             return error_res
 
-        if opt_response is None:
+        if response is None:
             logging.error("No response")
             return error_res
 
-        command_main = command[0 : command.index(";;")]
-        logging.debug(f"{command_main}: {opt_response.full_response} {opt_response.response}")
-        if opt_response.response is None:
-            return error_res
+        command_end = command.index(";;")
+        orig_command = response.command.command
+        if len(response.full_response) == 0:
+            # TODO: this often happens before the timeout, looks like a bug in ATtila
+            response = _exec(command[command_end:])
+            if response is None:
+                logging.error("No response")
+                return error_res
+        logging.debug(f"{orig_command}: {response.full_response} {response.response}")
+        if response.response is None:
+            return ([], None)
 
         res = []
         for query in queries:
-            res.append(opt_response.get_collectable(query))
-        return (res, opt_response.full_response)
+            res.append(response.get_collectable(query))
+        return (res, response.full_response)
 
     def __del__(self):
         self._disconnect(self._mqtt_id)
