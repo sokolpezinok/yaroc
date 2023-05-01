@@ -8,6 +8,7 @@ import paho.mqtt.client as mqtt
 from attila.atre import ATRuntimeEnvironment
 from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
 
+from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_coords_proto, create_punch_proto
 from .client import Client
@@ -79,10 +80,9 @@ class MqttClient(Client):
         mode: int,
         process_time: datetime | None = None,
     ) -> mqtt.MQTTMessageInfo:
-        return self._send(
-            self.topic_punches,
-            create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
-        )
+        punches = Punches()
+        punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
+        return self._send(self.topic_punches, punches.SerializeToString())
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime
@@ -179,7 +179,8 @@ class SIM7020MqttClient(Client):
             logging.error("No response")
             return error_res
 
-        logging.debug(f"{opt_response.full_response}: {opt_response.response}")
+        command_main = command[0 : command.index(";;")]
+        logging.debug(f"{command_main}: {opt_response.full_response} {opt_response.response}")
         if opt_response.response is None:
             return error_res
 
@@ -269,9 +270,12 @@ class SIM7020MqttClient(Client):
         with self._lock:
             if self._detect_mqtt_id() is None:
                 self._connect()
+
+        punches = Punches()
+        punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
         return self._send(
             self.topic_punches,
-            create_punch_proto(card_number, si_time, code, mode, process_time).SerializeToString(),
+            punches.SerializeToString(),
             "Punch",
         )
 

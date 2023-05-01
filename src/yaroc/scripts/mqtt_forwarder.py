@@ -9,7 +9,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from ..clients.client import Client
 from ..clients.roc import RocClient
 from ..pb.coords_pb2 import Coordinates
-from ..pb.punches_pb2 import Punch
+from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 
 
@@ -34,20 +34,21 @@ class MqttForwader:
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
         return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
 
-    def _handle_punch(self, mac_addr: str, payload: bytes, now: datetime):
-        punch = Punch.FromString(payload)
-        si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-        process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
-        total_latency = now - si_time
+    def _handle_punches(self, mac_addr: str, payload: bytes, now: datetime):
+        punches = Punches.FromString(payload)
+        for punch in punches.punches:
+            si_time = MqttForwader._prototime_to_datetime(punch.si_time)
+            process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
+            total_latency = now - si_time
 
-        log_message = (
-            f"{punch.code:03} dated {si_time}, processed {process_time:%H:%M:%S.%f},"
-            f" latency {total_latency}"
-        )
-        logging.info(log_message)
+            log_message = (
+                f"{punch.code:03} dated {si_time}, processed {process_time:%H:%M:%S.%f},"
+                f" latency {total_latency}"
+            )
+            logging.info(log_message)
 
-        for client in self.clients[mac_addr]:
-            client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
+            for client in self.clients[mac_addr]:
+                client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
 
     def _handle_coords(self, payload: bytes, now: datetime):
         coords = Coordinates.FromString(payload)
@@ -86,7 +87,7 @@ class MqttForwader:
         mac_addr = groups[0]
 
         if msg.topic.endswith("/p"):
-            self._handle_punch(mac_addr, msg.payload, now)
+            self._handle_punches(mac_addr, msg.payload, now)
         elif msg.topic.endswith("/coords"):
             self._handle_coords(msg.payload, now)
         elif msg.topic.endswith("/status"):
