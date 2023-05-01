@@ -64,15 +64,6 @@ class MqttForwader:
         oneof = status.WhichOneof("msg")
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
-        elif oneof == "signal_strength":
-            signal_strength = status.signal_strength
-            orig_time = MqttForwader._prototime_to_datetime(signal_strength.time)
-            total_latency = now - orig_time
-            csq = signal_strength.csq
-            log_message = (
-                f"CSQ {csq}, {-114 + 2*csq} dBm, at {orig_time}, " f"latency {total_latency}"
-            )
-            logging.info(log_message)
         elif oneof == "mini_call_home":
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
@@ -94,7 +85,7 @@ class MqttForwader:
             return
         mac_addr = groups[0]
 
-        if msg.topic.endswith("/punches"):
+        if msg.topic.endswith("/p"):
             self._handle_punch(mac_addr, msg.payload, now)
         elif msg.topic.endswith("/coords"):
             self._handle_coords(msg.payload, now)

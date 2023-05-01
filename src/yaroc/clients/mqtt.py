@@ -1,66 +1,24 @@
 import logging
 import time
 from datetime import datetime
-from math import floor
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 import paho.mqtt.client as mqtt
 from attila.atre import ATRuntimeEnvironment
 from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
-from google.protobuf.timestamp_pb2 import Timestamp
 
-from ..pb.coords_pb2 import Coordinates
-from ..pb.punches_pb2 import Punch
-from ..pb.status_pb2 import Disconnected, MiniCallHome, SignalStrength, Status
+from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
+from ..pb.utils import create_coords_proto, create_punch_proto
 from .client import Client
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
 
 
-def _datetime_to_prototime(time: datetime) -> Timestamp:
-    ret = Timestamp()
-    ret.FromMilliseconds(floor(time.timestamp() * 1000))
-    return ret
-
-
-def create_punch_proto(
-    card_number: int, si_time: datetime, code: int, mode: int, process_time: datetime | None = None
-) -> Punch:
-    punch = Punch()
-    punch.card = card_number
-    punch.code = code
-    punch.mode = mode
-    punch.si_time.CopyFrom(_datetime_to_prototime(si_time))
-    if process_time is None:
-        process_time = datetime.now()
-    process_time_latency = process_time - si_time
-    punch.process_time_ms = round(1000 * process_time_latency.total_seconds())
-    return punch
-
-
-def create_coords_proto(lat: float, lon: float, alt: float, timestamp: datetime) -> Coordinates:
-    coords = Coordinates()
-    coords.latitude = lat
-    coords.longitude = lon
-    coords.altitude = alt
-    coords.time.CopyFrom(_datetime_to_prototime(timestamp))
-    return coords
-
-
-def create_signal_strength_proto(csq: int, orig_time: datetime) -> Status:
-    signal_strength = SignalStrength()
-    signal_strength.time.CopyFrom(_datetime_to_prototime(orig_time))
-    signal_strength.csq = csq
-    status = Status()
-    status.signal_strength.CopyFrom(signal_strength)
-    return status
-
-
 def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
     return (
-        f"yaroc/{mac_address}/punches",
+        f"yaroc/{mac_address}/p",
         f"yaroc/{mac_address}/coords",
         f"yaroc/{mac_address}/status",
     )
@@ -131,10 +89,6 @@ class MqttClient(Client):
     ) -> mqtt.MQTTMessageInfo:
         coords = create_coords_proto(lat, lon, alt, timestamp)
         return self._send(self.topic_coords, coords.SerializeToString())
-
-    def send_signal_strength(self, csq: int, orig_time: datetime) -> mqtt.MQTTMessageInfo:
-        status = create_signal_strength_proto(csq, orig_time)
-        return self._send(self.topic_status, status.SerializeToString())
 
     def send_mini_call_home(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
         status = Status()
@@ -326,10 +280,6 @@ class SIM7020MqttClient(Client):
     ) -> mqtt.MQTTMessageInfo:
         coords = create_coords_proto(lat, lon, alt, timestamp)
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
-
-    def send_signal_strength(self, csq: int, orig_time: datetime):
-        status = create_signal_strength_proto(csq, orig_time)
-        return self._send(self.topic_status, status.SerializeToString(), "SignalStrength")
 
     def send_mini_call_home(self, mch: MiniCallHome):
         (answers, opt_response) = self._send_at_queries(

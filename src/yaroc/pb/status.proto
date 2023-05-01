@@ -5,11 +5,6 @@ message Disconnected {
   string client_name = 1;
 }
 
-message SignalStrength {
-  uint32 csq = 1;
-  google.protobuf.Timestamp time = 2;
-}
-
 message MiniCallHome {
   string mac_address = 1;
   string local_ip = 2;
@@ -28,7 +23,6 @@ message MiniCallHome {
 message Status {
   oneof msg {
     Disconnected disconnected = 1;
-    SignalStrength signal_strength = 2;
     MiniCallHome mini_call_home = 3;
   }
 }
