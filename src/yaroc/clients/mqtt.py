@@ -123,8 +123,9 @@ class MqttClient(Client):
 class SIM7020MqttClient(Client):
     """Class for an MQTT client using SIM7020's AT commands"""
 
+    # TODO: move AT commands into a separate class
+
     def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
-        # TODO: detect "+CMQDISCON" messages
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
 
         self.atrunenv = ATRuntimeEnvironment(False)
@@ -196,17 +197,10 @@ class SIM7020MqttClient(Client):
             res.append(response.get_collectable(query))
         return (res, response.full_response)
 
-    def __del__(self):
-        self._disconnect(self._mqtt_id)
-
-    def _disconnect(self, mqtt_id: int | None):
-        if mqtt_id is not None:
-            self._send_at(f"AT+CMQDISCON={mqtt_id};;OK;;200;;5")
-
     def _detect_mqtt_id(self) -> int | None:
         (answers, full_response) = self._send_at_queries(
-            f"AT+CMQNEW?;;\\+CMQNEW: [0-9],1,{BROKER_URL};;100;;3;;"
-            '["CMQNEW: ?{mqtt_id::[0-9]},1"]',
+            f'AT+CMQCON?;;CMQCON: [0-9],1,"{BROKER_URL}";;200;;2;;'
+            '["CMQCON: ?{mqtt_id::[0-9]},1"]',
             ["mqtt_id"],
         )
         try:
@@ -216,43 +210,46 @@ class SIM7020MqttClient(Client):
         except Exception:
             return None
 
+    def __del__(self):
+        mqtt_id = self._detect_mqtt_id()
+        if mqtt_id is not None:
+            self._disconnect(mqtt_id)
+
+    def _disconnect(self, mqtt_id: int | None):
+        if mqtt_id is not None:
+            self._send_at(f"AT+CMQDISCON={mqtt_id};;OK;;200;;5")
+
     def _connect(self) -> int | None:
-        self._send_at("AT+CENG?;;\\+CENG:.*;;200;;5")
-        if self._send_at("AT+CGREG?;;CGREG: 0,1;;200;;2") is None:
+        # TODO: move elsewhere
+        # self._send_at("AT+CMQTSYNC=1;;OK;;100;;1")
+        mqtt_id = self._detect_mqtt_id()
+        if mqtt_id is not None:
+            return mqtt_id
+
+        if self._send_at("AT+CGREG?;;CGREG: 0,1;;100;;2") is None:
             logging.warning("Not registered yet")
             return None
 
-        response = self._send_at('AT*MCGDEFCONT="IP","trial-nbiot.corp";;OK;;200;;35')
+        # Can APN be set automatically?
+        response = self._send_at('AT*MCGDEFCONT="IP","trial-nbiot.corp";;OK;;100;;35')
         if response is None:
             logging.warning("Can not set APN")
             return None
 
-        self._send_at("AT+CMQTSYNC=1;;OK;;200;;1")
-        mqtt_id = self._detect_mqtt_id()
-        if mqtt_id is None:
-            cmqnew = f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,100'
-            is_new_session = True
-            (answers, full_response) = self._send_at_queries(
-                cmqnew + ';;CMQNEW: ;;200;;35;;["CMQNEW: ?{mqtt_id::[0-9]}"]', ["mqtt_id"]
-            )
-            if len(answers) == 1:
-                mqtt_id = int(answers[0])
-                logging.info(f"Connected to mqtt_id={mqtt_id}")
-            else:
-                logging.error("MQTT connection unsuccessful")
-                return None
-        else:
-            is_new_session = False
+        (answers, full_response) = self._send_at_queries(
+            f"AT+CMQNEW?;;\\+CMQNEW: [0-9],1,{BROKER_URL};;100;;2;;"
+            '["CMQNEW: ?{mqtt_id::[0-9]},1"]',
+            ["mqtt_id"],
+        )
+        if full_response is not None:
+            self._disconnect(int(answers[0]))
 
-        if not is_new_session:
-            opt_response = self._send_at(f'AT+CMQCON?;;CMQCON: {mqtt_id},1,"{BROKER_URL}";;200;;2')
-            if opt_response is not None:
-                self._mqtt_id = mqtt_id
-                return mqtt_id
-            self._disconnect(mqtt_id)
-            # TODO: reconnect after diconnecting?
-            return None
-        else:
+        cmqnew = f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,100'
+        (answers, full_response) = self._send_at_queries(
+            cmqnew + ';;CMQNEW: ;;200;;35;;["CMQNEW: ?{mqtt_id::[0-9]}"]', ["mqtt_id"]
+        )
+        try:
+            mqtt_id = int(answers[0])
             # TODO: add will flag and will from disconnected
             # status = Status()
             # status.disconnected.CopyFrom(disconnected)
@@ -260,11 +257,14 @@ class SIM7020MqttClient(Client):
                 f'AT+CMQCON={mqtt_id},3,"{self._disconnected.client_name}",120,0,0;;OK;;1000;;35'
             )
             if opt_reponse is not None:
-                self._mqtt_id = mqtt_id
+                logging.info(f"Connected to mqtt_id={mqtt_id}")
                 return mqtt_id
             else:
                 logging.error("MQTT connection unsuccessful")
                 return None
+        except Exception as err:
+            logging.error(f"MQTT connection unsuccessful: {err}")
+            return None
 
     def send_punch(
         self,
