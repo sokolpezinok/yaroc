@@ -1,11 +1,12 @@
 import logging
 import socket
+from concurrent.futures import Future
 from datetime import datetime, time, timedelta
 from typing import Literal
 
 from ..pb.status_pb2 import MiniCallHome
 # TODO: consider using https://pypi.org/project/backoff/
-from ..utils.backoff import BackoffMessageInfo, BackoffSender
+from ..utils.backoff import BackoffSender
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -54,7 +55,7 @@ class MeosClient(Client):
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ) -> BackoffMessageInfo:
+    ) -> Future:
         del mode
         message = MeosClient._serialize_punch(card_number, sitime.time(), code)
         return self._backoff_sender.send(message)
@@ -91,7 +92,7 @@ class MeosClient(Client):
         start: time | None,
         finish: time | None,
         punches: list[tuple[int, time]],
-    ) -> BackoffMessageInfo:
+    ) -> Future:
         message = MeosClient._serialize_card(card_number, start, finish, punches)
         return self._backoff_sender.send(message)
 

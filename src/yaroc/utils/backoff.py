@@ -1,60 +1,16 @@
-import heapq
+import asyncio
 import logging
-import queue
-import time
 from collections.abc import Callable
+from concurrent.futures import Future
 from datetime import datetime, timedelta
-from threading import Condition, Thread
+from threading import Thread
 from typing import Any, Generic, Optional, TypeVar
 
-PRIORITY = 1
-
-
-class BackoffMessageInfo:
-    def __init__(self):
-        self._published = False
-        self._condition = Condition()
-
-    def set_as_published(self):
-        with self._condition:
-            self._published = True
-            self._condition.notify_all()
-
-    def wait_for_publish(self, timeout=None):
-        timeout_time = None if timeout is None else time.time() + timeout
-        timeout_tenth = None if timeout is None else timeout / 10.0
-
-        def timed_out():
-            return False if timeout_time is None else time.time() > timeout_time
-
-        with self._condition:
-            while not self._published and not timed_out():
-                self._condition.wait(timeout_tenth)
-
-
-# TODO: make the type generic
-class UnsentMessage:
-    # TODO: make backoff a timedelta
-    def __init__(
-        self,
-        argument: Any,
-        deadline: datetime,
-        backoff: float,
-        backoff_message_info: BackoffMessageInfo,
-    ):
-        self.argument = argument
-        self.deadline = deadline
-        self.backoff = backoff
-        self.backoff_message_info = backoff_message_info
-
-    def new_backoff(self, multiplier: float):
-        self.backoff *= multiplier
-
-
 T = TypeVar("T")
+A = TypeVar("A")
 
 
-class BackoffSender(Generic[T]):
+class BackoffSender(Generic[A, T]):
     """
     A sender that does exponential backoff in case of failed send operations
 
@@ -63,7 +19,7 @@ class BackoffSender(Generic[T]):
 
     def __init__(
         self,
-        send_function: Callable[[Any], T],
+        send_function: Callable[[A], T],
         on_publish: Callable[[Any], Any],
         first_backoff: float,
         multiplier: float,
@@ -74,62 +30,41 @@ class BackoffSender(Generic[T]):
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
-        self.queue: queue.Queue[tuple[datetime, UnsentMessage]] = queue.Queue()
 
-        self.thread = Thread(target=self._do_work)
-        self.thread.daemon = True
-        self.thread.start()
+        def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
 
-    def wrapped_function(self, unsent_message: UnsentMessage) -> Optional[T]:
-        try:
-            ret = self.send_function(unsent_message.argument)
-            unsent_message.backoff_message_info.set_as_published()
+        self._loop = asyncio.new_event_loop()
+        self._thread = Thread(target=start_background_loop, args=(self._loop,), daemon=True)
+        self._thread.start()
+
+    async def _backoff_send(self, argument: A) -> Optional[T]:
+        deadline = datetime.now() + self.max_duration
+        cur_backoff = self.first_backoff
+
+        while datetime.now() < deadline:
             try:
-                self.on_publish(unsent_message.argument)
-            finally:
-                return ret
-        except Exception as e:
-            logging.error(e)
-            cur_backoff = unsent_message.backoff
-            unsent_message.new_backoff(self.multiplier)
-            if datetime.now() + timedelta(seconds=cur_backoff) < unsent_message.deadline:
+                ret = self.send_function(argument)
+                try:
+                    self.on_publish(argument)
+                finally:
+                    return ret
+            except Exception as e:
+                logging.error(e)
+                if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
+                    cur_backoff = (deadline - datetime.now()).total_seconds()
                 logging.info(f"Retrying after {cur_backoff} seconds")
-                self.queue.put((datetime.now() + timedelta(seconds=cur_backoff), unsent_message))
-            else:
-                logging.info(f"Message expired, args = {unsent_message.argument}")
-            return None
+                await asyncio.sleep(cur_backoff)
+                cur_backoff = cur_backoff * self.multiplier
 
-    def _do_work(self):
-        messages = []
-        while True:
-            if len(messages) > 0:
-                tim, _ = messages[0]
-                timeout = max((tim - datetime.now()).total_seconds(), 0.0)
-            else:
-                timeout = 10000
-
-            try:
-                heapq.heappush(messages, self.queue.get(timeout=timeout))
-                logging.debug("Received a new entry")
-            except queue.Empty:
-                (_, message) = heapq.heappop(messages)
-                self.wrapped_function(message)
+        logging.info(f"Message expired, args = {argument}")
+        return None
 
     def close(self, timeout=None):
-        self.thread.join(timeout)
+        self._thread.join(timeout)
 
-    def send(self, argument: Any):
-        backoff_message_info = BackoffMessageInfo()
-        self.queue.put(
-            (
-                datetime.now(),
-                UnsentMessage(
-                    argument,
-                    datetime.now() + self.max_duration,
-                    self.first_backoff,
-                    backoff_message_info,
-                ),
-            )
-        )
+    def send(self, argument: A) -> Future:
+        future = asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
         logging.debug("Scheduled")  # TODO: add message ID
-        return backoff_message_info
+        return future

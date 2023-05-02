@@ -230,7 +230,7 @@ class SIM7020Interface:
         return self._mqtt_id
 
     def _mqtt_connect_internal(self) -> int | None:
-        """ Should only work under a global lock"""
+        """Should only work under a global lock"""
         mqtt_id = self._detect_mqtt_id()
         if mqtt_id is not None:
             return mqtt_id
