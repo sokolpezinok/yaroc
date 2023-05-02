@@ -136,6 +136,7 @@ class SIM7020Interface:
         self._default_delay = 100
         self._default_timeout = 1
         self._atrunenv_lock = Lock()
+        self._global_lock = Lock()
 
         self._send_at("AT+CMEE=2")
         self._send_at("ATE0")
@@ -160,7 +161,7 @@ class SIM7020Interface:
         collectables: List[str] = [],
         queries: List[str] = [],
         timeout: float | None = None,
-    ) -> Tuple[str, list[str]] | None:
+    ) -> list[str] | None:
         timeout = timeout if timeout is not None else self._default_timeout
         at_command = ATCommand(
             command,
@@ -199,7 +200,7 @@ class SIM7020Interface:
         answers = []
         for query in queries:
             answers.append(response.get_collectable(query))
-        return (response.response, answers)
+        return answers
 
     def __del__(self):
         mqtt_id = self._detect_mqtt_id()
@@ -212,19 +213,24 @@ class SIM7020Interface:
 
     def _detect_mqtt_id(self) -> int | None:
         try:
-            (_, answers) = self._send_at(
+            answers = self._send_at(
                 "AT+CMQCON?",
                 f'CMQCON: [0-9],1,"{BROKER_URL}"',
                 ["CMQCON: ?{id::[0-9]},1"],
                 ["id"],
             )
-            if len(answers) == 1:
+            if answers is not None and len(answers) == 1:
                 return int(answers[0])
             return None
         except Exception:
             return None
 
     def mqtt_connect(self) -> int | None:
+        self._mqtt_id = self._mqtt_connect_internal()
+        return self._mqtt_id
+
+    def _mqtt_connect_internal(self) -> int | None:
+        """ Should only work under a global lock"""
         mqtt_id = self._detect_mqtt_id()
         if mqtt_id is not None:
             return mqtt_id
@@ -239,25 +245,24 @@ class SIM7020Interface:
             logging.warning("Can not set APN")
             return None
 
-        res = self._send_at(
+        answers = self._send_at(
             "AT+CMQNEW?",
             f"\\+CMQNEW: [0-9],1,{BROKER_URL}",
             ["CMQNEW: ?{mqtt_id::[0-9]},1"],
             ["mqtt_id"],
         )
-        if res is not None:
-            self.mqtt_disconnect(int(res[1][0]))
+        if answers is not None:
+            self.mqtt_disconnect(int(answers[0]))
 
-        res = self._send_at(
+        answers = self._send_at(
             f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,100',
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
             timeout=35,
         )
-        if res is None:
+        if answers is None:
             return None
-        (_, answers) = res
         try:
             mqtt_id = int(answers[0])
             # TODO: add will flag and will from disconnected
@@ -278,20 +283,24 @@ class SIM7020Interface:
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
         if qos == 1:
-            if self._detect_mqtt_id() is None:
-                self.mqtt_connect()
+            with self._global_lock:
+                if self._detect_mqtt_id() is None:
+                    self._mqtt_id = self.mqtt_connect()
 
         message_hex = message.hex()
         opt_response = self._send_at(
-            f'AT+CMQPUB=0,"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"', "OK", timeout=60
+            # TODO: not a thread-safe read
+            f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
+            "OK",
+            timeout=60,
         )
         return opt_response is not None
 
     def get_signal_dbm(self) -> int | None:
-        res = self._send_at("AT+CENG?", "CENG", ["CENG: ?{ceng::.*}"], ["ceng"])
+        answers = self._send_at("AT+CENG?", "CENG", ["CENG: ?{ceng::.*}"], ["ceng"])
         try:
-            if res is not None and len(res[1]) == 1:
-                ceng_split = res[1][0].split(",")
+            if answers is not None and len(answers) == 1:
+                ceng_split = answers[0].split(",")
                 return int(ceng_split[6])
             return None
         except Exception as err:
