@@ -6,7 +6,7 @@ from typing import Literal
 
 from ..pb.status_pb2 import MiniCallHome
 # TODO: consider using https://pypi.org/project/backoff/
-from ..utils.backoff import BackoffSender
+from ..utils.retries import BackoffRetries
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -25,7 +25,7 @@ class MeosClient(Client):
         self.address = (host, port)
         self._connect()
 
-        self._backoff_sender = BackoffSender(
+        self._backoff_sender = BackoffRetries(
             self._send, self._on_publish, 0.2, 2.0, timedelta(minutes=10)
         )
 
