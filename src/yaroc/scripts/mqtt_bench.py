@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime
 
-from ..clients.mqtt import MqttClient, SIM7020Interface, SIM7020MqttClient
+from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..utils.sys_info import create_minicallhome, eth_mac_addr
 
 logging.basicConfig(
