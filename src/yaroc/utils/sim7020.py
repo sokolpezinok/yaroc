@@ -1,5 +1,4 @@
 import logging
-from threading import Lock
 
 from attila.atcommand import ATCommand
 from attila.atre import ATRuntimeEnvironment
@@ -11,7 +10,13 @@ BROKER_PORT = 1883
 
 
 class SIM7020Interface:
-    # TODO: it should be thread-safe
+    """An AT interface to the SIM7020 NB-IoT chip
+
+    Implements mostly MQTT functionality
+
+    Note: this class is not thread-safe.
+    """
+
     def __init__(self, port: str, client_name: str = "SIM7020"):
         self.atrunenv = ATRuntimeEnvironment(False)
         self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
@@ -24,8 +29,6 @@ class SIM7020Interface:
         self._client_name = client_name
         self._default_delay = 100
         self._default_timeout = 1
-        self._atrunenv_lock = Lock()
-        self._global_lock = Lock()
 
         self._send_at("AT+CMEE=2")
         self._send_at("ATE0")
@@ -60,9 +63,8 @@ class SIM7020Interface:
             collectables=collectables,
         )
         try:
-            with self._atrunenv_lock:
-                self.atrunenv.add_command(at_command)
-                response = self.atrunenv.exec_next()
+            self.atrunenv.add_command(at_command)
+            response = self.atrunenv.exec_next()
         except ATRuntimeError as err:
             logging.error(f"Runtime error {err}")
             raise err
@@ -172,13 +174,11 @@ class SIM7020Interface:
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
         if qos == 1:
-            with self._global_lock:
-                if self._detect_mqtt_id() is None:
-                    self._mqtt_id = self.mqtt_connect()
+            if self._detect_mqtt_id() is None:
+                self._mqtt_id = self.mqtt_connect()
 
         message_hex = message.hex()
         opt_response = self._send_at(
-            # TODO: not a thread-safe read
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
             "OK",
             timeout=60,

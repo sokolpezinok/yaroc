@@ -20,4 +20,4 @@ for i in range(1000):
     mqtt_client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
     mini_call_home = create_minicallhome()
     mqtt_client.send_mini_call_home(mini_call_home)
-    time.sleep(20)
+    time.sleep(5)

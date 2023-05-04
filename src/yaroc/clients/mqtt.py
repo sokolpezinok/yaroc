@@ -5,9 +5,10 @@ from typing import Any, Dict, Optional, Tuple
 
 import paho.mqtt.client as mqtt
 
-from ..pb.punches_pb2 import Punches
+from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_coords_proto, create_punch_proto
+from ..utils.retries import BatchMessageInfo, BatchRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
@@ -126,6 +127,19 @@ class SIM7020MqttClient(Client):
         self._at_iface = SIM7020Interface(port, name if name is not None else "SIM7020")
         self._at_iface.mqtt_connect()
 
+        self._batch_retries = BatchRetries(self._send_punches, 3)
+
+    def _send_punches(self, punches: list[Punch]):
+        punches_proto = Punches()
+        for punch in punches:
+            punches_proto.punches.append(punch)
+        res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
+        if res:
+            logging.info("Punches sent")
+        else:
+            logging.error("Punches not sent")
+            raise Exception("Punches not sent")
+
     def send_punch(
         self,
         card_number: int,
@@ -133,10 +147,10 @@ class SIM7020MqttClient(Client):
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ) -> mqtt.MQTTMessageInfo:
-        punches = Punches()
-        punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
-        return self._send(self.topic_punches, punches.SerializeToString(), "Punch", qos=1)
+    ) -> BatchMessageInfo:
+        return self._batch_retries.send(
+            create_punch_proto(card_number, si_time, code, mode, process_time)
+        )
 
     def send_coords(
         self, lat: float, lon: float, alt: float, timestamp: datetime
@@ -145,7 +159,8 @@ class SIM7020MqttClient(Client):
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     def send_mini_call_home(self, mch: MiniCallHome):
-        dbm = self._at_iface.get_signal_dbm()
+        fut = self._batch_retries.execute(self._at_iface.get_signal_dbm)
+        dbm = fut.result()
         if dbm is not None:
             mch.signal_dbm = dbm
 
@@ -154,8 +169,8 @@ class SIM7020MqttClient(Client):
         return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome", qos=0)
 
     def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0):
-        if self._at_iface.mqtt_send(topic, message, qos):
+        fut = self._batch_retries.execute(self._at_iface.mqtt_send, topic, message, qos)
+        if fut.result():
             logging.info(f"{message_type} sent")
         else:
-            # TODO: add to unsent messages if response is ERROR
             logging.error("Message not sent")

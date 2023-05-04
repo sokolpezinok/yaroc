@@ -71,7 +71,7 @@ class BackoffRetries(Generic[A, T]):
         return future
 
 
-class MessageInfo:
+class BatchMessageInfo:
     def __init__(self, mid: int):
         self._published = False
         self._condition = Condition()
@@ -95,8 +95,9 @@ class MessageInfo:
 
 
 class BatchRetries(Generic[A, T]):
+    # TODO: add callback and max_duration
     def __init__(self, send_function: Callable[[list[A]], T], batch_count: int = 1):
-        self.queue: Queue[Tuple[A, MessageInfo]] = Queue()
+        self.queue: Queue[Tuple[A, BatchMessageInfo]] = Queue()
         self.send_function = send_function
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.batch_count = batch_count
@@ -123,12 +124,12 @@ class BatchRetries(Generic[A, T]):
         if not self.queue.empty():
             self.executor.submit(self._send_remaining).add_done_callback(self._send_all)
 
-    def send(self, arg: A) -> MessageInfo:
-        ret = MessageInfo(self.message_counter)
+    def send(self, arg: A) -> BatchMessageInfo:
+        ret = BatchMessageInfo(self.message_counter)
         self.message_counter += 1
         self.queue.put((arg, ret))
         self.executor.submit(self._send_remaining).add_done_callback(self._send_all)
         return ret
 
-    def execute(self, fn) -> Future:
-        return self.executor.submit(fn)
+    def execute(self, fn, *args) -> Future:
+        return self.executor.submit(fn, *args)
