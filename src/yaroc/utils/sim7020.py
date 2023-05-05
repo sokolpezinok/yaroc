@@ -78,7 +78,11 @@ class SIM7020Interface:
         if response is None:
             return None
 
-        logging.debug(f"{command}: {response.full_response} {response.response}")
+        if command != response.command.command:
+            logging.warning("Response to a different command")
+            logging.debug(f"{command}/{response.command.command}: {response.full_response} {response.response}")
+        else:
+            logging.debug(f"{command}: {response.full_response} {response.response}")
         if response.response is None:
             return None
         # if len(response.full_response) == 0:
@@ -150,7 +154,7 @@ class SIM7020Interface:
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
-            timeout=35,
+            timeout=60,
         )
         if answers is None:
             return None
