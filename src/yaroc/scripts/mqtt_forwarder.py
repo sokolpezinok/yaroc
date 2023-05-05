@@ -39,11 +39,16 @@ class MqttForwader:
         for punch in punches.punches:
             si_time = MqttForwader._prototime_to_datetime(punch.si_time)
             process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
-            total_latency = now - si_time
+            send_time = (
+                MqttForwader._prototime_to_datetime(punches.sending_timestamp)
+                if punches.HasField("sending_timestamp")
+                else process_time
+            )
+            network_latency = now - send_time
 
             log_message = (
-                f"{punch.code:03} dated {si_time}, processed {process_time:%H:%M:%S.%f},"
-                f" latency {total_latency}"
+                f"{punch.code:03} dated {si_time}, sent {send_time:%H:%M:%S.%f},"
+                f" latency {network_latency}"
             )
             logging.info(log_message)
 

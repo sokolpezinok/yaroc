@@ -11,4 +11,5 @@ message Punch {
 
 message Punches {
   repeated Punch punches = 1;
+  google.protobuf.Timestamp sending_timestamp = 2;
 }

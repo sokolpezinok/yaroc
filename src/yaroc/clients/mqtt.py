@@ -81,6 +81,7 @@ class MqttClient(Client):
     ) -> mqtt.MQTTMessageInfo:
         punches = Punches()
         punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
+        punches.sending_timestamp.GetCurrentTime()
         return self._send(self.topic_punches, punches.SerializeToString())
 
     def send_coords(
@@ -133,6 +134,7 @@ class SIM7020MqttClient(Client):
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)
+        punches_proto.sending_timestamp.GetCurrentTime()
         res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
             logging.info("Punches sent")

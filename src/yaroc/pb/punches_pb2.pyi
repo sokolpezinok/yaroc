@@ -21,7 +21,9 @@ class Punch(_message.Message):
     def __init__(self, code: _Optional[int] = ..., card: _Optional[int] = ..., si_time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ..., process_time_ms: _Optional[int] = ..., mode: _Optional[int] = ...) -> None: ...
 
 class Punches(_message.Message):
-    __slots__ = ["punches"]
+    __slots__ = ["punches", "sending_timestamp"]
     PUNCHES_FIELD_NUMBER: _ClassVar[int]
+    SENDING_TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     punches: _containers.RepeatedCompositeFieldContainer[Punch]
-    def __init__(self, punches: _Optional[_Iterable[_Union[Punch, _Mapping]]] = ...) -> None: ...
+    sending_timestamp: _timestamp_pb2.Timestamp
+    def __init__(self, punches: _Optional[_Iterable[_Union[Punch, _Mapping]]] = ..., sending_timestamp: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
