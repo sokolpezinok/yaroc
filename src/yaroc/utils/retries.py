@@ -119,8 +119,10 @@ class BatchRetries(Generic[A, T]):
             for message_info in message_infos:
                 message_info.set_as_published()
         except Exception:
-            for message, message_info in zip(messages, message_infos):
-                self.queue.put((message, message_info))
+            pass
+            # TODO: this is too agressive without a backoff or throttling
+            # for message, message_info in zip(messages, message_infos):
+            #     self.queue.put((message, message_info))
 
     def _send_all(self, _):
         if not self.queue.empty():

@@ -181,6 +181,10 @@ class SIM7020Interface:
             if self._detect_mqtt_id() is None:
                 self._mqtt_id = self.mqtt_connect()
 
+        if self._mqtt_id is None:
+            logging.warning("Not connected, will not send an MQTT message")
+            return False
+
         message_hex = message.hex()
         opt_response = self._send_at(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',

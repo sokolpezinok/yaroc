@@ -128,7 +128,7 @@ class SIM7020MqttClient(Client):
         self._at_iface = SIM7020Interface(port, name if name is not None else "SIM7020")
         self._at_iface.mqtt_connect()
 
-        self._batch_retries = BatchRetries(self._send_punches, 3)
+        self._batch_retries = BatchRetries(self._send_punches, 2)
 
     def _send_punches(self, punches: list[Punch]):
         punches_proto = Punches()
