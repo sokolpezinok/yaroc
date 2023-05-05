@@ -111,6 +111,8 @@ class BatchRetries(Generic[A, T]):
             message_infos.append(message_info)
             if len(messages) >= self.batch_count:
                 break
+        if len(messages) == 0:
+            return
 
         try:
             self.send_function(messages)
