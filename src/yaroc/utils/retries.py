@@ -53,7 +53,7 @@ class BackoffRetries(Generic[A, T]):
                 finally:
                     return ret
             except Exception as e:
-                logging.error(e)
+                logging.error(f"Caught exception while sending: {e}")
                 if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
                     cur_backoff = (deadline - datetime.now()).total_seconds()
                 logging.info(f"Retrying after {cur_backoff} seconds")

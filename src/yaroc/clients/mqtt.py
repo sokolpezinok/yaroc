@@ -154,8 +154,8 @@ class SIM7020MqttClient(Client):
         if res:
             logging.info("Punches sent")
         else:
-            logging.error("Punches not sent")
-            raise Exception("Punches not sent")
+            logging.error("Punch not sent")
+            raise Exception("Punch not sent")
 
     def send_punch(
         self,
