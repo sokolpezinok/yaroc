@@ -25,12 +25,14 @@ class BackoffRetries(Generic[A, T]):
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
+        workers: int = 1,
     ):
         self.send_function = send_function
         self.on_publish = on_publish
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
+        self.executor = ThreadPoolExecutor(max_workers=workers)
 
         def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
             asyncio.set_event_loop(loop)
@@ -46,7 +48,7 @@ class BackoffRetries(Generic[A, T]):
 
         while datetime.now() < deadline:
             try:
-                ret = self.send_function(argument)
+                ret = await self._loop.run_in_executor(self.executor, self.send_function, argument)
                 try:
                     self.on_publish(argument)
                 finally:
