@@ -72,6 +72,9 @@ class BackoffRetries(Generic[A, T]):
         logging.debug("Scheduled")  # TODO: add message ID
         return future
 
+    def execute(self, fn, *args) -> Future:
+        return self.executor.submit(fn, *args)
+
 
 class BatchMessageInfo:
     def __init__(self, mid: int):

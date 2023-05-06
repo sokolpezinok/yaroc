@@ -12,7 +12,7 @@ class TestRetries(unittest.TestCase):
         stats = {2: 0, 4: 0}
 
         def send_f(x: int) -> datetime:
-            time.sleep(.025)
+            time.sleep(0.025)
             stats[x] += 1
             if stats[x] < x:
                 raise Exception(f"Failed arg={x} for the {stats[x]}th time")
