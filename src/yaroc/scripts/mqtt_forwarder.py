@@ -50,8 +50,8 @@ class MqttForwader:
             network_latency = now - send_time
 
             log_message = (
-                f"{punch.code:03} dated {si_time}, sent {send_time:%H:%M:%S.%f},"
-                f" latency {network_latency}"
+                f"{punch.card} punched {punch.code:03} at {si_time}, sent {send_time:%H:%M:%S.%f},"
+                f"network latency {network_latency}"
             )
             logging.info(log_message)
 
