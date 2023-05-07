@@ -38,7 +38,11 @@ class MqttForwader:
         return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
 
     def _handle_punches(self, mac_addr: str, payload: bytes, now: datetime):
-        punches = Punches.FromString(payload)
+        try:
+            punches = Punches.FromString(payload)
+        except Exception as err:
+            logging.error(f"Error while parsing protobuf: {err}")
+            return
         for punch in punches.punches:
             si_time = MqttForwader._prototime_to_datetime(punch.si_time)
             process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
@@ -65,7 +69,11 @@ class MqttForwader:
         logging.info(log_message)
 
     def _handle_status(self, mac_addr: str, payload: bytes, now: datetime):
-        status = Status.FromString(payload)
+        try:
+            status = Status.FromString(payload)
+        except Exception as err:
+            logging.error(f"Error while parsing protobuf: {err}")
+            return
         oneof = status.WhichOneof("msg")
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
