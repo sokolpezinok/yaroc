@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from attila.atcommand import ATCommand
 from attila.atre import ATRuntimeEnvironment
@@ -29,6 +30,8 @@ class SIM7020Interface:
         self._client_name = client_name
         self._default_delay = 100
         self._default_timeout = 1
+        self._mqtt_id = None
+        self._mqtt_id_timestamp = datetime.now()
 
         self._send_at("AT+CMEE=2")
         self._send_at("ATE0")
@@ -124,6 +127,7 @@ class SIM7020Interface:
 
     def mqtt_connect(self) -> int | None:
         self._mqtt_id = self._mqtt_connect_internal()
+        self._mqtt_id_timestamp = datetime.now()
         return self._mqtt_id
 
     def _mqtt_connect_internal(self) -> int | None:
@@ -179,7 +183,9 @@ class SIM7020Interface:
             return None
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
-        if qos == 1:
+        if qos == 1 or (
+            qos == 0 and datetime.now() - self._mqtt_id_timestamp > timedelta(minutes=3)
+        ):
             if self._detect_mqtt_id() is None:
                 self._mqtt_id = self.mqtt_connect()
 
