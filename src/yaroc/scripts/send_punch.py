@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 import tomllib
 from datetime import datetime

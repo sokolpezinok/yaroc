@@ -8,6 +8,7 @@ import paho.mqtt.client as mqtt
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import Client
+from ..clients.meos import MeosClient
 from ..clients.roc import RocClient
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
@@ -110,11 +111,19 @@ with open("mqtt-forwarder.toml", "rb") as f:
 setup_logging(config)
 
 mac_addresses = config["mac-addresses"]
+meos_conf = config["client"]["meos"]
+roc_conf = config["client"]["roc"]
 client_map = {}
 for mac_address in mac_addresses:
     clients: list[Client] = []
-    logging.info(f"Setting up ROC for {mac_address}")
-    clients.append(RocClient(mac_address))
+    if meos_conf.get("enable", True):
+        logging.info("Enabled SIRAP client")
+        clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
+    if roc_conf.get("enable", True):
+        logging.info(f"Enabling ROC for {mac_address}")
+        clients.append(RocClient(mac_address))
+    if len(clients) == 0:
+        logging.info(f"Listening to {mac_address} without forwarding")
     client_map[str(mac_address)] = clients
 
 forwarder = MqttForwader(client_map)

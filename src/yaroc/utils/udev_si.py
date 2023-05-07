@@ -5,13 +5,6 @@ from typing import Callable, Dict
 import pyudev
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
-
 DEFAULT_TIMEOUT_MS = 3.0
 
 
