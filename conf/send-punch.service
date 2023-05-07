@@ -2,7 +2,7 @@
 Description=YAROC Send Punches
 
 [Service]
-ExecStart=/home/pi/yaroc/.venv/bin/send-punch /dev/ttySI0
+ExecStart=/home/pi/yaroc/.venv/bin/send-punch
 WorkingDirectory=/home/pi
 User=pi
 Restart=always

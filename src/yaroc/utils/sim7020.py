@@ -35,6 +35,7 @@ class SIM7020Interface:
 
         self._send_at("AT+CMEE=2")
         self._send_at("ATE0")
+        self._send_at("AT+CREVHEX=1")
         self._send_at("AT+CMQTSYNC=1")
 
         # self._disconnected = Disconnected()
