@@ -8,7 +8,7 @@ from sportident import SIReader
 
 from ..clients.client import Client
 from ..clients.meos import MeosClient
-from ..clients.mqtt import SIM7020MqttClient
+from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..utils.script import setup_logging
 from ..utils.sys_info import create_minicallhome, eth_mac_addr
@@ -30,6 +30,7 @@ logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
 sim7020_conf = config["client"]["sim7020"]
 meos_conf = config["client"]["meos"]
+mqtt_conf = config["client"]["mqtt"]
 roc_conf = config["client"]["roc"]
 
 clients: list[Client] = []
@@ -39,6 +40,9 @@ if sim7020_conf.get("enable", True):
 if meos_conf.get("enable", True):
     logging.info("Enabled SIRAP client")
     clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
+if mqtt_conf.get("enable", True):
+    logging.info("Enabled MQTT client")
+    clients.append(MqttClient(mac_addr))
 if roc_conf.get("enable", True):
     logging.info("Enabled ROC client")
     clients.append(RocClient(mac_addr))
