@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 import tomllib
 from datetime import datetime
@@ -10,14 +11,9 @@ from ..clients.client import Client
 from ..clients.meos import MeosClient
 from ..clients.mqtt import SIM7020MqttClient
 from ..clients.roc import RocClient
+from ..utils.script import setup_logging
 from ..utils.sys_info import create_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
-
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 
 START = 3
 FINISH = 4
@@ -27,8 +23,11 @@ BEACON_CONTROL = 18
 with open("send-punch.toml", "rb") as f:
     config = tomllib.load(f)
 
+setup_logging(config)
+
 mac_addr = eth_mac_addr()
 assert mac_addr is not None
+logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
 sim7020_conf = config["client"]["sim7020"]
 meos_conf = config["client"]["meos"]
@@ -36,11 +35,17 @@ roc_conf = config["client"]["roc"]
 
 clients: list[Client] = []
 if sim7020_conf.get("enable", True):
+    logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
     clients.append(SIM7020MqttClient(mac_addr, sim7020_conf["device"], "SendPunch"))
 if meos_conf.get("enable", True):
+    logging.info("Enabled SIRAP client")
     clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
 if roc_conf.get("enable", True):
+    logging.info("Enabled ROC client")
     clients.append(RocClient(mac_addr))
+
+if len(clients) == 0:
+    logging.warning("No clients enabled, will listen to punches but nothing will be sent")
 
 
 def si_worker(si: SIReader, finished: Event):
@@ -68,6 +73,7 @@ def si_worker(si: SIReader, finished: Event):
         for code, tim, mode in messages:
             logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
             for client in clients:
+                # TODO: some of the clients are blocking, they shouldn't do that
                 client.send_punch(card_number, tim, code, mode)
 
 

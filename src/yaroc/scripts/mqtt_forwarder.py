@@ -1,5 +1,6 @@
 import logging
 import re
+import tomllib
 from datetime import datetime, timedelta, timezone
 from typing import Dict
 
@@ -11,6 +12,7 @@ from ..clients.roc import RocClient
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
+from ..utils.script import setup_logging
 
 
 class MqttForwader:
@@ -102,11 +104,18 @@ class MqttForwader:
         self.mqtt_client.loop_forever()  # Is there a way to stop this?
 
 
-logging.basicConfig(
-    encoding="utf-8",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+with open("mqtt-forwarder.toml", "rb") as f:
+    config = tomllib.load(f)
 
-forwarder = MqttForwader({"8c8caa504e8a": [RocClient("8c8caa504e8a")]})
+setup_logging(config)
+
+mac_addresses = config["mac-addresses"]
+client_map = {}
+for mac_address in mac_addresses:
+    clients: list[Client] = []
+    logging.info(f"Setting up ROC for {mac_address}")
+    clients.append(RocClient(mac_address))
+    client_map[str(mac_address)] = clients
+
+forwarder = MqttForwader(client_map)
 forwarder.loop()
