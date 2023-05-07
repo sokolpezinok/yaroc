@@ -128,6 +128,7 @@ class SIM7020MqttClient(Client):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
         self._at_iface = SIM7020Interface(port, name if name is not None else "SIM7020")
         self._at_iface.mqtt_connect()
+        self._include_sending_timestamp = False
 
         # self._retries = BatchRetries(self._send_punches, 2)
         self._retries = BackoffRetries(
@@ -138,7 +139,8 @@ class SIM7020MqttClient(Client):
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)
-        punches_proto.sending_timestamp.GetCurrentTime()
+        if self._include_sending_timestamp:
+            punches_proto.sending_timestamp.GetCurrentTime()
         res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
             logging.info("Punches sent")
@@ -149,7 +151,8 @@ class SIM7020MqttClient(Client):
     def _send_punch(self, punch: Punch):
         punches_proto = Punches()
         punches_proto.punches.append(punch)
-        punches_proto.sending_timestamp.GetCurrentTime()
+        if self._include_sending_timestamp:
+            punches_proto.sending_timestamp.GetCurrentTime()
         res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
             logging.info("Punches sent")
