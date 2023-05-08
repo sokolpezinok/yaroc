@@ -8,6 +8,11 @@ from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortE
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
+CONNECT_TIME = 35
+
+
+def time_since(t: datetime, delta: timedelta) -> bool:
+    return datetime.now() - t > delta
 
 
 class SIM7020Interface:
@@ -30,7 +35,7 @@ class SIM7020Interface:
         self._client_name = client_name
         self._default_delay = 100
         self._default_timeout = 1
-        self._mqtt_id = None
+        self._mqtt_id: int | None = None
         self._mqtt_id_timestamp = datetime.now()
 
         self._send_at("AT+CMEE=2")
@@ -142,7 +147,9 @@ class SIM7020Interface:
             return None
 
         # Can APN be set automatically?
-        response = self._send_at('AT*MCGDEFCONT="IP","trial-nbiot.corp"', "OK", timeout=35)
+        response = self._send_at(
+            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', "OK", timeout=CONNECT_TIME
+        )
         if response is None:
             logging.warning("Can not set APN")
             return None
@@ -161,7 +168,7 @@ class SIM7020Interface:
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
-            timeout=60,
+            timeout=CONNECT_TIME,
         )
         if answers is None:
             return None
@@ -171,7 +178,7 @@ class SIM7020Interface:
             # status = Status()
             # status.disconnected.CopyFrom(disconnected)
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",120,0,0', "OK", timeout=35
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",120,0,0', "OK", timeout=CONNECT_TIME
             )
             if opt_reponse is not None:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
@@ -184,8 +191,8 @@ class SIM7020Interface:
             return None
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
-        if qos == 1 or (
-            qos == 0 and datetime.now() - self._mqtt_id_timestamp > timedelta(minutes=3)
+        if (qos == 1 and time_since(self._mqtt_id_timestamp, timedelta(seconds=30))) or (
+            qos == 0 and time_since(self._mqtt_id_timestamp, timedelta(minutes=3))
         ):
             if self._detect_mqtt_id() is None:
                 self._mqtt_id = self.mqtt_connect()
@@ -198,7 +205,7 @@ class SIM7020Interface:
         opt_response = self._send_at(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
             "OK",
-            timeout=60,
+            timeout=CONNECT_TIME,
         )
         success = opt_response is not None
         if success:
