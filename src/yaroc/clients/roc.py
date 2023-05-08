@@ -46,13 +46,12 @@ class RocClient(Client):
         }
 
         try:
-            response = self.http.request(
+            self.http.request(
                 "POST",
                 ROC_SEND_PUNCH,
                 encode_multipart=False,
                 fields=data,
             )
-            logging.debug(f"Got response {response.status}: {response.data}")
         except Exception as e:
             logging.error(e)
 
@@ -76,11 +75,10 @@ class RocClient(Client):
         }
 
         try:
-            response = self.http.request(
+            self.http.request(
                 "GET",
                 ROC_RECEIVEDATA,
                 fields=data,
             )
-            logging.debug(f"Got response {response.status}: {response.data.decode('utf-8')}")
         except Exception as e:
             logging.error(e)
