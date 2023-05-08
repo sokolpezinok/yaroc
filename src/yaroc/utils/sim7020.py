@@ -110,14 +110,14 @@ class SIM7020Interface:
 
     def __del__(self):
         mqtt_id = self._detect_mqtt_id()
-        if mqtt_id is not None:
-            self.mqtt_disconnect(mqtt_id)
+        self.mqtt_disconnect(mqtt_id)
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
             self._send_at(f"AT+CMQDISCON={mqtt_id}", "OK")
 
     def _detect_mqtt_id(self) -> int | None:
+        self._mqtt_id = None
         try:
             answers = self._send_at(
                 "AT+CMQCON?",
@@ -126,21 +126,18 @@ class SIM7020Interface:
                 ["id"],
             )
             if answers is not None and len(answers) == 1:
-                return int(answers[0])
-            return None
-        except Exception:
-            return None
+                self._mqtt_id = int(answers[0])
+        finally:
+            return self._mqtt_id
 
-    def mqtt_connect(self) -> int | None:
+    def mqtt_connect(self):
         self._mqtt_id = self._mqtt_connect_internal()
         self._mqtt_id_timestamp = datetime.now()
-        return self._mqtt_id
 
     def _mqtt_connect_internal(self) -> int | None:
-        """Should only work under a global lock"""
-        mqtt_id = self._detect_mqtt_id()
-        if mqtt_id is not None:
-            return mqtt_id
+        self._detect_mqtt_id()
+        if self._mqtt_id is not None:
+            return self._mqtt_id
 
         if self._send_at("AT+CGREG?", "CGREG: 0,1") is None:
             logging.warning("Not registered yet")
@@ -195,7 +192,7 @@ class SIM7020Interface:
             qos == 0 and time_since(self._mqtt_id_timestamp, timedelta(minutes=3))
         ):
             if self._detect_mqtt_id() is None:
-                self._mqtt_id = self.mqtt_connect()
+                self.mqtt_connect()
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
