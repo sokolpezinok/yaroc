@@ -19,7 +19,7 @@ mqtt_client = SIM7020MqttClient(mac_addr, "/dev/ttyUSB0", "SIM7020")
 
 
 def mini_call_home():
-    for i in range(1000):
+    while True:
         mini_call_home = create_minicallhome()
         mqtt_client.send_mini_call_home(mini_call_home)
         time.sleep(20)
