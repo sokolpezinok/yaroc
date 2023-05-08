@@ -200,7 +200,10 @@ class SIM7020Interface:
             "OK",
             timeout=60,
         )
-        return opt_response is not None
+        success = opt_response is not None
+        if success:
+            self._mqtt_id_timestamp = datetime.now()
+        return success
 
     def get_signal_dbm(self) -> int | None:
         answers = self._send_at("AT+CENG?", "CENG", ["CENG: ?{ceng::.*}"], ["ceng"])
