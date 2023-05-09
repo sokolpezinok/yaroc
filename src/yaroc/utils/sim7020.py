@@ -161,7 +161,7 @@ class SIM7020Interface:
             self.mqtt_disconnect(int(answers[0]))
 
         answers = self._send_at(
-            f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,100',
+            f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,200',
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
