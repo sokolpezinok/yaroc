@@ -136,6 +136,7 @@ class SIM7020Interface:
 
     def _mqtt_connect_internal(self) -> int | None:
         self._detect_mqtt_id()
+        self._send_at("ATE0")
         if self._mqtt_id is not None:
             return self._mqtt_id
 
@@ -158,6 +159,7 @@ class SIM7020Interface:
             ["mqtt_id"],
         )
         if answers is not None:
+            # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             self.mqtt_disconnect(int(answers[0]))
 
         answers = self._send_at(
@@ -171,7 +173,7 @@ class SIM7020Interface:
             return None
         try:
             mqtt_id = int(answers[0])
-            # TODO: add will flag and will from disconnected
+            # TODO: add will flag and a will created from 'disconnected'
             # status = Status()
             # status.disconnected.CopyFrom(disconnected)
             opt_reponse = self._send_at(
