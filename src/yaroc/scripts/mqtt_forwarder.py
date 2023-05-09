@@ -55,6 +55,7 @@ class MqttForwader:
                 )
             else:
                 log_message += f"processed {process_time}, latency {now - process_time}"
+            log_message += f", MAC {mac_addr}"
 
             logging.info(log_message)
 
@@ -86,7 +87,7 @@ class MqttForwader:
             total_latency = now - orig_time
             log_message = (
                 f"At {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C,{mch.signal_dbm:4} dBm,"
-                f"{mch.freq:4} MHz, latency {total_latency.total_seconds():6.2f}s"
+                f"{mch.freq:4} MHz, latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
             )
             logging.info(log_message)
             for client in self.clients[mac_addr]:
