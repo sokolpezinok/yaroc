@@ -8,7 +8,7 @@ from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortE
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
-CONNECT_TIME = 35
+CONNECT_TIME = 60
 
 
 def time_since(t: datetime, delta: timedelta) -> bool:
@@ -175,7 +175,7 @@ class SIM7020Interface:
             # status = Status()
             # status.disconnected.CopyFrom(disconnected)
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",120,0,0', "OK", timeout=CONNECT_TIME
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",90,0,0', "OK", timeout=CONNECT_TIME
             )
             if opt_reponse is not None:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
