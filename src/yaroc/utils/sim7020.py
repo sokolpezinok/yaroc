@@ -1,6 +1,8 @@
 import logging
+import shlex
+import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from attila.atcommand import ATCommand
 from attila.atre import ATRuntimeEnvironment
@@ -145,6 +147,14 @@ class SIM7020Interface:
         self._mqtt_id = self._mqtt_connect_internal()
         self._mqtt_id_timestamp = datetime.now()
 
+    def set_clock(self, clock: str):
+        tim = (
+            datetime.strptime(clock, "%y/%m/%d,%H:%M:%S+08")
+            .replace(tzinfo=timezone.utc)
+            .astimezone()
+        )
+        subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
+
     def _mqtt_connect_internal(self) -> int | None:
         self._send_at("ATE0")
         self._send_at("AT")  # sync command to make sure the following one succeeds
@@ -163,6 +173,10 @@ class SIM7020Interface:
         if response is None:
             logging.warning("Can not set APN")
             return None
+
+        answers = self._send_at("AT+CCLK?", "CCLK", ["CCLK: ?{clock::.*}"], ["clock"])
+        if answers is not None and len(answers) == 1:
+            self.set_clock(answers[0])
 
         answers = self._send_at(
             "AT+CMQNEW?",
