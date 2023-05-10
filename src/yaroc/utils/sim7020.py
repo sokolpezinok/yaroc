@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timedelta
 
 from attila.atcommand import ATCommand
@@ -37,6 +38,7 @@ class SIM7020Interface:
         self._default_timeout = 1
         self._mqtt_id: int | None = None
         self._mqtt_id_timestamp = datetime.now()
+        self._last_success = datetime.now()
 
         self._send_at("AT+CMEE=2")
         self._send_at("ATE0")
@@ -193,6 +195,12 @@ class SIM7020Interface:
         if (qos == 1 and time_since(self._mqtt_id_timestamp, timedelta(seconds=30))) or (
             qos == 0 and time_since(self._mqtt_id_timestamp, timedelta(minutes=3))
         ):
+            if time_since(self._last_success, timedelta(minutes=8)):
+                self._send_at("AT+CFUN=0", "", timeout=10)
+                time.sleep(15)
+                self._send_at("AT+CFUN=1", "")
+                self._last_success = datetime.now()  # Do not restart too often
+
             if self._detect_mqtt_id() is None:
                 self.mqtt_connect()
 
@@ -209,6 +217,7 @@ class SIM7020Interface:
         success = opt_response is not None
         if success:
             self._mqtt_id_timestamp = datetime.now()
+            self._last_success = datetime.now()
         return success
 
     def get_signal_dbm(self) -> int | None:
