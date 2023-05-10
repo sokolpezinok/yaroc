@@ -137,8 +137,9 @@ class SIM7020Interface:
         self._mqtt_id_timestamp = datetime.now()
 
     def _mqtt_connect_internal(self) -> int | None:
-        self._detect_mqtt_id()
         self._send_at("ATE0")
+        self._send_at("AT") # sync command to make sure the following one succeeds
+        self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
 
