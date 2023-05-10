@@ -43,4 +43,4 @@ thread.start()
 for i in range(1000):
     for client in clients:
         client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
-    time.sleep(10)
+    time.sleep(30)
