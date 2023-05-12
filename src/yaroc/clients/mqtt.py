@@ -130,9 +130,8 @@ class SIM7020MqttClient(Client):
         self._at_iface.mqtt_connect()
         self._include_sending_timestamp = False
 
-        # self._retries = BatchRetries(self._send_punches, 2)
         self._retries = BackoffRetries(
-            self._send_punch, lambda x: x, 3.0, 2.0, timedelta(minutes=5)
+            self._send_punch, lambda x: x, 3.0, 2.0, timedelta(minutes=10)
         )
 
     def _send_punches(self, punches: list[Punch]):
