@@ -24,7 +24,7 @@ def create_punch_proto(
     if process_time is None:
         process_time = datetime.now()
     process_time_latency = process_time - si_time
-    punch.process_time_ms = round(1000 * process_time_latency.total_seconds())
+    punch.process_time_ms = max(round(1000 * process_time_latency.total_seconds()), 0)
     return punch
 
 
