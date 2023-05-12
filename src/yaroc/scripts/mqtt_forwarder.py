@@ -54,7 +54,10 @@ class MqttForwader:
                     f"{(now - send_time).total_seconds():6.2}s"
                 )
             else:
-                log_message += f"processed {process_time}, latency {now - process_time}"
+                log_message += (
+                    f"processed {process_time:%H:%M:%S.%f}, latency"
+                    f"{(now - process_time).total_seconds():6.2}s"
+                )
             log_message += f", MAC {mac_addr}"
 
             logging.info(log_message)
