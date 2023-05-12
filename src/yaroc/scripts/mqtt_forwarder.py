@@ -51,12 +51,12 @@ class MqttForwader:
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
                 log_message += (
                     f"sent {send_time:%H:%M:%S.%f}, network latency "
-                    f"{(now - send_time).total_seconds():6.2}s"
+                    f"{(now - send_time).total_seconds():6.2f}s"
                 )
             else:
                 log_message += (
-                    f"processed {process_time:%H:%M:%S.%f}, latency"
-                    f"{(now - process_time).total_seconds():6.2}s"
+                    f"processed {process_time:%H:%M:%S.%f}, latency "
+                    f"{(now - process_time).total_seconds():6.2f}s"
                 )
             log_message += f", MAC {mac_addr}"
 
