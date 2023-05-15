@@ -11,7 +11,7 @@ from ..pb.status_pb2 import Disconnected, Status
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
-CONNECT_TIME = 60
+CONNECT_TIME = 35
 
 
 def time_since(t: datetime, delta: timedelta) -> bool:
@@ -169,7 +169,7 @@ class SIM7020Interface:
             self.mqtt_disconnect(int(answers[0]))
 
         answers = self._send_at(
-            f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",60000,200',
+            f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",{CONNECT_TIME}000,200',
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
@@ -181,8 +181,9 @@ class SIM7020Interface:
             mqtt_id = int(answers[0])
             will_hex = self._will.hex()
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",90,0,1,"topic={self._will_topic},'
-                f'qos=1,retained=0,message_len={len(will_hex)},message={will_hex}"',
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{CONNECT_TIME},0,1,'
+                f'"topic={self._will_topic},qos=1,retained=0,'
+                f'message_len={len(will_hex)},message={will_hex}"',
                 "OK",
                 timeout=CONNECT_TIME + 3,
             )
