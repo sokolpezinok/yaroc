@@ -126,7 +126,9 @@ class SIM7020MqttClient(Client):
 
     def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
-        self._at_iface = SIM7020Interface(port, name if name is not None else "SIM7020")
+        self._at_iface = SIM7020Interface(
+            port, self.topic_status, name if name is not None else "SIM7020"
+        )
         self._at_iface.mqtt_connect()
         self._include_sending_timestamp = False
 

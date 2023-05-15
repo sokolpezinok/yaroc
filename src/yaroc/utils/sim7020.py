@@ -6,6 +6,8 @@ from attila.atcommand import ATCommand
 from attila.atre import ATRuntimeEnvironment
 from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
 
+from ..pb.status_pb2 import Disconnected, Status
+
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -24,7 +26,7 @@ class SIM7020Interface:
     Note: this class is not thread-safe.
     """
 
-    def __init__(self, port: str, client_name: str = "SIM7020"):
+    def __init__(self, port: str, will_topic: str, client_name: str = "SIM7020"):
         self.atrunenv = ATRuntimeEnvironment(False)
         self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
         try:
@@ -45,11 +47,12 @@ class SIM7020Interface:
         self._send_at("AT+CREVHEX=1")
         self._send_at("AT+CMQTSYNC=1")
 
-        # self._disconnected = Disconnected()
-        # if name is None:
-        #     self._disconnected.client_name = ""
-        # else:
-        #     self._disconnected.client_name = str(name)
+        status = Status()
+        disconnected = Disconnected()
+        disconnected.client_name = client_name
+        status.disconnected.CopyFrom(disconnected)
+        self._will = status.SerializeToString()
+        self._will_topic = will_topic
         if self._send_at("AT", "OK") is not None:
             logging.info("SIM7020 is ready")
         else:
@@ -138,7 +141,7 @@ class SIM7020Interface:
 
     def _mqtt_connect_internal(self) -> int | None:
         self._send_at("ATE0")
-        self._send_at("AT") # sync command to make sure the following one succeeds
+        self._send_at("AT")  # sync command to make sure the following one succeeds
         self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
@@ -176,11 +179,11 @@ class SIM7020Interface:
             return None
         try:
             mqtt_id = int(answers[0])
-            # TODO: add will flag and a will created from 'disconnected'
-            # status = Status()
-            # status.disconnected.CopyFrom(disconnected)
+            will_hex = self._will.hex()
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",90,0,0', "OK",
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",90,0,1,"topic={self._will_topic},'
+                f'qos=1,retained=0,message_len={len(will_hex)},message={will_hex}"',
+                "OK",
                 timeout=CONNECT_TIME + 3,
             )
             if opt_reponse is not None:
