@@ -144,10 +144,8 @@ class SIM7020MqttClient(Client):
             punches_proto.sending_timestamp.GetCurrentTime()
         res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
-            logging.info("Punches sent")
             return [res] * len(punches)
         else:
-            logging.error("Punches not sent")
             return [None] * len(punches)
 
     def send_punch(

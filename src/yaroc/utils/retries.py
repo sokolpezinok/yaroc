@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from asyncio import Condition
+from asyncio import Condition, Lock
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, time, timedelta
@@ -78,10 +78,11 @@ class BackoffRetries(Generic[A, T]):
 
 
 class RetriedMessage(Generic[A, T]):
-    def __init__(self, arg: A):
+    def __init__(self, arg: A, mid: int):
         self.processed = Condition()
         self.published = False
         self.returned: T | None = None
+        self.mid = mid
         self.arg = arg
 
     async def set_published(self, returned: T):
@@ -130,6 +131,8 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.batch_count = batch_count
         self._executor = ThreadPoolExecutor(max_workers=workers)
         self._queue: Queue[RetriedMessage] = Queue()
+        self._current_mid_lock = Lock()
+        self._current_mid = 0
 
         def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
             asyncio.set_event_loop(loop)
@@ -154,17 +157,28 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     async def _send_and_notify(self):
         (messages, returned) = await self._loop.run_in_executor(self._executor, self._send_queued)
+        published, not_published = [], []
         for message, r in zip(messages, returned):
             if r is None:
                 await message.set_not_published()
+                not_published.append(message.mid)
             else:
                 await message.set_published(r)
+                published.append(message.mid)
+
+        if len(published) > 0:
+            logging.info("Punches sent: " + ",".join(map(str, published)))
+        if len(not_published) > 0:
+            logging.error("Punches not sent: " + ",".join(map(str, not_published)))
 
     async def _backoff_send(self, argument: A) -> Optional[T]:
+        async with self._current_mid_lock:
+            self._current_mid += 1
+            retried_message: RetriedMessage[A, T] = RetriedMessage(argument, self._current_mid)
+        logging.debug(f"Scheduled: {retried_message.mid}")
+
         deadline = datetime.now() + self.max_duration
         cur_backoff = self.first_backoff
-        retried_message: RetriedMessage[A, T] = RetriedMessage(argument)
-
         while datetime.now() < deadline:
             async with retried_message.processed:
                 self._queue.put(retried_message)
@@ -177,11 +191,11 @@ class BackoffBatchedRetries(Generic[A, T]):
                 cur_backoff = (deadline - datetime.now()).total_seconds()
                 if cur_backoff < 0:
                     break
-            logging.info(f"Retrying after {cur_backoff} seconds")
+            logging.info(f"Retrying mid={retried_message.mid} after {cur_backoff} seconds")
             await asyncio.sleep(cur_backoff)
             cur_backoff = cur_backoff * self.multiplier
 
-        logging.info(f"Message expired, args = {argument}")
+        logging.info(f"Message mid={retried_message.mid} expired, args = {argument}")
         return None
 
     def close(self, timeout=None):
@@ -189,7 +203,6 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     def send(self, argument: A) -> Future:
         future = asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
-        logging.debug("Scheduled")  # TODO: add message ID
         return future
 
     def execute(self, fn, *args) -> Future:
