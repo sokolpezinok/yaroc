@@ -1,4 +1,5 @@
 import io
+import socket
 from math import floor
 
 import psutil
@@ -12,6 +13,15 @@ def eth_mac_addr() -> str | None:
             for address in addresses:
                 if address.family == psutil.AF_LINK:
                     return address.address.replace(":", "")
+    return None
+
+
+def local_ip() -> str | None:
+    for name, addresses in psutil.net_if_addrs().items():
+        if name != "lo":
+            for address in addresses:
+                if address.family == socket.AF_INET:
+                    return address.address
     return None
 
 
@@ -37,6 +47,10 @@ def create_sys_minicallhome() -> MiniCallHome:
     net_counters = psutil.net_io_counters()
     mch.totaldatarx = net_counters.bytes_recv
     mch.totaldatatx = net_counters.bytes_sent
+
+    ip = local_ip()
+    if ip:
+        mch.local_ip = ip
 
     if is_raspberrypi():
         import gpiozero
