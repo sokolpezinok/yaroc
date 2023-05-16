@@ -129,7 +129,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.multiplier = multiplier
         self.batch_count = batch_count
         self._executor = ThreadPoolExecutor(max_workers=workers)
-        self.queue: Queue[RetriedMessage] = Queue()
+        self._queue: Queue[RetriedMessage] = Queue()
 
         def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
             asyncio.set_event_loop(loop)
@@ -139,10 +139,10 @@ class BackoffBatchedRetries(Generic[A, T]):
         self._thread = Thread(target=start_background_loop, args=(self._loop,), daemon=True)
         self._thread.start()
 
-    def _send_remaining(self) -> Tuple[list[RetriedMessage], Exception | list[T]]:
+    def _send_queued(self) -> Tuple[list[RetriedMessage], Exception | list[T]]:
         messages = []
-        while not self.queue.empty():
-            message = self.queue.get()
+        while not self._queue.empty():
+            message = self._queue.get()
             messages.append(message)
             if len(messages) >= self.batch_count:
                 break
@@ -154,9 +154,9 @@ class BackoffBatchedRetries(Generic[A, T]):
         except Exception as err:
             return (messages, err)
 
-    async def _poll_queue(self):
+    async def _send_and_notify(self):
         (messages, returned) = await self._loop.run_in_executor(
-            self._executor, self._send_remaining
+            self._executor, self._send_queued
         )
         if isinstance(returned, list):
             for message, r in zip(messages, returned):
@@ -172,16 +172,17 @@ class BackoffBatchedRetries(Generic[A, T]):
         retried_message: RetriedMessage[A, T] = RetriedMessage(argument)
 
         while datetime.now() < deadline:
-            self.queue.put(retried_message)
-            asyncio.run_coroutine_threadsafe(self._poll_queue(), self._loop)
             async with retried_message.processed:
+                self._queue.put(retried_message)
+                asyncio.run_coroutine_threadsafe(self._send_and_notify(), self._loop)
                 await retried_message.processed.wait()
-
                 if retried_message.published:
                     return retried_message.returned
 
             if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
                 cur_backoff = (deadline - datetime.now()).total_seconds()
+                if cur_backoff < 0:
+                    break
             logging.info(f"Retrying after {cur_backoff} seconds")
             await asyncio.sleep(cur_backoff)
             cur_backoff = cur_backoff * self.multiplier
