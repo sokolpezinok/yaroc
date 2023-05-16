@@ -25,7 +25,7 @@ def is_raspberrypi() -> bool:
         return detected
 
 
-def create_minicallhome() -> MiniCallHome:
+def create_sys_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.GetCurrentTime()
 

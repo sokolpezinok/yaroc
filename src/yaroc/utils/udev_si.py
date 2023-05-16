@@ -16,6 +16,12 @@ class SiWorker:
         self.thread.setDaemon(True)
         self.thread.start()
 
+    def __str__(self):
+        if isinstance(self.si, SIReaderSRR):
+            return "0-srr"
+        if isinstance(self.si, SIReaderControl):
+            return "0-control"
+
     def close(self, timeout: float = DEFAULT_TIMEOUT_MS):
         self.finished.set()
         self.si.disconnect()
@@ -31,14 +37,22 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(self, worker_fn: Callable[[SIReader, threading.Event], None]):
+    def __init__(
+        self,
+        worker_fn: Callable[[SIReader, threading.Event], None],
+        udev_handler: Callable[[pyudev.Device], None],
+    ):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
         self.si_workers: Dict[str, SiWorker] = {}
         self.worker_fn = worker_fn
+        self._udev_handler = udev_handler
         for device in context.list_devices():
             self._handle_udev_event("add", device)
+
+    def __str__(self) -> str:
+        return ",".join(str(worker) for worker in self.si_workers.values())
 
     def _is_sportident(self, device: pyudev.Device):
         try:
@@ -60,6 +74,7 @@ class UdevSIManager:
         if not self._is_sportident(device):
             return
         device_node = device.device_node
+        self._udev_handler(device)
         if action == "add":
             if device_node in self.si_workers:
                 return

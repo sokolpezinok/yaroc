@@ -4,14 +4,16 @@ import tomllib
 from datetime import datetime
 from threading import Event, Thread
 
+from pyudev import Device
 from sportident import SIReader
 
 from ..clients.client import Client
 from ..clients.meos import MeosClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
+from ..pb.status_pb2 import MiniCallHome
 from ..utils.script import setup_logging
-from ..utils.sys_info import create_minicallhome, eth_mac_addr
+from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
 
 START = 3
@@ -80,11 +82,30 @@ def si_worker(si: SIReader, finished: Event):
                 client.send_punch(card_number, tim, code, mode)
 
 
+def send_mini_call_home(mch: MiniCallHome):
+    for client in clients:
+        client.send_mini_call_home(mch)
+
+
+def udev_handler(device: Device):
+    mch = MiniCallHome()
+    mch.time.GetCurrentTime()
+    device_name = device.device_node.removeprefix("/dev/").lower()
+    if device.action == "add" or device.action is None:
+        mch.codes = f"siadded-{device_name}"
+    else:
+        mch.codes = f"siremoved-{device_name}"
+    send_mini_call_home(mch)
+
+
+si_manager = UdevSIManager(si_worker, udev_handler)
+
+
 def periodic_mini_call_home():
     while True:
-        mch = create_minicallhome()
-        for client in clients:
-            client.send_mini_call_home(mch)
+        mch = create_sys_minicallhome()
+        mch.codes = str(si_manager)
+        send_mini_call_home(mch)
         time.sleep(20.0)  # TODO: make the timeout configurable
 
 
@@ -93,5 +114,4 @@ thread.daemon = True
 thread.start()
 
 
-si_manager = UdevSIManager(si_worker)
 si_manager.loop()

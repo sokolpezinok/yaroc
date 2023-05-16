@@ -7,7 +7,7 @@ from threading import Thread
 from ..clients.client import Client
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..utils.script import setup_logging
-from ..utils.sys_info import create_minicallhome, eth_mac_addr
+from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 mac_addr = eth_mac_addr()
 assert mac_addr is not None
@@ -31,7 +31,7 @@ if mqtt_conf.get("enable", True):
 
 def mini_call_home():
     while True:
-        mini_call_home = create_minicallhome()
+        mini_call_home = create_sys_minicallhome()
         for client in clients:
             client.send_mini_call_home(mini_call_home)
         time.sleep(20)

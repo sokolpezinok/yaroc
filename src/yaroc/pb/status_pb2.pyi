@@ -12,7 +12,8 @@ class Disconnected(_message.Message):
     def __init__(self, client_name: _Optional[str] = ...) -> None: ...
 
 class MiniCallHome(_message.Message):
-    __slots__ = ["cpu_temperature", "freq", "local_ip", "mac_address", "max_freq", "min_freq", "network_type", "signal_dbm", "time", "totaldatarx", "totaldatatx", "volts"]
+    __slots__ = ["codes", "cpu_temperature", "freq", "local_ip", "mac_address", "max_freq", "min_freq", "network_type", "signal_dbm", "time", "totaldatarx", "totaldatatx", "volts"]
+    CODES_FIELD_NUMBER: _ClassVar[int]
     CPU_TEMPERATURE_FIELD_NUMBER: _ClassVar[int]
     FREQ_FIELD_NUMBER: _ClassVar[int]
     LOCAL_IP_FIELD_NUMBER: _ClassVar[int]
@@ -25,6 +26,7 @@ class MiniCallHome(_message.Message):
     TOTALDATARX_FIELD_NUMBER: _ClassVar[int]
     TOTALDATATX_FIELD_NUMBER: _ClassVar[int]
     VOLTS_FIELD_NUMBER: _ClassVar[int]
+    codes: str
     cpu_temperature: float
     freq: int
     local_ip: str
@@ -37,7 +39,7 @@ class MiniCallHome(_message.Message):
     totaldatarx: int
     totaldatatx: int
     volts: float
-    def __init__(self, mac_address: _Optional[str] = ..., local_ip: _Optional[str] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., volts: _Optional[float] = ..., signal_dbm: _Optional[int] = ..., network_type: _Optional[int] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, mac_address: _Optional[str] = ..., local_ip: _Optional[str] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., volts: _Optional[float] = ..., signal_dbm: _Optional[int] = ..., network_type: _Optional[int] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ..., codes: _Optional[str] = ...) -> None: ...
 
 class Status(_message.Message):
     __slots__ = ["disconnected", "mini_call_home"]

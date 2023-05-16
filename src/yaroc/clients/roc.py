@@ -62,7 +62,7 @@ class RocClient(Client):
             "macaddr": self.macaddr,
             "failedcallhomes": "0",
             "localipaddress": mch.local_ip,
-            "codes": "",
+            "codes": mch.codes,
             "totaldatatx": str(mch.totaldatarx),
             "totaldatarx": str(mch.totaldatatx),
             "signaldBm": str(-mch.signal_dbm),

@@ -18,6 +18,7 @@ message MiniCallHome {
   uint64 totaldatarx = 10;
   uint64 totaldatatx = 11;
   google.protobuf.Timestamp time = 12;
+  string codes = 13;
 }
 
 message Status {

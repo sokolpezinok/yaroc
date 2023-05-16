@@ -88,10 +88,14 @@ class MqttForwader:
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
             total_latency = now - orig_time
-            log_message = (
-                f"At {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C,{mch.signal_dbm:4} dBm,"
-                f"{mch.freq:4} MHz, latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
-            )
+            if mch.freq > 0.0:
+                log_message = (
+                    f"At {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C, "
+                    f"{mch.signal_dbm:4} dBm, {mch.freq:4} MHz, "
+                )
+            else:
+                log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
+            log_message += f"latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
             logging.info(log_message)
             for client in self.clients[mac_addr]:
                 client.send_mini_call_home(mch)
