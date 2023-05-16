@@ -9,7 +9,7 @@ import paho.mqtt.client as mqtt
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_coords_proto, create_punch_proto
-from ..utils.retries import BackoffRetries
+from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
@@ -132,11 +132,11 @@ class SIM7020MqttClient(Client):
         self._at_iface.mqtt_connect()
         self._include_sending_timestamp = False
 
-        self._retries = BackoffRetries(
-            self._send_punch, lambda x: x, 3.0, 2.0, timedelta(minutes=10)
+        self._retries = BackoffBatchedRetries(
+            self._send_punches, lambda x: x, 3.0, 2.0, timedelta(minutes=10), batch_count=2
         )
 
-    def _send_punches(self, punches: list[Punch]):
+    def _send_punches(self, punches: list[Punch]) -> list[bool | None]:
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)
@@ -145,21 +145,10 @@ class SIM7020MqttClient(Client):
         res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
             logging.info("Punches sent")
+            return [res] * len(punches)
         else:
             logging.error("Punches not sent")
-            raise Exception("Punches not sent")
-
-    def _send_punch(self, punch: Punch):
-        punches_proto = Punches()
-        punches_proto.punches.append(punch)
-        if self._include_sending_timestamp:
-            punches_proto.sending_timestamp.GetCurrentTime()
-        res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
-        if res:
-            logging.info("Punches sent")
-        else:
-            logging.error("Punch not sent")
-            raise Exception("Punch not sent")
+            return [None] * len(punches)
 
     def send_punch(
         self,

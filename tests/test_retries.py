@@ -1,9 +1,8 @@
-import asyncio
 import time
 import unittest
 from datetime import datetime, timedelta
 
-from yaroc.utils.retries import BackoffBatchedRetries, BackoffRetries, RetriedMessage
+from yaroc.utils.retries import BackoffBatchedRetries, BackoffRetries
 
 
 class TestBackoffRetries(unittest.TestCase):
@@ -46,16 +45,16 @@ class TestBackoffRetries(unittest.TestCase):
         # pretty wide
         stats = {1: 0, 2: 0, 3: 0}
 
-        def send_f(xs: list[int]):
-            one_failed = False
+        def send_f(xs: list[int]) -> list[datetime | None]:
+            ret: list[datetime | None] = []
             for x in xs:
                 time.sleep(0.04)
                 if stats[x] < x:
                     stats[x] += 1
-                    one_failed = True
-            if one_failed:
-                raise Exception(f"Failed {xs}")
-            return [datetime.now()] * len(xs)
+                    ret.append(None)
+                else:
+                    ret.append(datetime.now())
+            return ret
 
         b = BackoffBatchedRetries(
             send_f, lambda x: x, 0.03, 2.0, timedelta(minutes=0.1), batch_count=2
@@ -71,10 +70,14 @@ class TestBackoffRetries(unittest.TestCase):
         finished3 = f3.result()
         b.close(0.1)
 
-        self.assertAlmostEqual(finished2.timestamp(), finished1.timestamp(), delta=0.001)
+        self.assertAlmostEqual(
+            finished1.timestamp(),
+            (start + timedelta(seconds=0.242)).timestamp(),
+            delta=0.01,
+        )
         self.assertAlmostEqual(
             finished2.timestamp(),
-            (start + timedelta(seconds=0.385)).timestamp(),
+            (start + timedelta(seconds=0.342)).timestamp(),
             delta=0.01,
         )
         self.assertAlmostEqual(

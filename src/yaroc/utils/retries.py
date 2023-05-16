@@ -114,7 +114,7 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     def __init__(
         self,
-        send_function: Callable[[list[A]], list[T]],
+        send_function: Callable[[list[A]], list[T | None]],
         on_publish: Callable[[Any], Any],
         first_backoff: float,
         multiplier: float,
@@ -139,7 +139,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         self._thread = Thread(target=start_background_loop, args=(self._loop,), daemon=True)
         self._thread.start()
 
-    def _send_queued(self) -> Tuple[list[RetriedMessage], Exception | list[T]]:
+    def _send_queued(self) -> Tuple[list[RetriedMessage], list[T | None]]:
         messages = []
         while not self._queue.empty():
             message = self._queue.get()
@@ -148,23 +148,17 @@ class BackoffBatchedRetries(Generic[A, T]):
                 break
         if len(messages) == 0:
             return ([], [])
-        try:
-            returned = self.send_function([message.arg for message in messages])
-            return (messages, returned)
-        except Exception as err:
-            return (messages, err)
+
+        returned = self.send_function([message.arg for message in messages])
+        return (messages, returned)
 
     async def _send_and_notify(self):
-        (messages, returned) = await self._loop.run_in_executor(
-            self._executor, self._send_queued
-        )
-        if isinstance(returned, list):
-            for message, r in zip(messages, returned):
-                await message.set_published(r)
-        else:
-            logging.error(returned)
-            for message in messages:
+        (messages, returned) = await self._loop.run_in_executor(self._executor, self._send_queued)
+        for message, r in zip(messages, returned):
+            if r is None:
                 await message.set_not_published()
+            else:
+                await message.set_published(r)
 
     async def _backoff_send(self, argument: A) -> Optional[T]:
         deadline = datetime.now() + self.max_duration
