@@ -22,6 +22,7 @@ class SiWorker:
         self.clients = clients
         self.thread = Thread(target=self._worker_fn, daemon=True)
         self.thread.start()
+        self.codes: set[int] = set()
 
     def _worker_fn(self):
         while True:
@@ -47,15 +48,17 @@ class SiWorker:
 
             for code, tim, mode in messages:
                 logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
+                self.codes.add(code)
                 for client in self.clients:
                     # TODO: some of the clients are blocking, they shouldn't do that
                     client.send_punch(card_number, tim, code, mode)
 
     def __str__(self):
+        codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
         if isinstance(self.si, SIReaderSRR):
-            return "0-srr"
+            return f"{codes_str}-srr"
         if isinstance(self.si, SIReaderControl):
-            return "0-control"
+            return f"{codes_str}-control"
 
     def close(self, timeout: float = DEFAULT_TIMEOUT_MS):
         self.finished.set()
