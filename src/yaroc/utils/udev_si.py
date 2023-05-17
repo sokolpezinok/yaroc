@@ -1,20 +1,55 @@
 import logging
-import threading
+import time
+from datetime import datetime
+from threading import Event, Thread
 from typing import Callable, Dict
 
 import pyudev
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
+from ..clients.client import Client
+
 DEFAULT_TIMEOUT_MS = 3.0
+START_MODE = 3
+FINISH_MODE = 4
+BEACON_CONTROL = 18
 
 
 class SiWorker:
-    def __init__(self, si: SIReader, worker_fn: Callable[[SIReader, threading.Event], None]):
+    def __init__(self, si: SIReader, clients: list[Client]):
         self.si = si
-        self.finished = threading.Event()
-        self.thread = threading.Thread(target=worker_fn, args=(self.si, self.finished))
-        self.thread.setDaemon(True)
+        self.finished = Event()
+        self.clients = clients
+        self.thread = Thread(target=self._worker_fn, daemon=True)
         self.thread.start()
+
+    def _worker_fn(self):
+        while True:
+            if self.finished.is_set():
+                return
+
+            if self.si.poll_sicard():
+                card_data = self.si.read_sicard()
+            else:
+                time.sleep(1.0)
+                continue
+
+            now = datetime.now()
+            card_number = card_data["card_number"]
+            messages = []
+            for punch in card_data["punches"]:
+                (code, tim) = punch
+                messages.append((code, tim, BEACON_CONTROL))
+            if isinstance(card_data["start"], datetime):
+                messages.append((1, card_data["start"], START_MODE))
+            if isinstance(card_data["finish"], datetime):
+                messages.append((2, card_data["finish"], FINISH_MODE))
+
+            for code, tim, mode in messages:
+                logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
+                for client in self.clients:
+                    # TODO: some of the clients are blocking, they shouldn't do that
+                    client.send_punch(card_number, tim, code, mode)
 
     def __str__(self):
         if isinstance(self.si, SIReaderSRR):
@@ -37,16 +72,12 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(
-        self,
-        worker_fn: Callable[[SIReader, threading.Event], None],
-        udev_handler: Callable[[pyudev.Device], None],
-    ):
+    def __init__(self, udev_handler: Callable[[pyudev.Device], None], clients: list[Client]):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
         self.si_workers: Dict[str, SiWorker] = {}
-        self.worker_fn = worker_fn
+        self._clients = clients
         self._udev_handler = udev_handler
         for device in context.list_devices():
             self._handle_udev_event("add", device)
@@ -92,7 +123,7 @@ class UdevSIManager:
                     si = SIReaderControl(device_node)
 
                 if is_control:
-                    self.si_workers[device_node] = SiWorker(si, self.worker_fn)
+                    self.si_workers[device_node] = SiWorker(si, self._clients)
                     logging.info(f"Connected to {si.port}")
                 else:
                     logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")

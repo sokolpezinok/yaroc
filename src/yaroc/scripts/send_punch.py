@@ -1,8 +1,7 @@
 import logging
 import time
 import tomllib
-from datetime import datetime
-from threading import Event, Thread
+from threading import Thread
 
 from pyudev import Device
 from sportident import SIReader
@@ -15,11 +14,6 @@ from ..pb.status_pb2 import MiniCallHome
 from ..utils.script import setup_logging
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
-
-START = 3
-FINISH = 4
-BEACON_CONTROL = 18
-
 
 with open("send-punch.toml", "rb") as f:
     config = tomllib.load(f)
@@ -53,35 +47,6 @@ if len(clients) == 0:
     logging.warning("No clients enabled, will listen to punches but nothing will be sent")
 
 
-def si_worker(si: SIReader, finished: Event):
-    while True:
-        if finished.is_set():
-            return
-
-        if si.poll_sicard():
-            card_data = si.read_sicard()
-        else:
-            time.sleep(1.0)
-            continue
-
-        now = datetime.now()
-        card_number = card_data["card_number"]
-        messages = []
-        for punch in card_data["punches"]:
-            (code, tim) = punch
-            messages.append((code, tim, BEACON_CONTROL))
-        if isinstance(card_data["start"], datetime):
-            messages.append((1, card_data["start"], START))
-        if isinstance(card_data["finish"], datetime):
-            messages.append((2, card_data["finish"], FINISH))
-
-        for code, tim, mode in messages:
-            logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
-            for client in clients:
-                # TODO: some of the clients are blocking, they shouldn't do that
-                client.send_punch(card_number, tim, code, mode)
-
-
 def send_mini_call_home(mch: MiniCallHome):
     for client in clients:
         client.send_mini_call_home(mch)
@@ -98,7 +63,7 @@ def udev_handler(device: Device):
     send_mini_call_home(mch)
 
 
-si_manager = UdevSIManager(si_worker, udev_handler)
+si_manager = UdevSIManager(udev_handler, clients)
 
 
 def periodic_mini_call_home():
