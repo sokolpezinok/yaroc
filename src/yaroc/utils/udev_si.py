@@ -1,7 +1,7 @@
 import logging
 import time
 from datetime import datetime
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Callable, Dict
 
 import pyudev
@@ -76,14 +76,16 @@ class UdevSIManager:
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
-        self.si_workers: Dict[str, SiWorker] = {}
+        self._si_workers_lock = Lock()
+        self._si_workers: Dict[str, SiWorker] = {}
         self._clients = clients
         self._udev_handler = udev_handler
         for device in context.list_devices():
             self._handle_udev_event("add", device)
 
     def __str__(self) -> str:
-        return ",".join(str(worker) for worker in self.si_workers.values())
+        with self._si_workers_lock:
+            return ",".join(str(worker) for worker in self._si_workers.values())
 
     def _is_sportident(self, device: pyudev.Device):
         try:
@@ -107,8 +109,9 @@ class UdevSIManager:
         device_node = device.device_node
         self._udev_handler(device)
         if action == "add":
-            if device_node in self.si_workers:
-                return
+            with self._si_workers_lock:
+                if device_node in self._si_workers:
+                    return
             logging.info(f"Inserted SportIdent device {device_node}")
             try:
                 si = SIReaderReadout(device_node)
@@ -123,16 +126,18 @@ class UdevSIManager:
                     si = SIReaderControl(device_node)
 
                 if is_control:
-                    self.si_workers[device_node] = SiWorker(si, self._clients)
-                    logging.info(f"Connected to {si.port}")
+                    with self._si_workers_lock:
+                        self._si_workers[device_node] = SiWorker(si, self._clients)
+                        logging.info(f"Connected to {si.port}")
                 else:
                     logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
 
             except Exception as err:
                 logging.error(f"Failed to connect to an SI station at {device_node}: {err}")
         elif device.action == "remove":
-            if device_node in self.si_workers:
-                logging.info(f"Removed device {device_node}")
-                si_worker = self.si_workers[device_node]
-                si_worker.close()
-                del self.si_workers[device_node]
+            with self._si_workers_lock:
+                if device_node in self._si_workers:
+                    logging.info(f"Removed device {device_node}")
+                    si_worker = self._si_workers[device_node]
+                    si_worker.close()
+                    del self._si_workers[device_node]
