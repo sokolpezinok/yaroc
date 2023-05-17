@@ -34,6 +34,8 @@ class BackoffRetries(Generic[A, T]):
         self.max_duration = max_duration
         self.multiplier = multiplier
         self.executor = ThreadPoolExecutor(max_workers=workers)
+        self._current_mid_lock = Lock()
+        self._current_mid = 0
 
         def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
             asyncio.set_event_loop(loop)
@@ -44,34 +46,38 @@ class BackoffRetries(Generic[A, T]):
         self._thread.start()
 
     async def _backoff_send(self, argument: A) -> Optional[T]:
+        async with self._current_mid_lock:
+            self._current_mid += 1
+            mid = self._current_mid
+        logging.debug(f"Scheduled: {mid}")
+
         deadline = datetime.now() + self.max_duration
         cur_backoff = self.first_backoff
-
         while datetime.now() < deadline:
-            try:
-                ret = await self._loop.run_in_executor(self.executor, self.send_function, argument)
+            ret = await self._loop.run_in_executor(self.executor, self.send_function, argument)
+            if ret is not None:
+                logging.info("Punch sent: {mid}")
                 try:
                     self.on_publish(argument)
                 finally:
                     return ret
-            except Exception as e:
-                logging.error(f"Caught exception while sending: {e}")
-                if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
-                    cur_backoff = (deadline - datetime.now()).total_seconds()
-                logging.info(f"Retrying after {cur_backoff} seconds")
-                await asyncio.sleep(cur_backoff)
-                cur_backoff = cur_backoff * self.multiplier
 
-        logging.info(f"Message expired, args = {argument}")
+            if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
+                cur_backoff = (deadline - datetime.now()).total_seconds()
+            if cur_backoff < 0:
+                break
+            logging.error("Punch not sent: {mid}, retrying after {cur_backoff} seconds")
+            await asyncio.sleep(cur_backoff)
+            cur_backoff = cur_backoff * self.multiplier
+
+        logging.error(f"Message mid={mid} expired, args = {argument}")
         return None
 
     def close(self, timeout=None):
         self._thread.join(timeout)
 
     def send(self, argument: A) -> Future:
-        future = asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
-        logging.debug("Scheduled")  # TODO: add message ID
-        return future
+        return asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
 
     def execute(self, fn, *args) -> Future:
         return self.executor.submit(fn, *args)
@@ -195,15 +201,14 @@ class BackoffBatchedRetries(Generic[A, T]):
             await asyncio.sleep(cur_backoff)
             cur_backoff = cur_backoff * self.multiplier
 
-        logging.info(f"Message mid={retried_message.mid} expired, args = {argument}")
+        logging.error(f"Message mid={retried_message.mid} expired, args = {argument}")
         return None
 
     def close(self, timeout=None):
         self._thread.join(timeout)
 
     def send(self, argument: A) -> Future:
-        future = asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
-        return future
+        return asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
 
     def execute(self, fn, *args) -> Future:
         return self._executor.submit(fn, *args)

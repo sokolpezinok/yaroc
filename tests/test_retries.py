@@ -11,11 +11,11 @@ class TestBackoffRetries(unittest.TestCase):
         # pretty wide
         stats = {2: 0, 4: 0}
 
-        def send_f(x: int) -> datetime:
+        def send_f(x: int) -> datetime | None:
             time.sleep(0.025)
             stats[x] += 1
             if stats[x] < x:
-                raise Exception(f"Failed arg={x} for the {stats[x]}th time")
+                return None
             return datetime.now()
 
         b = BackoffRetries(send_f, lambda x: x, 0.04, 2.0, timedelta(minutes=0.1))
