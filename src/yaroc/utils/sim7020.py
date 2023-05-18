@@ -146,7 +146,7 @@ class SIM7020Interface:
         if self._mqtt_id is not None:
             return self._mqtt_id
 
-        if self._send_at("AT+CGREG?", "CGREG: 0,1") is None:
+        if self._send_at("AT+CGREG?", "CGREG: [012],1") is None:
             logging.warning("Not registered yet")
             return None
 
