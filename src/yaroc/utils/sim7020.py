@@ -76,6 +76,8 @@ class SIM7020Interface:
             tout=timeout,
             collectables=collectables,
         )
+        if timeout > 5:
+            logging.debug(f"Running a longer command: {command}")
         try:
             self.atrunenv.add_command(at_command)
             response = self.atrunenv.exec_next()
