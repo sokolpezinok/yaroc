@@ -5,6 +5,13 @@ from ..pb.status_pb2 import MiniCallHome
 
 
 class Client(ABC):
+    """A client implementation
+
+    All 'send*' functions must be non-blocking. Sending should be deferred to another thread and the
+    functions should return a future-like object that can be awaited on.
+
+    If the client fails to connect or access a device, it should not crash, but maybe try later.
+    """
     @abstractmethod
     def send_punch(
         self,

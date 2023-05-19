@@ -45,6 +45,8 @@ class RocClient(Client):
             "length": str(118 + sum(map(length, [code, card_number, mode]))),
         }
 
+        # TODO: this is blocking but it shouldn't be
+        # Probably should be using BackoffBatchRetries
         try:
             self.http.request(
                 "POST",

@@ -27,14 +27,6 @@ class SIM7020Interface:
     """
 
     def __init__(self, port: str, will_topic: str, client_name: str = "SIM7020"):
-        self.atrunenv = ATRuntimeEnvironment(False)
-        self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
-        try:
-            self.atrunenv.open_serial()
-            logging.debug("Opened serial port")
-        except ATSerialPortError as err:
-            logging.error("Failed to open serial port")
-            raise err
         self._client_name = client_name
         self._default_delay = 100
         self._default_timeout = 1
@@ -42,17 +34,29 @@ class SIM7020Interface:
         self._mqtt_id_timestamp = datetime.now()
         self._last_success = datetime.now()
 
-        self._send_at("AT+CMEE=2")
-        self._send_at("ATE0")
-        self._send_at("AT+CREVHEX=1")
-        self._send_at("AT+CMQTSYNC=1")
-
         status = Status()
         disconnected = Disconnected()
         disconnected.client_name = client_name
         status.disconnected.CopyFrom(disconnected)
         self._will = status.SerializeToString()
         self._will_topic = will_topic
+
+        # TODO: move all the below into another init function that can be retried without crashing
+        # throwing from the client
+        self.atrunenv = ATRuntimeEnvironment(False)
+        self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
+        try:
+            self.atrunenv.open_serial()
+            logging.debug("Opened serial port")
+        except ATSerialPortError as err:
+            logging.error("Failed to open serial port")
+            # TODO: this crashes the client but a client should never throw
+            raise err
+        self._send_at("AT+CMEE=2")
+        self._send_at("ATE0")
+        self._send_at("AT+CREVHEX=1")
+        self._send_at("AT+CMQTSYNC=1")
+
         if self._send_at("AT", "OK") is not None:
             logging.info("SIM7020 is ready")
         else:
