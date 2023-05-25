@@ -193,7 +193,7 @@ class SIM7020Interface:
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
-            timeout=61, # Timeout is one minute for some reason
+            timeout=61,  # Timeout is one minute for some reason
         )
         if answers is None:
             return None
@@ -201,11 +201,11 @@ class SIM7020Interface:
             mqtt_id = int(answers[0])
             will_hex = self._will.hex()
             opt_reponse = self._send_at(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{CONNECT_TIME},0,1,'
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{2 * CONNECT_TIME},0,1,'
                 f'"topic={self._will_topic},qos=1,retained=0,'
                 f'message_len={len(will_hex)},message={will_hex}"',
                 "OK",
-                timeout=CONNECT_TIME + 3,
+                timeout=2 * CONNECT_TIME,
             )
             if opt_reponse is not None:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
