@@ -7,5 +7,6 @@ dist/
 __pycache__/
 *.so
 *~
-send-punch.toml
+mqtt-bench.toml
 mqtt-forwarder.toml
+send-punch.toml
