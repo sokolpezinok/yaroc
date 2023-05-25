@@ -100,11 +100,8 @@ class SIM7020Interface:
         if response is None:
             return None
 
-        if command != response.command.command:
-            logging.warning("Response to a different command")
-            logging.debug(
-                f"{command}/{response.command.command}: {response.full_response} {response.response}"
-            )
+        if timeout > 5:
+            logging.debug(f"[long command]: {response.full_response} {response.response}")
         else:
             logging.debug(f"{command}: {response.full_response} {response.response}")
         if response.response is None:
