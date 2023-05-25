@@ -1,5 +1,8 @@
 import io
+import logging
+import shlex
 import socket
+import subprocess
 from math import floor
 
 import psutil
@@ -56,6 +59,14 @@ def create_sys_minicallhome() -> MiniCallHome:
         import gpiozero
 
         mch.cpu_temperature = gpiozero.CPUTemperature().temperature
+        try:
+            result = subprocess.run(shlex.split("vcgencmd measure_volts"), capture_output=True)
+            volts_v = result.stdout.decode("utf-8").split("=")[1]
+            mch.volts = float(volts_v.split("V")[0])
+        except Exception as err:
+            logging.error(err)
+            logging.error(result.stdout)
+
     else:
         temperatures = psutil.sensors_temperatures()
         # TODO: make this more general than ThinkPad

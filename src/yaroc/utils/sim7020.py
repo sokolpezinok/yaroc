@@ -145,12 +145,15 @@ class SIM7020Interface:
         self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, clock: str):
-        tim = (
-            datetime.strptime(clock, "%y/%m/%d,%H:%M:%S+08")
-            .replace(tzinfo=timezone.utc)
-            .astimezone()
-        )
-        subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
+        try:
+            tim = (
+                datetime.strptime(clock, "%y/%m/%d,%H:%M:%S+08")
+                .replace(tzinfo=timezone.utc)
+                .astimezone()
+            )
+            subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
+        except:
+            logging.error("Failed to set time")
 
     def _mqtt_connect_internal(self) -> int | None:
         self._send_at("ATE0")

@@ -12,6 +12,7 @@ class Client(ABC):
 
     If the client fails to connect or access a device, it should not crash, but maybe try later.
     """
+
     @abstractmethod
     def send_punch(
         self,
