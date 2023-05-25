@@ -193,7 +193,7 @@ class SIM7020Interface:
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
-            timeout=CONNECT_TIME + 3,
+            timeout=61, # Timeout is one minute for some reason
         )
         if answers is None:
             return None
