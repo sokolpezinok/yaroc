@@ -126,10 +126,10 @@ class SIM7020MqttClient(Client):
 
     def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
-        self._at_iface = SIM7020Interface(
+        self._sim7020 = SIM7020Interface(
             port, self.topic_status, name if name is not None else "SIM7020"
         )
-        self._at_iface.mqtt_connect()
+        self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
 
         self._retries = BackoffBatchedRetries(
@@ -142,7 +142,7 @@ class SIM7020MqttClient(Client):
             punches_proto.punches.append(punch)
         if self._include_sending_timestamp:
             punches_proto.sending_timestamp.GetCurrentTime()
-        res = self._at_iface.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
+        res = self._sim7020.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
         if res:
             return [res] * len(punches)
         else:
@@ -167,7 +167,7 @@ class SIM7020MqttClient(Client):
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     def send_mini_call_home(self, mch: MiniCallHome):
-        fut = self._retries.execute(self._at_iface.get_signal_dbm)
+        fut = self._retries.execute(self._sim7020.get_signal_dbm)
         dbm = fut.result()
         if dbm is not None:
             mch.signal_dbm = dbm
@@ -177,7 +177,7 @@ class SIM7020MqttClient(Client):
         return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome", qos=0)
 
     def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0):
-        fut = self._retries.execute(self._at_iface.mqtt_send, topic, message, qos)
+        fut = self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)
         if fut.result():
             logging.info(f"{message_type} sent")
         else:
