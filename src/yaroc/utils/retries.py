@@ -101,16 +101,6 @@ class RetriedMessage(Generic[A, T]):
         async with self.processed:
             self.processed.notify()
 
-    def wait_for_publish(self, timeout=None):
-        timeout_time = None if timeout is None else time.time() + timeout
-        timeout_tenth = None if timeout is None else timeout / 10.0
-
-        def timed_out():
-            return False if timeout_time is None else time.time() > timeout_time
-
-        while not timed_out():
-            self.processed.wait(timeout_tenth)
-
 
 class BackoffBatchedRetries(Generic[A, T]):
     """
