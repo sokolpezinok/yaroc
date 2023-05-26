@@ -160,9 +160,7 @@ class SIM7020MqttClient(Client):
             create_punch_proto(card_number, si_time, code, mode, process_time)
         )
 
-    def send_coords(
-        self, lat: float, lon: float, alt: float, timestamp: datetime
-    ) -> mqtt.MQTTMessageInfo:
+    def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime):
         coords = create_coords_proto(lat, lon, alt, timestamp)
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
