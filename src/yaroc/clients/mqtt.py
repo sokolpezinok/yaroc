@@ -133,7 +133,7 @@ class SIM7020MqttClient(Client):
         self._include_sending_timestamp = False
 
         self._retries = BackoffBatchedRetries(
-            self._send_punches, lambda x: x, 3.0, 2.0, timedelta(minutes=10), batch_count=2
+            self._send_punches, lambda x: x, 3.0, 2.0, timedelta(minutes=10), batch_count=4
         )
 
     def _send_punches(self, punches: list[Punch]) -> list[bool | None]:
