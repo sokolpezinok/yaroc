@@ -13,7 +13,7 @@ from ..pb.status_pb2 import Disconnected, Status
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
-CONNECT_TIME = 35
+CONNECT_TIME = 45
 
 
 def time_since(t: datetime, delta: timedelta) -> bool:
