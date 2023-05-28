@@ -151,7 +151,8 @@ class SIM7020Interface:
                 .replace(tzinfo=timezone.utc)
                 .astimezone()
             )
-            subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
+            if (tim - datetime.now()) > timedelta(seconds=5):
+                subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
         except:
             logging.error("Failed to set time")
 
