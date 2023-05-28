@@ -153,6 +153,7 @@ class SIM7020Interface:
             )
             if (tim - datetime.now()) > timedelta(seconds=5):
                 subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
+                time.sleep(5)
         except:
             logging.error("Failed to set time")
 
