@@ -194,7 +194,7 @@ class SIM7020Interface:
             "CMQNEW:",
             ["CMQNEW: ?{mqtt_id::[0-9]}"],
             ["mqtt_id"],
-            timeout=61,  # Timeout is one minute for some reason
+            timeout=150,  # Timeout is very long for this command
         )
         if answers is None:
             return None
@@ -222,7 +222,7 @@ class SIM7020Interface:
         if (qos == 1 and time_since(self._mqtt_id_timestamp, timedelta(seconds=30))) or (
             qos == 0 and time_since(self._mqtt_id_timestamp, timedelta(minutes=3))
         ):
-            if time_since(self._last_success, timedelta(minutes=8)):
+            if time_since(self._last_success, timedelta(minutes=15)):
                 self._send_at("AT+CFUN=0", "", timeout=10)
                 time.sleep(15)
                 self._send_at("AT+CFUN=1", "")
