@@ -128,6 +128,9 @@ class SIM7020Interface:
 
     def _detect_mqtt_id(self) -> int | None:
         self._mqtt_id = None
+        if not time_since(self._last_success, timedelta(minutes=3)):
+            # If there hasn't been a successful send for a long time, do not trust the detection
+            return self._mqtt_id
         try:
             answers = self._send_at(
                 "AT+CMQCON?",
@@ -160,11 +163,10 @@ class SIM7020Interface:
     def _mqtt_connect_internal(self) -> int | None:
         self._send_at("ATE0")
         self._send_at("AT+CGREG=2")
-        if not time_since(self._last_success, timedelta(minutes=3)):
-            # If there hasn't been a successful send for a long time, do not trust the detection
-            self._detect_mqtt_id()
-            if self._mqtt_id is not None:
-                return self._mqtt_id
+
+        self._detect_mqtt_id()
+        if self._mqtt_id is not None:
+            return self._mqtt_id
 
         if self._send_at("AT+CGREG?", "CGREG: [012],1") is None:
             logging.warning("Not registered yet")
