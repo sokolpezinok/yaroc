@@ -151,11 +151,11 @@ class SIM7020Interface:
                 .replace(tzinfo=timezone.utc)
                 .astimezone()
             )
-            if (tim - datetime.now()) > timedelta(seconds=5):
+            if (tim - datetime.utcnow()) > timedelta(seconds=5):
                 subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
                 time.sleep(5)
-        except:
-            logging.error("Failed to set time")
+        except Exception as err:
+            logging.error(f"Failed to set time: {err}")
 
     def _mqtt_connect_internal(self) -> int | None:
         self._send_at("ATE0")
