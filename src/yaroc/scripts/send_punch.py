@@ -47,9 +47,22 @@ if len(clients) == 0:
     logging.warning("No clients enabled, will listen to punches but nothing will be sent")
 
 
+def handle_mini_call_home(fut):
+    try:
+        if fut.result():
+            logging.info("MiniCallHome sent")
+        else:
+            logging.error("MiniCallHome not sent")
+    except Exception as err:
+        logging.error(f"MiniCallHome not sent: {err}")
+
+
 def send_mini_call_home(mch: MiniCallHome):
     for client in clients:
-        client.send_mini_call_home(mch)
+        handle = client.send_mini_call_home(mch)
+        if isinstance(client, SIM7020MqttClient):
+            # TODO: convert all clients to Future
+            handle.add_done_callback(handle_mini_call_home)
 
 
 def udev_handler(device: Device):

@@ -160,11 +160,11 @@ class SIM7020MqttClient(Client):
             create_punch_proto(card_number, si_time, code, mode, process_time)
         )
 
-    def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime):
+    def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> Future:
         coords = create_coords_proto(lat, lon, alt, timestamp)
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
-    def send_mini_call_home(self, mch: MiniCallHome):
+    def send_mini_call_home(self, mch: MiniCallHome) -> Future:
         fut = self._retries.execute(self._sim7020.get_signal_dbm)
         dbm = fut.result()
         if dbm is not None:
@@ -172,11 +172,7 @@ class SIM7020MqttClient(Client):
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome", qos=0)
+        return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome")
 
-    def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0):
-        fut = self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)
-        if fut.result():
-            logging.info(f"{message_type} sent")
-        else:
-            logging.error("Message not sent")
+    def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> Future:
+        return self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)

@@ -8,7 +8,8 @@ class Client(ABC):
     """A client implementation
 
     All 'send*' functions must be non-blocking. Sending should be deferred to another thread and the
-    functions should return a future-like object that can be awaited on.
+    functions should return a future-like object that can be awaited on. The 'send*' functions must
+    not throw.
 
     If the client fails to connect or access a device, it should not crash, but maybe try later.
     """
