@@ -3,7 +3,7 @@ import logging
 from asyncio import Condition, Lock
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from queue import Queue
 from threading import Thread
 from typing import Any, Generic, Optional, Tuple, TypeVar
@@ -163,15 +163,15 @@ class BackoffBatchedRetries(Generic[A, T]):
                 published.append(message.mid)
 
         if len(published) > 0:
-            logging.info("Punches sent: " + ",".join(map(str, published)))
+            logging.info("Messages sent: " + ",".join(map(str, published)))
         if len(not_published) > 0:
-            logging.error("Punches not sent: " + ",".join(map(str, not_published)))
+            logging.error("Messages not sent: " + ",".join(map(str, not_published)))
 
     async def _backoff_send(self, argument: A) -> Optional[T]:
         async with self._current_mid_lock:
             self._current_mid += 1
             retried_message: RetriedMessage[A, T] = RetriedMessage(argument, self._current_mid)
-        logging.debug(f"Scheduled: {retried_message.mid}")
+        logging.debug(f"Scheduled: mid={retried_message.mid}")
 
         deadline = datetime.now() + self.max_duration
         cur_backoff = self.first_backoff
