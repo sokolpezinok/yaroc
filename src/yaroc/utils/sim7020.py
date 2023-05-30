@@ -4,11 +4,8 @@ import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
-from attila.atcommand import ATCommand
-from attila.atre import ATRuntimeEnvironment
-from attila.exceptions import ATRuntimeError, ATScriptSyntaxError, ATSerialPortError
-
 from ..pb.status_pb2 import Disconnected, Status
+from .async_serial import AsyncATCom
 
 # TODO: either share these constants or make them parameters
 BROKER_URL = "broker.hivemq.com"
@@ -24,6 +21,8 @@ class SIM7020Interface:
     """An AT interface to the SIM7020 NB-IoT chip
 
     Implements mostly MQTT functionality
+
+    Uses pyserial-asyncio under the hood to communicate with the modem.
 
     Note: this class is not thread-safe.
     """
@@ -43,80 +42,14 @@ class SIM7020Interface:
         self._will = status.SerializeToString()
         self._will_topic = will_topic
 
-        # TODO: move all the below into another init function that can be retried without crashing
-        # throwing from the client
-        self.atrunenv = ATRuntimeEnvironment(False)
-        self.atrunenv.configure_communicator(port, 115200, None, "\r", rtscts=False)
-        try:
-            self.atrunenv.open_serial()
-            logging.debug("Opened serial port")
-        except ATSerialPortError as err:
-            logging.error("Failed to open serial port")
-            # TODO: this crashes the client but a client should never throw
-            raise err
-        self._send_at("AT+CMEE=2")
-        self._send_at("ATE0")
-        self._send_at("AT+CREVHEX=1")
-        self._send_at("AT+CMQTSYNC=1")
+        self.async_at = AsyncATCom(port)  # 115200
 
-        if self._send_at("AT", "OK") is not None:
+        self.async_at.call("ATE0")
+        self.async_at.call("AT+CMEE=2")
+        self.async_at.call("AT+CREVHEX=1")
+
+        if self.async_at.call("AT") is not None:
             logging.info("SIM7020 is ready")
-        else:
-            raise ATSerialPortError(
-                "Modem not responding"
-            )  # TODO: there might be a better exception
-
-    def _send_at(
-        self,
-        command: str,
-        expected: str = "OK",
-        collectables: list[str] = [],
-        queries: list[str] = [],
-        timeout: float | None = None,
-    ) -> list[str] | None:
-        timeout = timeout if timeout is not None else self._default_timeout
-        at_command = ATCommand(
-            command,
-            exp_response=expected,
-            delay=self._default_delay,
-            tout=timeout,
-            collectables=collectables,
-        )
-        if timeout > 5:
-            logging.debug(f"Running a longer command: {command}")
-        try:
-            self.atrunenv.add_command(at_command)
-            response = self.atrunenv.exec_next()
-        except ATRuntimeError as err:
-            logging.error(f"Runtime error {err}")
-            raise err
-        except ATSerialPortError as err:
-            logging.error("Failed to open serial port")
-            raise err
-        except Exception as err:
-            logging.error(f"Unknown exception {err}")
-            raise err
-
-        if response is None:
-            return None
-
-        if timeout > 5:
-            logging.debug(f"[long command]: {response.full_response} {response.response}")
-        else:
-            logging.debug(f"{command}: {response.full_response} {response.response}")
-        if response.response is None:
-            return None
-        # if len(response.full_response) == 0:
-        #     # TODO: this often happens before the timeout, looks like a bug in ATtila
-        #     response = _exec(command[command_end:])
-        #     if response is None:
-        #         logging.error("No response")
-        #         return None
-
-        answers = []
-        for query in queries:
-            answers.append(response.get_collectable(query))
-        return answers
 
     def __del__(self):
         mqtt_id = self._detect_mqtt_id()
@@ -124,22 +57,17 @@ class SIM7020Interface:
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
-            self._send_at(f"AT+CMQDISCON={mqtt_id}", "OK")
+            self.async_at.call(f"AT+CMQDISCON={mqtt_id}")
 
     def _detect_mqtt_id(self) -> int | None:
         self._mqtt_id = None
-        if not time_since(self._last_success, timedelta(minutes=3)):
+        if time_since(self._last_success, timedelta(minutes=3)):
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
-            answers = self._send_at(
-                "AT+CMQCON?",
-                f'CMQCON: [0-9],1,"{BROKER_URL}"',
-                ["CMQCON: ?{id::[0-9]},1"],
-                ["id"],
-            )
-            if answers is not None and len(answers) == 1:
-                self._mqtt_id = int(answers[0])
+            response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{BROKER_URL}"')
+            if response.query is not None:
+                self._mqtt_id = int(response.query[0])
         finally:
             return self._mqtt_id
 
@@ -161,59 +89,53 @@ class SIM7020Interface:
             logging.error(f"Failed to set time: {err}")
 
     def _mqtt_connect_internal(self) -> int | None:
-        self._send_at("ATE0")
-        self._send_at("AT+CGREG=2")
+        self.async_at.call("ATE0")
+        self.async_at.call("AT+CGREG=2")
 
         self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
 
-        if self._send_at("AT+CGREG?", "CGREG: [012],1") is None:
+        if self.async_at.call("AT+CGREG?", "CGREG: [012],([0-9])") is None:
             logging.warning("Not registered yet")
             return None
 
         # Can APN be set automatically?
-        response = self._send_at(
-            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', "OK", timeout=CONNECT_TIME
-        )
+        response = self.async_at.call('AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=CONNECT_TIME)
         if response is None:
             logging.warning("Can not set APN")
             return None
 
-        answers = self._send_at("AT+CCLK?", "CCLK", ["CCLK: ?{clock::.*}"], ["clock"])
-        if answers is not None and len(answers) == 1:
-            self.set_clock(answers[0])
+        response = self.async_at.call("AT+CCLK?", "CCLK: (.*)", None)
+        if response.query is not None:
+            self.set_clock(response.query[0])
 
-        answers = self._send_at(
+        response = self.async_at.call(
             "AT+CMQNEW?",
-            f"\\+CMQNEW: [0-9],1,{BROKER_URL}",
-            ["CMQNEW: ?{mqtt_id::[0-9]},1"],
-            ["mqtt_id"],
+            f"\\+CMQNEW: ([0-9]),1,{BROKER_URL}",
         )
-        if answers is not None:
+        if response.query is not None:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
-            self.mqtt_disconnect(int(answers[0]))
+            self.mqtt_disconnect(int(response.query[0]))
 
-        answers = self._send_at(
+        response = self.async_at.call(
             f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",{CONNECT_TIME}000,200',
-            "CMQNEW:",
-            ["CMQNEW: ?{mqtt_id::[0-9]}"],
-            ["mqtt_id"],
+            "CMQNEW: ([0-9])",
             timeout=150,  # Timeout is very long for this command
         )
-        if answers is None:
+        if response.query is None:
             return None
         try:
-            mqtt_id = int(answers[0])
+            mqtt_id = int(response.query[0])
             will_hex = self._will.hex()
-            opt_reponse = self._send_at(
+            response = self.async_at.call(
                 f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{2 * CONNECT_TIME},0,1,'
                 f'"topic={self._will_topic},qos=1,retained=0,'
                 f'message_len={len(will_hex)},message={will_hex}"',
-                "OK",
                 timeout=2 * CONNECT_TIME,
             )
-            if opt_reponse is not None:
+            print(response)
+            if response.query is not None:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
                 return mqtt_id
             else:
@@ -233,30 +155,28 @@ class SIM7020Interface:
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
             if time_since(self._last_success, timedelta(minutes=15)):
-                self._send_at("AT+CFUN=0", "", timeout=10)
-                time.sleep(5)
-                self._send_at("AT+CFUN=1", "")
+                self.async_at.call("AT+CFUN=0", "", timeout=10)
+                self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
             return False
 
         message_hex = message.hex()
-        opt_response = self._send_at(
+        response = self.async_at.call(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
             "OK",
             timeout=CONNECT_TIME + 3,
         )
-        success = opt_response is not None
+        success = response.query is not None
         if success:
             self._mqtt_id_timestamp = datetime.now()
             self._last_success = datetime.now()
         return success
 
     def get_signal_dbm(self) -> int | None:
-        answers = self._send_at("AT+CENG?", "CENG", ["CENG: ?{ceng::.*}"], ["ceng"])
+        response = self.async_at.call("AT+CENG?", "CENG: (.*)", 6)
         try:
-            if answers is not None and len(answers) == 1:
-                ceng_split = answers[0].split(",")
-                return int(ceng_split[6])
+            if response.query is not None:
+                return int(response.query[0])
             return None
         except Exception as err:
             logging.error(f"Error getting signal dBm {err}")
