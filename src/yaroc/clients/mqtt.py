@@ -124,11 +124,10 @@ class MqttClient(Client):
 class SIM7020MqttClient(Client):
     """Class for an MQTT client using SIM7020's AT commands"""
 
-    def __init__(self, mac_address: str, port: str, name: Optional[str] = None):
+    def __init__(self, mac_address: str, port: str, name_prefix: Optional[str] = None):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
-        self._sim7020 = SIM7020Interface(
-            port, self.topic_status, name if name is not None else "SIM7020"
-        )
+        name = (name_prefix if name_prefix is not None else "SIM7020") + f"-{mac_address}"
+        self._sim7020 = SIM7020Interface(port, self.topic_status, name)
         self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
 

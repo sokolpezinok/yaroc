@@ -162,7 +162,6 @@ class SIM7020Interface:
         message_hex = message.hex()
         response = self.async_at.call(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
-            "OK",
             timeout=CONNECT_TIME + 3,
         )
         if response.success:
