@@ -134,8 +134,7 @@ class SIM7020Interface:
                 f'message_len={len(will_hex)},message={will_hex}"',
                 timeout=2 * CONNECT_TIME,
             )
-            print(response)
-            if response.query is not None:
+            if response.success:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
                 return mqtt_id
             else:
@@ -166,11 +165,10 @@ class SIM7020Interface:
             "OK",
             timeout=CONNECT_TIME + 3,
         )
-        success = response.query is not None
-        if success:
+        if response.success:
             self._mqtt_id_timestamp = datetime.now()
             self._last_success = datetime.now()
-        return success
+        return response.success
 
     def get_signal_dbm(self) -> int | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", 6)

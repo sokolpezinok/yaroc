@@ -13,6 +13,7 @@ from serial_asyncio import open_serial_connection
 class ATResponse:
     full_response: list[str]
     query: list[str] | None = None
+    success: bool = False
 
 
 class AsyncATCom:
@@ -52,8 +53,12 @@ class AsyncATCom:
         self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
     ) -> list[str]:
         async with self._lock:
-            async with asyncio.timeout(timeout):
-                return await self._call_until(command, last_line)
+            try:
+                async with asyncio.timeout(timeout):
+                    return await self._call_until(command, last_line)
+            except asyncio.TimeoutError:
+                logging.error(f"Timed out: {command}")
+                return []
 
     async def _call_until(self, command: str, last_line: str = "OK|ERROR") -> list[str]:
         """Call until 'last_line' matches"""
@@ -69,7 +74,6 @@ class AsyncATCom:
             if callback is not None:
                 callback(line)
                 continue
-            # TODO: infinite loop, add timeout
 
             full_response.append(line)
             if regex.match(line):
@@ -87,22 +91,25 @@ class AsyncATCom:
         ).result()
         res = ATResponse(full_response)
         logging.debug(f"{command} {full_response}")
-        if res.full_response[-1] == "ERROR" or match is None:
+        if res.full_response[-1] == "ERROR":
+            return res
+        if match is None:
+            res.success = True
             return res
 
-        if match is not None:
-            regex = re.compile(match)
-            for line in res.full_response:
-                found = regex.search(line)
-                if found is None:
-                    continue
+        regex = re.compile(match)
+        for line in res.full_response:
+            found = regex.search(line)
+            if found is None:
+                continue
 
-                res.query = []
-                for group in found.groups():
-                    assert type(group) == str
-                    if field_no is not None:
-                        res.query = [group.split(",")[field_no]]
-                    else:
-                        res.query.append(group)
-                return res
+            res.query = []
+            res.success = True
+            for group in found.groups():
+                assert type(group) == str
+                if field_no is not None:
+                    res.query = [group.split(",")[field_no]]
+                else:
+                    res.query.append(group)
+            return res
         return res
