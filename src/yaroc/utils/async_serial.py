@@ -91,7 +91,7 @@ class AsyncATCom:
         ).result()
         res = ATResponse(full_response)
         logging.debug(f"{command} {full_response}")
-        if res.full_response[-1] == "ERROR":
+        if len(res.full_response) == 0 or res.full_response[-1] == "ERROR":
             return res
         if match is None:
             res.success = True
