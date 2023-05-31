@@ -57,7 +57,7 @@ class SIM7020Interface:
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
-            self.async_at.call(f"AT+CMQDISCON={mqtt_id}")
+            self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=2 * CONNECT_TIME)
 
     def _detect_mqtt_id(self) -> int | None:
         self._mqtt_id = None
