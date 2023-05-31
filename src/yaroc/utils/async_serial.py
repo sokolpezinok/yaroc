@@ -84,7 +84,7 @@ class AsyncATCom:
         command: str,
         match: str | None = None,
         field_no: int | None = None,
-        timeout: float = 10,
+        timeout: float = 60,
     ) -> ATResponse:
         full_response = asyncio.run_coroutine_threadsafe(
             self._call_until_with_timeout(command, timeout), self._loop
