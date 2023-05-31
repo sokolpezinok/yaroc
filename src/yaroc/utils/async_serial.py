@@ -23,6 +23,7 @@ class AsyncATCom:
         self.add_callback("+CLTS", lambda x: None)
         self.add_callback("+CPIN", lambda x: None)
         # self.add_callback("+CGREG")
+        self.delay = 0.05  # TODO: make configurable
 
         self._lock = asyncio.Lock()
         self._reader = reader
@@ -59,6 +60,18 @@ class AsyncATCom:
 
     async def _call_until(self, command: str, last_line: str = "OK|ERROR") -> list[str]:
         """Call until 'last_line' matches"""
+        pre_read = []
+        try:
+            async with asyncio.timeout(self.delay):
+                while True:
+                    line = (await self._reader.readline()).strip().decode("utf-8")
+                    if len(line) == 0:
+                        continue  # Skip empty lines
+                    pre_read.append(line)
+        except asyncio.TimeoutError:
+            if len(pre_read) > 0:
+                logging.info(f"Read {pre_read} at the start")
+
         self._writer.write((command + "\r\n").encode("utf-8"))
         regex = re.compile(last_line)
         full_response: list[str] = []
