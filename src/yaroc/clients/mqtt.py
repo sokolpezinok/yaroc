@@ -133,13 +133,18 @@ class SIM7020MqttClient(Client):
     ):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
         name = (name_prefix if name_prefix is not None else "SIM7020") + f"-{mac_address}"
-        self._sim7020 = SIM7020Interface(async_at, self.topic_status, name)
+        self._sim7020 = SIM7020Interface(
+            async_at, self.topic_status, name, self._handle_registration
+        )
         self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
 
         self._retries = BackoffBatchedRetries(
             self._send_punches, lambda x: x, 3.0, 2.0, timedelta(minutes=10), batch_count=4
         )
+
+    def _handle_registration(self, line: str):
+        return self._retries.execute(self._sim7020.mqtt_connect)
 
     def _send_punches(self, punches: list[Punch]) -> list[bool | None]:
         punches_proto = Punches()
