@@ -51,6 +51,8 @@ class SIM7020Interface:
         self.async_at.call("ATE0")
         self.async_at.call("AT+CMEE=2")
         self.async_at.call("AT+CREVHEX=1")
+        self.async_at.add_callback("+CLTS", lambda x: None)
+        self.async_at.add_callback("+CPIN", lambda x: None)
 
         if self.async_at.call("AT") is not None:
             logging.info("SIM7020 is ready")

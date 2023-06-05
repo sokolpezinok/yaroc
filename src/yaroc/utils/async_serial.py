@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import logging
 import re
 from asyncio import StreamReader, StreamWriter
@@ -22,7 +23,6 @@ class AsyncATCom:
         self.callbacks: Dict[str, Callable[[str], None]] = {}
         self.add_callback("+CLTS", lambda x: None)
         self.add_callback("+CPIN", lambda x: None)
-        # self.add_callback("+CGREG")
         self.delay = 0.05  # TODO: make configurable
 
         self._lock = asyncio.Lock()
@@ -80,14 +80,17 @@ class AsyncATCom:
             if len(line) == 0:
                 continue  # Skip empty lines
 
+            full_response.append(line)
+            if regex.match(line):
+                break
+
+        for line in itertools.chain(pre_read, full_response):
             callback = self.match_callback(line)
             if callback is not None:
                 callback(line)
                 continue
 
-            full_response.append(line)
-            if regex.match(line):
-                return full_response
+        return full_response
 
     def call(
         self,
