@@ -22,8 +22,7 @@ class PunchSender:
         self.clients = clients
         self.si_manager = UdevSIManager(self.udev_handler, clients)
 
-        thread = Thread(target=self.periodic_mini_call_home)
-        thread.daemon = True
+        thread = Thread(target=self.periodic_mini_call_home, daemon=True)
         thread.start()
 
     @staticmethod
@@ -65,9 +64,7 @@ class PunchSender:
 
 
 @inject
-def loop(
-    clients: list[Client] = Provide[Container.clients],
-) -> None:
+def loop(clients: list[Client] = Provide[Container.clients]) -> None:
     ps = PunchSender(clients)
     ps.loop()
 
