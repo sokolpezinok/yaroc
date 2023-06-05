@@ -27,7 +27,12 @@ class SIM7020Interface:
     Note: this class is not thread-safe.
     """
 
-    def __init__(self, port: str, will_topic: str, client_name: str = "SIM7020"):
+    def __init__(
+        self,
+        async_at: AsyncATCom,
+        will_topic: str,
+        client_name: str = "SIM7020",
+    ):
         self._client_name = client_name
         self._default_delay = 100
         self._default_timeout = 1
@@ -42,8 +47,7 @@ class SIM7020Interface:
         self._will = status.SerializeToString()
         self._will_topic = will_topic
 
-        self.async_at = AsyncATCom(port)  # 115200
-
+        self.async_at = async_at
         self.async_at.call("ATE0")
         self.async_at.call("AT+CMEE=2")
         self.async_at.call("AT+CREVHEX=1")

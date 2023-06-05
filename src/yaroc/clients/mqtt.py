@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_coords_proto, create_punch_proto
+from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
@@ -124,10 +125,15 @@ class MqttClient(Client):
 class SIM7020MqttClient(Client):
     """Class for an MQTT client using SIM7020's AT commands"""
 
-    def __init__(self, mac_address: str, port: str, name_prefix: Optional[str] = None):
+    def __init__(
+        self,
+        mac_address: str,
+        async_at: AsyncATCom,
+        name_prefix: Optional[str] = None,
+    ):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
         name = (name_prefix if name_prefix is not None else "SIM7020") + f"-{mac_address}"
-        self._sim7020 = SIM7020Interface(port, self.topic_status, name)
+        self._sim7020 = SIM7020Interface(async_at, self.topic_status, name)
         self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
 

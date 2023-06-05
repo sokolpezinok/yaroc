@@ -3,93 +3,87 @@ import time
 import tomllib
 from threading import Thread
 
+from dependency_injector.wiring import Provide, inject
 from pyudev import Device
 from sportident import SIReader
 
 from ..clients.client import Client
-from ..clients.meos import MeosClient
-from ..clients.mqtt import MqttClient, SIM7020MqttClient
-from ..clients.roc import RocClient
+from ..clients.mqtt import SIM7020MqttClient
 from ..pb.status_pb2 import MiniCallHome
-from ..utils.script import setup_logging
+from ..utils.container import Container
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
 
-with open("send-punch.toml", "rb") as f:
-    config = tomllib.load(f)
 
-setup_logging(config)
+class PunchSender:
+    def __init__(self, clients: list[Client]):
+        if len(clients) == 0:
+            logging.warning("No clients enabled, will listen to punches but nothing will be sent")
+        self.clients = clients
+        self.si_manager = UdevSIManager(self.udev_handler, clients)
 
-mac_addr = eth_mac_addr()
-assert mac_addr is not None
-logging.info(f"Starting SendPunch for MAC {mac_addr}")
+        thread = Thread(target=self.periodic_mini_call_home)
+        thread.daemon = True
+        thread.start()
 
-sim7020_conf = config["client"]["sim7020"]
-meos_conf = config["client"]["meos"]
-mqtt_conf = config["client"]["mqtt"]
-roc_conf = config["client"]["roc"]
+    @staticmethod
+    def handle_mini_call_home(fut):
+        try:
+            if fut.result():
+                logging.info("MiniCallHome sent")
+            else:
+                logging.error("MiniCallHome not sent")
+        except Exception as err:
+            logging.error(f"MiniCallHome not sent: {err}")
 
-clients: list[Client] = []
-if sim7020_conf.get("enable", True):
-    logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
-    clients.append(SIM7020MqttClient(mac_addr, sim7020_conf["device"], "SendPunch"))
-if meos_conf.get("enable", True):
-    logging.info("Enabled SIRAP client")
-    clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
-if mqtt_conf.get("enable", True):
-    logging.info("Enabled MQTT client")
-    clients.append(MqttClient(mac_addr))
-if roc_conf.get("enable", True):
-    logging.info("Enabled ROC client")
-    clients.append(RocClient(mac_addr))
+    def send_mini_call_home(self, mch: MiniCallHome):
+        for client in self.clients:
+            handle = client.send_mini_call_home(mch)
+            if isinstance(client, SIM7020MqttClient):
+                # TODO: convert all clients to Future
+                handle.add_done_callback(PunchSender.handle_mini_call_home)
 
-if len(clients) == 0:
-    logging.warning("No clients enabled, will listen to punches but nothing will be sent")
+    def periodic_mini_call_home(self):
+        while True:
+            mch = create_sys_minicallhome()
+            mch.codes = str(self.si_manager)
+            self.send_mini_call_home(mch)
+            time.sleep(20.0)  # TODO: make the timeout configurable
 
-
-def handle_mini_call_home(fut):
-    try:
-        if fut.result():
-            logging.info("MiniCallHome sent")
+    def udev_handler(self, device: Device):
+        mch = MiniCallHome()
+        mch.time.GetCurrentTime()
+        device_name = device.device_node.removeprefix("/dev/").lower()
+        if device.action == "add" or device.action is None:
+            mch.codes = f"siadded-{device_name}"
         else:
-            logging.error("MiniCallHome not sent")
-    except Exception as err:
-        logging.error(f"MiniCallHome not sent: {err}")
+            mch.codes = f"siremoved-{device_name}"
+        self.send_mini_call_home(mch)
+
+    def loop(self):
+        self.si_manager.loop()
 
 
-def send_mini_call_home(mch: MiniCallHome):
-    for client in clients:
-        handle = client.send_mini_call_home(mch)
-        if isinstance(client, SIM7020MqttClient):
-            # TODO: convert all clients to Future
-            handle.add_done_callback(handle_mini_call_home)
+@inject
+def loop(
+    clients: list[Client] = Provide[Container.clients],
+) -> None:
+    ps = PunchSender(clients)
+    ps.loop()
 
 
-def udev_handler(device: Device):
-    mch = MiniCallHome()
-    mch.time.GetCurrentTime()
-    device_name = device.device_node.removeprefix("/dev/").lower()
-    if device.action == "add" or device.action is None:
-        mch.codes = f"siadded-{device_name}"
-    else:
-        mch.codes = f"siremoved-{device_name}"
-    send_mini_call_home(mch)
+def main():
+    mac_addr = eth_mac_addr()
+    assert mac_addr is not None
 
+    with open("send-punch.toml", "rb") as f:
+        config = tomllib.load(f)
 
-si_manager = UdevSIManager(udev_handler, clients)
+    container = Container()
+    container.config.from_dict(config)
+    container.config.mac_addr.from_value(mac_addr)
+    container.init_resources()
+    container.wire(modules=[__name__])
+    logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
-
-def periodic_mini_call_home():
-    while True:
-        mch = create_sys_minicallhome()
-        mch.codes = str(si_manager)
-        send_mini_call_home(mch)
-        time.sleep(20.0)  # TODO: make the timeout configurable
-
-
-thread = Thread(target=periodic_mini_call_home)
-thread.daemon = True
-thread.start()
-
-
-si_manager.loop()
+    loop()

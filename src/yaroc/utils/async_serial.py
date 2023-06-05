@@ -1,10 +1,9 @@
 import asyncio
 import logging
 import re
+from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
-from datetime import datetime
-from threading import Thread
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple
 
 from serial_asyncio import open_serial_connection
 
@@ -17,31 +16,29 @@ class ATResponse:
 
 
 class AsyncATCom:
-    def __init__(self, port: str):
+    def __init__(
+        self, reader: StreamReader, writer: StreamWriter, async_loop: asyncio.AbstractEventLoop
+    ):
         self.callbacks: Dict[str, Callable[[str], None]] = {}
         self.add_callback("+CLTS", lambda x: None)
         self.add_callback("+CPIN", lambda x: None)
         # self.add_callback("+CGREG")
 
-        def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
-            asyncio.set_event_loop(loop)
-            loop.run_forever()
-
-        self._loop = asyncio.new_event_loop()
-        self._thread = Thread(target=start_background_loop, args=(self._loop,), daemon=True)
-        self._thread.start()
-        self.port = port
-        asyncio.run_coroutine_threadsafe(self._open_port(), self._loop).result()
-
         self._lock = asyncio.Lock()
+        self._reader = reader
+        self._writer = writer
+        self._loop = async_loop
+
+    @staticmethod
+    def atcom_from_port(port: str, async_loop: asyncio.AbstractEventLoop):
+        async def open_port(port: str) -> Tuple[StreamReader, StreamWriter]:
+            return await open_serial_connection(url=port, baudrate=115200, rtscts=False)
+
+        reader, writer = asyncio.run_coroutine_threadsafe(open_port(port), async_loop).result()
+        return AsyncATCom(reader, writer, async_loop)
 
     def add_callback(self, prefix: str, fn: Callable[[str], None]):
         self.callbacks[prefix] = fn
-
-    async def _open_port(self):
-        reader, writer = await open_serial_connection(url=self.port, baudrate=115200, rtscts=False)
-        self.reader = reader
-        self.writer = writer
 
     def match_callback(self, line: str) -> Callable[[str], None] | None:
         for prefix, callback in self.callbacks.items():
@@ -62,11 +59,11 @@ class AsyncATCom:
 
     async def _call_until(self, command: str, last_line: str = "OK|ERROR") -> list[str]:
         """Call until 'last_line' matches"""
-        self.writer.write((command + "\r\n").encode("utf-8"))
+        self._writer.write((command + "\r\n").encode("utf-8"))
         regex = re.compile(last_line)
         full_response: list[str] = []
         while True:
-            line = (await self.reader.readline()).strip().decode("utf-8")
+            line = (await self._reader.readline()).strip().decode("utf-8")
             if len(line) == 0:
                 continue  # Skip empty lines
 
