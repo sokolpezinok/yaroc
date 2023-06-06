@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from threading import Event, Lock, Thread
-from typing import AsyncIterator, Dict, Tuple
+from typing import AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
@@ -13,6 +14,14 @@ DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
 FINISH_MODE = 4
 BEACON_CONTROL = 18
+
+
+@dataclass
+class SiPunch:
+    card: int
+    code: int
+    time: datetime
+    mode: int
 
 
 class SiWorker:
@@ -50,7 +59,7 @@ class SiWorker:
             for code, tim, mode in messages:
                 logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
                 asyncio.run_coroutine_threadsafe(
-                    self._queue.put((card_number, code, tim, mode)), self._loop
+                    self._queue.put(SiPunch(card_number, code, tim, mode)), self._loop
                 )
                 self.codes.add(code)
 
@@ -82,7 +91,7 @@ class UdevSIManager:
         self.monitor.filter_by("tty")
         self._si_workers_lock = Lock()
         self._si_workers: Dict[str, SiWorker] = {}
-        self._queue: asyncio.Queue[Tuple[int, int, datetime, int]] = asyncio.Queue()
+        self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[str] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
 
@@ -95,7 +104,7 @@ class UdevSIManager:
         with self._si_workers_lock:
             return ",".join(str(worker) for worker in self._si_workers.values())
 
-    async def punches(self) -> AsyncIterator[Tuple[int, int, datetime, int]]:
+    async def punches(self) -> AsyncIterator[SiPunch]:
         while True:
             yield await self._queue.get()
 

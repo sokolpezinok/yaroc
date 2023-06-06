@@ -27,10 +27,10 @@ class PunchSender:
             await asyncio.sleep(20)
 
     async def send_punches(self):
-        async for card_number, code, tim, mode in self.si_manager.punches():
+        async for si_punch in self.si_manager.punches():
             for client in self.clients:
                 # TODO: some of the clients are blocking, they shouldn't do that
-                client.send_punch(card_number, tim, code, mode)
+                client.send_punch(si_punch.card_number, si_punch.tim, si_punch.code, si_punch.mode)
 
     async def udev_events(self):
         async for device in self.si_manager.udev_events():
