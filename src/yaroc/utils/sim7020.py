@@ -33,7 +33,7 @@ class SIM7020Interface:
         async_at: AsyncATCom,
         will_topic: str,
         client_name: str,
-        registration_callback: Callable[[str], None],
+        connection_callback: Callable[[str], None],
     ):
         self._client_name = client_name
         self._default_delay = 100
@@ -55,7 +55,8 @@ class SIM7020Interface:
         self.async_at.call("AT+CREVHEX=1")
         self.async_at.add_callback("+CLTS", lambda x: None)
         self.async_at.add_callback("+CPIN", lambda x: None)
-        self.async_at.add_callback('+CGREG: 1,"', registration_callback)
+        self.async_at.add_callback('+CGREG: 1,"', connection_callback)
+        self.async_at.add_callback('+CMQDISCON:', connection_callback)
 
         if self.async_at.call("AT") is not None:
             logging.info("SIM7020 is ready")

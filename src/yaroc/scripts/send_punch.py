@@ -73,9 +73,9 @@ def main():
     container.config.from_dict(config)
     container.config.mac_addr.from_value(mac_addr)
     container.init_resources()
-    container.wire(modules=[__name__])
+    container.wire(modules=["yaroc.utils.container"])
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
-    clients = create_clients(config["client"], mac_addr, container.client_factories, container.loop)
+    clients = create_clients(mac_addr, container.client_factories)
     ps = PunchSender(clients)
     ps.loop()

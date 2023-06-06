@@ -4,15 +4,12 @@ import tomllib
 from datetime import datetime
 from threading import Thread
 
-from dependency_injector.wiring import Provide, inject
-
 from ..clients.client import Client
-from ..utils.container import Container
+from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 
-@inject
-def loop(clients: list[Client] = Provide[Container.clients]) -> None:
+def loop(clients: list[Client]) -> None:
     # Merge with PunchSender
     def mini_call_home():
         while True:
@@ -41,7 +38,8 @@ def main():
     container.config.from_dict(config)
     container.config.mac_addr.from_value(mac_addr)
     container.init_resources()
-    container.wire(modules=[__name__])
+    container.wire(modules=["yaroc.utils.container"])
     logging.info(f"Starting MQTT benchmark for MAC {mac_addr}")
 
-    loop()
+    clients = create_clients(mac_addr, container.client_factories)
+    loop(clients)
