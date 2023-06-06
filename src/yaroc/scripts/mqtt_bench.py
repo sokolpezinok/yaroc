@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import tomllib
@@ -10,21 +11,24 @@ from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 
 def loop(clients: list[Client]) -> None:
-    # Merge with PunchSender
-    def mini_call_home():
+    async_loop = asyncio.get_event_loop()
+
+    async def mini_call_home():
         while True:
             mini_call_home = create_sys_minicallhome()
             for client in clients:
                 client.send_mini_call_home(mini_call_home)
-            time.sleep(20)
+            await asyncio.sleep(20)
 
-    thread = Thread(target=mini_call_home, daemon=True)
-    thread.start()
+    async def generate_punches():
+        for i in range(1000):
+            for client in clients:
+                client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
+            await asyncio.sleep(12)
 
-    for i in range(1000):
-        for client in clients:
-            client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
-        time.sleep(12)
+    asyncio.run_coroutine_threadsafe(mini_call_home(), async_loop)
+    asyncio.run_coroutine_threadsafe(generate_punches(), async_loop)
+    async_loop.run_forever()
 
 
 def main():
