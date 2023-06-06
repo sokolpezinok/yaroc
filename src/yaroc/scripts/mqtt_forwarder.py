@@ -129,13 +129,11 @@ def main():
     container = Container()
     container.config.from_dict(config)
     container.init_resources()
-    container.wire(modules=[__name__])
+    container.wire(modules=["yaroc.utils.container"])
 
     client_map = {}
     for mac_address in config["mac-addresses"]:
-        clients = create_clients(
-            config["client"], mac_address, container.client_factories, container.loop
-        )
+        clients = create_clients(mac_address, container.client_factories)
         if len(clients) == 0:
             logging.info(f"Listening to {mac_address} without forwarding")
         client_map[str(mac_address)] = clients
