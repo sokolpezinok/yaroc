@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import tomllib
-from threading import Thread
 
 from pyudev import Device
 from sportident import SIReader

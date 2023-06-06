@@ -48,7 +48,7 @@ class Container(containers.DeclarativeContainer):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    client_factories = providers.FactoryAggregate(
+    client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
         sirap=providers.Factory(SirapClient),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
