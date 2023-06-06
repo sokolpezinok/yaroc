@@ -55,7 +55,7 @@ class PunchSender:
         self.send_mini_call_home(mch)
 
     def loop(self):
-        async_loop = asyncio.new_event_loop()
+        async_loop = asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
         async_loop.run_forever()
 

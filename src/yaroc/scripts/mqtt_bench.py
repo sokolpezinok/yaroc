@@ -11,8 +11,6 @@ from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 
 def loop(clients: list[Client]) -> None:
-    async_loop = asyncio.get_event_loop()
-
     async def mini_call_home():
         while True:
             mini_call_home = create_sys_minicallhome()
@@ -26,6 +24,7 @@ def loop(clients: list[Client]) -> None:
                 client.send_punch(46283, datetime.now(), (i + 1) % 1000, 18)
             await asyncio.sleep(12)
 
+    async_loop = asyncio.get_event_loop()
     asyncio.run_coroutine_threadsafe(mini_call_home(), async_loop)
     asyncio.run_coroutine_threadsafe(generate_punches(), async_loop)
     async_loop.run_forever()
