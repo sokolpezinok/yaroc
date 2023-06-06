@@ -3,9 +3,10 @@ import logging
 import time
 from datetime import datetime
 from threading import Event, Lock, Thread
-from typing import Dict, Tuple
+from typing import AsyncIterator, Dict, Tuple
 
 import pyudev
+from pyudev import Device
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 DEFAULT_TIMEOUT_MS = 3.0
@@ -94,15 +95,15 @@ class UdevSIManager:
         with self._si_workers_lock:
             return ",".join(str(worker) for worker in self._si_workers.values())
 
-    async def punches(self):
+    async def punches(self) -> AsyncIterator[Tuple[int, int, datetime, int]]:
         while True:
             yield await self._queue.get()
 
-    async def udev_events(self):
+    async def udev_events(self) -> AsyncIterator[Device]:
         while True:
             yield await self._device_queue.get()
 
-    def _is_sportident(self, device: pyudev.Device):
+    def _is_sportident(self, device: Device):
         try:
             is_sportident = (
                 device.subsystem == "tty"
@@ -117,7 +118,7 @@ class UdevSIManager:
     def stop(self):
         self._observer.stop()
 
-    def _handle_udev_event(self, action, device: pyudev.Device):
+    def _handle_udev_event(self, action, device: Device):
         if not self._is_sportident(device):
             return
         device_node = device.device_node
