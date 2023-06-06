@@ -13,7 +13,7 @@ from ..clients.roc import RocClient
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
-from ..utils.script import setup_logging
+from ..utils.container import Container, create_clients
 
 
 class MqttForwader:
@@ -120,26 +120,25 @@ class MqttForwader:
         self.mqtt_client.loop_forever()  # Is there a way to stop this?
 
 
-with open("mqtt-forwarder.toml", "rb") as f:
-    config = tomllib.load(f)
+def main():
+    with open("mqtt-forwarder.toml", "rb") as f:
+        config = tomllib.load(f)
+    config.pop("mqtt", None)  # Disallow MQTT forwarding to break loops
+    config.pop("sim7020", None)  # Disallow MQTT forwarding to break loops
 
-setup_logging(config)
+    container = Container()
+    container.config.from_dict(config)
+    container.init_resources()
+    container.wire(modules=[__name__])
 
-mac_addresses = config["mac-addresses"]
-meos_conf = config["client"]["meos"]
-roc_conf = config["client"]["roc"]
-client_map = {}
-for mac_address in mac_addresses:
-    clients: list[Client] = []
-    if meos_conf.get("enable", True):
-        logging.info("Enabled SIRAP client")
-        clients.append(MeosClient(meos_conf["ip"], meos_conf["port"]))
-    if roc_conf.get("enable", True):
-        logging.info(f"Enabling ROC for {mac_address}")
-        clients.append(RocClient(mac_address))
-    if len(clients) == 0:
-        logging.info(f"Listening to {mac_address} without forwarding")
-    client_map[str(mac_address)] = clients
+    client_map = {}
+    for mac_address in config["mac-addresses"]:
+        clients = create_clients(
+            config["client"], mac_address, container.client_factories, container.loop
+        )
+        if len(clients) == 0:
+            logging.info(f"Listening to {mac_address} without forwarding")
+        client_map[str(mac_address)] = clients
 
-forwarder = MqttForwader(client_map)
-forwarder.loop()
+    forwarder = MqttForwader(client_map)
+    forwarder.loop()

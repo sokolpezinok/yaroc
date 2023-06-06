@@ -33,7 +33,7 @@ class SIM7020Interface:
         async_at: AsyncATCom,
         will_topic: str,
         client_name: str,
-        registration_callback: Callable[[str], None]
+        registration_callback: Callable[[str], None],
     ):
         self._client_name = client_name
         self._default_delay = 100

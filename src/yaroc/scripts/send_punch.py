@@ -10,7 +10,7 @@ from sportident import SIReader
 from ..clients.client import Client
 from ..clients.mqtt import SIM7020MqttClient
 from ..pb.status_pb2 import MiniCallHome
-from ..utils.container import Container
+from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 from ..utils.udev_si import UdevSIManager
 
@@ -63,12 +63,6 @@ class PunchSender:
         self.si_manager.loop()
 
 
-@inject
-def loop(clients: list[Client] = Provide[Container.clients]) -> None:
-    ps = PunchSender(clients)
-    ps.loop()
-
-
 def main():
     mac_addr = eth_mac_addr()
     assert mac_addr is not None
@@ -83,4 +77,6 @@ def main():
     container.wire(modules=[__name__])
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
-    loop()
+    clients = create_clients(config["client"], mac_addr, container.client_factories, container.loop)
+    ps = PunchSender(clients)
+    ps.loop()
