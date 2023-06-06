@@ -1,13 +1,12 @@
+import asyncio
 import logging
 import time
 from datetime import datetime
 from threading import Event, Lock, Thread
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple
 
 import pyudev
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
-
-from ..clients.client import Client
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -16,10 +15,11 @@ BEACON_CONTROL = 18
 
 
 class SiWorker:
-    def __init__(self, si: SIReader, clients: list[Client]):
+    def __init__(self, si: SIReader, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         self.si = si
         self.finished = Event()
-        self.clients = clients
+        self._queue = queue
+        self._loop = loop
         self.thread = Thread(target=self._worker_fn, daemon=True)
         self.thread.start()
         self.codes: set[int] = set()
@@ -48,10 +48,13 @@ class SiWorker:
 
             for code, tim, mode in messages:
                 logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
+                asyncio.run_coroutine_threadsafe(
+                    self.put_punch(card_number, code, tim, mode), self._loop
+                )
                 self.codes.add(code)
-                for client in self.clients:
-                    # TODO: some of the clients are blocking, they shouldn't do that
-                    client.send_punch(card_number, tim, code, mode)
+
+    async def put_punch(self, card_number: int, code: int, tim: datetime, mode: int):
+        await self._queue.put((card_number, code, tim, mode))
 
     def __str__(self):
         codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
@@ -75,23 +78,28 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(self, udev_handler: Callable[[pyudev.Device], None], clients: list[Client]):
+    def __init__(self, udev_handler: Callable[[pyudev.Device], None]):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
         self._si_workers_lock = Lock()
         self._si_workers: Dict[str, SiWorker] = {}
-        self._clients = clients
+        self._queue: asyncio.Queue[Tuple[int, int, datetime, int]] = asyncio.Queue()
+        self._loop = asyncio.get_event_loop()
         self._udev_handler = udev_handler
+
         for device in context.list_devices():
             self._handle_udev_event("add", device)
-
         self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
         self._observer.start()
 
     def __str__(self) -> str:
         with self._si_workers_lock:
             return ",".join(str(worker) for worker in self._si_workers.values())
+
+    async def punches(self):
+        while True:
+            yield await self._queue.get()
 
     def _is_sportident(self, device: pyudev.Device):
         try:
@@ -132,7 +140,7 @@ class UdevSIManager:
 
                 if is_control:
                     with self._si_workers_lock:
-                        self._si_workers[device_node] = SiWorker(si, self._clients)
+                        self._si_workers[device_node] = SiWorker(si, self._queue, self._loop)
                         logging.info(f"Connected to {si.port}")
                 else:
                     logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")

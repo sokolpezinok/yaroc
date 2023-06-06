@@ -18,7 +18,7 @@ class PunchSender:
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.clients = clients
-        self.si_manager = UdevSIManager(self.udev_handler, clients)
+        self.si_manager = UdevSIManager(self.udev_handler)
 
     async def periodic_mini_call_home(self):
         while True:
@@ -26,6 +26,12 @@ class PunchSender:
             mini_call_home.codes = str(self.si_manager)
             self.send_mini_call_home(mini_call_home)
             await asyncio.sleep(20)
+
+    async def send_punches(self):
+        async for card_number, code, tim, mode in self.si_manager.punches():
+            for client in self.clients:
+                # TODO: some of the clients are blocking, they shouldn't do that
+                client.send_punch(card_number, tim, code, mode)
 
     def send_mini_call_home(self, mch: MiniCallHome):
         for client in self.clients:
@@ -56,6 +62,7 @@ class PunchSender:
     def loop(self):
         async_loop = asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
+        asyncio.run_coroutine_threadsafe(self.send_punches(), async_loop)
         async_loop.run_forever()
 
 
