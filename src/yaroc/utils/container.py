@@ -63,11 +63,10 @@ class Container(containers.DeclarativeContainer):
 def create_clients(
     mac_addr: str,
     client_factories: providers.FactoryAggregate,
-    config: Dict[str, Any] = Provide[Container.config],
+    client_config: Dict[str, Any] = Provide[Container.config.client],
     async_loop: asyncio.AbstractEventLoop = Provide[Container.loop],
     thread=Provide[Container.thread],
 ) -> list[Client]:
-    client_config = config.get("client", {})
     clients: list[Client] = []
     if client_config.get("sim7020", {}).get("enable", False):
         sim7020_conf = client_config["sim7020"]
