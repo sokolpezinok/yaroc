@@ -3,7 +3,6 @@ import logging
 import tomllib
 
 from pyudev import Device
-from sportident import SIReader
 
 from ..clients.client import Client
 from ..clients.mqtt import SIM7020MqttClient
@@ -18,7 +17,7 @@ class PunchSender:
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.clients = clients
-        self.si_manager = UdevSIManager(self.udev_handler)
+        self.si_manager = UdevSIManager()
 
     async def periodic_mini_call_home(self):
         while True:
@@ -32,6 +31,17 @@ class PunchSender:
             for client in self.clients:
                 # TODO: some of the clients are blocking, they shouldn't do that
                 client.send_punch(card_number, tim, code, mode)
+
+    async def udev_events(self):
+        async for device in self.si_manager.udev_events():
+            mch = MiniCallHome()
+            mch.time.GetCurrentTime()
+            device_name = device.device_node.removeprefix("/dev/").lower()
+            if device.action == "add" or device.action is None:
+                mch.codes = f"siadded-{device_name}"
+            else:
+                mch.codes = f"siremoved-{device_name}"
+            self.send_mini_call_home(mch)
 
     def send_mini_call_home(self, mch: MiniCallHome):
         for client in self.clients:
@@ -49,20 +59,11 @@ class PunchSender:
 
                 handle.add_done_callback(handle_mini_call_home)
 
-    def udev_handler(self, device: Device):
-        mch = MiniCallHome()
-        mch.time.GetCurrentTime()
-        device_name = device.device_node.removeprefix("/dev/").lower()
-        if device.action == "add" or device.action is None:
-            mch.codes = f"siadded-{device_name}"
-        else:
-            mch.codes = f"siremoved-{device_name}"
-        self.send_mini_call_home(mch)
-
     def loop(self):
         async_loop = asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
         asyncio.run_coroutine_threadsafe(self.send_punches(), async_loop)
+        asyncio.run_coroutine_threadsafe(self.udev_events(), async_loop)
         async_loop.run_forever()
 
 

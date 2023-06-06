@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime
 from threading import Event, Lock, Thread
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 import pyudev
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
@@ -49,12 +49,9 @@ class SiWorker:
             for code, tim, mode in messages:
                 logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
                 asyncio.run_coroutine_threadsafe(
-                    self.put_punch(card_number, code, tim, mode), self._loop
+                    self._queue.put((card_number, code, tim, mode)), self._loop
                 )
                 self.codes.add(code)
-
-    async def put_punch(self, card_number: int, code: int, tim: datetime, mode: int):
-        await self._queue.put((card_number, code, tim, mode))
 
     def __str__(self):
         codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
@@ -78,15 +75,15 @@ class UdevSIManager:
     si_manager.loop()
     """
 
-    def __init__(self, udev_handler: Callable[[pyudev.Device], None]):
+    def __init__(self):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
         self._si_workers_lock = Lock()
         self._si_workers: Dict[str, SiWorker] = {}
         self._queue: asyncio.Queue[Tuple[int, int, datetime, int]] = asyncio.Queue()
+        self._device_queue: asyncio.Queue[str] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
-        self._udev_handler = udev_handler
 
         for device in context.list_devices():
             self._handle_udev_event("add", device)
@@ -100,6 +97,10 @@ class UdevSIManager:
     async def punches(self):
         while True:
             yield await self._queue.get()
+
+    async def udev_events(self):
+        while True:
+            yield await self._device_queue.get()
 
     def _is_sportident(self, device: pyudev.Device):
         try:
@@ -120,7 +121,7 @@ class UdevSIManager:
         if not self._is_sportident(device):
             return
         device_node = device.device_node
-        self._udev_handler(device)
+        asyncio.run_coroutine_threadsafe(self._device_queue.put(device), self._loop)
         if action == "add":
             with self._si_workers_lock:
                 if device_node in self._si_workers:
