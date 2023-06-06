@@ -86,6 +86,9 @@ class UdevSIManager:
         for device in context.list_devices():
             self._handle_udev_event("add", device)
 
+        self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
+        self._observer.start()
+
     def __str__(self) -> str:
         with self._si_workers_lock:
             return ",".join(str(worker) for worker in self._si_workers.values())
@@ -102,9 +105,8 @@ class UdevSIManager:
             # pyudev sucks, it throws an exception when you're only doing a lookup
             return False
 
-    def loop(self):
-        for device in iter(self.monitor.poll, None):
-            self._handle_udev_event(device.action, device)
+    def stop(self):
+        self._observer.stop()
 
     def _handle_udev_event(self, action, device: pyudev.Device):
         if not self._is_sportident(device):

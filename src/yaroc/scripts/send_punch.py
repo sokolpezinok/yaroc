@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import time
 import tomllib
 from threading import Thread
 
@@ -21,32 +21,28 @@ class PunchSender:
         self.clients = clients
         self.si_manager = UdevSIManager(self.udev_handler, clients)
 
-        thread = Thread(target=self.periodic_mini_call_home, daemon=True)
-        thread.start()
-
-    @staticmethod
-    def handle_mini_call_home(fut):
-        try:
-            if fut.result():
-                logging.info("MiniCallHome sent")
-            else:
-                logging.error("MiniCallHome not sent")
-        except Exception as err:
-            logging.error(f"MiniCallHome not sent: {err}")
+    async def periodic_mini_call_home(self):
+        while True:
+            mini_call_home = create_sys_minicallhome()
+            mini_call_home.codes = str(self.si_manager)
+            self.send_mini_call_home(mini_call_home)
+            await asyncio.sleep(20)
 
     def send_mini_call_home(self, mch: MiniCallHome):
         for client in self.clients:
             handle = client.send_mini_call_home(mch)
-            if isinstance(client, SIM7020MqttClient):
-                # TODO: convert all clients to Future
-                handle.add_done_callback(PunchSender.handle_mini_call_home)
+            if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
 
-    def periodic_mini_call_home(self):
-        while True:
-            mch = create_sys_minicallhome()
-            mch.codes = str(self.si_manager)
-            self.send_mini_call_home(mch)
-            time.sleep(20.0)  # TODO: make the timeout configurable
+                def handle_mini_call_home(fut):
+                    try:
+                        if fut.result():
+                            logging.info("MiniCallHome sent")
+                        else:
+                            logging.error("MiniCallHome not sent")
+                    except Exception as err:
+                        logging.error(f"MiniCallHome not sent: {err}")
+
+                handle.add_done_callback(handle_mini_call_home)
 
     def udev_handler(self, device: Device):
         mch = MiniCallHome()
@@ -59,7 +55,9 @@ class PunchSender:
         self.send_mini_call_home(mch)
 
     def loop(self):
-        self.si_manager.loop()
+        async_loop = asyncio.new_event_loop()
+        asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
+        async_loop.run_forever()
 
 
 def main():
