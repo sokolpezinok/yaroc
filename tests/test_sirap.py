@@ -1,18 +1,18 @@
 import unittest
 from datetime import time
 
-from yaroc.clients.meos import MeosClient
+from yaroc.clients.sirap import SirapClient
 
 
-class TestMeos(unittest.TestCase):
+class TestSirap(unittest.TestCase):
     def test_punch_serialization(self):
-        message = MeosClient._serialize_punch(46283, time(hour=7, minute=3, second=20), code=31)
+        message = SirapClient._serialize_punch(46283, time(hour=7, minute=3, second=20), code=31)
         self.assertEqual(message, b"\x00\x1f\x00\xcb\xb4\x00\x00\x00\x00\x00\x00\x30\xe0\x03\x00")
 
     def test_card_serialization(self):
         start = time(hour=8, minute=0, second=2)
         finish = time(hour=8, minute=9, second=13)
-        message = MeosClient._serialize_card(46283, start, finish, [])
+        message = SirapClient._serialize_card(46283, start, finish, [])
         self.assertEqual(
             message,
             b"\x40\x02\x00\xcb\xb4\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x14"

@@ -18,7 +18,7 @@ PUNCH_FINISH = 2
 CODE_DAY = int(0).to_bytes(4, ENDIAN)
 
 
-class MeosClient(Client):
+class SirapClient(Client):
     """Class for sending punches to MeOS"""
 
     def __init__(self, host: str, port: int):
@@ -45,7 +45,7 @@ class MeosClient(Client):
             + code.to_bytes(2, ENDIAN)
             + card_number.to_bytes(4, ENDIAN)
             + CODE_DAY
-            + MeosClient._time_to_bytes(si_daytime)
+            + SirapClient._time_to_bytes(si_daytime)
         )
 
     def send_punch(
@@ -57,7 +57,7 @@ class MeosClient(Client):
         process_time: datetime | None = None,
     ) -> Future:
         del mode
-        message = MeosClient._serialize_punch(card_number, sitime.time(), code)
+        message = SirapClient._serialize_punch(card_number, sitime.time(), code)
         return self._backoff_sender.send(message)
 
     def send_mini_call_home(self, mch: MiniCallHome):
@@ -68,7 +68,7 @@ class MeosClient(Client):
         card_number: int, start: time | None, finish: time | None, punches: list[tuple[int, time]]
     ) -> bytes:
         def serialize_card_punch(code: int, si_daytime: time) -> bytes:
-            return code.to_bytes(4, ENDIAN) + MeosClient._time_to_bytes(si_daytime)
+            return code.to_bytes(4, ENDIAN) + SirapClient._time_to_bytes(si_daytime)
 
         punch_count: int = len(punches) + int(start is not None) + int(finish is not None)
         result = (
@@ -76,7 +76,7 @@ class MeosClient(Client):
             + punch_count.to_bytes(2, ENDIAN)
             + card_number.to_bytes(4, ENDIAN)
             + CODE_DAY
-            + MeosClient._time_to_bytes(time())
+            + SirapClient._time_to_bytes(time())
         )
         if start is not None:
             result += serialize_card_punch(PUNCH_START, start)
@@ -93,7 +93,7 @@ class MeosClient(Client):
         finish: time | None,
         punches: list[tuple[int, time]],
     ) -> Future:
-        message = MeosClient._serialize_card(card_number, start, finish, punches)
+        message = SirapClient._serialize_card(card_number, start, finish, punches)
         return self._backoff_sender.send(message)
 
     def close(self, timeout=10):

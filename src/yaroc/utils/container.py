@@ -8,9 +8,9 @@ from dependency_injector import containers, providers
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client
-from ..clients.meos import MeosClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
+from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
 
 
@@ -49,7 +49,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     client_factories = providers.FactoryAggregate(
-        meos=providers.Factory(MeosClient),
+        sirap=providers.Factory(SirapClient),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
         sim7020=providers.Factory(SIM7020MqttClient),
@@ -73,9 +73,9 @@ def create_clients(
         sim7020_client = client_factories.sim7020(mac_addr, async_at, "SIM7020")
         clients.append(sim7020_client)
         logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
-    if client_config.get("meos", {}).get("enable", False):
-        meos_conf = client_config["meos"]
-        clients.append(client_factories.meos(meos_conf["ip"], meos_conf["port"]))
+    if client_config.get("sirap", {}).get("enable", False):
+        sirap_conf = client_config["sirap"]
+        clients.append(client_factories.sirap(sirap_conf["ip"], sirap_conf["port"]))
         logging.info("Enabled SIRAP client")
     if client_config.get("mqtt", {}).get("enable", False):
         logging.info("Enabled MQTT client")
