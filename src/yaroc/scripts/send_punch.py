@@ -3,7 +3,6 @@ import time
 import tomllib
 from threading import Thread
 
-from dependency_injector.wiring import Provide, inject
 from pyudev import Device
 from sportident import SIReader
 

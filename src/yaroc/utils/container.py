@@ -48,7 +48,7 @@ class Container(containers.DeclarativeContainer):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    client_factories = providers.Aggregate(
+    client_factories = providers.FactoryAggregate(
         meos=providers.Factory(MeosClient),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
@@ -63,14 +63,14 @@ class Container(containers.DeclarativeContainer):
 def create_clients(
     client_config: Dict[str, Any],
     mac_addr: str,
-    client_factories,
+    client_factories: providers.FactoryAggregate,
     async_loop: asyncio.AbstractEventLoop = Provide[Container.loop],
 ) -> list[Client]:
     clients: list[Client] = []
     if client_config.get("sim7020", {}).get("enable", False):
         sim7020_conf = client_config["sim7020"]
         async_at = AsyncATCom.atcom_from_port(sim7020_conf["device"], async_loop)
-        sim7020_client = client_factories.sim7020(mac_addr, async_at, "SendPunch")
+        sim7020_client = client_factories.sim7020(mac_addr, async_at, "SIM7020")
         clients.append(sim7020_client)
         logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
     if client_config.get("meos", {}).get("enable", False):

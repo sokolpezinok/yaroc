@@ -123,8 +123,8 @@ class MqttForwader:
 def main():
     with open("mqtt-forwarder.toml", "rb") as f:
         config = tomllib.load(f)
-    config.pop("mqtt", None)  # Disallow MQTT forwarding to break loops
-    config.pop("sim7020", None)  # Disallow MQTT forwarding to break loops
+    config.pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
+    config.pop("sim7020", None)  # Disallow MQTT forwarding to break infinite loops
 
     container = Container()
     container.config.from_dict(config)

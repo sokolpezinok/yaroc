@@ -29,7 +29,7 @@ def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
 class MqttClient(Client):
     """Class for a simple MQTT reporting"""
 
-    def __init__(self, mac_address: str, name: Optional[str] = None):
+    def __init__(self, mac_address: str, name_prefix: str = "PahoMQTT"):
         def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
             del client, userdata, flags
             logging.info(f"Connected with result code {str(rc)}")
@@ -47,13 +47,10 @@ class MqttClient(Client):
 
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
 
+        name = f"{name_prefix}-{mac_address}"
         disconnected = Disconnected()
-        if name is None:
-            disconnected.client_name = ""
-            self.client = mqtt.Client()
-        else:
-            disconnected.client_name = str(name)
-            self.client = mqtt.Client(client_id=name, clean_session=False)
+        disconnected.client_name = name
+        self.client: mqtt.Client = mqtt.Client(client_id=name, clean_session=False)
         status = Status()
         status.disconnected.CopyFrom(disconnected)
         self.client.will_set(self.topic_status, status.SerializeToString(), qos=1)
@@ -129,10 +126,10 @@ class SIM7020MqttClient(Client):
         self,
         mac_address: str,
         async_at: AsyncATCom,
-        name_prefix: Optional[str] = None,
+        name_prefix: str = "SIM7020",
     ):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
-        name = (name_prefix if name_prefix is not None else "SIM7020") + f"-{mac_address}"
+        name = f"{name_prefix}-{mac_address}"
         self._sim7020 = SIM7020Interface(
             async_at, self.topic_status, name, self._handle_registration
         )
