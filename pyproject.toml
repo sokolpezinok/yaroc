@@ -48,7 +48,6 @@ pylsp = [
 test = ["pytest"]
 
 [project.scripts]
-mqtt-bench = "yaroc.scripts.mqtt_bench:main"
 mqtt-forwarder = "yaroc.scripts.mqtt_forwarder:main"
 send-punch = "yaroc.scripts.send_punch:main"
 

@@ -2,22 +2,25 @@ import asyncio
 import logging
 import tomllib
 
-from pyudev import Device
+from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client
 from ..clients.mqtt import SIM7020MqttClient
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.container import Container, create_clients
+from ..utils.si import FakeSiManager, SiManager
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
-from ..utils.udev_si import UdevSIManager
 
 
 class PunchSender:
-    def __init__(self, clients: list[Client]):
+    @inject
+    def __init__(
+        self, clients: list[Client], si_manager: SiManager = Provide[Container.si_manager]
+    ):
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.clients = clients
-        self.si_manager = UdevSIManager()
+        self.si_manager = si_manager
 
     async def periodic_mini_call_home(self):
         while True:
@@ -30,7 +33,10 @@ class PunchSender:
         async for si_punch in self.si_manager.punches():
             for client in self.clients:
                 # TODO: some of the clients are blocking, they shouldn't do that
-                client.send_punch(si_punch.card_number, si_punch.tim, si_punch.code, si_punch.mode)
+                try:
+                    client.send_punch(si_punch.card, si_punch.time, si_punch.code, si_punch.mode)
+                except Exception as err:
+                    logging.error(err)
 
     async def udev_events(self):
         async for device in self.si_manager.udev_events():
@@ -78,7 +84,8 @@ def main():
     container.config.from_dict(config)
     container.config.mac_addr.from_value(mac_addr)
     container.init_resources()
-    container.wire(modules=["yaroc.utils.container"])
+    container.wire(modules=["yaroc.utils.container", __name__])
+    # container.si_manager.override(FakeSiManager())
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
     clients = create_clients(mac_addr, container.client_factories)

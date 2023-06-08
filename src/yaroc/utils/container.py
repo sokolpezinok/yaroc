@@ -12,6 +12,7 @@ from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
+from ..utils.si import UdevSiManager
 
 
 def get_log_level(log_level: str | None) -> int:
@@ -57,6 +58,7 @@ class Container(containers.DeclarativeContainer):
 
     loop = providers.Singleton(asyncio.new_event_loop)
     thread = providers.Singleton(start_loop, loop)
+    si_manager = providers.Singleton(UdevSiManager)
 
 
 @inject

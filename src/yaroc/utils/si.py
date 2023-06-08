@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Event, Lock, Thread
@@ -76,13 +77,24 @@ class SiWorker:
         self.thread.join(timeout)
 
 
-class UdevSIManager:
+class SiManager(ABC):
+    @abstractmethod
+    async def punches(self):
+        pass
+
+    @abstractmethod
+    async def udev_events(self):
+        pass
+
+
+class UdevSiManager(SiManager):
     """
     Dynamically manages connecting and disconnecting SportIdent devices: SI readers or SRR dongles.
 
     Usage:
-    si_manager = UdevSIManager()
-    si_manager.loop()
+    si_manager = UdevSiManager()
+    ...
+    si_manager.stop()
     """
 
     def __init__(self):
@@ -165,3 +177,27 @@ class UdevSIManager:
                     si_worker = self._si_workers[device_node]
                     si_worker.close()
                     del self._si_workers[device_node]
+
+
+class FakeSiManager(SiManager):
+    """
+    Creates fake SportIdent events, useful for benchmarks and tests.
+
+    Usage:
+    si_manager = FakeSiManager()
+    ...
+    si_manager.stop()
+    """
+
+    def __init__(self):
+        self._punch_interval = 12
+
+    async def punches(self) -> AsyncIterator[SiPunch]:
+        for i in range(1000):
+            time_start = time.time()
+            yield SiPunch(46283, (i + 1) % 1000, datetime.now(), 18)
+            await asyncio.sleep(self._punch_interval - (time.time() - time_start))
+
+    async def udev_events(self) -> AsyncIterator[Device]:
+        await asyncio.sleep(10000000)
+        yield None

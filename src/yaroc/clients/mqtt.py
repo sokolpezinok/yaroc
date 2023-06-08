@@ -2,7 +2,7 @@ import logging
 import time
 from concurrent.futures import Future
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import paho.mqtt.client as mqtt
 
