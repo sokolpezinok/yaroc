@@ -1,3 +1,4 @@
+import asyncio
 import time
 import unittest
 from datetime import datetime, timedelta
@@ -11,14 +12,14 @@ class TestBackoffRetries(unittest.TestCase):
         # pretty wide
         stats = {2: 0, 4: 0}
 
-        def send_f(x: int) -> datetime | None:
-            time.sleep(0.025)
+        async def send_f(x: int) -> datetime | None:
+            await asyncio.sleep(0.025)
             stats[x] += 1
             if stats[x] < x:
                 return None
             return datetime.now()
 
-        b = BackoffRetries(send_f, lambda x: x, 0.04, 2.0, timedelta(minutes=0.1))
+        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
         f2 = b.send(2)
         time.sleep(0.13)

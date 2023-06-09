@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from asyncio import Condition, Lock
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Queue
@@ -21,19 +21,15 @@ class BackoffRetries(Generic[A, T]):
 
     def __init__(
         self,
-        send_function: Callable[[A], T],
-        on_publish: Callable[[Any], Any],
+        send_function: Callable[[A], Awaitable[T]],
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
-        workers: int = 1,
     ):
         self.send_function = send_function
-        self.on_publish = on_publish
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
-        self.executor = ThreadPoolExecutor(max_workers=workers)
         self._current_mid_lock = Lock()
         self._current_mid = 0
 
@@ -54,19 +50,16 @@ class BackoffRetries(Generic[A, T]):
         deadline = datetime.now() + self.max_duration
         cur_backoff = self.first_backoff
         while datetime.now() < deadline:
-            ret = await self._loop.run_in_executor(self.executor, self.send_function, argument)
+            ret = await self.send_function(argument)
             if ret is not None:
-                logging.info("Punch sent: {mid}")
-                try:
-                    self.on_publish(argument)
-                finally:
-                    return ret
+                logging.info(f"Punch sent: {mid}")
+                return ret
 
             if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
                 cur_backoff = (deadline - datetime.now()).total_seconds()
             if cur_backoff < 0:
                 break
-            logging.error("Punch not sent: {mid}, retrying after {cur_backoff} seconds")
+            logging.error(f"Punch not sent: {mid}, retrying after {cur_backoff} seconds")
             await asyncio.sleep(cur_backoff)
             cur_backoff = cur_backoff * self.multiplier
 

@@ -26,9 +26,7 @@ class SirapClient(Client):
         self.port = port
         self.connected = False
 
-        self._backoff_sender = BackoffRetries(
-            self._send, self._on_publish, 0.2, 2.0, timedelta(minutes=10)
-        )
+        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10))
         asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
@@ -119,15 +117,12 @@ class SirapClient(Client):
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)
 
-    async def _send(self, message: bytes):
+    async def _send(self, message: bytes) -> bool:
         if not self.connected:
             raise Exception("Not connected")
         try:
             self._writer.write(message)
             await self._writer.drain()
+            return True
         except Exception as err:
             raise err
-
-    def _on_publish(self, message: bytes):
-        del message
-        logging.info("Published!")
