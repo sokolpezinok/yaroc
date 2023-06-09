@@ -26,7 +26,7 @@ class SirapClient(Client):
         self.port = port
         self.connected = False
 
-        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10))
+        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10), loop)
         asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
