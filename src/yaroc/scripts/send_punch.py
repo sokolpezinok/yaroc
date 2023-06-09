@@ -8,7 +8,7 @@ from ..clients.client import Client
 from ..clients.mqtt import SIM7020MqttClient
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.container import Container, create_clients
-from ..utils.si import FakeSiManager, SiManager
+from ..utils.si import SiManager
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 
@@ -79,13 +79,14 @@ def main():
 
     with open("send-punch.toml", "rb") as f:
         config = tomllib.load(f)
+    if "si_punches" not in config:
+        config['si_punches'] = 'udev'
 
     container = Container()
     container.config.from_dict(config)
     container.config.mac_addr.from_value(mac_addr)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container", __name__])
-    # container.si_manager.override(FakeSiManager())
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
     clients = create_clients(mac_addr, container.client_factories)

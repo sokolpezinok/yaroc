@@ -111,6 +111,7 @@ class UdevSiManager(SiManager):
             self._handle_udev_event("add", device)
         self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
         self._observer.start()
+        logging.info("Starting udev-based SportIdent device manager")
 
     def __str__(self) -> str:
         with self._si_workers_lock:
@@ -191,6 +192,8 @@ class FakeSiManager(SiManager):
 
     def __init__(self):
         self._punch_interval = 12
+        logging.info("Starting a fake SportIdent device manager, sending a punch every "
+                     f"{self._punch_interval} seconds")
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         for i in range(1000):
