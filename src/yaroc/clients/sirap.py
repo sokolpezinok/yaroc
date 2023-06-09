@@ -124,5 +124,8 @@ class SirapClient(Client):
             self._writer.write(message)
             await self._writer.drain()
             return True
+        except (ConnectionResetError, BrokenPipeError) as err:
+            self.connected = False
+            raise err
         except Exception as err:
             raise err
