@@ -1,8 +1,7 @@
 import logging
 import shlex
 import subprocess
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Callable
 
 from ..pb.status_pb2 import Disconnected, Status
