@@ -50,10 +50,13 @@ class BackoffRetries(Generic[A, T]):
         deadline = datetime.now() + self.max_duration
         cur_backoff = self.first_backoff
         while datetime.now() < deadline:
-            ret = await self.send_function(argument)
-            if ret is not None:
-                logging.info(f"Punch sent: {mid}")
-                return ret
+            try:
+                ret = await self.send_function(argument)
+                if ret is not None:
+                    logging.info(f"Punch sent: {mid}")
+                    return ret
+            except Exception as err:
+                logging.error(f"Sending failed: {err}")
 
             if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
                 cur_backoff = (deadline - datetime.now()).total_seconds()
