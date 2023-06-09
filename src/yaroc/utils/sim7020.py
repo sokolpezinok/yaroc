@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from ..pb.status_pb2 import Disconnected, Status
+from ..utils.sys_info import is_time_off
 from .async_serial import AsyncATCom
 
 # TODO: either share these constants or make them parameters
@@ -85,18 +86,10 @@ class SIM7020Interface:
         self._mqtt_id = self._mqtt_connect_internal()
         self._mqtt_id_timestamp = datetime.now()
 
-    def set_clock(self, clock: str):
-        try:
-            tim = (
-                datetime.strptime(clock, "%y/%m/%d,%H:%M:%S+08")
-                .replace(tzinfo=timezone.utc)
-                .astimezone()
-            )
-            if (tim - datetime.utcnow()) > timedelta(seconds=5):
-                subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
-                time.sleep(5)
-        except Exception as err:
-            logging.error(f"Failed to set time: {err}")
+    def set_clock(self, modem_clock: str):
+        tim = is_time_off(modem_clock, datetime.utcnow())
+        if tim is not None:
+            subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
     def _mqtt_connect_internal(self) -> int | None:
         self.async_at.call("ATE0")

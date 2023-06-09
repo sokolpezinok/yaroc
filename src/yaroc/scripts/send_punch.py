@@ -80,7 +80,7 @@ def main():
     with open("send-punch.toml", "rb") as f:
         config = tomllib.load(f)
     if "si_punches" not in config:
-        config['si_punches'] = 'udev'
+        config["si_punches"] = "udev"
 
     container = Container()
     container.config.from_dict(config)

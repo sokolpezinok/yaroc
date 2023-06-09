@@ -3,6 +3,7 @@ import logging
 import shlex
 import socket
 import subprocess
+from datetime import datetime, timedelta, timezone
 from math import floor
 
 import psutil
@@ -73,3 +74,18 @@ def create_sys_minicallhome() -> MiniCallHome:
         cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
         mch.cpu_temperature = cpu_temp.current
     return mch
+
+
+def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
+    try:
+        tim = (
+            datetime.strptime(modem_clock, "%y/%m/%d,%H:%M:%S+08")
+            .replace(tzinfo=timezone.utc)
+            .astimezone()
+        )
+        if tim - now.astimezone() > timedelta(seconds=5):
+            return tim
+        return None
+    except Exception as err:
+        logging.error(f"Failed to check time: {err}")
+        return None

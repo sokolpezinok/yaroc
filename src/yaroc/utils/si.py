@@ -192,8 +192,10 @@ class FakeSiManager(SiManager):
 
     def __init__(self):
         self._punch_interval = 12
-        logging.info("Starting a fake SportIdent device manager, sending a punch every "
-                     f"{self._punch_interval} seconds")
+        logging.info(
+            "Starting a fake SportIdent device manager, sending a punch every "
+            f"{self._punch_interval} seconds"
+        )
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         for i in range(1000):
