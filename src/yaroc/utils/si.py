@@ -97,7 +97,7 @@ class UdevSiManager(SiManager):
     si_manager.stop()
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
