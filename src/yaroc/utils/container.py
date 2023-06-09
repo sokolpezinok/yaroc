@@ -82,7 +82,7 @@ def create_clients(
         logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
     if client_config.get("sirap", {}).get("enable", False):
         sirap_conf = client_config["sirap"]
-        clients.append(client_factories.sirap(sirap_conf["ip"], sirap_conf["port"]))
+        clients.append(client_factories.sirap(sirap_conf["ip"], sirap_conf["port"], async_loop))
         logging.info("Enabled SIRAP client")
     if client_config.get("mqtt", {}).get("enable", False):
         logging.info("Enabled MQTT client")

@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import socket
 from concurrent.futures import Future
 from datetime import datetime, time, timedelta
 from typing import Literal
@@ -21,17 +21,37 @@ CODE_DAY = int(0).to_bytes(4, ENDIAN)
 class SirapClient(Client):
     """Class for sending punches to MeOS"""
 
-    def __init__(self, host: str, port: int):
-        self.address = (host, port)
-        self._connect()
+    def __init__(self, host: str, port: int, loop: asyncio.AbstractEventLoop):
+        self.host = host
+        self.port = port
+        self.connected = False
 
         self._backoff_sender = BackoffRetries(
             self._send, self._on_publish, 0.2, 2.0, timedelta(minutes=10)
         )
+        asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
         if self._socket is not None:
             self._socket.close()
+
+    async def _connect(self, host: str, port: int):
+        if self.connected:
+            return
+        try:
+            reader, writer = await asyncio.open_connection("localhost", 4247)
+            self._reader = reader
+            self._writer = writer
+            self.connected = True
+        except Exception as err:
+            logging.error(f"Error connecting to SIRAP endpoint: {err}")
+            self.connected = False
+            return
+
+    async def keep_connected(self):
+        while True:
+            await self._connect(self.host, self.port)
+            await asyncio.sleep(20)  # TODO: configure timeout
 
     @staticmethod
     def _time_to_bytes(daytime: time) -> bytes:
@@ -99,27 +119,13 @@ class SirapClient(Client):
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)
 
-    def _connect(self):
+    async def _send(self, message: bytes):
+        if not self.connected:
+            raise Exception("Not connected")
         try:
-            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        except OSError:
-            self._socket = None
-            return
-        self._socket.connect(self.address)
-
-    def _send(self, message: bytes):
-        try:
-            if self._socket is None:
-                raise Exception("Not connected")
-
-            ret = self._socket.sendall(message)
-            if ret is None:
-                return
-            raise Exception("Failed sending")
-        except socket.error as err:
-            if self._socket is not None:
-                self._socket.close()
-            self._connect()
+            self._writer.write(message)
+            await self._writer.drain()
+        except Exception as err:
             raise err
 
     def _on_publish(self, message: bytes):
