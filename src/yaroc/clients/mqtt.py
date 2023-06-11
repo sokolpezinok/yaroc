@@ -38,11 +38,8 @@ class MqttClient(Client):
             del client, userdata
             logging.error(f"Disconnected with result code {str(rc)}")
 
-        self._message_infos: Dict[int, mqtt.MQTTMessageInfo] = {}
-
         def on_publish(client: mqtt.Client, userdata: Any, mid: int):
             del client, userdata
-            del self._message_infos[mid]
             logging.info(f"Published id={mid}")
 
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
@@ -94,19 +91,8 @@ class MqttClient(Client):
         status.mini_call_home.CopyFrom(mch)
         return self._send(self.topic_status, status.SerializeToString(), qos=0)
 
-    def wait_for_publish(self, timeout: float | None = None):
-        deadline = None if timeout is None else timeout + time.time()
-        for message_info in self._message_infos.values():
-            while not self.client.is_connected():
-                time.sleep(1.0)
-
-            if message_info.rc == mqtt.MQTT_ERR_SUCCESS:
-                remaining = None if deadline is None else deadline - time.time()
-                message_info.wait_for_publish(remaining)
-
     def _send(self, topic: str, message: bytes, qos: int = 1) -> mqtt.MQTTMessageInfo:
         message_info = self.client.publish(topic, message, qos=qos)
-        self._message_infos[message_info.mid] = message_info
         if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
             logging.error("Message not sent: no connection")
             # TODO: add to unsent messages
