@@ -15,7 +15,6 @@ from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
 BROKER_URL = "broker.hivemq.com"
-BROKER_PORT = 1883
 
 
 def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
@@ -29,7 +28,13 @@ def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
 class MqttClient(Client):
     """Class for a simple MQTT reporting"""
 
-    def __init__(self, mac_address: str, name_prefix: str = "PahoMQTT"):
+    def __init__(
+        self,
+        mac_address: str,
+        name_prefix: str = "PahoMQTT",
+        broker_url: str = BROKER_URL,
+        broker_port: int = 1883,
+    ):
         def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
             del client, userdata, flags
             logging.info(f"Connected with result code {str(rc)}")
@@ -61,7 +66,7 @@ class MqttClient(Client):
         self.client.on_connect = on_connect
         self.client.on_disconnect = on_disconnect
         self.client.on_publish = on_publish
-        self.client.connect(BROKER_URL, BROKER_PORT, 35)
+        self.client.connect(broker_url, broker_port, 35)
         self.client.loop_start()
 
     def __del__(self):
@@ -113,6 +118,8 @@ class SIM7020MqttClient(Client):
         mac_address: str,
         async_at: AsyncATCom,
         name_prefix: str = "SIM7020",
+        broker_url: str = BROKER_URL,
+        broker_port: int = 1883,
     ):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
         name = f"{name_prefix}-{mac_address}"

@@ -8,9 +8,6 @@ from ..pb.status_pb2 import Disconnected, Status
 from ..utils.sys_info import is_time_off
 from .async_serial import AsyncATCom
 
-# TODO: either share these constants or make them parameters
-BROKER_URL = "broker.hivemq.com"
-BROKER_PORT = 1883
 CONNECT_TIME = 45
 
 
@@ -34,6 +31,8 @@ class SIM7020Interface:
         will_topic: str,
         client_name: str,
         connection_callback: Callable[[str], None],
+        broker_url: str,
+        broker_port: int,
     ):
         self._client_name = client_name
         self._default_delay = 100
@@ -41,6 +40,8 @@ class SIM7020Interface:
         self._mqtt_id: int | None = None
         self._mqtt_id_timestamp = datetime.now()
         self._last_success = datetime.now()
+        self._broker_url = broker_url
+        self._broker_port = broker_port
 
         status = Status()
         disconnected = Disconnected()
@@ -75,7 +76,7 @@ class SIM7020Interface:
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
-            response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{BROKER_URL}"')
+            response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
             if response.query is not None:
                 self._mqtt_id = int(response.query[0])
         finally:
@@ -114,14 +115,14 @@ class SIM7020Interface:
 
         response = self.async_at.call(
             "AT+CMQNEW?",
-            f"\\+CMQNEW: ([0-9]),1,{BROKER_URL}",
+            f"\\+CMQNEW: ([0-9]),1,{self._broker_url}",
         )
         if response.query is not None:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             self.mqtt_disconnect(int(response.query[0]))
 
         response = self.async_at.call(
-            f'AT+CMQNEW="{BROKER_URL}","{BROKER_PORT}",{CONNECT_TIME}000,200',
+            f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{CONNECT_TIME}000,200',
             "CMQNEW: ([0-9])",
             timeout=150,  # Timeout is very long for this command
         )
