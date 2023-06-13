@@ -94,7 +94,6 @@ class BackoffBatchedRetries(Generic[A, T]):
     def __init__(
         self,
         send_function: Callable[[list[A]], list[T | None]],
-        on_publish: Callable[[Any], Any],
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
@@ -102,7 +101,6 @@ class BackoffBatchedRetries(Generic[A, T]):
         workers: int = 1,
     ):
         self.send_function = send_function
-        self.on_publish = on_publish
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier

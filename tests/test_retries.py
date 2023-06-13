@@ -57,9 +57,7 @@ class TestBackoffRetries(unittest.TestCase):
                     ret.append(datetime.now())
             return ret
 
-        b = BackoffBatchedRetries(
-            send_f, lambda x: x, 0.03, 2.0, timedelta(minutes=0.1), batch_count=2
-        )
+        b = BackoffBatchedRetries(send_f, 0.03, 2.0, timedelta(minutes=0.1), batch_count=2)
         start = datetime.now()
         f3 = b.send(3)
         time.sleep(0.002)
