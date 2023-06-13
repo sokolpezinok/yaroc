@@ -1,8 +1,7 @@
 import logging
-import time
 from concurrent.futures import Future
 from datetime import datetime, timedelta
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 
 import paho.mqtt.client as mqtt
 
@@ -124,7 +123,12 @@ class SIM7020MqttClient(Client):
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
         name = f"{name_prefix}-{mac_address}"
         self._sim7020 = SIM7020Interface(
-            async_at, self.topic_status, name, self._handle_registration
+            async_at,
+            self.topic_status,
+            name,
+            self._handle_registration,
+            broker_url,
+            broker_port,
         )
         self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
