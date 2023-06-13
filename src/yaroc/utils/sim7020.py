@@ -8,8 +8,6 @@ from ..pb.status_pb2 import Disconnected, Status
 from ..utils.sys_info import is_time_off
 from .async_serial import AsyncATCom
 
-CONNECT_TIME = 45
-
 
 def time_since(t: datetime, delta: timedelta) -> bool:
     return datetime.now() - t > delta
@@ -30,13 +28,14 @@ class SIM7020Interface:
         async_at: AsyncATCom,
         will_topic: str,
         client_name: str,
+        connect_timeout: float,
         connection_callback: Callable[[str], None],
         broker_url: str,
         broker_port: int,
     ):
         self._client_name = client_name
-        self._default_delay = 100
-        self._default_timeout = 1
+        self._connect_timeout = connect_timeout
+        self._keepalive = 2 * connect_timeout
         self._mqtt_id: int | None = None
         self._mqtt_id_timestamp = datetime.now()
         self._last_success = datetime.now()
@@ -68,11 +67,11 @@ class SIM7020Interface:
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
-            self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=2 * CONNECT_TIME)
+            self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive)
 
     def _detect_mqtt_id(self) -> int | None:
         self._mqtt_id = None
-        if time_since(self._last_success, timedelta(minutes=3)):
+        if time_since(self._last_success, timedelta(minutes=self._keepalive)):
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
@@ -104,7 +103,9 @@ class SIM7020Interface:
             return None
 
         # Can APN be set automatically?
-        response = self.async_at.call('AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=CONNECT_TIME)
+        response = self.async_at.call(
+            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
+        )
         if response is None:
             logging.warning("Can not set APN")
             return None
@@ -122,7 +123,7 @@ class SIM7020Interface:
             self.mqtt_disconnect(int(response.query[0]))
 
         response = self.async_at.call(
-            f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{CONNECT_TIME}000,200',
+            f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,200',
             "CMQNEW: ([0-9])",
             timeout=150,  # Timeout is very long for this command
         )
@@ -132,10 +133,10 @@ class SIM7020Interface:
             mqtt_id = int(response.query[0])
             will_hex = self._will.hex()
             response = self.async_at.call(
-                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{2 * CONNECT_TIME},0,1,'
+                f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{self._keepalive},0,1,'
                 f'"topic={self._will_topic},qos=1,retained=0,'
                 f'message_len={len(will_hex)},message={will_hex}"',
-                timeout=2 * CONNECT_TIME,
+                timeout=self._keepalive,
             )
             if response.success:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
@@ -148,11 +149,11 @@ class SIM7020Interface:
             return None
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
-        if (qos == 1 and time_since(self._mqtt_id_timestamp, timedelta(seconds=30))) or (
-            qos == 0 and time_since(self._mqtt_id_timestamp, timedelta(minutes=3))
+        if (
+            time_since(self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout))
+            and self._detect_mqtt_id() is None
         ):
-            if self._detect_mqtt_id() is None:
-                self.mqtt_connect()
+            self.mqtt_connect()
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
@@ -165,7 +166,7 @@ class SIM7020Interface:
         message_hex = message.hex()
         response = self.async_at.call(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
-            timeout=CONNECT_TIME + 3,
+            timeout=self._connect_timeout + 3,
         )
         if response.success:
             self._mqtt_id_timestamp = datetime.now()

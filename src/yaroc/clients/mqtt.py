@@ -14,6 +14,8 @@ from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
 BROKER_URL = "broker.hivemq.com"
+BROKER_PORT = 1883
+CONNECT_TIMEOUT = 45
 
 
 def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
@@ -32,7 +34,7 @@ class MqttClient(Client):
         mac_address: str,
         name_prefix: str = "PahoMQTT",
         broker_url: str = BROKER_URL,
-        broker_port: int = 1883,
+        broker_port: int = BROKER_PORT,
     ):
         def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
             del client, userdata, flags
@@ -117,6 +119,7 @@ class SIM7020MqttClient(Client):
         mac_address: str,
         async_at: AsyncATCom,
         name_prefix: str = "SIM7020",
+        connect_timeout: float = CONNECT_TIMEOUT,
         broker_url: str = BROKER_URL,
         broker_port: int = 1883,
     ):
@@ -126,6 +129,7 @@ class SIM7020MqttClient(Client):
             async_at,
             self.topic_status,
             name,
+            connect_timeout,
             self._handle_registration,
             broker_url,
             broker_port,
