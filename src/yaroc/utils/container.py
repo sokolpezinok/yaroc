@@ -49,15 +49,17 @@ class Container(containers.DeclarativeContainer):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
+    loop = providers.Singleton(asyncio.new_event_loop)
+    thread = providers.Singleton(start_loop, loop)
+
+    async_at = providers.Singleton(AsyncATCom.atcom_from_port, config.client.sim7020.device, loop)
+
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
         sirap=providers.Factory(SirapClient),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
-        sim7020=providers.Factory(SIM7020MqttClient),
+        sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
-
-    loop = providers.Singleton(asyncio.new_event_loop)
-    thread = providers.Singleton(start_loop, loop)
     si_manager = providers.Selector(
         config.si_punches,
         udev=providers.Factory(UdevSiManager),
@@ -75,11 +77,9 @@ def create_clients(
 ) -> list[Client]:
     clients: list[Client] = []
     if client_config.get("sim7020", {}).get("enable", False):
-        sim7020_conf = client_config["sim7020"]
-        async_at = AsyncATCom.atcom_from_port(sim7020_conf["device"], async_loop)
-        sim7020_client = client_factories.sim7020(mac_addr, async_at, "SIM7020")
+        sim7020_client = client_factories.sim7020(mac_addr)
         clients.append(sim7020_client)
-        logging.info(f"Enabled SIM7020 MQTT client at {sim7020_conf['device']}")
+        logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
     if client_config.get("sirap", {}).get("enable", False):
         sirap_conf = client_config["sirap"]
         clients.append(client_factories.sirap(sirap_conf["ip"], sirap_conf["port"], async_loop))
