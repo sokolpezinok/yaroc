@@ -89,6 +89,6 @@ def main():
     container.wire(modules=["yaroc.utils.container", __name__])
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
-    clients = create_clients(mac_addr, container.client_factories)
+    clients = create_clients(container.client_factories)
     ps = PunchSender(clients)
     ps.loop()

@@ -133,7 +133,7 @@ def main():
 
     client_map = {}
     for mac_address in config["mac-addresses"]:
-        clients = create_clients(mac_address, container.client_factories)
+        clients = create_clients(container.client_factories)
         if len(clients) == 0:
             logging.info(f"Listening to {mac_address} without forwarding")
         client_map[str(mac_address)] = clients

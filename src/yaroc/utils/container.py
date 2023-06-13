@@ -55,10 +55,12 @@ class Container(containers.DeclarativeContainer):
     async_at = providers.Singleton(AsyncATCom.atcom_from_port, config.client.sim7020.device, loop)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
-        sirap=providers.Factory(SirapClient),
-        mqtt=providers.Factory(MqttClient),
-        roc=providers.Factory(RocClient),
-        sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
+        sirap=providers.Factory(
+            SirapClient, config.client.sirap.ip, config.client.sirap.port, loop
+        ),
+        mqtt=providers.Factory(MqttClient, config.mac_addr),
+        roc=providers.Factory(RocClient, config.mac_addr),
+        sim7020=providers.Factory(SIM7020MqttClient, config.mac_addr, async_at=async_at),
     )
     si_manager = providers.Selector(
         config.si_punches,
@@ -69,25 +71,21 @@ class Container(containers.DeclarativeContainer):
 
 @inject
 def create_clients(
-    mac_addr: str,
     client_factories: providers.FactoryAggregate,
     client_config: Dict[str, Any] = Provide[Container.config.client],
-    async_loop: asyncio.AbstractEventLoop = Provide[Container.loop],
     thread=Provide[Container.thread],
 ) -> list[Client]:
     clients: list[Client] = []
     if client_config.get("sim7020", {}).get("enable", False):
-        sim7020_client = client_factories.sim7020(mac_addr)
-        clients.append(sim7020_client)
+        clients.append(client_factories.sim7020())
         logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
     if client_config.get("sirap", {}).get("enable", False):
-        sirap_conf = client_config["sirap"]
-        clients.append(client_factories.sirap(sirap_conf["ip"], sirap_conf["port"], async_loop))
+        clients.append(client_factories.sirap())
         logging.info("Enabled SIRAP client")
     if client_config.get("mqtt", {}).get("enable", False):
         logging.info("Enabled MQTT client")
-        clients.append(client_factories.mqtt(mac_addr))
+        clients.append(client_factories.mqtt())
     if client_config.get("roc", {}).get("enable", False):
         logging.info("Enabled ROC client")
-        clients.append(client_factories.roc(mac_addr))
+        clients.append(client_factories.roc())
     return clients
