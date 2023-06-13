@@ -97,6 +97,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
+        loop: asyncio.AbstractEventLoop,
         batch_count: int = 2,
         workers: int = 1,
     ):
@@ -109,14 +110,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         self._queue: Queue[RetriedMessage] = Queue()
         self._current_mid_lock = Lock()
         self._current_mid = 0
-
-        def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
-            asyncio.set_event_loop(loop)
-            loop.run_forever()
-
-        self._loop = asyncio.new_event_loop()
-        self._thread = Thread(target=start_background_loop, args=(self._loop,), daemon=True)
-        self._thread.start()
+        self._loop = loop
 
     def _send_queued(self) -> Tuple[list[RetriedMessage], list[T | None]]:
         messages = []
@@ -173,9 +167,6 @@ class BackoffBatchedRetries(Generic[A, T]):
 
         logging.error(f"Message mid={retried_message.mid} expired, args = {argument}")
         return None
-
-    def close(self, timeout=None):
-        self._thread.join(timeout)
 
     def send(self, argument: A) -> Future:
         return asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)

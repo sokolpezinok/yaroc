@@ -60,7 +60,9 @@ class Container(containers.DeclarativeContainer):
         ),
         mqtt=providers.Factory(MqttClient, config.mac_addr),
         roc=providers.Factory(RocClient, config.mac_addr),
-        sim7020=providers.Factory(SIM7020MqttClient, config.mac_addr, async_at=async_at),
+        sim7020=providers.Factory(
+            SIM7020MqttClient, config.mac_addr, async_at=async_at, retry_loop=loop
+        ),
     )
     si_manager = providers.Selector(
         config.si_punches,

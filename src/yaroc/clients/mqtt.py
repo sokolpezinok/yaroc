@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from concurrent.futures import Future
 from datetime import datetime, timedelta
@@ -118,6 +119,7 @@ class SIM7020MqttClient(Client):
         self,
         mac_address: str,
         async_at: AsyncATCom,
+        retry_loop: asyncio.AbstractEventLoop,
         name_prefix: str = "SIM7020",
         connect_timeout: float = CONNECT_TIMEOUT,
         broker_url: str = BROKER_URL,
@@ -138,7 +140,7 @@ class SIM7020MqttClient(Client):
         self._include_sending_timestamp = False
 
         self._retries = BackoffBatchedRetries(
-            self._send_punches, 3.0, 2.0, timedelta(minutes=10), batch_count=4
+            self._send_punches, 3.0, 2.0, timedelta(minutes=10), retry_loop, batch_count=4
         )
 
     def _handle_registration(self, line: str):
