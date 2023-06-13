@@ -6,7 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Queue
 from threading import Thread
-from typing import Any, Generic, Optional, Tuple, TypeVar
+from typing import Generic, Optional, Tuple, TypeVar
 
 T = TypeVar("T")
 A = TypeVar("A")

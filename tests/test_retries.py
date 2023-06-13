@@ -3,6 +3,7 @@ import time
 import unittest
 from datetime import datetime, timedelta
 
+from yaroc.utils.container import Container
 from yaroc.utils.retries import BackoffBatchedRetries, BackoffRetries
 
 
@@ -19,7 +20,10 @@ class TestBackoffRetries(unittest.TestCase):
                 return None
             return datetime.now()
 
-        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1))
+        container = Container()
+        container.wire(modules=["yaroc.utils.container", __name__])
+        container.thread()
+        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1), container.loop())
         start = datetime.now()
         f2 = b.send(2)
         time.sleep(0.13)
@@ -27,7 +31,6 @@ class TestBackoffRetries(unittest.TestCase):
         finished2 = f2.result()
         finished4 = f4.result()
         published4 = datetime.now()
-        b.close(0.1)
 
         self.assertAlmostEqual(
             finished2.timestamp(),
