@@ -1,0 +1,12 @@
+[Unit]
+Description=YAROC MQTT Forwarder
+
+[Service]
+ExecStart=/home/pi/yaroc/.venv/bin/mqtt-forwarder
+WorkingDirectory=/home/pi
+User=pi
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
