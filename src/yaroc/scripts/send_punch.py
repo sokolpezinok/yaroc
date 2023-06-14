@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import tomllib
 
 from dependency_injector.wiring import Provide, inject
@@ -21,13 +22,15 @@ class PunchSender:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.clients = clients
         self.si_manager = si_manager
+        self._mch_interval = 20
 
     async def periodic_mini_call_home(self):
         while True:
+            time_start = time.time()
             mini_call_home = create_sys_minicallhome()
             mini_call_home.codes = str(self.si_manager)
             self.send_mini_call_home(mini_call_home)
-            await asyncio.sleep(20)
+            await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
