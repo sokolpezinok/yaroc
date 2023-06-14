@@ -86,7 +86,7 @@ class SIM7020Interface:
         self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, modem_clock: str):
-        tim = is_time_off(modem_clock, datetime.utcnow())
+        tim = is_time_off(modem_clock, datetime.now())
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
