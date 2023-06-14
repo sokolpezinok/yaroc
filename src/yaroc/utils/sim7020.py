@@ -71,7 +71,7 @@ class SIM7020Interface:
 
     def _detect_mqtt_id(self) -> int | None:
         self._mqtt_id = None
-        if time_since(self._last_success, timedelta(minutes=self._keepalive)):
+        if time_since(self._last_success, timedelta(seconds=self._keepalive)):
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
