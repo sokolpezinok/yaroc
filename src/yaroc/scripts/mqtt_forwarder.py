@@ -8,8 +8,6 @@ import paho.mqtt.client as mqtt
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import Client
-from ..clients.roc import RocClient
-from ..clients.sirap import SirapClient
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
