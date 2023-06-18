@@ -98,7 +98,8 @@ class SIM7020Interface:
         if self._mqtt_id is not None:
             return self._mqtt_id
 
-        if self.async_at.call("AT+CGREG?", "CGREG: [012],([0-9])") is None:
+        response = self.async_at.call("AT+CGREG?", "CGREG: [012],[15]")
+        if not response.success:
             logging.warning("Not registered yet")
             return None
 
@@ -106,7 +107,7 @@ class SIM7020Interface:
         response = self.async_at.call(
             'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
         )
-        if response is None:
+        if not response.success:
             logging.warning("Can not set APN")
             return None
 
