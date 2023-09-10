@@ -43,7 +43,12 @@ class MqttForwader:
             return
         for punch in punches.punches:
             si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-            process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
+            if now - si_time > timedelta(days=7):
+                # If too much in the past, assume the date is wrong and push it one week forward
+                si_time += timedelta(days=7)
+                process_time = si_time
+            else:
+                process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
             log_message = f"{punch.card} punched {punch.code:03} at {si_time}, "
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
