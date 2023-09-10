@@ -37,7 +37,7 @@ class SirapClient(Client):
         if self.connected:
             return
         try:
-            reader, writer = await asyncio.open_connection("localhost", 4247)
+            reader, writer = await asyncio.open_connection(host, port)
             self._reader = reader
             self._writer = writer
             self.connected = True
