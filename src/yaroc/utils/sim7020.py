@@ -55,7 +55,7 @@ class SIM7020Interface:
         self.async_at.call("AT+CREVHEX=1")
         self.async_at.add_callback("+CLTS", lambda x: None)
         self.async_at.add_callback("+CPIN", lambda x: None)
-        self.async_at.add_callback('+CGREG: 1,"', connection_callback)
+        self.async_at.add_callback('+CEREG: 1,"', connection_callback)
         self.async_at.add_callback("+CMQDISCON:", connection_callback)
 
         if self.async_at.call("AT") is not None:
@@ -92,13 +92,13 @@ class SIM7020Interface:
 
     def _mqtt_connect_internal(self) -> int | None:
         self.async_at.call("ATE0")
-        self.async_at.call("AT+CGREG=2")
+        self.async_at.call("AT+CEREG=3")
 
         self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
 
-        response = self.async_at.call("AT+CGREG?", "CGREG: [012],[15]")
+        response = self.async_at.call("AT+CEREG?", "CEREG: [0123],[15]")
         if not response.success:
             logging.warning("Not registered yet")
             return None
