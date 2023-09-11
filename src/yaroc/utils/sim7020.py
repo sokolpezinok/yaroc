@@ -92,13 +92,15 @@ class SIM7020Interface:
 
     def _mqtt_connect_internal(self) -> int | None:
         self.async_at.call("ATE0")
-        self.async_at.call("AT+CEREG=3")
 
         self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
 
         response = self.async_at.call("AT+CEREG?", "CEREG: [0123],[15]")
+        correct = any(line.startswith("+CEREG: 3") for line in response.full_response)
+        if not correct:
+            self.async_at.call("AT+CEREG=3")
         if not response.success:
             logging.warning("Not registered yet")
             return None
