@@ -158,7 +158,7 @@ class SIM7020Interface:
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
-            if time_since(self._last_success, timedelta(minutes=15)):
+            if time_since(self._last_success, timedelta(minutes=60)):
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
