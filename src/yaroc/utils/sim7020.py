@@ -131,6 +131,8 @@ class SIM7020Interface:
             timeout=150,  # Timeout is very long for this command
         )
         if response.query is None:
+            self.async_at.call("AT+CIPPING=8.8.8.8", "OK", timeout=10)
+            self.async_at.call("AT+CDNSGIP=sme.sk", "OK", timeout=10)
             return None
         try:
             mqtt_id = int(response.query[0])
