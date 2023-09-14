@@ -175,10 +175,12 @@ class SIM7020MqttClient(Client):
         return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     def send_mini_call_home(self, mch: MiniCallHome) -> Future:
-        fut = self._retries.execute(self._sim7020.get_signal_dbm)
-        dbm = fut.result()
-        if dbm is not None:
+        fut = self._retries.execute(self._sim7020.get_signal_info)
+        res = fut.result()
+        if res is not None:
+            (dbm, cellid) = res
             mch.signal_dbm = dbm
+            mch.cellid = cellid
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)

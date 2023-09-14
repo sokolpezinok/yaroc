@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19src/yaroc/pb/status.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"#\n\x0c\x44isconnected\x12\x13\n\x0b\x63lient_name\x18\x01 \x01(\t\"\x9c\x02\n\x0cMiniCallHome\x12\x13\n\x0bmac_address\x18\x01 \x01(\t\x12\x10\n\x08local_ip\x18\x02 \x01(\t\x12\x17\n\x0f\x63pu_temperature\x18\x03 \x01(\x02\x12\x0c\n\x04\x66req\x18\x04 \x01(\r\x12\x10\n\x08min_freq\x18\x05 \x01(\r\x12\x10\n\x08max_freq\x18\x06 \x01(\r\x12\r\n\x05volts\x18\x07 \x01(\x02\x12\x12\n\nsignal_dbm\x18\x08 \x01(\x05\x12\x14\n\x0cnetwork_type\x18\t \x01(\r\x12\x13\n\x0btotaldatarx\x18\n \x01(\x04\x12\x13\n\x0btotaldatatx\x18\x0b \x01(\x04\x12(\n\x04time\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x63odes\x18\r \x01(\t\"_\n\x06Status\x12%\n\x0c\x64isconnected\x18\x01 \x01(\x0b\x32\r.DisconnectedH\x00\x12\'\n\x0emini_call_home\x18\x03 \x01(\x0b\x32\r.MiniCallHomeH\x00\x42\x05\n\x03msgb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19src/yaroc/pb/status.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"#\n\x0c\x44isconnected\x12\x13\n\x0b\x63lient_name\x18\x01 \x01(\t\"\xac\x02\n\x0cMiniCallHome\x12\x13\n\x0bmac_address\x18\x01 \x01(\t\x12\x10\n\x08local_ip\x18\x02 \x01(\t\x12\x17\n\x0f\x63pu_temperature\x18\x03 \x01(\x02\x12\x0c\n\x04\x66req\x18\x04 \x01(\r\x12\x10\n\x08min_freq\x18\x05 \x01(\r\x12\x10\n\x08max_freq\x18\x06 \x01(\r\x12\r\n\x05volts\x18\x07 \x01(\x02\x12\x12\n\nsignal_dbm\x18\x08 \x01(\x05\x12\x0e\n\x06\x63\x65llid\x18\x0e \x01(\r\x12\x14\n\x0cnetwork_type\x18\t \x01(\r\x12\x13\n\x0btotaldatarx\x18\n \x01(\x04\x12\x13\n\x0btotaldatatx\x18\x0b \x01(\x04\x12(\n\x04time\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x63odes\x18\r \x01(\t\"_\n\x06Status\x12%\n\x0c\x64isconnected\x18\x01 \x01(\x0b\x32\r.DisconnectedH\x00\x12\'\n\x0emini_call_home\x18\x03 \x01(\x0b\x32\r.MiniCallHomeH\x00\x42\x05\n\x03msgb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'src.yaroc.pb.status_pb2', globals())
@@ -24,7 +24,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _DISCONNECTED._serialized_start=62
   _DISCONNECTED._serialized_end=97
   _MINICALLHOME._serialized_start=100
-  _MINICALLHOME._serialized_end=384
-  _STATUS._serialized_start=386
-  _STATUS._serialized_end=481
+  _MINICALLHOME._serialized_end=400
+  _STATUS._serialized_start=402
+  _STATUS._serialized_end=497
 # @@protoc_insertion_point(module_scope)

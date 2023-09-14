@@ -14,6 +14,7 @@ message MiniCallHome {
   uint32 max_freq = 6;
   float volts = 7;
   int32 signal_dbm = 8;
+  uint32 cellid = 14;
   uint32 network_type = 9;
   uint64 totaldatarx = 10;
   uint64 totaldatatx = 11;

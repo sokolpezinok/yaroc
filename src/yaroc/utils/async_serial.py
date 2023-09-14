@@ -96,7 +96,7 @@ class AsyncATCom:
         self,
         command: str,
         match: str | None = None,
-        field_no: int | None = None,
+        fields: [int] = [],
         timeout: float = 20,
     ) -> ATResponse:
         full_response = asyncio.run_coroutine_threadsafe(
@@ -119,9 +119,10 @@ class AsyncATCom:
             res.query = []
             res.success = True
             for group in found.groups():
-                assert type(group) == str
-                if field_no is not None:
-                    res.query = [group.split(",")[field_no]]
+                assert isinstance(group, str)
+                if len(fields) > 0:
+                    split = group.split(",")
+                    res.query = [split[field] for field in fields]
                 else:
                     res.query.append(group)
             return res

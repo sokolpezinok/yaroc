@@ -94,8 +94,11 @@ class MqttForwader:
             if mch.freq > 0.0:
                 log_message = (
                     f"At {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C, "
-                    f"{mch.signal_dbm:4}dBm, {mch.volts:3.2f}V, {mch.freq:4}MHz, "
+                    f"{mch.signal_dbm:4}dBm, "
                 )
+                if mch.cellid > 0:
+                    log_message += f"cell {mch.cellid:X}, "
+                log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
                 log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"

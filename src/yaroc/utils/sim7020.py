@@ -113,7 +113,7 @@ class SIM7020Interface:
             logging.warning("Can not set APN")
             return None
 
-        response = self.async_at.call("AT+CCLK?", "CCLK: (.*)", None)
+        response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
         if response.query is not None:
             self.set_clock(response.query[0])
 
@@ -177,11 +177,17 @@ class SIM7020Interface:
             self._last_success = datetime.now()
         return response.success
 
-    def get_signal_dbm(self) -> int | None:
-        response = self.async_at.call("AT+CENG?", "CENG: (.*)", 6)
+    def get_signal_info(self) -> tuple[int, str] | None:
+        response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         try:
             if response.query is not None:
-                return int(response.query[0])
+                try:
+                    cellid = int(response.query[1][1:-1], 16)
+                except Exception:
+                    logging.error(f"Failed to parse cell ID {response.query[1]}")
+                    return None
+
+                return (int(response.query[0]), cellid)
             return None
         except Exception as err:
             logging.error(f"Error getting signal dBm {err}")
