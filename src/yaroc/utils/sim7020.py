@@ -1,6 +1,7 @@
 import logging
 import shlex
 import subprocess
+import time
 from datetime import datetime, timedelta
 from typing import Callable
 
@@ -131,7 +132,8 @@ class SIM7020Interface:
             timeout=150,  # Timeout is very long for this command
         )
         if response.query is None:
-            self.async_at.call("AT+CIPPING=8.8.8.8", "OK", timeout=15)
+            self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
+            time.sleep(10)  # 2 pings, 5 seconds each
             return None
         try:
             mqtt_id = int(response.query[0])
