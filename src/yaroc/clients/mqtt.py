@@ -136,9 +136,7 @@ class SIM7020MqttClient(Client):
             broker_url,
             broker_port,
         )
-        self._sim7020.mqtt_connect()
         self._include_sending_timestamp = False
-
         self._retries = BackoffBatchedRetries(
             self._send_punches, 3.0, 2.0, timedelta(minutes=45), retry_loop, batch_count=4
         )

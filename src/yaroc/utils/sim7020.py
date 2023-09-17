@@ -38,7 +38,7 @@ class SIM7020Interface:
         self._connect_timeout = connect_timeout
         self._keepalive = 2 * connect_timeout
         self._mqtt_id: int | None = None
-        self._mqtt_id_timestamp = datetime.now()
+        self._mqtt_id_timestamp = datetime.now() - timedelta(hours=1)
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
@@ -83,8 +83,12 @@ class SIM7020Interface:
             return self._mqtt_id
 
     def mqtt_connect(self):
-        self._mqtt_id = self._mqtt_connect_internal()
-        self._mqtt_id_timestamp = datetime.now()
+        if (
+            time_since(self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout))
+            and self._detect_mqtt_id() is None
+        ):
+            self._mqtt_id = self._mqtt_connect_internal()
+            self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, modem_clock: str):
         tim = is_time_off(modem_clock, datetime.now())
@@ -93,8 +97,6 @@ class SIM7020Interface:
 
     def _mqtt_connect_internal(self) -> int | None:
         self.async_at.call("ATE0")
-
-        self._detect_mqtt_id()
         if self._mqtt_id is not None:
             return self._mqtt_id
 
@@ -155,15 +157,11 @@ class SIM7020Interface:
             return None
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
-        if (
-            time_since(self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout))
-            and self._detect_mqtt_id() is None
-        ):
-            self.mqtt_connect()
+        self.mqtt_connect()
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
-            if time_since(self._last_success, timedelta(minutes=60)):
+            if time_since(self._last_success, timedelta(minutes=60)): # TODO: wrap into a function
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
