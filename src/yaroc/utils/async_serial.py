@@ -41,10 +41,10 @@ class AsyncATCom:
     def add_callback(self, prefix: str, fn: Callable[[str], None]):
         self.callbacks[prefix] = fn
 
-    def match_callback(self, line: str) -> Callable[[str], None] | None:
+    def match_callback(self, line: str) -> tuple[Callable[[str], None], str] | None:
         for prefix, callback in self.callbacks.items():
             if line.startswith(prefix):
-                return callback
+                return callback, line[len(prefix) :]
         return None
 
     async def _call_until_with_timeout(
@@ -85,9 +85,10 @@ class AsyncATCom:
                 break
 
         for line in itertools.chain(pre_read, full_response):
-            callback = self.match_callback(line)
-            if callback is not None:
-                callback(line)
+            ret = self.match_callback(line)
+            if ret is not None:
+                callback, rest = ret
+                callback(rest)
                 continue
 
         return full_response
