@@ -52,12 +52,19 @@ class SIM7020Interface:
 
         self.async_at = async_at
         self.async_at.call("ATE0")
-        self.async_at.call("AT+CMEE=2")
-        self.async_at.call("AT+CREVHEX=1")
+        self.async_at.call("AT+CMEE=2")  # Text error messages
+        self.async_at.call("AT+CREVHEX=1")  # Hex messages
+        self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         self.async_at.add_callback("+CLTS", lambda x: None)
         self.async_at.add_callback("+CPIN", lambda x: None)
         self.async_at.add_callback('+CEREG: 1,"', connection_callback)
         self.async_at.add_callback("+CMQDISCON:", connection_callback)
+        response = self.async_at.call(
+            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
+        )
+        if not response.success:
+            logging.warning("Can not set APN")
+            return None
 
         if self.async_at.call("AT") is not None:
             logging.info("SIM7020 is ready")
@@ -108,14 +115,6 @@ class SIM7020Interface:
             logging.warning("Not registered yet")
             return None
 
-        # Can APN be set automatically?
-        response = self.async_at.call(
-            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
-        )
-        if not response.success:
-            logging.warning("Can not set APN")
-            return None
-
         response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
         if response.query is not None:
             self.set_clock(response.query[0])
@@ -161,7 +160,7 @@ class SIM7020Interface:
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
-            if time_since(self._last_success, timedelta(minutes=60)): # TODO: wrap into a function
+            if time_since(self._last_success, timedelta(minutes=60)):  # TODO: wrap into a function
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
