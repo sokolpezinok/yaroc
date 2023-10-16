@@ -48,6 +48,10 @@ class SiWorker:
 
             now = datetime.now()
             card_number = card_data["card_number"]
+            series = card_number // 2**16
+            if series >= 1 and series <= 4:
+                card_number += series * 34464
+
             messages = []
             for punch in card_data["punches"]:
                 (code, tim) = punch
