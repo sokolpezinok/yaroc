@@ -1,4 +1,10 @@
-FROM docker.io/python:3.11-slim-bullseye
+FROM docker.io/python:3.11-slim-bookworm
 
-COPY . .
+RUN apt update && \
+    apt install -y python3-serial-asyncio python3-psutil python3-paho-mqtt \
+                   python3-gpiozero python3-pydbus python3-pyudev python3-requests
+
+WORKDIR /app
+COPY pyproject.toml .
+COPY src src
 RUN pip install .
