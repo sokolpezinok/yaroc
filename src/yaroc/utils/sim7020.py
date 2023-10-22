@@ -86,11 +86,10 @@ class SIM7020Interface:
             GPIO.setmode(GPIO.BCM)
             GPIO.setwarnings(False)
             GPIO.setup(POWER_KEY, GPIO.OUT)
-            time.sleep(0.1)
             GPIO.output(POWER_KEY, GPIO.HIGH)
             time.sleep(1)
             GPIO.output(POWER_KEY, GPIO.LOW)
-            time.sleep(5)
+            time.sleep(3)
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
