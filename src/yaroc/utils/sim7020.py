@@ -4,6 +4,7 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 from typing import Callable
+
 import RPi.GPIO as GPIO
 
 from ..pb.status_pb2 import Disconnected, Status
