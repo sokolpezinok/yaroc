@@ -196,6 +196,8 @@ class SIM7020Interface:
 
     def get_signal_info(self) -> tuple[int, str] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
+        if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
+            self.power_on()
         try:
             if response.success:
                 try:

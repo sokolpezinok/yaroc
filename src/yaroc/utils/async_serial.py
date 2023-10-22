@@ -4,6 +4,7 @@ import logging
 import re
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable, Dict, Tuple
 
 from serial_asyncio import open_serial_connection
@@ -29,6 +30,7 @@ class AsyncATCom:
         self._reader = reader
         self._writer = writer
         self._loop = async_loop
+        self._last_at_response = datetime.now()
 
     @staticmethod
     def atcom_from_port(port: str, async_loop: asyncio.AbstractEventLoop):
@@ -47,13 +49,18 @@ class AsyncATCom:
                 return callback, line[len(prefix) :]
         return None
 
+    def last_at_response(self) -> datetime:
+        return self._last_at_response
+
     async def _call_until_with_timeout(
         self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
     ) -> list[str]:
         async with self._lock:
             try:
                 async with asyncio.timeout(timeout):
-                    return await self._call_until(command, last_line)
+                    result = await self._call_until(command, last_line)
+                    self._last_at_response = datetime.now()
+                    return result
             except asyncio.TimeoutError:
                 logging.error(f"Timed out: {command}")
                 return []
