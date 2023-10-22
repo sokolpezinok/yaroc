@@ -4,6 +4,7 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 from typing import Callable
+import RPi.GPIO as GPIO
 
 from ..pb.status_pb2 import Disconnected, Status
 from ..utils.sys_info import is_time_off
@@ -43,14 +44,8 @@ class SIM7020Interface:
         self._broker_url = broker_url
         self._broker_port = broker_port
 
-        status = Status()
-        disconnected = Disconnected()
-        disconnected.client_name = client_name
-        status.disconnected.CopyFrom(disconnected)
-        self._will = status.SerializeToString()
-        self._will_topic = will_topic
-
         self.async_at = async_at
+        self.power_on()
         self.async_at.call("ATE0")
         self.async_at.call("AT+CMEE=2")  # Text error messages
         self.async_at.call("AT+CREVHEX=1")  # Hex messages
@@ -66,12 +61,35 @@ class SIM7020Interface:
             logging.warning("Can not set APN")
             return None
 
+        status = Status()
+        disconnected = Disconnected()
+        disconnected.client_name = client_name
+        status.disconnected.CopyFrom(disconnected)
+        self._will = status.SerializeToString()
+        self._will_topic = will_topic
+
         if self.async_at.call("AT") is not None:
             logging.info("SIM7020 is ready")
 
     def __del__(self):
         mqtt_id = self._detect_mqtt_id()
         self.mqtt_disconnect(mqtt_id)
+
+    def power_on(self):
+        self.async_at.call("ATE0", timeout=1)
+        if self.async_at.call("AT", "OK", timeout=1).success:
+            logging.info("SIM7020 is powered on")
+        else:
+            logging.info("Powering on SIM7020")
+            POWER_KEY = 4
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+            GPIO.setup(POWER_KEY, GPIO.OUT)
+            time.sleep(0.1)
+            GPIO.output(POWER_KEY, GPIO.HIGH)
+            time.sleep(1)
+            GPIO.output(POWER_KEY, GPIO.LOW)
+            time.sleep(5)
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
