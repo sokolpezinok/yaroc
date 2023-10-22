@@ -79,7 +79,7 @@ def create_sys_minicallhome() -> MiniCallHome:
 def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
     try:
         tim = (
-            datetime.strptime(modem_clock, "%y/%m/%d,%H:%M:%S+08")
+            datetime.strptime(modem_clock[:20], "%y/%m/%d,%H:%M:%S+08")
             .replace(tzinfo=timezone.utc)
             .astimezone()
         )
