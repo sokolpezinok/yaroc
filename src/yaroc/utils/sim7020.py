@@ -68,7 +68,7 @@ class SIM7020Interface:
         self._will = status.SerializeToString()
         self._will_topic = will_topic
 
-        if self.async_at.call("AT") is not None:
+        if not self.async_at.call("AT").success:
             logging.info("SIM7020 is ready")
 
     def __del__(self):
@@ -102,7 +102,7 @@ class SIM7020Interface:
             return self._mqtt_id
         try:
             response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
-            if response.query is not None:
+            if response.success:
                 self._mqtt_id = int(response.query[0])
         finally:
             return self._mqtt_id
@@ -134,14 +134,14 @@ class SIM7020Interface:
             return None
 
         response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
-        if response.query is not None:
+        if response.success:
             self.set_clock(response.query[0])
 
         response = self.async_at.call(
             "AT+CMQNEW?",
             f"\\+CMQNEW: ([0-9]),1,{self._broker_url}",
         )
-        if response.query is not None:
+        if response.success:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             self.mqtt_disconnect(int(response.query[0]))
 
@@ -197,7 +197,7 @@ class SIM7020Interface:
     def get_signal_info(self) -> tuple[int, str] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         try:
-            if response.query is not None:
+            if response.success:
                 try:
                     cellid = int(response.query[1][1:-1], 16)
                 except Exception:
