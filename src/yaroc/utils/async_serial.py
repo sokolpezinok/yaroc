@@ -5,7 +5,7 @@ import re
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, List, Tuple
 
 from serial_asyncio import open_serial_connection
 
@@ -104,7 +104,7 @@ class AsyncATCom:
         self,
         command: str,
         match: str | None = None,
-        fields: [int] = [],
+        fields: List[int] = [],
         timeout: float = 20,
     ) -> ATResponse:
         full_response = asyncio.run_coroutine_threadsafe(
