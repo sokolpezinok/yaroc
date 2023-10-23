@@ -5,10 +5,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable
 
-import RPi.GPIO as GPIO
-
 from ..pb.status_pb2 import Disconnected, Status
-from ..utils.sys_info import is_time_off
+from ..utils.sys_info import is_raspberrypi, is_time_off
 from .async_serial import AsyncATCom
 
 
@@ -81,15 +79,20 @@ class SIM7020Interface:
         if self.async_at.call("AT", "OK", timeout=1).success:
             logging.info("SIM7020 is powered on")
         else:
-            logging.info("Powering on SIM7020")
-            POWER_KEY = 4
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setwarnings(False)
-            GPIO.setup(POWER_KEY, GPIO.OUT)
-            GPIO.output(POWER_KEY, GPIO.HIGH)
-            time.sleep(1)
-            GPIO.output(POWER_KEY, GPIO.LOW)
-            time.sleep(3)
+            if is_raspberrypi():
+                logging.info("Powering on SIM7020")
+                import RPi.GPIO as GPIO
+
+                POWER_KEY = 4
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setwarnings(False)
+                GPIO.setup(POWER_KEY, GPIO.OUT)
+                GPIO.output(POWER_KEY, GPIO.HIGH)
+                time.sleep(1)
+                GPIO.output(POWER_KEY, GPIO.LOW)
+                time.sleep(3)
+            else:
+                logging.error("Cannot power on the module, press the power button")
 
     def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
