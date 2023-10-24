@@ -2,6 +2,9 @@
 
 Yet Another [ROC](https://roc.olresultat.se).
 
+[![Python](https://github.com/sokolpezinok/yaroc/actions/workflows/python-app.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/python-app.yml)
+[![Rust](https://github.com/sokolpezinok/yaroc/actions/workflows/rust.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/rust.yml)
+
 # Installation
 
 Clone or download this repository, then create a virtualenv and install the package.
