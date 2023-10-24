@@ -2,7 +2,7 @@ import logging
 import shlex
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from ..pb.status_pb2 import Disconnected, Status
@@ -119,7 +119,7 @@ class SIM7020Interface:
             self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, modem_clock: str):
-        tim = is_time_off(modem_clock, datetime.now())
+        tim = is_time_off(modem_clock, datetime.now(timezone.utc))
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
