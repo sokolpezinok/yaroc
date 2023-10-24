@@ -28,7 +28,7 @@ impl AsyncSerial {
         &mut self,
         command: &str,
         timeout: f64,
-    ) -> Result<Vec<u8>, AsyncSerialError> {
+    ) -> Result<Vec<String>, AsyncSerialError> {
         self.serial
             .write(format!("{command}\r\n").as_bytes())
             .await
@@ -42,7 +42,15 @@ impl AsyncSerial {
         .await;
         match result {
             Ok(read_result) => match read_result {
-                Ok(_) => Ok(buffer),
+                Ok(_) => {
+                    let buffer = String::from_utf8(buffer)
+                        .map_err(|e| AsyncSerialError::ReadError(Box::new(e)))?;
+                    Ok(buffer
+                        .split("\r\n")
+                        .filter(|line| !line.is_empty())
+                        .map(|line| line.to_owned())
+                        .collect())
+                }
                 Err(e) => Err(AsyncSerialError::ReadError(Box::new(e))),
             },
             Err(_) => Err(AsyncSerialError::Timeout(timeout)),
@@ -53,6 +61,6 @@ impl AsyncSerial {
 #[tokio::main]
 async fn main() {
     let mut serial = AsyncSerial::new("/dev/ttyUSB2").unwrap();
-    let b = serial.call_with_timeout("AT+CPSI?", 1).await;
+    let b = serial.call_with_timeout("AT+CPSI?", 1.0).await;
     println!("{:?}", b);
 }
