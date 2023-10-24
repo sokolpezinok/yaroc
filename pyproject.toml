@@ -24,7 +24,7 @@ dependencies = [
   'pyserial-asyncio==0.6',
   'pyudev==0.24.*; platform_system == "Linux"',
   'requests==2.28.*',
-  'RPi.GPIO==0.7.1',
+  'RPi.GPIO==0.7.1; platform_system == "Linux"',
   'sportident',
 ]
 

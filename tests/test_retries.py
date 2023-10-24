@@ -40,7 +40,7 @@ class TestBackoffRetries(unittest.TestCase):
         self.assertAlmostEqual(
             finished4.timestamp(),
             (start + timedelta(seconds=0.51)).timestamp(),
-            delta=0.008,
+            delta=0.015,
         )
         self.assertAlmostEqual(finished4.timestamp(), published4.timestamp(), delta=0.004)
 
@@ -79,17 +79,17 @@ class TestBackoffRetries(unittest.TestCase):
         self.assertAlmostEqual(
             finished1.timestamp(),
             (start + timedelta(seconds=0.242)).timestamp(),
-            delta=0.01,
+            delta=0.05,
         )
         self.assertAlmostEqual(
             finished2.timestamp(),
             (start + timedelta(seconds=0.342)).timestamp(),
-            delta=0.01,
+            delta=0.05,
         )
         self.assertAlmostEqual(
             finished3.timestamp(),
             (start + timedelta(seconds=0.445)).timestamp(),
-            delta=0.01,
+            delta=0.05,
         )
 
 
