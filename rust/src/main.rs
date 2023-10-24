@@ -26,6 +26,18 @@ impl AsyncSerial {
         })
     }
 
+    pub async fn call(
+        &mut self,
+        command: &str,
+        matc: &str,
+        queries: &[&str],
+        timeout: f64,
+    ) -> Result<HashMap<String, String>, AsyncSerialError> {
+        let response = self.call_with_timeout(command, timeout).await?;
+        let query = Self::search(response, matc, queries);
+        Ok(query)
+    }
+
     async fn call_with_timeout(
         &mut self,
         command: &str,
@@ -62,13 +74,13 @@ impl AsyncSerial {
         }
     }
 
-    fn search(lines: Vec<String>, needle: &str, ids: Vec<&str>) -> HashMap<String, String> {
+    fn search(lines: Vec<String>, needle: &str, ids: &[&str]) -> HashMap<String, String> {
         let re = regex::Regex::new(needle).unwrap();
         for line in lines.into_iter() {
             if let Some(c) = re.captures(&line) {
                 return ids
-                    .into_iter()
-                    .map(|key| (key.to_owned(), c[key].to_owned()))
+                    .iter()
+                    .map(|key| ((*key).to_owned(), c[*key].to_owned()))
                     .collect();
             }
         }
@@ -79,7 +91,14 @@ impl AsyncSerial {
 #[tokio::main]
 async fn main() {
     let mut serial = AsyncSerial::new("/dev/ttyUSB2").unwrap();
-    let b = serial.call_with_timeout("AT+CPSI?", 1.0).await;
+    let b = serial
+        .call(
+            "AT+CPSI?",
+            r"\+CPSI: (?<serv>.*),(?<stat>.*)",
+            &["serv", "stat"],
+            1.0,
+        )
+        .await;
     println!("{:?}", b);
 }
 
@@ -90,9 +109,9 @@ mod test_search {
     #[test]
     fn test_simple() {
         let r = AsyncSerial::search(
-            vec!["CENG: 1,2,3,abc,1,2,-89,".to_string()],
-            r"CENG: .*,.*,.*,(?<cell>.*),.*,.*,(?<rssi>.*),",
-            vec!["cell", "rssi"],
+            vec!["CENG: 1,2,3,\"abc\",1,2,-89,".to_string()],
+            r#"CENG: .*,.*,.*,"(?<cell>.*)",.*,.*,(?<rssi>.*),"#,
+            &["cell", "rssi"],
         );
     }
 }
