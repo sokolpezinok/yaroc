@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 struct AsyncSerial {
-    serial: SerialStream,
+    serial: tokio::sync::Mutex<SerialStream>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -21,7 +21,9 @@ impl AsyncSerial {
     fn new(port: &str) -> Result<Self, serialport::Error> {
         let builder = tokio_serial::new(port, 115200);
         let serial = builder.open_native_async()?;
-        Ok(Self { serial })
+        Ok(Self {
+            serial: tokio::sync::Mutex::new(serial),
+        })
     }
 
     async fn call_with_timeout(
@@ -29,7 +31,8 @@ impl AsyncSerial {
         command: &str,
         timeout: f64,
     ) -> Result<Vec<String>, AsyncSerialError> {
-        self.serial
+        let mut serial = self.serial.lock().await;
+        serial
             .write(format!("{command}\r\n").as_bytes())
             .await
             .map_err(|e| AsyncSerialError::WriteError(Box::new(e)))?;
@@ -37,9 +40,11 @@ impl AsyncSerial {
         let mut buffer = Vec::with_capacity(256);
         let result = tokio::time::timeout(
             Duration::from_micros((timeout * 1_000_000.0).trunc() as u64),
-            self.serial.read_buf(&mut buffer),
+            serial.read_buf(&mut buffer),
         )
         .await;
+        std::mem::drop(serial);
+
         match result {
             Ok(read_result) => match read_result {
                 Ok(_) => {
