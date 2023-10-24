@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
@@ -61,6 +61,19 @@ impl AsyncSerial {
             Err(_) => Err(AsyncSerialError::Timeout(timeout)),
         }
     }
+
+    fn search(lines: Vec<String>, needle: &str, ids: Vec<&str>) -> HashMap<String, String> {
+        let re = regex::Regex::new(needle).unwrap();
+        for line in lines.into_iter() {
+            if let Some(c) = re.captures(&line) {
+                return ids
+                    .into_iter()
+                    .map(|key| (key.to_owned(), c[key].to_owned()))
+                    .collect();
+            }
+        }
+        HashMap::new()
+    }
 }
 
 #[tokio::main]
@@ -68,4 +81,18 @@ async fn main() {
     let mut serial = AsyncSerial::new("/dev/ttyUSB2").unwrap();
     let b = serial.call_with_timeout("AT+CPSI?", 1.0).await;
     println!("{:?}", b);
+}
+
+#[cfg(test)]
+mod test_search {
+    use super::AsyncSerial;
+
+    #[test]
+    fn test_simple() {
+        let r = AsyncSerial::search(
+            vec!["CENG: 1,2,3,abc,1,2,-89,".to_string()],
+            r"CENG: .*,.*,.*,(?<cell>.*),.*,.*,(?<rssi>.*),",
+            vec!["cell", "rssi"],
+        );
+    }
 }
