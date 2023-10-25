@@ -138,7 +138,7 @@ class SIM7020MqttClient(Client):
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
-            self._send_punches, 3.0, 2.0, timedelta(minutes=45), retry_loop, batch_count=4
+            self._send_punches, 3.0, 2.0, timedelta(hours=3), retry_loop, batch_count=4
         )
 
     def _handle_registration(self, line: str):

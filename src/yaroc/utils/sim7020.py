@@ -14,6 +14,9 @@ def time_since(t: datetime, delta: timedelta) -> bool:
     return datetime.now() - t > delta
 
 
+RESTART_TIME = timedelta(minutes=40)
+
+
 class SIM7020Interface:
     """An AT interface to the SIM7020 NB-IoT chip
 
@@ -181,7 +184,7 @@ class SIM7020Interface:
 
         if self._mqtt_id is None:
             logging.warning("Not connected, will not send an MQTT message")
-            if time_since(self._last_success, timedelta(minutes=60)):  # TODO: wrap into a function
+            if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
