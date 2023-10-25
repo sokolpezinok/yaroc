@@ -107,11 +107,13 @@ mod test_search {
     use super::AsyncSerial;
 
     #[test]
-    fn test_simple() {
-        let r = AsyncSerial::search(
+    fn test_search() {
+        let res = AsyncSerial::search(
             vec!["CENG: 1,2,3,\"abc\",1,2,-89,".to_string()],
             r#"CENG: .*,.*,.*,"(?<cell>.*)",.*,.*,(?<rssi>.*),"#,
             &["cell", "rssi"],
         );
+        assert_eq!(res.get("cell"), Some(&"abc".to_owned()));
+        assert_eq!(res.get("rssi"), Some(&"-89".to_owned()));
     }
 }
