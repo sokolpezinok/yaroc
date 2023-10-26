@@ -19,7 +19,6 @@ dependencies = [
   'aiomqtt==1.2.*',
   'gpiozero==1.6.*',
   'dependency-injector==4.41.*',
-  'paho-mqtt==1.6.*',
   'protobuf==4.22.*',
   'psutil==5.9.*',
   'pydbus==0.6.*; platform_system == "Linux"',
@@ -36,7 +35,6 @@ dev = [
   "isort",
   "mypy",
   "Flake8-pyproject",
-  "types-paho-mqtt",
   "types-protobuf",
   "types-psutil",
   "types-requests"

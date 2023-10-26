@@ -9,6 +9,7 @@ from typing import AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
+
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 DEFAULT_TIMEOUT_MS = 3.0

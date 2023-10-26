@@ -2,9 +2,11 @@ import asyncio
 import logging
 from concurrent.futures import Future
 from datetime import datetime, timedelta
-from typing import Any, Tuple
+from typing import Tuple
 
-import paho.mqtt.client as mqtt
+from aiomqtt import Client as AioMqttClient
+from aiomqtt.client import Will
+from aiomqtt.error import MqttCodeError
 
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
@@ -37,79 +39,62 @@ class MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = BROKER_PORT,
     ):
-        def on_connect(client: mqtt.Client, userdata: Any, flags, rc: int):
-            del client, userdata, flags
-            logging.info(f"Connected with result code {str(rc)}")
-
-        def on_disconnect(client: mqtt.Client, userdata: Any, rc):
-            del client, userdata
-            logging.error(f"Disconnected with result code {str(rc)}")
-
-        def on_publish(client: mqtt.Client, userdata: Any, mid: int):
-            del client, userdata
-            logging.info(f"Published id={mid}")
-
         self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
-
-        name = f"{name_prefix}-{mac_address}"
-        disconnected = Disconnected()
-        disconnected.client_name = name
-        self.client: mqtt.Client = mqtt.Client(client_id=name, clean_session=False)
-        status = Status()
-        status.disconnected.CopyFrom(disconnected)
-        self.client.will_set(self.topic_status, status.SerializeToString(), qos=1)
-
-        # NB-IoT is slow to connect
-        self.client._connect_timeout = 35
-        self.client.message_retry_set(26)
-        self.client.max_inflight_messages_set(100)  # bump from 20
-        self.client.enable_logger()
-
-        self.client.on_connect = on_connect
-        self.client.on_disconnect = on_disconnect
-        self.client.on_publish = on_publish
-        self.client.connect(broker_url, broker_port, 35)
-        self.client.loop_start()
+        self.name = f"{name_prefix}-{mac_address}"
+        self.broker_url = broker_url
+        self.broker_port = broker_port
 
     def __del__(self):
         self.client.loop_stop()
 
-    def send_punch(
+    async def send_punch(
         self,
         card_number: int,
         si_time: datetime,
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ) -> mqtt.MQTTMessageInfo:
+    ):
         punches = Punches()
         punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
         punches.sending_timestamp.GetCurrentTime()
-        return self._send(self.topic_punches, punches.SerializeToString())
+        return await self._send(self.topic_punches, punches.SerializeToString())
 
-    def send_coords(
-        self, lat: float, lon: float, alt: float, timestamp: datetime
-    ) -> mqtt.MQTTMessageInfo:
+    async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime):
         coords = create_coords_proto(lat, lon, alt, timestamp)
-        return self._send(self.topic_coords, coords.SerializeToString())
+        return await self._send(self.topic_coords, coords.SerializeToString())
 
-    def send_mini_call_home(self, mch: MiniCallHome) -> mqtt.MQTTMessageInfo:
+    async def send_mini_call_home(self, mch: MiniCallHome):
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return self._send(self.topic_status, status.SerializeToString(), qos=0)
+        return await self._send(self.topic_status, status.SerializeToString(), qos=0)
 
-    def _send(self, topic: str, message: bytes, qos: int = 1) -> mqtt.MQTTMessageInfo:
-        message_info = self.client.publish(topic, message, qos=qos)
-        if message_info.rc == mqtt.MQTT_ERR_NO_CONN:
-            logging.error("Message not sent: no connection")
-            # TODO: add to unsent messages
-        elif message_info.rc == mqtt.MQTT_ERR_QUEUE_SIZE:
-            # this should never happen as the queue size is huuuge
-            logging.error("Message not sent: queue full")
-        else:
-            # TODO: store message_info to inquire later
-            logging.info(f"Message sent, id = {message_info.mid}")
-        return message_info
+    async def _send(self, topic: str, message: bytes, qos: int = 1):
+        disconnected = Disconnected()
+        disconnected.client_name = self.name
+
+        status = Status()
+        status.disconnected.CopyFrom(disconnected)
+        will = Will(topic=self.topic_status, payload=status.SerializeToString(), qos=1)
+
+        # TODO: as a first hack this is fine, but the client should be persisted
+        async with AioMqttClient(
+            self.broker_url,
+            self.broker_port,
+            timeout=20,
+            will=will,
+            client_id=self.name,
+            clean_session=False,
+            max_inflight_messages=100,
+            logger=logging.getLogger(),
+        ) as client:
+            # TODO: Add connection/disconnected notifications
+
+            try:
+                await client.publish(topic, payload=message, qos=qos)
+                logging.info("Message sent")  # TODO: message ID
+            except MqttCodeError as e:
+                logging.error(f"Message not sent: {e}")
 
 
 class SIM7020MqttClient(Client):

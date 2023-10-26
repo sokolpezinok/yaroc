@@ -53,9 +53,7 @@ class PunchSender:
             await self.send_mini_call_home(mch)
 
     async def send_mini_call_home(self, mch: MiniCallHome):
-        handles = [
-            client.send_mini_call_home(mch) for client in self.clients
-        ]
+        handles = [client.send_mini_call_home(mch) for client in self.clients]
         await asyncio.gather(*handles)
         # TODO: do something with the results
 
