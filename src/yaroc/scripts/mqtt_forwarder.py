@@ -5,7 +5,9 @@ import tomllib
 from datetime import datetime, timedelta, timezone
 from typing import Dict
 
-import paho.mqtt.client as mqtt
+from aiomqtt import Client as MqttClient
+from aiomqtt import Message
+from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import Client
@@ -17,28 +19,24 @@ from ..utils.container import Container, create_clients
 
 class MqttForwader:
     def __init__(self, clients: Dict[str, list[Client]]):
-        def on_connect(client: mqtt.Client, userdata, flags, rc: int):
-            del userdata, flags
-            logging.info(f"Connected with result code {rc}")
-
-            # Subscribing in on_connect() means that if we lose the connection and
-            # reconnect then subscriptions will be renewed.
-            for mac_addr in clients.keys():
-                client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
-
         self.clients = clients
-        self.mqtt_client = mqtt.Client()
-        self.mqtt_client.on_connect = on_connect
-        self.mqtt_client.on_message = self._on_message
-        self.mqtt_client.connect("broker.hivemq.com", 1883, 60)
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
         return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
 
-    async def _handle_punches(self, mac_addr: str, payload: bytes, now: datetime):
+    @staticmethod
+    def _payload_to_bytes(payload: PayloadType) -> bytes:
+        if type(payload) == bytes:
+            return payload
+        elif type(payload) == str:
+            return payload.encode("utf-8")
+        else:
+            return bytes()  # TODO: indicate error
+
+    async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
-            punches = Punches.FromString(payload)
+            punches = Punches.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
@@ -68,12 +66,12 @@ class MqttForwader:
 
             handles = [
                 client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
-                for client in self.clients
+                for client in self.clients[mac_addr]
             ]
             await asyncio.gather(*handles)
 
-    def _handle_coords(self, payload: bytes, now: datetime):
-        coords = Coordinates.FromString(payload)
+    def _handle_coords(self, payload: PayloadType, now: datetime):
+        coords = Coordinates.FromString(MqttForwader._payload_to_bytes(payload))
         orig_time = MqttForwader._prototime_to_datetime(coords.time)
         total_latency = now - orig_time
         log_message = (
@@ -82,9 +80,9 @@ class MqttForwader:
         )
         logging.info(log_message)
 
-    async def _handle_status(self, mac_addr: str, payload: bytes, now: datetime):
+    async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
-            status = Status.FromString(payload)
+            status = Status.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
@@ -107,29 +105,38 @@ class MqttForwader:
                 log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
             logging.info(log_message)
-            handles = [
-                client.send_mini_call_home(mch) for client in self.clients[mac_addr]
-            ]
+            handles = [client.send_mini_call_home(mch) for client in self.clients[mac_addr]]
             await asyncio.gather(*handles)
 
-    async def _on_message(self, client, userdata, msg):
-        del client, userdata
+    async def _on_message(self, msg: Message):
         now = datetime.now().astimezone()
-        groups = re.match("yaroc/([0-9a-f]{12})/.*", msg.topic).groups()
+        topic = msg.topic.value
+        match = re.match("yaroc/([0-9a-f]{12})/.*", topic)
+        if match is None:
+            logging.error(f"Invalid topic: {topic}")
+            return
+
+        groups = match.groups()
         if len(groups) == 0:
-            logging.debug(f"Topic {msg.topic} doesn't match")
+            logging.debug(f"Topic {topic} doesn't match")
             return
         mac_addr = groups[0]
 
-        if msg.topic.endswith("/p"):
+        if topic.endswith("/p"):
             await self._handle_punches(mac_addr, msg.payload, now)
-        elif msg.topic.endswith("/coords"):
+        elif topic.endswith("/coords"):
             self._handle_coords(msg.payload, now)
-        elif msg.topic.endswith("/status"):
+        elif topic.endswith("/status"):
             await self._handle_status(mac_addr, msg.payload, now)
 
-    def loop(self):
-        self.mqtt_client.loop_forever()  # Is there a way to stop this?
+    async def loop(self):
+        async with MqttClient("broker.hivemq.com", 1883, timeout=30) as client:
+            logging.info("Connected to mqtt://broker.hivemq.com")
+            for mac_addr in self.clients.keys():
+                await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
+            async with client.messages() as messages:
+                async for message in messages:
+                    await self._on_message(message)
 
 
 def main():
@@ -151,4 +158,4 @@ def main():
         client_map[str(mac_address)] = clients
 
     forwarder = MqttForwader(client_map)
-    forwarder.loop()
+    asyncio.run(forwarder.loop())
