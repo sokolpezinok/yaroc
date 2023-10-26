@@ -4,7 +4,8 @@ from concurrent.futures import Future
 from datetime import datetime, timedelta
 from typing import Tuple
 
-from aiomqtt import Client as AioMqttClient, MqttError
+from aiomqtt import Client as AioMqttClient
+from aiomqtt import MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
 

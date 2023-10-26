@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import List
 
-import requests
+import aiohttp
 
 
 @dataclass
@@ -97,22 +98,22 @@ class MOP:
             competitors.append(MOP._competitor_from_mop(cmp, base))
         return competitors
 
-    @staticmethod
-    def results(address: str, port: int) -> List[MeosResult]:
-        response = requests.get(
-            f"http://{address}:{port}/meos?difference=zero",
-        )
-        assert response.status_code == 200
-        xml = ET.XML(response.text)
+    async def loop(self):
+        timeout = aiohttp.ClientTimeout(total=20)
+        self.session = aiohttp.ClientSession(timeout)
+        async with self.session:
+            await asyncio.sleep(1000000)
 
-        return MOP._results_from_meos_xml(xml)
+    async def results(self, address: str, port: int) -> List[MeosResult]:
+        async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
+            assert response.status_code == 200
+            xml = ET.XML(response.text)
 
-    @staticmethod
-    def competitors(address: str, port: int) -> List[MeosCompetitor]:
-        response = requests.get(
-            f"http://{address}:{port}/meos?difference=zero",  # TODO: it could be asimpler call
-        )
-        assert response.status_code == 200
-        xml = ET.XML(response.text)
+            return MOP._results_from_meos_xml(xml)
 
-        return MOP._competitors_from_meos_xml(xml)
+    async def competitors(self, address: str, port: int) -> List[MeosCompetitor]:
+        async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
+            assert response.status_code == 200
+            xml = ET.XML(response.text)
+
+            return MOP._competitors_from_meos_xml(xml)

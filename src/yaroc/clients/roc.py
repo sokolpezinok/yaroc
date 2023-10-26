@@ -19,7 +19,8 @@ class RocClient(Client):
         self.macaddr = macaddr
 
     async def loop(self):
-        self.session = aiohttp.ClientSession()
+        timeout = aiohttp.ClientTimeout(total=20)
+        self.session = aiohttp.ClientSession(timeout)
         async with self.session:
             await asyncio.sleep(1000000)
 
