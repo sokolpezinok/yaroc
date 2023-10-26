@@ -27,9 +27,9 @@ class MqttForwader:
 
     @staticmethod
     def _payload_to_bytes(payload: PayloadType) -> bytes:
-        if type(payload) == bytes:
+        if isinstance(payload, bytes):
             return payload
-        elif type(payload) == str:
+        elif isinstance(payload, str):
             return payload.encode("utf-8")
         else:
             return bytes()  # TODO: indicate error
@@ -63,7 +63,6 @@ class MqttForwader:
             log_message += f", MAC {mac_addr}"
 
             logging.info(log_message)
-
             handles = [
                 client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
                 for client in self.clients[mac_addr]
