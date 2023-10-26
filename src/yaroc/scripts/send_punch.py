@@ -53,22 +53,25 @@ class PunchSender:
             await self.send_mini_call_home(mch)
 
     async def send_mini_call_home(self, mch: MiniCallHome):
-        for client in self.clients:
-            await client.send_mini_call_home(mch)
+        handles = [
+            client.send_mini_call_home(mch) for client in self.clients
+        ]
+        await asyncio.gather(*handles)
+        # TODO: do something with the results
 
-            # handle = client.send_mini_call_home(mch)
-            # if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
-            #
-            #     def handle_mini_call_home(fut):
-            #         try:
-            #             if fut.result():
-            #                 logging.info("MiniCallHome sent")
-            #             else:
-            #                 logging.error("MiniCallHome not sent")
-            #         except Exception as err:
-            #             logging.error(f"MiniCallHome not sent: {err}")
-            #
-            #     handle.add_done_callback(handle_mini_call_home)
+        # handle = client.send_mini_call_home(mch)
+        # if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
+        #
+        #     def handle_mini_call_home(fut):
+        #         try:
+        #             if fut.result():
+        #                 logging.info("MiniCallHome sent")
+        #             else:
+        #                 logging.error("MiniCallHome not sent")
+        #         except Exception as err:
+        #             logging.error(f"MiniCallHome not sent: {err}")
+        #
+        #     handle.add_done_callback(handle_mini_call_home)
 
     def loop(self):
         async_loop = asyncio.get_event_loop()

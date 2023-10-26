@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import tomllib
@@ -35,7 +36,7 @@ class MqttForwader:
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
         return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
 
-    def _handle_punches(self, mac_addr: str, payload: bytes, now: datetime):
+    async def _handle_punches(self, mac_addr: str, payload: bytes, now: datetime):
         try:
             punches = Punches.FromString(payload)
         except Exception as err:
@@ -65,8 +66,11 @@ class MqttForwader:
 
             logging.info(log_message)
 
-            for client in self.clients[mac_addr]:
+            handles = [
                 client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
+                for client in self.clients
+            ]
+            await asyncio.gather(*handles)
 
     def _handle_coords(self, payload: bytes, now: datetime):
         coords = Coordinates.FromString(payload)
@@ -78,7 +82,7 @@ class MqttForwader:
         )
         logging.info(log_message)
 
-    def _handle_status(self, mac_addr: str, payload: bytes, now: datetime):
+    async def _handle_status(self, mac_addr: str, payload: bytes, now: datetime):
         try:
             status = Status.FromString(payload)
         except Exception as err:
@@ -103,10 +107,12 @@ class MqttForwader:
                 log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
             logging.info(log_message)
-            for client in self.clients[mac_addr]:
-                client.send_mini_call_home(mch)
+            handles = [
+                client.send_mini_call_home(mch) for client in self.clients[mac_addr]
+            ]
+            await asyncio.gather(*handles)
 
-    def _on_message(self, client, userdata, msg):
+    async def _on_message(self, client, userdata, msg):
         del client, userdata
         now = datetime.now().astimezone()
         groups = re.match("yaroc/([0-9a-f]{12})/.*", msg.topic).groups()
@@ -116,11 +122,11 @@ class MqttForwader:
         mac_addr = groups[0]
 
         if msg.topic.endswith("/p"):
-            self._handle_punches(mac_addr, msg.payload, now)
+            await self._handle_punches(mac_addr, msg.payload, now)
         elif msg.topic.endswith("/coords"):
             self._handle_coords(msg.payload, now)
         elif msg.topic.endswith("/status"):
-            self._handle_status(mac_addr, msg.payload, now)
+            await self._handle_status(mac_addr, msg.payload, now)
 
     def loop(self):
         self.mqtt_client.loop_forever()  # Is there a way to stop this?
