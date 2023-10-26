@@ -130,11 +130,16 @@ class MqttForwader:
             await self._handle_status(mac_addr, msg.payload, now)
 
     async def loop(self):
+        async_loop = asyncio.get_event_loop()
+        for clients in self.clients.values():
+            for client in clients:
+                asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
+
         async with MqttClient("broker.hivemq.com", 1883, timeout=30) as client:
             logging.info("Connected to mqtt://broker.hivemq.com")
-            for mac_addr in self.clients.keys():
-                await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
             async with client.messages() as messages:
+                for mac_addr in self.clients.keys():
+                    await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
                 async for message in messages:
                     await self._on_message(message)
 

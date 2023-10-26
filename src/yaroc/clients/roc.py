@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 from datetime import datetime
@@ -15,8 +16,12 @@ class RocClient(Client):
     """Class for sending punches to ROC"""
 
     def __init__(self, macaddr: str):
-        self.session = aiohttp.ClientSession()
         self.macaddr = macaddr
+
+    async def loop(self):
+        self.session = aiohttp.ClientSession()
+        async with self.session:
+            await asyncio.sleep(1000000)
 
     async def send_punch(
         self,

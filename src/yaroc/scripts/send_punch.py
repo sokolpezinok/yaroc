@@ -39,7 +39,6 @@ class PunchSender:
                 for client in self.clients
             ]
             await asyncio.gather(*handles)
-            # TODO: do something with the results
 
     async def udev_events(self):
         async for device in self.si_manager.udev_events():
@@ -55,7 +54,6 @@ class PunchSender:
     async def send_mini_call_home(self, mch: MiniCallHome):
         handles = [client.send_mini_call_home(mch) for client in self.clients]
         await asyncio.gather(*handles)
-        # TODO: do something with the results
 
         # handle = client.send_mini_call_home(mch)
         # if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
