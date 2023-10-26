@@ -76,6 +76,9 @@ class PunchSender:
         asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
         asyncio.run_coroutine_threadsafe(self.send_punches(), async_loop)
         asyncio.run_coroutine_threadsafe(self.udev_events(), async_loop)
+
+        for client in self.clients:  # TODO: separate loop?
+            asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
         async_loop.run_forever()
 
 

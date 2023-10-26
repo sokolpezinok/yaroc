@@ -4,7 +4,7 @@ from concurrent.futures import Future
 from datetime import datetime, timedelta
 from typing import Tuple
 
-from aiomqtt import Client as AioMqttClient
+from aiomqtt import Client as AioMqttClient, MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
 
@@ -35,7 +35,7 @@ class MqttClient(Client):
     def __init__(
         self,
         mac_address: str,
-        name_prefix: str = "PahoMQTT",
+        name_prefix: str = "aiomqtt",
         broker_url: str = BROKER_URL,
         broker_port: int = BROKER_PORT,
     ):
@@ -43,6 +43,24 @@ class MqttClient(Client):
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
+
+        disconnected = Disconnected()
+        disconnected.client_name = self.name
+
+        status = Status()
+        status.disconnected.CopyFrom(disconnected)
+        will = Will(topic=self.topic_status, payload=status.SerializeToString(), qos=1)
+
+        self.client = AioMqttClient(
+            self.broker_url,
+            self.broker_port,
+            timeout=20,
+            will=will,
+            client_id=self.name,
+            clean_session=False,
+            max_inflight_messages=100,
+            logger=logging.getLogger(),
+        )
 
     def __del__(self):
         self.client.loop_stop()
@@ -58,43 +76,32 @@ class MqttClient(Client):
         punches = Punches()
         punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
         punches.sending_timestamp.GetCurrentTime()
-        return await self._send(self.topic_punches, punches.SerializeToString())
+        await self._send(self.topic_punches, punches.SerializeToString(), qos=1)
 
     async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime):
         coords = create_coords_proto(lat, lon, alt, timestamp)
-        return await self._send(self.topic_coords, coords.SerializeToString())
+        await self._send(self.topic_coords, coords.SerializeToString(), qos=0)
 
     async def send_mini_call_home(self, mch: MiniCallHome):
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return await self._send(self.topic_status, status.SerializeToString(), qos=0)
+        await self._send(self.topic_status, status.SerializeToString(), qos=0)
 
-    async def _send(self, topic: str, message: bytes, qos: int = 1):
-        disconnected = Disconnected()
-        disconnected.client_name = self.name
+    async def _send(self, topic: str, msg: bytes, qos: int):
+        try:
+            await self.client.publish(topic, payload=msg, qos=qos)
+            logging.info("Message sent")
+        except MqttCodeError as e:
+            logging.error(f"Message not sent: {e}")
 
-        status = Status()
-        status.disconnected.CopyFrom(disconnected)
-        will = Will(topic=self.topic_status, payload=status.SerializeToString(), qos=1)
-
-        # TODO: as a first hack this is fine, but the client should be persisted
-        async with AioMqttClient(
-            self.broker_url,
-            self.broker_port,
-            timeout=20,
-            will=will,
-            client_id=self.name,
-            clean_session=False,
-            max_inflight_messages=100,
-            logger=logging.getLogger(),
-        ) as client:
-            # TODO: Add connection/disconnected notifications
-
+    async def loop(self):
+        while True:
             try:
-                await client.publish(topic, payload=message, qos=qos)
-                logging.info("Message sent")  # TODO: message ID
-            except MqttCodeError as e:
-                logging.error(f"Message not sent: {e}")
+                async with self.client:
+                    logging.info(f"Connected to mqtt://{BROKER_URL}")
+                    await asyncio.sleep(10000000.0)
+            except MqttError:
+                logging.error(f"Connection lost to mqtt://{BROKER_URL}")
 
 
 class SIM7020MqttClient(Client):
