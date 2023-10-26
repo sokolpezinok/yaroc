@@ -2,7 +2,7 @@ import logging
 import math
 from datetime import datetime
 
-from requests.adapters import PoolManager, Retry
+import aiohttp
 
 from ..pb.status_pb2 import MiniCallHome
 from .client import Client
@@ -15,18 +15,17 @@ class RocClient(Client):
     """Class for sending punches to ROC"""
 
     def __init__(self, macaddr: str):
+        self.session = aiohttp.ClientSession()
         self.macaddr = macaddr
-        retries = Retry(backoff_factor=1.0)
-        self.http = PoolManager(retries=retries)
 
-    def send_punch(
+    async def send_punch(
         self,
         card_number: int,
         sitime: datetime,
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ):
+    ) -> bool:
         def length(x: int):
             return int(math.log10(x)) + 1
 
@@ -45,20 +44,16 @@ class RocClient(Client):
             "length": str(118 + sum(map(length, [code, card_number, mode]))),
         }
 
-        # TODO: this is blocking but it shouldn't be
-        # Probably should be using BackoffBatchRetries
-        try:
-            self.http.request(
-                "POST",
-                ROC_SEND_PUNCH,
-                encode_multipart=False,
-                fields=data,
-            )
-        except Exception as e:
-            logging.error(e)
+        async with self.session.post(ROC_SEND_PUNCH, encode_multipart=False, data=data) as response:
+            if response.status < 300:
+                logging.info("Punch sent to ROC")
+                return True
+            else:
+                logging.error("ROC error {}: {}", response.status, await response.text())
+                return False
 
-    def send_mini_call_home(self, mch: MiniCallHome):
-        data = {
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        params = {
             "function": "callhome",
             "command": "setmini",
             "macaddr": self.macaddr,
@@ -75,12 +70,10 @@ class RocClient(Client):
             "minFreq": str(mch.min_freq),
             "maxFreq": str(mch.max_freq),
         }
-
-        try:
-            self.http.request(
-                "GET",
-                ROC_RECEIVEDATA,
-                fields=data,
-            )
-        except Exception as e:
-            logging.error(e)
+        async with self.session.get(ROC_RECEIVEDATA, params=params) as response:
+            if response.status < 300:
+                logging.info("MiniCallHome sent to ROC")
+                return True
+            else:
+                logging.error("ROC error {}: {}", response.status, await response.text())
+                return False

@@ -15,16 +15,16 @@ class Client(ABC):
     """
 
     @abstractmethod
-    def send_punch(
+    async def send_punch(
         self,
         card_number: int,
         si_time: datetime,
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ):
+    ) -> bool:
         pass
 
     @abstractmethod
-    def send_mini_call_home(self, mch: MiniCallHome):
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         pass

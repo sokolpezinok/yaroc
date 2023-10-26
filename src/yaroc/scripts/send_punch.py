@@ -29,17 +29,17 @@ class PunchSender:
             time_start = time.time()
             mini_call_home = create_sys_minicallhome()
             mini_call_home.codes = str(self.si_manager)
-            self.send_mini_call_home(mini_call_home)
+            await self.send_mini_call_home(mini_call_home)
             await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
-            for client in self.clients:
-                # TODO: some of the clients are blocking, they shouldn't do that
-                try:
-                    client.send_punch(si_punch.card, si_punch.time, si_punch.code, si_punch.mode)
-                except Exception as err:
-                    logging.error(err)
+            handles = [
+                client.send_punch(si_punch.card, si_punch.time, si_punch.code, si_punch.mode)
+                for client in self.clients
+            ]
+            await asyncio.gather(*handles)
+            # TODO: do something with the results
 
     async def udev_events(self):
         async for device in self.si_manager.udev_events():
@@ -50,23 +50,25 @@ class PunchSender:
                 mch.codes = f"siadded-{device_name}"
             else:
                 mch.codes = f"siremoved-{device_name}"
-            self.send_mini_call_home(mch)
+            await self.send_mini_call_home(mch)
 
-    def send_mini_call_home(self, mch: MiniCallHome):
+    async def send_mini_call_home(self, mch: MiniCallHome):
         for client in self.clients:
-            handle = client.send_mini_call_home(mch)
-            if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
+            await client.send_mini_call_home(mch)
 
-                def handle_mini_call_home(fut):
-                    try:
-                        if fut.result():
-                            logging.info("MiniCallHome sent")
-                        else:
-                            logging.error("MiniCallHome not sent")
-                    except Exception as err:
-                        logging.error(f"MiniCallHome not sent: {err}")
-
-                handle.add_done_callback(handle_mini_call_home)
+            # handle = client.send_mini_call_home(mch)
+            # if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
+            #
+            #     def handle_mini_call_home(fut):
+            #         try:
+            #             if fut.result():
+            #                 logging.info("MiniCallHome sent")
+            #             else:
+            #                 logging.error("MiniCallHome not sent")
+            #         except Exception as err:
+            #             logging.error(f"MiniCallHome not sent: {err}")
+            #
+            #     handle.add_done_callback(handle_mini_call_home)
 
     def loop(self):
         async_loop = asyncio.get_event_loop()

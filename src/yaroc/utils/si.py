@@ -9,7 +9,6 @@ from typing import AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
-
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 DEFAULT_TIMEOUT_MS = 3.0
@@ -201,6 +200,9 @@ class FakeSiManager(SiManager):
             "Starting a fake SportIdent device manager, sending a punch every "
             f"{self._punch_interval} seconds"
         )
+
+    def __str__(self) -> str:
+        return ""
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         for i in range(1000):
