@@ -24,7 +24,7 @@ dependencies = [
   'pydbus==0.6.*; platform_system == "Linux"',
   'pyserial-asyncio==0.6',
   'pyudev==0.24.*; platform_system == "Linux"',
-  'RPi.GPIO==0.7.1; platform_system == "Linux"',
+  'RPi.GPIO==0.7.1; platform_machine == "armv7l" or platform_machine == "aarch64"',
   'sportident',
 ]
 
