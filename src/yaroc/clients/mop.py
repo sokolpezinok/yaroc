@@ -19,6 +19,7 @@ class MeosCompetitor:
     name: str
     card: int | None
     bib: int | None
+    id: int | None
 
 
 @dataclass
@@ -48,8 +49,9 @@ class MOP:
     @staticmethod
     def _competitor_from_mop(cmp: ET.Element, base: ET.Element) -> MeosCompetitor:
         card, bib = MOP._parse_int(cmp.get("card")), MOP._parse_int(base.get("bib"))
+        id = MOP._parse_int(cmp.get("id"))
         name = "" if base.text is None else base.text
-        return MeosCompetitor(name=name, card=card, bib=bib)
+        return MeosCompetitor(name=name, card=card, bib=bib, id=id)
 
     @staticmethod
     def _results_from_meos_xml(xml: ET.Element) -> List[MeosResult]:
@@ -110,14 +112,17 @@ class MOP:
         return competitors
 
     @staticmethod
-    def _to_xml(result: MeosResult) -> ET.Element:
-        root = ET.Element("cmp", {"card": str(result.competitor.card)})
+    def _result_to_xml(result: MeosResult) -> ET.Element:
+        competitor = result.competitor
+        root = ET.Element("cmp", {"card": str(result.competitor.card), "id": str(competitor.id)})
         st = "-1" if result.start is None else str(result.start.seconds * 10)
-        rt = "-1" if result.time is None else str(result.time.seconds * 10)
+        rt = "0" if result.time is None else str(result.time.seconds * 10)
         cls = str(result.category.id)
         base = ET.Element(
-            "base", {"org": "22", "st": st, "rt": rt, "cls": cls, "stat": str(result.stat)}
+            "base",
+            {"org": "22", "st": st, "rt": rt, "cls": cls, "stat": str(result.stat)},
         )
+        base.text = competitor.name
         root.append(base)
         return root
 
@@ -131,16 +136,34 @@ class MOP:
         xml = ET.parse(filename)
         return MOP._results_from_meos_xml(xml.getroot())
 
+    @staticmethod
+    async def send_result(result: MeosResult, api_key: str):
+        root = ET.Element("MOPDiff", {"xmlns": "http://www.melin.nu/mop"})
+        root.append(MOP._result_to_xml(result))
+        data = ET.tostring(root)
+        headers = {"pwd": api_key}
+
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout).post(
+            "https://api.oresults.eu/meos", data=data, headers=headers
+        ) as response:
+            if response.status == 200:
+                logging.info("Sending to OResults successful")
+                logging.debug(f"Response: {response}")
+                logging.debug(await response.text())
+            else:
+                logging.error(f"Sending unsuccessful: {response}")
+
     async def results(self, address: str, port: int) -> List[MeosResult]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
-            assert response.status_code == 200
+            assert response.status == 200
             xml = ET.XML(response.text)
 
             return MOP._results_from_meos_xml(xml)
 
     async def competitors(self, address: str, port: int) -> List[MeosCompetitor]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
-            assert response.status_code == 200
+            assert response.status == 200
             xml = ET.XML(response.text)
 
             return MOP._competitors_from_meos_xml(xml)
