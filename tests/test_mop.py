@@ -13,7 +13,7 @@ TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <cls id="2" ord="40" radio="74">C</cls>
   <org id="22" nat="SVK">Klub OB Sokol Pezinok</org>
   <cmp id="165" card="2078195">
-    <base org="22" cls="2" stat="1" st="484570" rt="29800" bib="47">Sara Doe</base>
+    <base org="22" cls="2" stat="1" st="360000" rt="29800" bib="47">Sara Doe</base>
     <radio>74,25220</radio>
     <input it="0" tstat="1" />
   </cmp>
@@ -22,7 +22,7 @@ TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
     <input it="0" tstat="1" />
   </cmp>
   <cmp id="169" card="2211361">
-    <base org="22" cls="2" stat="4" st="372340" rt="0" bib="83">Ronald Doe</base>
+    <base org="22" cls="2" stat="4" st="375000" rt="0" bib="83">Ronald Doe</base>
     <input it="0" tstat="1"/>
   </cmp>
 </MOPComplete>
@@ -51,6 +51,19 @@ class TestMeos(unittest.TestCase):
             ),
         )
 
+    def test_result_to_xml(self):
+        result = MeosResult(
+            competitor=MeosCompetitor(name="Sara Doe", card=2078195, bib=47),
+            category=MeosCategory(name="C", id="2"),
+            stat=1,
+            start=timedelta(hours=10),
+            time=timedelta(seconds=2980),
+        )
+        self.assertEqual(
+            ET.tostring(MOP._to_xml(result)),
+            b'<cmp card="2078195"><base org="22" st="360000" rt="29800" cls="2" stat="1" /></cmp>',
+        )
+
     def test_result_parsing(self):
         xml = ET.XML(TEST_XML)
         ET.indent(xml)
@@ -61,6 +74,7 @@ class TestMeos(unittest.TestCase):
                 competitor=MeosCompetitor(name="Sara Doe", card=2078195, bib=47),
                 category=MeosCategory(name="C", id="2"),
                 stat=1,
+                start=timedelta(hours=10),
                 time=timedelta(seconds=2980),
             ),
         )
@@ -70,6 +84,7 @@ class TestMeos(unittest.TestCase):
                 competitor=MeosCompetitor(name="John Doe", card=2111071, bib=None),
                 category=MeosCategory(name="C", id="2"),
                 stat=20,
+                start=None,
                 time=None,
             ),
         )
@@ -79,6 +94,7 @@ class TestMeos(unittest.TestCase):
                 competitor=MeosCompetitor(name="Ronald Doe", card=2211361, bib=83),
                 category=MeosCategory(name="C", id="2"),
                 stat=4,
+                start=timedelta(hours=10, minutes=25),
                 time=None,
             ),
         )

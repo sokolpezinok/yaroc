@@ -26,6 +26,7 @@ class MeosResult:
     competitor: MeosCompetitor
     category: MeosCategory
     stat: int
+    start: timedelta | None
     time: timedelta | None
 
 
@@ -71,6 +72,12 @@ class MOP:
             stat = MOP._parse_int(base.get("stat"))
             assert stat is not None
 
+            st = base.get("st")
+            if st is not None and st != "-1":
+                start = timedelta(seconds=int(st) / 10.0)
+            else:
+                start = None
+
             rt = base.get("rt")
             if rt is not None and stat == MOP.STAT_OK:
                 total_time = timedelta(seconds=int(rt) / 10.0)
@@ -80,7 +87,11 @@ class MOP:
             assert cat_id is not None
             results.append(
                 MeosResult(
-                    competitor=competitor, category=categories[cat_id], stat=stat, time=total_time
+                    competitor=competitor,
+                    category=categories[cat_id],
+                    stat=stat,
+                    time=total_time,
+                    start=start,
                 )
             )
         return results
@@ -98,11 +109,27 @@ class MOP:
             competitors.append(MOP._competitor_from_mop(cmp, base))
         return competitors
 
+    @staticmethod
+    def _to_xml(result: MeosResult) -> ET.Element:
+        root = ET.Element("cmp", {"card": str(result.competitor.card)})
+        st = "-1" if result.start is None else str(result.start.seconds * 10)
+        rt = "-1" if result.time is None else str(result.time.seconds * 10)
+        cls = str(result.category.id)
+        base = ET.Element(
+            "base", {"org": "22", "st": st, "rt": rt, "cls": cls, "stat": str(result.stat)}
+        )
+        root.append(base)
+        return root
+
     async def loop(self):
         timeout = aiohttp.ClientTimeout(total=20)
         self.session = aiohttp.ClientSession(timeout)
         async with self.session:
             await asyncio.sleep(1000000)
+
+    def results_from_file(self, filename: str) -> List[MeosResult]:
+        xml = ET.parse(filename)
+        return MOP._results_from_meos_xml(xml.getroot())
 
     async def results(self, address: str, port: int) -> List[MeosResult]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
