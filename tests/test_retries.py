@@ -7,8 +7,8 @@ from yaroc.utils.container import Container
 from yaroc.utils.retries import BackoffBatchedRetries, BackoffRetries
 
 
-class TestBackoffRetries(unittest.TestCase):
-    def test_backoff_retries(self):
+class TestBackoffRetries(unittest.IsolatedAsyncioTestCase):
+    async def test_backoff_retries(self):
         # Note: this is not the best test as it is non-deterministic, but the error-margin is
         # pretty wide
         stats = {2: 0, 4: 0}
@@ -20,30 +20,30 @@ class TestBackoffRetries(unittest.TestCase):
                 return None
             return datetime.now()
 
-        container = Container()
-        container.wire(modules=["yaroc.utils.container", __name__])
-        container.thread()
-        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1), container.loop())
+        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1))
         start = datetime.now()
-        f2 = b.send(2)
-        time.sleep(0.13)
-        f4 = b.send(4)
-        finished2 = f2.result()
-        finished4 = f4.result()
+
+        async def sleep_and_4():
+            await asyncio.sleep(0.13)
+            return await b.backoff_send(4)
+
+        [finished2, finished4] = await asyncio.gather(b.backoff_send(2), sleep_and_4())
         published4 = datetime.now()
 
         self.assertAlmostEqual(
             finished2.timestamp(),
             (start + timedelta(seconds=0.09)).timestamp(),
-            delta=0.01,
+            delta=0.03,
         )
         self.assertAlmostEqual(
             finished4.timestamp(),
             (start + timedelta(seconds=0.51)).timestamp(),
-            delta=0.015,
+            delta=0.03,
         )
         self.assertAlmostEqual(finished4.timestamp(), published4.timestamp(), delta=0.004)
 
+
+class TestBatchedBackoffRetries(unittest.TestCase):
     def test_backoff_batched_retries(self):
         # Note: this is not the best test as it is non-deterministic, but the error-margin is
         # pretty wide

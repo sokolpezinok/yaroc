@@ -24,16 +24,14 @@ class BackoffRetries(Generic[A, T]):
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
-        loop: asyncio.AbstractEventLoop,
     ):
         self.send_function = send_function
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
         self._current_mid = 0
-        self._loop = loop
 
-    async def _backoff_send(self, argument: A) -> Optional[T]:
+    async def backoff_send(self, argument: A) -> Optional[T]:
         self._current_mid += 1
         mid = self._current_mid
         logging.debug(f"Scheduled: {mid}")
@@ -59,9 +57,6 @@ class BackoffRetries(Generic[A, T]):
 
         logging.error(f"Message mid={mid} expired, args = {argument}")
         return None
-
-    def send(self, argument: A) -> Future:
-        return asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
 
 
 class RetriedMessage(Generic[A, T]):

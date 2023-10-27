@@ -26,7 +26,7 @@ class SirapClient(Client):
         self.port = port
         self.connected = False
 
-        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10), loop)
+        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10))
         asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
@@ -66,17 +66,20 @@ class SirapClient(Client):
             + SirapClient._time_to_bytes(si_daytime)
         )
 
-    def send_punch(
+    async def send_punch(
         self,
         card_number: int,
         sitime: datetime,
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ) -> Future:
+    ) -> bool:
         del mode
         message = SirapClient._serialize_punch(card_number, sitime.time(), code)
-        return self._backoff_sender.send(message)
+        res = await self._backoff_sender.backoff_send(message)
+        if res is None:
+            return False
+        return res
 
     def send_mini_call_home(self, mch: MiniCallHome):
         pass
@@ -104,15 +107,18 @@ class SirapClient(Client):
             result += serialize_card_punch(PUNCH_FINISH, finish)
         return result
 
-    def send_card(
+    async def send_card(
         self,
         card_number: int,
         start: time | None,
         finish: time | None,
         punches: list[tuple[int, time]],
-    ) -> Future:
+    ) -> bool:
         message = SirapClient._serialize_card(card_number, start, finish, punches)
-        return self._backoff_sender.send(message)
+        res = await self._backoff_sender.backoff_send(message)
+        if res is None:
+            return False
+        return res
 
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)
@@ -129,3 +135,4 @@ class SirapClient(Client):
             raise err
         except Exception as err:
             raise err
+        return False
