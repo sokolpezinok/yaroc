@@ -2,7 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from datetime import timedelta
 
-from yaroc.clients.mop import MOP, MeosCategory, MeosCompetitor, MeosResult
+from yaroc.clients.mop import MopClient, MeosCategory, MeosCompetitor, MeosResult
 
 TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <MOPComplete xmlns="http://www.melin.nu/mop" nextdifference="1377871">
@@ -33,7 +33,7 @@ class TestMeos(unittest.TestCase):
     def test_competitor_parsing(self):
         xml = ET.XML(TEST_XML)
         ET.indent(xml)
-        competitors = MOP._competitors_from_meos_xml(xml)
+        competitors = MopClient._competitors_from_meos_xml(xml)
         self.assertEqual(
             competitors[0],
             MeosCompetitor(name="Sara Doe", card=2078195, bib=47, id=10),
@@ -52,7 +52,7 @@ class TestMeos(unittest.TestCase):
             time=timedelta(seconds=2980),
         )
         self.assertEqual(
-            ET.tostring(MOP._result_to_xml(result)),
+            ET.tostring(MopClient._result_to_xml(result)),
             (
                 b'<cmp card="2078" id="7"><base org="22" st="360000" rt="29800" cls="2" stat="1">'
                 b"Sara Doe</base></cmp>"
@@ -62,7 +62,7 @@ class TestMeos(unittest.TestCase):
     def test_result_parsing(self):
         xml = ET.XML(TEST_XML)
         ET.indent(xml)
-        results = MOP._results_from_meos_xml(xml)
+        results = MopClient._results_from_meos_xml(xml)
         self.assertEqual(
             results[0],
             MeosResult(

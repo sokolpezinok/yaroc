@@ -31,7 +31,7 @@ class MeosResult:
     time: timedelta | None
 
 
-class MOP:
+class MopClient:
     """Class for Meos online protocol (MOP)"""
 
     STAT_OK = 1
@@ -39,6 +39,9 @@ class MOP:
     STAT_DNF = 4
     STAT_OOC = 15
     STAT_DNS = 20
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
 
     @staticmethod
     def _parse_int(s: str | None) -> int | None:
@@ -48,8 +51,8 @@ class MOP:
 
     @staticmethod
     def _competitor_from_mop(cmp: ET.Element, base: ET.Element) -> MeosCompetitor:
-        card, bib = MOP._parse_int(cmp.get("card")), MOP._parse_int(base.get("bib"))
-        id = MOP._parse_int(cmp.get("id"))
+        card, bib = MopClient._parse_int(cmp.get("card")), MopClient._parse_int(base.get("bib"))
+        id = MopClient._parse_int(cmp.get("id"))
         name = "" if base.text is None else base.text
         return MeosCompetitor(name=name, card=card, bib=bib, id=id)
 
@@ -70,8 +73,8 @@ class MOP:
             if base is None:
                 logging.error("No base element")
                 continue
-            competitor = MOP._competitor_from_mop(cmp, base)
-            stat = MOP._parse_int(base.get("stat"))
+            competitor = MopClient._competitor_from_mop(cmp, base)
+            stat = MopClient._parse_int(base.get("stat"))
             assert stat is not None
 
             st = base.get("st")
@@ -81,7 +84,7 @@ class MOP:
                 start = None
 
             rt = base.get("rt")
-            if rt is not None and stat == MOP.STAT_OK:
+            if rt is not None and stat == MopClient.STAT_OK:
                 total_time = timedelta(seconds=int(rt) / 10.0)
             else:
                 total_time = None
@@ -108,7 +111,7 @@ class MOP:
             if base is None:
                 logging.error("No base element")
                 continue
-            competitors.append(MOP._competitor_from_mop(cmp, base))
+            competitors.append(MopClient._competitor_from_mop(cmp, base))
         return competitors
 
     @staticmethod
@@ -134,36 +137,32 @@ class MOP:
 
     def results_from_file(self, filename: str) -> List[MeosResult]:
         xml = ET.parse(filename)
-        return MOP._results_from_meos_xml(xml.getroot())
+        return MopClient._results_from_meos_xml(xml.getroot())
 
-    @staticmethod
-    async def send_result(result: MeosResult, api_key: str):
+    async def send_result(self, result: MeosResult):
         root = ET.Element("MOPDiff", {"xmlns": "http://www.melin.nu/mop"})
-        root.append(MOP._result_to_xml(result))
-        data = ET.tostring(root)
-        headers = {"pwd": api_key}
+        root.append(MopClient._result_to_xml(result))
+        headers = {"pwd": self.api_key}
 
-        timeout = aiohttp.ClientTimeout(total=20)
-        async with aiohttp.ClientSession(timeout=timeout).post(
-            "https://api.oresults.eu/meos", data=data, headers=headers
+        async with self.session.post(
+            "https://api.oresults.eu/meos", data=ET.tostring(root), headers=headers
         ) as response:
             if response.status == 200:
                 logging.info("Sending to OResults successful")
-                logging.debug(f"Response: {response}")
-                logging.debug(await response.text())
+                logging.debug("Response: {} {}", response, await response.text())
             else:
-                logging.error(f"Sending unsuccessful: {response}")
+                logging.error("Sending unsuccessful: {} {}", response, await response.text())
 
     async def results(self, address: str, port: int) -> List[MeosResult]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
             xml = ET.XML(response.text)
 
-            return MOP._results_from_meos_xml(xml)
+            return MopClient._results_from_meos_xml(xml)
 
     async def competitors(self, address: str, port: int) -> List[MeosCompetitor]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
             xml = ET.XML(response.text)
 
-            return MOP._competitors_from_meos_xml(xml)
+            return MopClient._competitors_from_meos_xml(xml)
