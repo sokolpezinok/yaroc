@@ -21,23 +21,23 @@ class TestBackoffRetries(unittest.IsolatedAsyncioTestCase):
             return datetime.now()
 
         b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1))
-        start = datetime.now()
 
         async def sleep_and_4():
-            await asyncio.sleep(0.13)
+            await asyncio.sleep(0.08)
             return await b.backoff_send(4)
 
+        start = datetime.now()
         [finished2, finished4] = await asyncio.gather(b.backoff_send(2), sleep_and_4())
         published4 = datetime.now()
 
         self.assertAlmostEqual(
             finished2.timestamp(),
-            (start + timedelta(seconds=0.09)).timestamp(),
+            (start + timedelta(seconds=0.10)).timestamp(),
             delta=0.03,
         )
         self.assertAlmostEqual(
             finished4.timestamp(),
-            (start + timedelta(seconds=0.51)).timestamp(),
+            (start + timedelta(seconds=0.49)).timestamp(),
             delta=0.03,
         )
         self.assertAlmostEqual(finished4.timestamp(), published4.timestamp(), delta=0.004)
