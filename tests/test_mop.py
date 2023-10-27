@@ -2,7 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from datetime import timedelta
 
-from yaroc.clients.mop import MopClient, MeosCategory, MeosCompetitor, MeosResult
+from yaroc.clients.mop import MeosCategory, MeosCompetitor, MeosResult, MopClient
 
 TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <MOPComplete xmlns="http://www.melin.nu/mop" nextdifference="1377871">

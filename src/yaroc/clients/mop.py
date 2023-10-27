@@ -7,6 +7,8 @@ from typing import List
 
 import aiohttp
 
+from ..pb.status_pb2 import MiniCallHome
+
 
 @dataclass
 class MeosCategory:
@@ -40,8 +42,12 @@ class MopClient:
     STAT_OOC = 15
     STAT_DNS = 20
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, mop_xml: str | None):
         self.api_key = api_key
+        if isinstance(mop_xml, str):
+            self.results = MopClient.results_from_file(mop_xml)
+        else:
+            self.results = []
 
     @staticmethod
     def _parse_int(s: str | None) -> int | None:
@@ -135,7 +141,8 @@ class MopClient:
         async with self.session:
             await asyncio.sleep(1000000)
 
-    def results_from_file(self, filename: str) -> List[MeosResult]:
+    @staticmethod
+    def results_from_file(filename: str) -> List[MeosResult]:
         xml = ET.parse(filename)
         return MopClient._results_from_meos_xml(xml.getroot())
 
@@ -153,7 +160,7 @@ class MopClient:
             else:
                 logging.error("Sending unsuccessful: {} {}", response, await response.text())
 
-    async def results(self, address: str, port: int) -> List[MeosResult]:
+    async def fetch_results(self, address: str, port: int) -> List[MeosResult]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
             xml = ET.XML(response.text)
@@ -166,3 +173,6 @@ class MopClient:
             xml = ET.XML(response.text)
 
             return MopClient._competitors_from_meos_xml(xml)
+
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        return True

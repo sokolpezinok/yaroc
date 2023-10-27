@@ -8,9 +8,9 @@ from dependency_injector import containers, providers
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client
+from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
-from ..clients.mop import MopClient
 from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
 from ..utils.si import FakeSiManager, UdevSiManager
@@ -59,7 +59,7 @@ class Container(containers.DeclarativeContainer):
         sirap=providers.Factory(
             SirapClient, config.client.sirap.ip, config.client.sirap.port, loop
         ),
-        mop=providers.Factory(MopClient, config.client.mop.api_key),
+        mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
         sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at, retry_loop=loop),
@@ -93,5 +93,5 @@ def create_clients(
         clients.append(client_factories.roc(mac_address))
     if client_config.get("mop", {}).get("enable", False):
         clients.append(client_factories.mop())
-        logging.info("Enabled SIRAP client")
+        logging.info("Enabled MOP client")
     return clients
