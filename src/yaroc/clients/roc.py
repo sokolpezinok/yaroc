@@ -20,7 +20,7 @@ class RocClient(Client):
 
     async def loop(self):
         timeout = aiohttp.ClientTimeout(total=20)
-        self.session = aiohttp.ClientSession(timeout)
+        self.session = aiohttp.ClientSession(timeout=timeout)
         async with self.session:
             await asyncio.sleep(1000000)
 
