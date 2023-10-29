@@ -166,7 +166,10 @@ class MopClient:
             if code == 1:
                 result.start = tim
             elif code == 2:
-                result.time = tim - result.start
+                if result.start is None:
+                    result.time = tim - timedelta(hours=10)  # TODO: hardcoded start time
+                else:
+                    result.time = tim - result.start
                 result.stat = MopClient.STAT_OK
             return await self.send_result(result)
         else:
