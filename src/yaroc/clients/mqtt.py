@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from concurrent.futures import Future
 from datetime import datetime, timedelta
 from typing import Tuple
 

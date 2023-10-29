@@ -108,7 +108,7 @@ class SIM7020Interface:
             return self._mqtt_id
         try:
             response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
-            if response.success:
+            if response.query is not None:
                 self._mqtt_id = int(response.query[0])
         finally:
             return self._mqtt_id
@@ -135,19 +135,19 @@ class SIM7020Interface:
         correct = any(line.startswith("+CEREG: 3") for line in response.full_response)
         if not correct:
             self.async_at.call("AT+CEREG=3")
-        if not response.success:
+        if response.query is not None:
             logging.warning("Not registered yet")
             return None
 
         response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
-        if response.success:
+        if response.query is not None:
             self.set_clock(response.query[0])
 
         response = self.async_at.call(
             "AT+CMQNEW?",
             f"\\+CMQNEW: ([0-9]),1,{self._broker_url}",
         )
-        if response.success:
+        if response.query is not None:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             self.mqtt_disconnect(int(response.query[0]))
 
@@ -200,12 +200,12 @@ class SIM7020Interface:
             self._last_success = datetime.now()
         return response.success
 
-    def get_signal_info(self) -> tuple[int, str] | None:
+    def get_signal_info(self) -> tuple[int, int] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             self.power_on()
         try:
-            if response.success:
+            if response.query is not None:
                 try:
                     cellid = int(response.query[1][1:-1], 16)
                 except Exception:
