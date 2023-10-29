@@ -103,6 +103,7 @@ class MqttClient(Client):
                     await asyncio.sleep(10000000.0)
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
+                await asyncio.sleep(5.0)
 
 
 class SIM7020MqttClient(Client):
@@ -133,6 +134,9 @@ class SIM7020MqttClient(Client):
         self._retries = BackoffBatchedRetries(
             self._send_punches, 3.0, 2.0, timedelta(hours=3), retry_loop, batch_count=4
         )
+
+    async def loop(self):
+        await asyncio.sleep(10000000.0)
 
     def _handle_registration(self, line: str):
         return self._retries.execute(self._sim7020.mqtt_connect)

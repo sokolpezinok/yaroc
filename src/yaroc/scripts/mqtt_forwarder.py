@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict
 
 from aiomqtt import Client as MqttClient
-from aiomqtt import Message
+from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -15,6 +15,8 @@ from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 from ..utils.container import Container, create_clients
+BROKER_URL = "broker.hivemq.com"
+BROKER_PORT = 1883
 
 
 class MqttForwader:
@@ -134,13 +136,18 @@ class MqttForwader:
             for client in clients:
                 asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
 
-        async with MqttClient("broker.hivemq.com", 1883, timeout=30) as client:
-            logging.info("Connected to mqtt://broker.hivemq.com")
-            async with client.messages() as messages:
-                for mac_addr in self.clients.keys():
-                    await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
-                async for message in messages:
-                    await self._on_message(message)
+        while True:
+            try:
+                async with MqttClient(BROKER_URL, BROKER_PORT, timeout=30) as client:
+                    logging.info(f"Connected to mqtt://{BROKER_URL}")
+                    async with client.messages() as messages:
+                        for mac_addr in self.clients.keys():
+                            await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
+                        async for message in messages:
+                            await self._on_message(message)
+            except MqttError:
+                logging.error(f"Connection lost to mqtt://{BROKER_URL}")
+                await asyncio.sleep(5.0)
 
 
 def main():
