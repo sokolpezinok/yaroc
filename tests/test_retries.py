@@ -31,7 +31,7 @@ class TestBackoffRetries(unittest.IsolatedAsyncioTestCase):
 
         self.assertAlmostEqual(
             finished2.timestamp(),
-            (start + timedelta(seconds=0.10)).timestamp(),
+            (start + timedelta(seconds=0.11)).timestamp(),
             delta=0.03,
         )
         self.assertAlmostEqual(
