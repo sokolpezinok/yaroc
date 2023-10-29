@@ -2,7 +2,7 @@ import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List
 
 import aiohttp
@@ -136,8 +136,7 @@ class MopClient:
         return root
 
     async def loop(self):
-        timeout = aiohttp.ClientTimeout(total=20)
-        self.session = aiohttp.ClientSession(timeout)
+        self.session = aiohttp.ClientSession()
         async with self.session:
             await asyncio.sleep(1000000)
 
@@ -146,7 +145,36 @@ class MopClient:
         xml = ET.parse(filename)
         return MopClient._results_from_meos_xml(xml.getroot())
 
-    async def send_result(self, result: MeosResult):
+    async def send_punch(
+        self,
+        card_number: int,
+        sitime: datetime,
+        code: int,
+        mode: int,
+        process_time: datetime | None = None,
+    ) -> bool:
+        sitime.replace(microsecond=0)
+        idx = -1
+        for i, res in enumerate(self.results):
+            if res.competitor.card == card_number:
+                idx = i
+
+        if idx != -1:
+            result = self.results[idx]
+            sitime_midnight = sitime.replace(hour=0, minute=0, second=0)
+            tim = sitime - sitime_midnight
+            if code == 1:
+                result.start = tim
+            elif code == 2:
+                result.time = tim - result.start
+                result.stat = MopClient.STAT_OK
+            return await self.send_result(result)
+        else:
+            logging.error("Competitor with card {card_number} not in database")
+            return False
+            # TODO: log to a file
+
+    async def send_result(self, result: MeosResult) -> bool:
         root = ET.Element("MOPDiff", {"xmlns": "http://www.melin.nu/mop"})
         root.append(MopClient._result_to_xml(result))
         headers = {"pwd": self.api_key}
@@ -157,9 +185,11 @@ class MopClient:
             ) as response:
                 if response.status == 200:
                     logging.info("Sending to OResults successful")
-                    logging.debug("Response: {} {}", response, await response.text())
+                    logging.debug("Response: {} {}", response.headers, await response.text())
+                    return True
                 else:
                     logging.error("Sending unsuccessful: {} {}", response, await response.text())
+                    return False
         except Exception as e:
             logging.error(f"MOP error: {e}")
             return False

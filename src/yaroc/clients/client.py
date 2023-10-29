@@ -15,6 +15,10 @@ class Client(ABC):
     """
 
     @abstractmethod
+    async def loop(self):
+        pass
+
+    @abstractmethod
     async def send_punch(
         self,
         card_number: int,
