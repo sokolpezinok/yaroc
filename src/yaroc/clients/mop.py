@@ -173,7 +173,7 @@ class MopClient:
                 result.stat = MopClient.STAT_OK
             return await self.send_result(result)
         else:
-            logging.error("Competitor with card {card_number} not in database")
+            logging.error(f"Competitor with card {card_number} not in database")
             return False
             # TODO: log to a file
 
@@ -188,7 +188,7 @@ class MopClient:
             ) as response:
                 if response.status == 200:
                     logging.info("Sending to OResults successful")
-                    logging.debug("Response: {} {}", response.headers, await response.text())
+                    logging.debug("Response: {}", await response.text())
                     return True
                 else:
                     logging.error("Sending unsuccessful: {} {}", response, await response.text())
