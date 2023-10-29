@@ -2,10 +2,9 @@ import asyncio
 import logging
 from asyncio import Condition, Lock
 from collections.abc import Awaitable, Callable
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Queue
-from typing import Generic, Optional, Tuple, TypeVar
+from typing import Generic, Optional, TypeVar
 
 T = TypeVar("T")
 A = TypeVar("A")
@@ -101,12 +100,10 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.multiplier = multiplier
         self.batch_count = batch_count
         self.failed_outcome = failed_outcome
-        self._executor = ThreadPoolExecutor(max_workers=workers)
+        self.lock = Lock()
         self._queue: Queue[RetriedMessage] = Queue()  # TODO: asyncio.Queue
         self._current_mid_lock = Lock()
         self._current_mid = 0
-
-        self.lock = Lock()
 
     async def _send_and_notify(self):
         messages = []
@@ -166,4 +163,5 @@ class BackoffBatchedRetries(Generic[A, T]):
         return await self._backoff_send(argument)
 
     async def execute(self, fn, *args):
-        return await asyncio.get_event_loop().run_in_executor(self._executor, fn, *args)
+        async with self.lock:
+            return fn(*args)

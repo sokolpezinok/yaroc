@@ -127,7 +127,8 @@ class SIM7020MqttClient(Client):
             self.topic_status,
             name,
             connect_timeout,
-            self._handle_registration,
+            # self._handle_registration,
+            (lambda x: None),
             broker_url,
             broker_port,
         )
@@ -139,8 +140,8 @@ class SIM7020MqttClient(Client):
     async def loop(self):
         await asyncio.sleep(10000000.0)
 
-    def _handle_registration(self, line: str):
-        return self._retries.execute(self._sim7020.mqtt_connect)
+    async def _handle_registration(self, line: str):
+        await self._retries.execute(self._sim7020.mqtt_connect)
 
     def _send_punches(self, punches: list[Punch]) -> list[bool]:
         punches_proto = Punches()
@@ -169,8 +170,7 @@ class SIM7020MqttClient(Client):
         return await self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        fut = self._retries.execute(self._sim7020.get_signal_info)
-        res = fut.result()
+        res = await self._retries.execute(self._sim7020.get_signal_info)
         if res is not None:
             (dbm, cellid) = res
             mch.signal_dbm = dbm
