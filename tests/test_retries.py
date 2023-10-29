@@ -30,14 +30,14 @@ class TestBackoffRetries(unittest.IsolatedAsyncioTestCase):
         published4 = datetime.now()
 
         self.assertAlmostEqual(
-            finished2.timestamp(),
-            (start + timedelta(seconds=0.11)).timestamp(),
-            delta=0.03,
+            (finished2 - start).microseconds,
+            110_000,
+            delta=30_000,
         )
         self.assertAlmostEqual(
-            finished4.timestamp(),
-            (start + timedelta(seconds=0.49)).timestamp(),
-            delta=0.03,
+            (finished4 - start).microseconds,
+            490_000,
+            delta=30_000,
         )
         self.assertAlmostEqual(finished4.timestamp(), published4.timestamp(), delta=0.004)
 
@@ -75,19 +75,19 @@ class TestBatchedBackoffRetries(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertAlmostEqual(
-            finished1.timestamp(),
-            (start + timedelta(seconds=0.242)).timestamp(),
-            delta=0.05,
+            (finished1 - start).microseconds,
+            242_000,
+            delta=50_000,
         )
         self.assertAlmostEqual(
-            finished2.timestamp(),
-            (start + timedelta(seconds=0.342)).timestamp(),
-            delta=0.05,
+            (finished2 - start).microseconds,
+            342_000,
+            delta=50_000,
         )
         self.assertAlmostEqual(
-            finished3.timestamp(),
-            (start + timedelta(seconds=0.445)).timestamp(),
-            delta=0.05,
+            (finished3 - start).microseconds,
+            445_000,
+            delta=50_000,
         )
 
 
