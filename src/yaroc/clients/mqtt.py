@@ -113,7 +113,6 @@ class SIM7020MqttClient(Client):
         self,
         mac_address: str,
         async_at: AsyncATCom,
-        retry_loop: asyncio.AbstractEventLoop,
         name_prefix: str = "SIM7020",
         connect_timeout: float = CONNECT_TIMEOUT,
         broker_url: str = BROKER_URL,
@@ -132,7 +131,7 @@ class SIM7020MqttClient(Client):
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
-            self._send_punches, 3.0, 2.0, timedelta(hours=3), retry_loop, batch_count=4
+            self._send_punches, 3.0, 2.0, timedelta(hours=3), batch_count=4
         )
 
     async def loop(self):
@@ -153,23 +152,24 @@ class SIM7020MqttClient(Client):
         else:
             return [None] * len(punches)
 
-    def send_punch(
+    async def send_punch(
         self,
         card_number: int,
         si_time: datetime,
         code: int,
         mode: int,
         process_time: datetime | None = None,
-    ) -> Future:
-        return self._retries.send(
+    ) -> bool:
+        res = await self._retries.send(
             create_punch_proto(card_number, si_time, code, mode, process_time)
         )
+        return res if res is not None else False
 
-    def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> Future:
+    async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> bool:
         coords = create_coords_proto(lat, lon, alt, timestamp)
-        return self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
+        return await self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
-    def send_mini_call_home(self, mch: MiniCallHome) -> Future:
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         fut = self._retries.execute(self._sim7020.get_signal_info)
         res = fut.result()
         if res is not None:
@@ -179,7 +179,7 @@ class SIM7020MqttClient(Client):
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return self._send(self.topic_status, status.SerializeToString(), "MiniCallHome")
+        return await self._send(self.topic_status, status.SerializeToString(), "MiniCallHome")
 
-    def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> Future:
-        return self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)
+    async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
+        return await self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from asyncio import Condition, Lock
 from collections.abc import Awaitable, Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Queue
 from typing import Generic, Optional, Tuple, TypeVar
@@ -91,7 +91,6 @@ class BackoffBatchedRetries(Generic[A, T]):
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
-        loop: asyncio.AbstractEventLoop,
         batch_count: int = 2,
         workers: int = 1,
     ):
@@ -104,7 +103,6 @@ class BackoffBatchedRetries(Generic[A, T]):
         self._queue: Queue[RetriedMessage] = Queue()
         self._current_mid_lock = Lock()
         self._current_mid = 0
-        self._loop = loop
 
     def _send_queued(self) -> Tuple[list[RetriedMessage], list[T | None]]:
         messages = []
@@ -120,7 +118,9 @@ class BackoffBatchedRetries(Generic[A, T]):
         return (messages, returned)
 
     async def _send_and_notify(self):
-        (messages, returned) = await self._loop.run_in_executor(self._executor, self._send_queued)
+        (messages, returned) = await asyncio.get_event_loop().run_in_executor(
+            self._executor, self._send_queued
+        )
         published, not_published = [], []
         for message, r in zip(messages, returned):
             if r is None:
@@ -146,7 +146,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         while datetime.now() < deadline:
             async with retried_message.processed:
                 self._queue.put(retried_message)
-                asyncio.run_coroutine_threadsafe(self._send_and_notify(), self._loop)
+                asyncio.run_coroutine_threadsafe(self._send_and_notify(), asyncio.get_event_loop())
                 await retried_message.processed.wait()
                 if retried_message.published:
                     return retried_message.returned
@@ -162,8 +162,8 @@ class BackoffBatchedRetries(Generic[A, T]):
         logging.error(f"Message mid={retried_message.mid} expired, args = {argument}")
         return None
 
-    def send(self, argument: A) -> Future:
-        return asyncio.run_coroutine_threadsafe(self._backoff_send(argument), self._loop)
+    async def send(self, argument: A) -> Optional[T]:
+        return await self._backoff_send(argument)
 
-    def execute(self, fn, *args) -> Future:
-        return self._executor.submit(fn, *args)
+    async def execute(self, fn, *args):
+        return await asyncio.get_event_loop().run_in_executor(self._executor, fn, *args)

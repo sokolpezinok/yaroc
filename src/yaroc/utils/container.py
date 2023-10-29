@@ -62,7 +62,7 @@ class Container(containers.DeclarativeContainer):
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),
-        sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at, retry_loop=loop),
+        sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
     si_manager = providers.Selector(
         config.si_punches,

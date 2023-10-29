@@ -6,7 +6,6 @@ import tomllib
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client
-from ..clients.mqtt import SIM7020MqttClient
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.container import Container, create_clients
 from ..utils.si import SiManager
@@ -54,20 +53,6 @@ class PunchSender:
     async def send_mini_call_home(self, mch: MiniCallHome):
         handles = [client.send_mini_call_home(mch) for client in self.clients]
         await asyncio.gather(*handles)
-
-        # handle = client.send_mini_call_home(mch)
-        # if isinstance(client, SIM7020MqttClient):  # TODO: convert all clients to Future
-        #
-        #     def handle_mini_call_home(fut):
-        #         try:
-        #             if fut.result():
-        #                 logging.info("MiniCallHome sent")
-        #             else:
-        #                 logging.error("MiniCallHome not sent")
-        #         except Exception as err:
-        #             logging.error(f"MiniCallHome not sent: {err}")
-        #
-        #     handle.add_done_callback(handle_mini_call_home)
 
     def loop(self):
         async_loop = asyncio.get_event_loop()

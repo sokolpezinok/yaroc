@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from concurrent.futures import Future
 from datetime import datetime, time, timedelta
 from typing import Literal
 
@@ -81,8 +80,8 @@ class SirapClient(Client):
             return False
         return res
 
-    def send_mini_call_home(self, mch: MiniCallHome):
-        pass
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        return True
 
     @staticmethod
     def _serialize_card(
