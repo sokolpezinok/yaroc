@@ -52,7 +52,11 @@ class PunchSender:
 
     async def send_mini_call_home(self, mch: MiniCallHome):
         handles = [client.send_mini_call_home(mch) for client in self.clients]
-        await asyncio.gather(*handles)
+        res = await asyncio.gather(*handles)
+        if all(res):
+            logging.info("MiniCallHome sent")
+        else:
+            logging.error("MiniCallHome not sent")
 
     def loop(self):
         async_loop = asyncio.get_event_loop()
