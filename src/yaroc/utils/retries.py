@@ -1,9 +1,8 @@
 import asyncio
 import logging
-from asyncio import Condition, Lock
+from asyncio import Condition, Lock, Queue
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from queue import Queue
 from typing import Generic, Optional, TypeVar
 
 T = TypeVar("T")
@@ -100,17 +99,16 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.multiplier = multiplier
         self.batch_count = batch_count
         self.failed_outcome = failed_outcome
-        self.lock = Lock()
-        self._queue: Queue[RetriedMessage] = Queue()  # TODO: asyncio.Queue
+        self._lock = Lock()
+        self._queue: Queue[RetriedMessage] = Queue()
         self._current_mid_lock = Lock()
         self._current_mid = 0
 
     async def _send_and_notify(self):
         messages = []
-        async with self.lock:
+        async with self._lock:
             while not self._queue.empty():
-                message = self._queue.get()
-                messages.append(message)
+                messages.append(self._queue.get_nowait())
                 if len(messages) >= self.batch_count:
                     break
             if len(messages) == 0:
@@ -142,7 +140,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         cur_backoff = self.first_backoff
         while datetime.now() < deadline:
             async with retried_message.processed:
-                self._queue.put(retried_message)
+                await self._queue.put(retried_message)
                 asyncio.run_coroutine_threadsafe(self._send_and_notify(), asyncio.get_event_loop())
                 await retried_message.processed.wait()
                 if retried_message.returned is not None:
@@ -163,5 +161,5 @@ class BackoffBatchedRetries(Generic[A, T]):
         return await self._backoff_send(argument)
 
     async def execute(self, fn, *args):
-        async with self.lock:
+        async with self._lock:
             return fn(*args)
