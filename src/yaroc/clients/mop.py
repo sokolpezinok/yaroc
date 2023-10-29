@@ -188,7 +188,7 @@ class MopClient:
             ) as response:
                 if response.status == 200:
                     logging.info("Sending to OResults successful")
-                    logging.debug("Response: {}", await response.text())
+                    logging.debug(f"Response: {await response.text()}")
                     return True
                 else:
                     logging.error("Sending unsuccessful: {} {}", response, await response.text())

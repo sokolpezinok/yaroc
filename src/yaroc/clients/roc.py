@@ -51,9 +51,7 @@ class RocClient(Client):
         }
 
         try:
-            async with self.session.post(
-                ROC_SEND_PUNCH, encode_multipart=False, data=data
-            ) as response:
+            async with self.session.post(ROC_SEND_PUNCH, data=data) as response:
                 if response.status < 300:
                     logging.info("Punch sent to ROC")
                     return True
