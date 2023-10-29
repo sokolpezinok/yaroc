@@ -151,14 +151,18 @@ class MopClient:
         root.append(MopClient._result_to_xml(result))
         headers = {"pwd": self.api_key}
 
-        async with self.session.post(
-            "https://api.oresults.eu/meos", data=ET.tostring(root), headers=headers
-        ) as response:
-            if response.status == 200:
-                logging.info("Sending to OResults successful")
-                logging.debug("Response: {} {}", response, await response.text())
-            else:
-                logging.error("Sending unsuccessful: {} {}", response, await response.text())
+        try:
+            async with self.session.post(
+                "https://api.oresults.eu/meos", data=ET.tostring(root), headers=headers
+            ) as response:
+                if response.status == 200:
+                    logging.info("Sending to OResults successful")
+                    logging.debug("Response: {} {}", response, await response.text())
+                else:
+                    logging.error("Sending unsuccessful: {} {}", response, await response.text())
+        except Exception as e:
+            logging.error(f"MOP error: {e}")
+            return False
 
     async def fetch_results(self, address: str, port: int) -> List[MeosResult]:
         async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:

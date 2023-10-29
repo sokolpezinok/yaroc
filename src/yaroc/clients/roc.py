@@ -50,13 +50,19 @@ class RocClient(Client):
             "length": str(118 + sum(map(length, [code, card_number, mode]))),
         }
 
-        async with self.session.post(ROC_SEND_PUNCH, encode_multipart=False, data=data) as response:
-            if response.status < 300:
-                logging.info("Punch sent to ROC")
-                return True
-            else:
-                logging.error("ROC error {}: {}", response.status, await response.text())
-                return False
+        try:
+            async with self.session.post(
+                ROC_SEND_PUNCH, encode_multipart=False, data=data
+            ) as response:
+                if response.status < 300:
+                    logging.info("Punch sent to ROC")
+                    return True
+                else:
+                    logging.error("ROC error {}: {}", response.status, await response.text())
+                    return False
+        except Exception as e:
+            logging.error(f"ROC error: {e}")
+            return False
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         params = {
@@ -76,10 +82,14 @@ class RocClient(Client):
             "minFreq": str(mch.min_freq),
             "maxFreq": str(mch.max_freq),
         }
-        async with self.session.get(ROC_RECEIVEDATA, params=params) as response:
-            if response.status < 300:
-                logging.info("MiniCallHome sent to ROC")
-                return True
-            else:
-                logging.error("ROC error {}: {}", response.status, await response.text())
-                return False
+        try:
+            async with self.session.get(ROC_RECEIVEDATA, params=params) as response:
+                if response.status < 300:
+                    logging.info("MiniCallHome sent to ROC")
+                    return True
+                else:
+                    logging.error("ROC error {}: {}", response.status, await response.text())
+                    return False
+        except Exception as e:
+            logging.error(f"ROC error: {e}")
+            return False
