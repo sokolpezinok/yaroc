@@ -25,7 +25,7 @@ class SirapClient(Client):
         self.port = port
         self.connected = False
 
-        self._backoff_sender = BackoffRetries(self._send, 0.2, 2.0, timedelta(minutes=10))
+        self._backoff_sender = BackoffRetries(self._send, False, 0.2, 2.0, timedelta(minutes=10))
         asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
@@ -75,10 +75,7 @@ class SirapClient(Client):
     ) -> bool:
         del mode
         message = SirapClient._serialize_punch(card_number, sitime.time(), code)
-        res = await self._backoff_sender.backoff_send(message)
-        if res is None:
-            return False
-        return res
+        return await self._backoff_sender.backoff_send(message)
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         return True
@@ -114,10 +111,7 @@ class SirapClient(Client):
         punches: list[tuple[int, time]],
     ) -> bool:
         message = SirapClient._serialize_card(card_number, start, finish, punches)
-        res = await self._backoff_sender.backoff_send(message)
-        if res is None:
-            return False
-        return res
+        return await self._backoff_sender.backoff_send(message)
 
     def close(self, timeout=10):
         self._backoff_sender.close(timeout)

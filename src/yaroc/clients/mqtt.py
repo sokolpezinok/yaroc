@@ -133,7 +133,7 @@ class SIM7020MqttClient(Client):
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
-            self._send_punches, 3.0, 2.0, timedelta(hours=3), batch_count=4
+            self._send_punches, False, 3.0, 2.0, timedelta(hours=3), batch_count=4
         )
 
     async def loop(self):
@@ -142,17 +142,14 @@ class SIM7020MqttClient(Client):
     def _handle_registration(self, line: str):
         return self._retries.execute(self._sim7020.mqtt_connect)
 
-    def _send_punches(self, punches: list[Punch]) -> list[bool | None]:
+    def _send_punches(self, punches: list[Punch]) -> list[bool]:
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)
         if self._include_sending_timestamp:
             punches_proto.sending_timestamp.GetCurrentTime()
         res = self._sim7020.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
-        if res:
-            return [res] * len(punches)
-        else:
-            return [None] * len(punches)
+        return [res] * len(punches)
 
     async def send_punch(
         self,

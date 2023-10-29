@@ -21,6 +21,7 @@ class BackoffRetries(Generic[A, T]):
     def __init__(
         self,
         send_function: Callable[[A], Awaitable[T]],
+        failed_outcome: T,
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
@@ -29,9 +30,10 @@ class BackoffRetries(Generic[A, T]):
         self.first_backoff = first_backoff
         self.max_duration = max_duration
         self.multiplier = multiplier
+        self.failed_outcome = failed_outcome
         self._current_mid = 0
 
-    async def backoff_send(self, argument: A) -> Optional[T]:
+    async def backoff_send(self, argument: A) -> T:
         self._current_mid += 1
         mid = self._current_mid
         logging.debug(f"Scheduled: {mid}")
@@ -41,35 +43,33 @@ class BackoffRetries(Generic[A, T]):
         while datetime.now() < deadline:
             try:
                 ret = await self.send_function(argument)
-                if ret is not None:
-                    logging.info(f"Punch sent: {mid}")
+                if ret != self.failed_outcome:
+                    logging.info(f"Sent: {mid}")
                     return ret
             except Exception as err:
                 logging.error(f"Sending failed: {err}")
 
             if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:
                 cur_backoff = (deadline - datetime.now()).total_seconds()
-            if cur_backoff < 0:
-                break
-            logging.error(f"Punch not sent: {mid}, retrying after {cur_backoff} seconds")
+                if cur_backoff < 0:
+                    break
+            logging.error(f"Message not sent: mid={mid}, retrying after {cur_backoff} seconds")
             await asyncio.sleep(cur_backoff)
             cur_backoff = cur_backoff * self.multiplier
 
         logging.error(f"Message mid={mid} expired, args = {argument}")
-        return None
+        return self.failed_outcome
 
 
 class RetriedMessage(Generic[A, T]):
     def __init__(self, arg: A, mid: int):
         self.processed = Condition()
-        self.published = False
         self.returned: T | None = None
         self.mid = mid
         self.arg = arg
 
     async def set_published(self, returned: T):
         async with self.processed:
-            self.published = True
             self.returned = returned
             self.processed.notify()
 
@@ -87,7 +87,8 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     def __init__(
         self,
-        send_function: Callable[[list[A]], list[T | None]],
+        send_function: Callable[[list[A]], list[T]],
+        failed_outcome: T,
         first_backoff: float,
         multiplier: float,
         max_duration: timedelta,
@@ -99,12 +100,13 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.max_duration = max_duration
         self.multiplier = multiplier
         self.batch_count = batch_count
+        self.failed_outcome = failed_outcome
         self._executor = ThreadPoolExecutor(max_workers=workers)
         self._queue: Queue[RetriedMessage] = Queue()
         self._current_mid_lock = Lock()
         self._current_mid = 0
 
-    def _send_queued(self) -> Tuple[list[RetriedMessage], list[T | None]]:
+    def _send_queued(self) -> Tuple[list[RetriedMessage], list[T]]:
         messages = []
         while not self._queue.empty():
             message = self._queue.get()
@@ -123,7 +125,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         )
         published, not_published = [], []
         for message, r in zip(messages, returned):
-            if r is None:
+            if r == self.failed_outcome:
                 await message.set_not_published()
                 not_published.append(message.mid)
             else:
@@ -148,7 +150,7 @@ class BackoffBatchedRetries(Generic[A, T]):
                 self._queue.put(retried_message)
                 asyncio.run_coroutine_threadsafe(self._send_and_notify(), asyncio.get_event_loop())
                 await retried_message.processed.wait()
-                if retried_message.published:
+                if retried_message.returned is not None:
                     return retried_message.returned
 
             if datetime.now() + timedelta(seconds=cur_backoff) >= deadline:

@@ -19,7 +19,7 @@ class TestBackoffRetries(unittest.IsolatedAsyncioTestCase):
                 return None
             return datetime.now()
 
-        b = BackoffRetries(send_f, 0.04, 2.0, timedelta(minutes=0.1))
+        b = BackoffRetries(send_f, None, 0.04, 2.0, timedelta(minutes=0.1))
 
         async def sleep_and_4():
             await asyncio.sleep(0.08)
@@ -59,7 +59,7 @@ class TestBatchedBackoffRetries(unittest.IsolatedAsyncioTestCase):
                     ret.append(datetime.now())
             return ret
 
-        b = BackoffBatchedRetries(send_f, 0.03, 2.0, timedelta(seconds=10), batch_count=2)
+        b = BackoffBatchedRetries(send_f, None, 0.03, 2.0, timedelta(seconds=10), batch_count=2)
 
         async def sleep_and_1():
             await asyncio.sleep(0.004)
