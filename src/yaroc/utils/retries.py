@@ -102,27 +102,25 @@ class BackoffBatchedRetries(Generic[A, T]):
         self.batch_count = batch_count
         self.failed_outcome = failed_outcome
         self._executor = ThreadPoolExecutor(max_workers=workers)
-        self._queue: Queue[RetriedMessage] = Queue()
+        self._queue: Queue[RetriedMessage] = Queue()  # TODO: asyncio.Queue
         self._current_mid_lock = Lock()
         self._current_mid = 0
 
-    def _send_queued(self) -> Tuple[list[RetriedMessage], list[T]]:
-        messages = []
-        while not self._queue.empty():
-            message = self._queue.get()
-            messages.append(message)
-            if len(messages) >= self.batch_count:
-                break
-        if len(messages) == 0:
-            return ([], [])
-
-        returned = self.send_function([message.arg for message in messages])
-        return (messages, returned)
+        self.lock = Lock()
 
     async def _send_and_notify(self):
-        (messages, returned) = await asyncio.get_event_loop().run_in_executor(
-            self._executor, self._send_queued
-        )
+        messages = []
+        async with self.lock:
+            while not self._queue.empty():
+                message = self._queue.get()
+                messages.append(message)
+                if len(messages) >= self.batch_count:
+                    break
+            if len(messages) == 0:
+                return ([], [])
+
+            returned = self.send_function([message.arg for message in messages])
+
         published, not_published = [], []
         for message, r in zip(messages, returned):
             if r == self.failed_outcome:
