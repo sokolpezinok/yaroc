@@ -1,6 +1,6 @@
 import unittest
 import xml.etree.ElementTree as ET
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from yaroc.clients.mop import MeosCategory, MeosCompetitor, MeosResult, MopClient
 
@@ -93,6 +93,30 @@ class TestMeos(unittest.TestCase):
                 time=None,
             ),
         )
+
+    def test_update_result(self):
+        result = MeosResult(
+            competitor=MeosCompetitor(name="Sara Doe", card=2078, bib=47, id=7),
+            category=MeosCategory(name="C", id="2"),
+            stat=0,
+            start=timedelta(hours=10, minutes=3),
+            time=None,
+        )
+        MopClient.update_result(result, 2, datetime(2023, 6, 9, 11, 2, 25))
+        self.assertEqual(result.time, timedelta(minutes=59, seconds=25))
+        self.assertEqual(result.stat, 1)
+
+    def test_update_result_no_start(self):
+        result = MeosResult(
+            competitor=MeosCompetitor(name="Sara Doe", card=2078, bib=47, id=7),
+            category=MeosCategory(name="C", id="2"),
+            stat=0,
+            start=None,
+            time=None,
+        )
+        MopClient.update_result(result, 2, datetime(2023, 6, 9, 11, 2, 25))
+        self.assertEqual(result.time, timedelta(hours=1, minutes=2, seconds=25))
+        self.assertEqual(result.stat, 1)
 
 
 if __name__ == "__main__":

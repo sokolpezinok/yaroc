@@ -145,6 +145,19 @@ class MopClient:
         xml = ET.parse(filename)
         return MopClient._results_from_meos_xml(xml.getroot())
 
+    @staticmethod
+    def update_result(result: MeosResult, code: int, sitime: datetime):
+        sitime_midnight = sitime.replace(hour=0, minute=0, second=0)
+        tim = sitime - sitime_midnight
+        if code == 1:
+            result.start = tim
+        elif code == 2:
+            if result.start is None:
+                result.time = tim - timedelta(hours=10)  # TODO: hardcoded start time
+            else:
+                result.time = tim - result.start
+            result.stat = MopClient.STAT_OK
+
     async def send_punch(
         self,
         card_number: int,
@@ -161,16 +174,7 @@ class MopClient:
 
         if idx != -1:
             result = self.results[idx]
-            sitime_midnight = sitime.replace(hour=0, minute=0, second=0)
-            tim = sitime - sitime_midnight
-            if code == 1:
-                result.start = tim
-            elif code == 2:
-                if result.start is None:
-                    result.time = tim - timedelta(hours=10)  # TODO: hardcoded start time
-                else:
-                    result.time = tim - result.start
-                result.stat = MopClient.STAT_OK
+            MopClient.update_result(result, code, sitime)
             return await self.send_result(result)
         else:
             logging.error(f"Competitor with card {card_number} not in database")
