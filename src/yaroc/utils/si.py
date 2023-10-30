@@ -156,7 +156,7 @@ class UdevSiManager(SiManager):
                     return
             logging.info(f"Inserted SportIdent device {device_node}")
             try:
-                si = SIReaderReadout(device_node)
+                si: SIReader = SIReaderReadout(device_node)
                 is_control = False
                 if si.get_type() == SIReader.M_SRR:
                     is_control = True

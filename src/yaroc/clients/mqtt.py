@@ -21,11 +21,12 @@ BROKER_PORT = 1883
 CONNECT_TIMEOUT = 45
 
 
-def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
+def topics_from_mac(mac_address: str) -> Tuple[str, str, str, str]:
     return (
         f"yaroc/{mac_address}/p",
         f"yaroc/{mac_address}/coords",
         f"yaroc/{mac_address}/status",
+        f"yaroc/{mac_address}/cmd",
     )
 
 
@@ -39,7 +40,9 @@ class MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = BROKER_PORT,
     ):
-        self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
+        self.topic_punches, self.topic_coords, self.topic_status, self.topic_cmd = topics_from_mac(
+            mac_address
+        )
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
@@ -101,7 +104,11 @@ class MqttClient(Client):
             try:
                 async with self.client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
-                    await asyncio.sleep(10000000.0)
+                    async with self.client.messages() as messages:
+                        await self.client.subscribe(self.topic_cmd)
+                        async for message in messages:
+                            logging.info("Got a command message, processing is not implemented")
+
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
                 await asyncio.sleep(5.0)
@@ -119,7 +126,7 @@ class SIM7020MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = 1883,
     ):
-        self.topic_punches, self.topic_coords, self.topic_status = topics_from_mac(mac_address)
+        self.topic_punches, self.topic_coords, self.topic_status, _ = topics_from_mac(mac_address)
         name = f"{name_prefix}-{mac_address}"
         self._sim7020 = SIM7020Interface(
             async_at,

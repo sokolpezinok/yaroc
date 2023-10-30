@@ -139,7 +139,12 @@ class MqttForwader:
 
         while True:
             try:
-                async with MqttClient(BROKER_URL, BROKER_PORT, timeout=30) as client:
+                async with MqttClient(
+                    BROKER_URL,
+                    BROKER_PORT,
+                    timeout=15,
+                    logger=logging.getLogger(),
+                ) as client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with client.messages() as messages:
                         for mac_addr in self.clients.keys():
