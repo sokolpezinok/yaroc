@@ -56,9 +56,7 @@ class Container(containers.DeclarativeContainer):
     async_at = providers.Singleton(AsyncATCom.atcom_from_port, config.client.sim7020.device, loop)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
-        sirap=providers.Factory(
-            SirapClient, config.client.sirap.ip, config.client.sirap.port, loop
-        ),
+        sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient),
         roc=providers.Factory(RocClient),

@@ -20,13 +20,12 @@ CODE_DAY = int(0).to_bytes(4, ENDIAN)
 class SirapClient(Client):
     """Class for sending punches to MeOS"""
 
-    def __init__(self, host: str, port: int, loop: asyncio.AbstractEventLoop):
+    def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
         self.connected = False
 
         self._backoff_sender = BackoffRetries(self._send, False, 0.2, 2.0, timedelta(minutes=10))
-        asyncio.run_coroutine_threadsafe(self.keep_connected(), loop)
 
     def __del__(self):
         if self._socket is not None:
@@ -45,7 +44,7 @@ class SirapClient(Client):
             self.connected = False
             return
 
-    async def keep_connected(self):
+    async def loop(self):
         while True:
             await self._connect(self.host, self.port)
             await asyncio.sleep(20)  # TODO: configure timeout
