@@ -142,7 +142,7 @@ class SIM7020MqttClient(Client):
     async def _handle_registration(self, line: str):
         await self._retries.execute(self._sim7020.mqtt_connect)
 
-    def _send_punches(self, punches: list[Punch]) -> list[bool]:
+    async def _send_punches(self, punches: list[Punch]) -> list[bool]:
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)

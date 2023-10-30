@@ -85,7 +85,7 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     def __init__(
         self,
-        send_function: Callable[[list[A]], list[T]],
+        send_function: Callable[[list[A]], Awaitable[list[T]]],
         failed_outcome: T,
         first_backoff: float,
         multiplier: float,
@@ -114,7 +114,7 @@ class BackoffBatchedRetries(Generic[A, T]):
             if len(messages) == 0:
                 return ([], [])
 
-            returned = self.send_function([message.arg for message in messages])
+            returned = await self.send_function([message.arg for message in messages])
 
         published, not_published = [], []
         for message, r in zip(messages, returned):

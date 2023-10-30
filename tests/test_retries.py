@@ -48,10 +48,10 @@ class TestBatchedBackoffRetries(unittest.IsolatedAsyncioTestCase):
         # pretty wide
         stats = {1: 0, 2: 0, 3: 0}
 
-        def send_f(xs: list[int]) -> list[datetime | None]:
+        async def send_f(xs: list[int]) -> list[datetime | None]:
             ret: list[datetime | None] = []
             for x in xs:
-                time.sleep(0.04)
+                await asyncio.sleep(0.04)
                 if stats[x] < x:
                     stats[x] += 1
                     ret.append(None)
