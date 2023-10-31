@@ -62,5 +62,12 @@ class ModemManager:
 
     def get_signal(self, modem_path: str) -> float:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
-        # TODO: return something else if LTE is not available
-        return modem.Lte["rssi"]
+        # TODO: Do this nicer, without try/except
+        try:
+            return modem.Lte["rssi"]
+        except Exception:
+            try:
+                return modem.Umts["rssi"]
+            except Exception:
+                logging.error("Error getting signal")
+                return 0.0

@@ -12,6 +12,7 @@ from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_coords_proto, create_punch_proto
 from ..utils.async_serial import AsyncATCom
+from ..utils.modem_manager import ModemManager
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
@@ -46,6 +47,7 @@ class MqttClient(Client):
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
+        self.mm = ModemManager()
 
         disconnected = Disconnected()
         disconnected.client_name = self.name
@@ -86,6 +88,11 @@ class MqttClient(Client):
         return await self._send(self.topic_coords, coords.SerializeToString(), qos=0)
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        modems = self.mm.get_modems()
+        if len(modems) > 0:
+            signal = self.mm.get_signal(modems[0])
+            mch.signal_dbm = round(signal)
+
         status = Status()
         status.mini_call_home.CopyFrom(mch)
         return await self._send(self.topic_status, status.SerializeToString(), qos=0)
