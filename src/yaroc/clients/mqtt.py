@@ -90,7 +90,7 @@ class MqttClient(Client):
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         modems = self.mm.get_modems()
         if len(modems) > 0:
-            signal = self.mm.get_signal(modems[0])
+            (signal, network_type) = self.mm.get_signal(modems[0])
             mch.signal_dbm = round(signal)
 
         status = Status()

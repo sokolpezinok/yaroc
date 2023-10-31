@@ -19,6 +19,15 @@ class SmsState(Enum):
         return str(self.name.lower())
 
 
+class NetworkType:
+    Unknown = 0
+    Nbiot = 1
+    Gsm = 2
+    Umts = 3
+    Lte = 4
+    Nr5g = 5
+
+
 class ModemManager:
     def __init__(self):
         self.bus = SystemBus()
@@ -60,14 +69,14 @@ class ModemManager:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
         modem["org.freedesktop.ModemManager1.Modem.Signal"].Setup(rate_secs)
 
-    def get_signal(self, modem_path: str) -> float:
+    def get_signal(self, modem_path: str) -> tuple[float, NetworkType]:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
         # TODO: Do this nicer, without try/except
         try:
-            return modem.Lte["rssi"]
+            return (modem.Lte["rssi"], NetworkType.Lte)
         except Exception:
             try:
-                return modem.Umts["rssi"]
+                return (modem.Umts["rssi"], NetworkType.Umts)
             except Exception:
                 logging.error("Error getting signal")
-                return 0.0
+                return (0.0, NetworkType.Unknown)
