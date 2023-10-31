@@ -15,12 +15,13 @@ classifiers = [
 ]
 
 dependencies = [
-  'aiohttp==3.8.*',
+  'aiohttp==3.8.4',
   'aiomqtt==1.2.*',
   'gpiozero==1.6.*',
   'dependency-injector==4.41.*',
   'protobuf==4.22.*',
   'psutil==5.9.*',
+  'pygobject==3.42.2',
   'pydbus==0.6.*; platform_system == "Linux"',
   'pyserial-asyncio==0.6',
   'pyudev==0.24.*; platform_system == "Linux"',
