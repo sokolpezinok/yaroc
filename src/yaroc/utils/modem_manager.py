@@ -69,7 +69,7 @@ class ModemManager:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
         modem["org.freedesktop.ModemManager1.Modem.Signal"].Setup(rate_secs)
 
-    def get_signal(self, modem_path: str) -> tuple[float, NetworkType]:
+    def get_signal(self, modem_path: str) -> tuple[float, int]:
         modem = self.bus.get(MODEM_MANAGER, modem_path)
         # TODO: Do this nicer, without try/except
         try:
