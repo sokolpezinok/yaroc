@@ -6,6 +6,7 @@ from datetime import datetime
 import aiohttp
 
 from ..pb.status_pb2 import MiniCallHome
+from ..utils.modem_manager import NetworkType
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
@@ -63,6 +64,12 @@ class RocClient(Client):
             return False
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        if mch.network_type == NetworkType.Lte:
+            network_type = "101"
+        elif mch.network_type == NetworkType.Umts:
+            network_type = "41"
+        else:
+            network_type = "0"
         params = {
             "function": "callhome",
             "command": "setmini",
@@ -74,7 +81,7 @@ class RocClient(Client):
             "totaldatarx": str(mch.totaldatatx),
             "signaldBm": str(-mch.signal_dbm),
             "temperature": str(mch.cpu_temperature),
-            "networktype": str(mch.network_type),
+            "networktype": network_type,
             "volts": str(mch.volts),
             "freq": str(mch.freq),
             "minFreq": str(mch.min_freq),

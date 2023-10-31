@@ -94,6 +94,7 @@ class MqttClient(Client):
             if len(modems) > 0:
                 (signal, network_type) = self.mm.get_signal(modems[0])
                 mch.signal_dbm = round(signal)
+                mch.network_type = network_type
                 if abs(signal) < 1 and random.randint(0, 10) == 7:
                     self.mm.signal_setup(modems[0], 20)
         except Exception as e:
