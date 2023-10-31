@@ -89,12 +89,15 @@ class MqttClient(Client):
         return await self._send(self.topic_coords, coords.SerializeToString(), qos=0)
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        modems = self.mm.get_modems()
-        if len(modems) > 0:
-            (signal, network_type) = self.mm.get_signal(modems[0])
-            mch.signal_dbm = round(signal)
-            if abs(signal) < 1 and random.randint(0, 10) == 7:
-                self.mm.signal_setup(modems[0], 20)
+        try:
+            modems = self.mm.get_modems()
+            if len(modems) > 0:
+                (signal, network_type) = self.mm.get_signal(modems[0])
+                mch.signal_dbm = round(signal)
+                if abs(signal) < 1 and random.randint(0, 10) == 7:
+                    self.mm.signal_setup(modems[0], 20)
+        except Exception as e:
+            logging.error(f"Error while getting signal strength: {e}")
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
