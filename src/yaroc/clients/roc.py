@@ -4,6 +4,7 @@ import math
 from datetime import datetime
 
 import aiohttp
+from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.modem_manager import NetworkType
@@ -20,9 +21,12 @@ class RocClient(Client):
         self.macaddr = macaddr
 
     async def loop(self):
-        timeout = aiohttp.ClientTimeout(total=20)
-        self.session = aiohttp.ClientSession(timeout=timeout)
-        async with self.session:
+        session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+        retry_options = ExponentialRetry(attempts=5, start_timeout=3)
+        self.client = RetryClient(
+            client_session=session, raise_for_status=True, retry_options=retry_options
+        )
+        async with self.client:
             await asyncio.sleep(1000000)
 
     async def send_punch(
@@ -52,7 +56,7 @@ class RocClient(Client):
         }
 
         try:
-            async with self.session.post(ROC_SEND_PUNCH, data=data) as response:
+            async with self.client.post(ROC_SEND_PUNCH, data=data) as response:
                 if response.status < 300:
                     logging.info("Punch sent to ROC")
                     return True
@@ -88,7 +92,7 @@ class RocClient(Client):
             "maxFreq": str(mch.max_freq),
         }
         try:
-            async with self.session.get(ROC_RECEIVEDATA, params=params) as response:
+            async with self.client.get(ROC_RECEIVEDATA, params=params) as response:
                 if response.status < 300:
                     logging.info("MiniCallHome sent to ROC")
                     return True

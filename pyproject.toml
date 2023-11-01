@@ -16,6 +16,7 @@ classifiers = [
 
 dependencies = [
   'aiohttp==3.8.4',
+  'aiohttp-retry==2.8.3',
   'aiomqtt==1.2.*',
   'gpiozero==1.6.*',
   'dependency-injector==4.41.*',

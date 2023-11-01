@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List
 
 import aiohttp
+from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import MiniCallHome
 
@@ -136,8 +137,12 @@ class MopClient:
         return root
 
     async def loop(self):
-        self.session = aiohttp.ClientSession()
-        async with self.session:
+        session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+        retry_options = ExponentialRetry(attempts=5, start_timeout=3)
+        self.client = RetryClient(
+            client_session=session, raise_for_status=True, retry_options=retry_options
+        )
+        async with self.client:
             await asyncio.sleep(1000000)
 
     @staticmethod
@@ -187,7 +192,7 @@ class MopClient:
         headers = {"pwd": self.api_key}
 
         try:
-            async with self.session.post(
+            async with self.client.post(
                 "https://api.oresults.eu/meos", data=ET.tostring(root), headers=headers
             ) as response:
                 if response.status == 200:
@@ -202,14 +207,14 @@ class MopClient:
             return False
 
     async def fetch_results(self, address: str, port: int) -> List[MeosResult]:
-        async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
+        async with self.client.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
             xml = ET.XML(response.text)
 
             return MopClient._results_from_meos_xml(xml)
 
     async def competitors(self, address: str, port: int) -> List[MeosCompetitor]:
-        async with self.session.get(f"http://{address}:{port}/meos?difference=zero") as response:
+        async with self.client.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
             xml = ET.XML(response.text)
 
