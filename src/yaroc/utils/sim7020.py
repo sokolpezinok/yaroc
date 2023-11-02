@@ -51,6 +51,7 @@ class SIM7020Interface:
         self.async_at.call("ATE0")
         self.async_at.call("AT+CMEE=2")  # Text error messages
         self.async_at.call("AT+CREVHEX=1")  # Hex messages
+        self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
         self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         self.async_at.add_callback("+CLTS: ", self.set_clock)
         self.async_at.add_callback("+CPIN", lambda x: None)
