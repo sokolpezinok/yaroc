@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import sys
-from threading import Thread
 from typing import Any, Dict
 
 from dependency_injector import containers, providers
@@ -30,16 +28,6 @@ def get_log_level(log_level: str | None) -> int:
         sys.exit(1)
 
 
-def start_loop(async_loop: asyncio.AbstractEventLoop):
-    def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
-        asyncio.set_event_loop(loop)
-        loop.run_forever()
-
-    thread = Thread(target=start_background_loop, args=(async_loop,), daemon=True)
-    thread.start()
-    return thread
-
-
 class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
     log_level = providers.Callable(get_log_level, config.log_level)
@@ -50,10 +38,7 @@ class Container(containers.DeclarativeContainer):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    loop = providers.Singleton(asyncio.new_event_loop)
-    thread = providers.Singleton(start_loop, loop)
-
-    async_at = providers.Singleton(AsyncATCom.atcom_from_port, config.client.sim7020.device, loop)
+    async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.device)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
@@ -74,7 +59,6 @@ def create_clients(
     client_factories: providers.FactoryAggregate,
     mac_address: str = Provide[Container.config.mac_addr],
     client_config: Dict[str, Any] = Provide[Container.config.client],
-    thread=Provide[Container.thread],
 ) -> list[Client]:
     clients: list[Client] = []
     if client_config.get("sim7020", {}).get("enable", False):

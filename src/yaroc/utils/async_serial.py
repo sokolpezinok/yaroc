@@ -5,7 +5,7 @@ import re
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Awaitable, Callable, Dict, List, Tuple
+from typing import Awaitable, Callable, Dict, List
 
 from serial_asyncio import open_serial_connection
 
@@ -22,24 +22,20 @@ Coroutines = list[Awaitable[None]]
 
 
 class AsyncATCom:
-    def __init__(
-        self, reader: StreamReader, writer: StreamWriter, async_loop: asyncio.AbstractEventLoop
-    ):
+    def __init__(self, reader: StreamReader, writer: StreamWriter):
         self.callbacks: Dict[str, Callback] = {}
         self.delay = 0.05  # TODO: make configurable
 
         self._reader = reader
         self._writer = writer
-        self._loop = async_loop
         self._last_at_response = datetime.now()
+        self._lock = asyncio.Lock()
 
     @staticmethod
-    def atcom_from_port(port: str, async_loop: asyncio.AbstractEventLoop):
-        async def open_port(port: str) -> Tuple[StreamReader, StreamWriter]:
-            return await open_serial_connection(url=port, baudrate=115200, rtscts=False)
-
-        reader, writer = asyncio.run_coroutine_threadsafe(open_port(port), async_loop).result()
-        return AsyncATCom(reader, writer, async_loop)
+    async def from_port(port: str):
+        async with asyncio.timeout(10):
+            reader, writer = await open_serial_connection(url=port, baudrate=115200, rtscts=False)
+            return AsyncATCom(reader, writer)
 
     def add_callback(self, prefix: str, fn: Callback):
         self.callbacks[prefix] = fn
@@ -102,16 +98,15 @@ class AsyncATCom:
 
         return full_response, coroutines
 
-    def call(
+    async def call(
         self,
         command: str,
         match: str | None = None,
         fields: List[int] = [],
         timeout: float = 20,
     ) -> ATResponse:
-        full_response, coroutines = asyncio.run_coroutine_threadsafe(
-            self._call_until_with_timeout(command, timeout), self._loop
-        ).result()
+        async with self._lock:
+            full_response, coroutines = await self._call_until_with_timeout(command, timeout)
         # TODO: do something with the returned coroutines
         res = ATResponse(full_response)
         if isinstance(full_response, str):

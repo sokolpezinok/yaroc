@@ -3,6 +3,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 from typing import Tuple
+from asyncio import Lock
 
 from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError
@@ -154,7 +155,7 @@ class SIM7020MqttClient(Client):
         self._retries = BackoffBatchedRetries(
             self._send_punches, False, 3.0, 2.0, timedelta(hours=3), batch_count=4
         )
-        self._lock = asyncio.Lock()
+        self._lock = Lock()
 
     async def loop(self):
         async with self._lock:

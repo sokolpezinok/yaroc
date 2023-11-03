@@ -63,20 +63,21 @@ class SIM7020Interface:
 
     async def setup(self):
         await self.power_on()
-        self.async_at.call("ATE0")
-        self.async_at.call("AT+CMEE=2")  # Text error messages
-        self.async_at.call("AT+CREVHEX=1")  # Hex messages
-        self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
-        self.async_at.call("AT+CLTS=1")  # Synchronize time from network
-        response = self.async_at.call(
+        await self.async_at.call("ATE0")
+        await self.async_at.call("AT+CMEE=2")  # Text error messages
+        await self.async_at.call("AT+CREVHEX=1")  # Hex messages
+        await self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
+        await self.async_at.call("AT+CLTS=1")  # Synchronize time from network
+        response = await self.async_at.call(
             'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
         )
         if not response.success:
             logging.warning("Can not set APN")
 
     async def power_on(self):
-        self.async_at.call("ATE0", timeout=1)
-        if self.async_at.call("AT", "OK", timeout=1).success:
+        await self.async_at.call("ATE0", timeout=1)
+        res = await self.async_at.call("AT", "OK", timeout=1)
+        if res.success:
             logging.info("SIM7020 is powered on")
         else:
             if is_raspberrypi():
@@ -96,7 +97,7 @@ class SIM7020Interface:
 
     async def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
-            self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
+            await self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
 
     async def _detect_mqtt_id(self) -> int | str:
         self._mqtt_id = "Expired MQTT connection"
@@ -104,7 +105,7 @@ class SIM7020Interface:
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
-            response = self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
+            response = await self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
             if response.query is not None:
                 self._mqtt_id = int(response.query[0])
         finally:
@@ -126,23 +127,23 @@ class SIM7020Interface:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
     async def _mqtt_connect_internal(self) -> int | str:
-        self.async_at.call("ATE0")
+        await self.async_at.call("ATE0")
         if isinstance(self._mqtt_id, int):
             return self._mqtt_id
 
-        response = self.async_at.call("AT+CEREG?", "CEREG: [0123],[15]")
+        response = await self.async_at.call("AT+CEREG?", "CEREG: [0123],[15]")
         correct = any(line.startswith("+CEREG: 3") for line in response.full_response)
         if not correct:
-            self.async_at.call("AT+CEREG=3")
+            await self.async_at.call("AT+CEREG=3")
         if response.query is None:
             self._mqtt_id = "Not registered yet"
             return self._mqtt_id
 
-        response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
+        response = await self.async_at.call("AT+CCLK?", "CCLK: (.*)")
         if response.query is not None:
             await self.set_clock(response.query[0])
 
-        response = self.async_at.call(
+        response = await self.async_at.call(
             "AT+CMQNEW?",
             f"\\+CMQNEW: ([0-9]),1,{self._broker_url}",
         )
@@ -150,20 +151,20 @@ class SIM7020Interface:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             await self.mqtt_disconnect(int(response.query[0]))
 
-        response = self.async_at.call(
+        response = await self.async_at.call(
             f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,200',
             "CMQNEW: ([0-9])",
             timeout=150,  # Timeout is very long for this command
         )
         if response.query is None:
-            self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
+            await self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
             time.sleep(10)  # 2 pings, 5 seconds each
             self._mqtt_id = "MQTT connection unsuccessful"
             return self._mqtt_id
         try:
             mqtt_id = int(response.query[0])
             will_hex = self._will.hex()
-            response = self.async_at.call(
+            response = await self.async_at.call(
                 f'AT+CMQCON={mqtt_id},3,"{self._client_name}",{self._keepalive},0,1,'
                 f'"topic={self._will_topic},qos=1,retained=0,'
                 f'message_len={len(will_hex)},message={will_hex}"',
@@ -185,13 +186,13 @@ class SIM7020Interface:
 
         if isinstance(self._mqtt_id, str):
             if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
-                self.async_at.call("AT+CFUN=0", "", timeout=10)
-                self.async_at.call("AT+CFUN=1", "")
+                await self.async_at.call("AT+CFUN=0", "", timeout=10)
+                await self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
             return self._mqtt_id
 
         message_hex = message.hex()
-        response = self.async_at.call(
+        response = await self.async_at.call(
             f'AT+CMQPUB={self._mqtt_id},"{topic}",{qos},0,0,{len(message_hex)},"{message_hex}"',
             timeout=self._connect_timeout + 3,
         )
@@ -202,7 +203,7 @@ class SIM7020Interface:
         return "MQTT send unsuccessful"
 
     async def get_signal_info(self) -> tuple[int, int] | None:
-        response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
+        response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             await self.power_on()
         try:

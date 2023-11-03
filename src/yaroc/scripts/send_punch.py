@@ -58,18 +58,17 @@ class PunchSender:
         else:
             logging.error("MiniCallHome not sent")
 
-    def loop(self):
+    async def loop(self):
         async_loop = asyncio.get_event_loop()
         for client in self.clients:
             asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
 
-        asyncio.run_coroutine_threadsafe(self.periodic_mini_call_home(), async_loop)
-        asyncio.run_coroutine_threadsafe(self.send_punches(), async_loop)
-        asyncio.run_coroutine_threadsafe(self.udev_events(), async_loop)
-        async_loop.run_forever()
+        await asyncio.gather(
+            self.periodic_mini_call_home(), self.send_punches(), self.udev_events()
+        )
 
 
-def main():
+async def main():
     mac_addr = eth_mac_addr()
     assert mac_addr is not None
 
@@ -85,6 +84,12 @@ def main():
     container.wire(modules=["yaroc.utils.container", __name__])
     logging.info(f"Starting SendPunch for MAC {mac_addr}")
 
-    clients = create_clients(container.client_factories)
+    clients = [
+        await c if isinstance(c, asyncio.Future) else c
+        for c in create_clients(container.client_factories)
+    ]
     ps = PunchSender(clients)
-    ps.loop()
+    await ps.loop()
+
+
+asyncio.run(main())
