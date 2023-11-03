@@ -75,8 +75,10 @@ class SIM7020Interface:
             logging.info("SIM7020 is ready")
 
     def __del__(self):
-        mqtt_id = self._detect_mqtt_id()
-        self.mqtt_disconnect(mqtt_id)
+        pass
+        # TODO: reenable
+        # mqtt_id = self._detect_mqtt_id()
+        # self.mqtt_disconnect(mqtt_id)
 
     def power_on(self):
         self.async_at.call("ATE0", timeout=1)
@@ -98,11 +100,11 @@ class SIM7020Interface:
             else:
                 logging.error("Cannot power on the module, press the power button")
 
-    def mqtt_disconnect(self, mqtt_id: int | None):
+    async def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
             self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
 
-    def _detect_mqtt_id(self) -> int | str:
+    async def _detect_mqtt_id(self) -> int | str:
         self._mqtt_id = "Expired MQTT connection"
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
             # If there hasn't been a successful send for a long time, do not trust the detection
@@ -117,8 +119,8 @@ class SIM7020Interface:
     async def mqtt_connect(self):
         if time_since(
             self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
-        ) and isinstance(self._detect_mqtt_id(), str):
-            self._mqtt_connect_internal()
+        ) and isinstance(await self._detect_mqtt_id(), str):
+            await self._mqtt_connect_internal()
             self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, modem_clock: str):
@@ -126,7 +128,7 @@ class SIM7020Interface:
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
-    def _mqtt_connect_internal(self) -> int | str:
+    async def _mqtt_connect_internal(self) -> int | str:
         self.async_at.call("ATE0")
         if isinstance(self._mqtt_id, int):
             return self._mqtt_id
@@ -149,7 +151,7 @@ class SIM7020Interface:
         )
         if response.query is not None:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
-            self.mqtt_disconnect(int(response.query[0]))
+            await self.mqtt_disconnect(int(response.query[0]))
 
         response = self.async_at.call(
             f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,200',
