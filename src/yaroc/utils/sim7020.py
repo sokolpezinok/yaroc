@@ -40,7 +40,7 @@ class SIM7020Interface:
         self._client_name = client_name
         self._connect_timeout = connect_timeout
         self._keepalive = 2 * connect_timeout
-        self._mqtt_id: int | None = None
+        self._mqtt_id: int | str = "Not connected yet"
         self._mqtt_id_timestamp = datetime.now() - timedelta(hours=1)
         self._last_success = datetime.now()
         self._broker_url = broker_url
@@ -102,8 +102,8 @@ class SIM7020Interface:
         if mqtt_id is not None:
             self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
 
-    def _detect_mqtt_id(self) -> int | None:
-        self._mqtt_id = None
+    def _detect_mqtt_id(self) -> int | str:
+        self._mqtt_id = "Expired MQTT connection"
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
@@ -115,11 +115,10 @@ class SIM7020Interface:
             return self._mqtt_id
 
     def mqtt_connect(self):
-        if (
-            time_since(self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout))
-            and self._detect_mqtt_id() is None
-        ):
-            self._mqtt_id = self._mqtt_connect_internal()
+        if time_since(
+            self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
+        ) and isinstance(self._detect_mqtt_id(), str):
+            self._mqtt_connect_internal()
             self._mqtt_id_timestamp = datetime.now()
 
     def set_clock(self, modem_clock: str):
@@ -127,18 +126,18 @@ class SIM7020Interface:
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
-    def _mqtt_connect_internal(self) -> int | None:
+    def _mqtt_connect_internal(self) -> int | str:
         self.async_at.call("ATE0")
-        if self._mqtt_id is not None:
+        if isinstance(self._mqtt_id, int):
             return self._mqtt_id
 
         response = self.async_at.call("AT+CEREG?", "CEREG: [0123],[15]")
         correct = any(line.startswith("+CEREG: 3") for line in response.full_response)
         if not correct:
             self.async_at.call("AT+CEREG=3")
-        if response.query is not None:
-            logging.warning("Not registered yet")
-            return None
+        if response.query is None:
+            self._mqtt_id = "Not registered yet"
+            return self._mqtt_id
 
         response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
         if response.query is not None:
@@ -160,7 +159,8 @@ class SIM7020Interface:
         if response.query is None:
             self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
             time.sleep(10)  # 2 pings, 5 seconds each
-            return None
+            self._mqtt_id = "MQTT connection unsuccessful"
+            return self._mqtt_id
         try:
             mqtt_id = int(response.query[0])
             will_hex = self._will.hex()
@@ -172,19 +172,19 @@ class SIM7020Interface:
             )
             if response.success:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
-                return mqtt_id
+                self._mqtt_id = mqtt_id
             else:
-                logging.error("MQTT connection unsuccessful")
-                return None
+                self._mqtt_id = "MQTT connection unsuccessful"
         except Exception as err:
-            logging.error(f"MQTT connection unsuccessful: {err}")
-            return None
+            self._mqtt_id = f"MQTT connection unsuccessful: {err}"
+
+        return self._mqtt_id
 
     def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
         self.mqtt_connect()
 
-        if self._mqtt_id is None:
-            logging.warning("Not connected, will not send an MQTT message")
+        if isinstance(self._mqtt_id, str):
+            logging.warning(f"Not sending a message, not connected: {self._mqtt_id}")
             if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
