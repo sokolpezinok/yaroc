@@ -148,7 +148,7 @@ class SIM7020MqttClient(Client):
             name,
             connect_timeout,
             # self._handle_registration,
-            (lambda x: None),
+            (lambda x: None),  # TODO: make it work with async
             broker_url,
             broker_port,
         )
@@ -156,24 +156,29 @@ class SIM7020MqttClient(Client):
         self._retries = BackoffBatchedRetries(
             self._send_punches, False, 3.0, 2.0, timedelta(hours=3), batch_count=4
         )
+        self._lock = asyncio.Lock()
 
     async def loop(self):
         await asyncio.sleep(10000000.0)
 
     async def _handle_registration(self, line: str):
-        await self._retries.execute(self._sim7020.mqtt_connect)
+        async with self._lock:
+            await self._sim7020.mqtt_connect()
 
     async def _send_punches(self, punches: list[Punch]) -> list[bool]:
-        punches_proto = Punches()
-        for punch in punches:
-            punches_proto.punches.append(punch)
-        if self._include_sending_timestamp:
-            punches_proto.sending_timestamp.GetCurrentTime()
-        res = self._sim7020.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
-        if isinstance(res, str):
-            logging.error(f"Sending of punches failed: {res}")
-            return [False] * len(punches)
-        return [True] * len(punches)
+        async with self._lock:
+            punches_proto = Punches()
+            for punch in punches:
+                punches_proto.punches.append(punch)
+            if self._include_sending_timestamp:
+                punches_proto.sending_timestamp.GetCurrentTime()
+            res = await self._sim7020.mqtt_send(
+                self.topic_punches, punches_proto.SerializeToString(), qos=1
+            )
+            if isinstance(res, str):
+                logging.error(f"Sending of punches failed: {res}")
+                return [False] * len(punches)
+            return [True] * len(punches)
 
     async def send_punch(
         self,
@@ -193,15 +198,21 @@ class SIM7020MqttClient(Client):
         return await self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        res = await self._retries.execute(self._sim7020.get_signal_info)
-        if res is not None:
-            (dbm, cellid) = res
-            mch.signal_dbm = dbm
-            mch.cellid = cellid
+        async with self._lock:
+            res = await self._sim7020.get_signal_info()
+            if res is not None:
+                (dbm, cellid) = res
+                mch.signal_dbm = dbm
+                mch.cellid = cellid
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
         return await self._send(self.topic_status, status.SerializeToString(), "MiniCallHome")
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
-        return await self._retries.execute(self._sim7020.mqtt_send, topic, message, qos)
+        async with self._lock:
+            res = await self._sim7020.mqtt_send(topic, message, qos)
+            if isinstance(res, str):
+                logging.error("MQTT send failed: {res}")
+                return False
+            return res

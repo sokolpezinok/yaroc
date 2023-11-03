@@ -206,7 +206,7 @@ class FakeSiManager(SiManager):
         return ""
 
     async def punches(self) -> AsyncIterator[SiPunch]:
-        for i in range(1000):
+        for i in range(31, 1000):
             time_start = time.time()
             yield SiPunch(46283, (i + 1) % 1000, datetime.now(), 18)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))

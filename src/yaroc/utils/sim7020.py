@@ -114,7 +114,7 @@ class SIM7020Interface:
         finally:
             return self._mqtt_id
 
-    def mqtt_connect(self):
+    async def mqtt_connect(self):
         if time_since(
             self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
         ) and isinstance(self._detect_mqtt_id(), str):
@@ -181,8 +181,8 @@ class SIM7020Interface:
 
         return self._mqtt_id
 
-    def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool | str:
-        self.mqtt_connect()
+    async def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool | str:
+        await self.mqtt_connect()
 
         if isinstance(self._mqtt_id, str):
             if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
@@ -202,7 +202,7 @@ class SIM7020Interface:
             return True
         return "MQTT send unsuccessful"
 
-    def get_signal_info(self) -> tuple[int, int] | None:
+    async def get_signal_info(self) -> tuple[int, int] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             self.power_on()

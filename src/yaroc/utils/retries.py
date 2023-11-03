@@ -107,10 +107,8 @@ class BackoffBatchedRetries(Generic[A, T]):
     async def _send_and_notify(self):
         messages = []
         async with self._lock:
-            while not self._queue.empty():
+            while not self._queue.empty() and len(messages) < self.batch_count:
                 messages.append(self._queue.get_nowait())
-                if len(messages) >= self.batch_count:
-                    break
             if len(messages) == 0:
                 return ([], [])
 
@@ -159,7 +157,3 @@ class BackoffBatchedRetries(Generic[A, T]):
 
     async def send(self, argument: A) -> Optional[T]:
         return await self._backoff_send(argument)
-
-    async def execute(self, fn, *args):
-        async with self._lock:
-            return fn(*args)
