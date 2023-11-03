@@ -45,22 +45,9 @@ class SIM7020Interface:
         self._broker_port = broker_port
 
         self.async_at = async_at
-        self.power_on()
-        self.async_at.call("ATE0")
-        self.async_at.call("AT+CMEE=2")  # Text error messages
-        self.async_at.call("AT+CREVHEX=1")  # Hex messages
-        self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
-        self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         self.async_at.add_callback("+CLTS: ", self.set_clock)
         self.async_at.add_callback('+CEREG: 1,"', self.mqtt_connect_callback)
         self.async_at.add_callback("+CMQDISCON:", self.mqtt_connect_callback)
-        response = self.async_at.call(
-            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
-        )
-        if not response.success:
-            logging.warning("Can not set APN")
-            return None
-
         status = Status()
         disconnected = Disconnected()
         disconnected.client_name = client_name
@@ -68,16 +55,26 @@ class SIM7020Interface:
         self._will = status.SerializeToString()
         self._will_topic = will_topic
 
-        if not self.async_at.call("AT").success:
-            logging.info("SIM7020 is ready")
-
     def __del__(self):
         pass
         # TODO: reenable
         # mqtt_id = self._detect_mqtt_id()
         # self.mqtt_disconnect(mqtt_id)
 
-    def power_on(self):
+    async def setup(self):
+        await self.power_on()
+        self.async_at.call("ATE0")
+        self.async_at.call("AT+CMEE=2")  # Text error messages
+        self.async_at.call("AT+CREVHEX=1")  # Hex messages
+        self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
+        self.async_at.call("AT+CLTS=1")  # Synchronize time from network
+        response = self.async_at.call(
+            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
+        )
+        if not response.success:
+            logging.warning("Can not set APN")
+
+    async def power_on(self):
         self.async_at.call("ATE0", timeout=1)
         if self.async_at.call("AT", "OK", timeout=1).success:
             logging.info("SIM7020 is powered on")
@@ -207,7 +204,7 @@ class SIM7020Interface:
     async def get_signal_info(self) -> tuple[int, int] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
-            self.power_on()
+            await self.power_on()
         try:
             if response.query is not None:
                 try:

@@ -157,6 +157,8 @@ class SIM7020MqttClient(Client):
         self._lock = asyncio.Lock()
 
     async def loop(self):
+        async with self._lock:
+            await self._sim7020.setup()
         await asyncio.sleep(10000000.0)
 
     async def _send_punches(self, punches: list[Punch]) -> list[bool]:
