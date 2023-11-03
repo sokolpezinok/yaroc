@@ -174,22 +174,22 @@ class SIM7020Interface:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
                 self._mqtt_id = mqtt_id
             else:
+                # TODO: Ping here too
                 self._mqtt_id = "MQTT connection unsuccessful"
         except Exception as err:
             self._mqtt_id = f"MQTT connection unsuccessful: {err}"
 
         return self._mqtt_id
 
-    def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool:
+    def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool | str:
         self.mqtt_connect()
 
         if isinstance(self._mqtt_id, str):
-            logging.warning(f"Not sending a message, not connected: {self._mqtt_id}")
             if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
                 self.async_at.call("AT+CFUN=0", "", timeout=10)
                 self.async_at.call("AT+CFUN=1", "")
                 self._last_success = datetime.now()  # Do not restart too often
-            return False
+            return self._mqtt_id
 
         message_hex = message.hex()
         response = self.async_at.call(
@@ -199,7 +199,8 @@ class SIM7020Interface:
         if response.success:
             self._mqtt_id_timestamp = datetime.now()
             self._last_success = datetime.now()
-        return response.success
+            return True
+        return "MQTT send unsuccessful"
 
     def get_signal_info(self) -> tuple[int, int] | None:
         response = self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])

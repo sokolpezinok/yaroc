@@ -170,7 +170,10 @@ class SIM7020MqttClient(Client):
         if self._include_sending_timestamp:
             punches_proto.sending_timestamp.GetCurrentTime()
         res = self._sim7020.mqtt_send(self.topic_punches, punches_proto.SerializeToString(), qos=1)
-        return [res] * len(punches)
+        if isinstance(res, str):
+            logging.error(f"Sending of punches failed: {res}")
+            return [False] * len(punches)
+        return [True] * len(punches)
 
     async def send_punch(
         self,
