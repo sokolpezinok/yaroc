@@ -12,7 +12,7 @@ from serial_asyncio import open_serial_connection
 
 @dataclass
 class ATResponse:
-    full_response: list[str]
+    full_response: list[str] | str
     query: list[str] | None = None
     success: bool = False
 
@@ -54,7 +54,7 @@ class AsyncATCom:
 
     async def _call_until_with_timeout(
         self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
-    ) -> list[str]:
+    ) -> list[str] | str:
         async with self._lock:
             try:
                 async with asyncio.timeout(timeout):
@@ -62,8 +62,7 @@ class AsyncATCom:
                     self._last_at_response = datetime.now()
                     return result
             except asyncio.TimeoutError:
-                logging.error(f"Timed out: {command}")
-                return []
+                return f"Timed out: {command}"
 
     async def _call_until(self, command: str, last_line: str = "OK|ERROR") -> list[str]:
         """Call until 'last_line' matches"""
@@ -77,7 +76,7 @@ class AsyncATCom:
                     pre_read.append(line)
         except asyncio.TimeoutError:
             if len(pre_read) > 0:
-                logging.info(f"Read {pre_read} at the start")
+                logging.debug(f"Read {pre_read} at the start")
 
         self._writer.write((command + "\r\n").encode("utf-8"))
         regex = re.compile(last_line)
@@ -111,6 +110,9 @@ class AsyncATCom:
             self._call_until_with_timeout(command, timeout), self._loop
         ).result()
         res = ATResponse(full_response)
+        if isinstance(full_response, str):
+            logging.error(f"{command} failed: {full_response}")
+            return res
         logging.debug(f"{command} {full_response}")
         if len(res.full_response) == 0 or res.full_response[-1] == "ERROR":
             return res
