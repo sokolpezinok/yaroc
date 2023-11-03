@@ -160,12 +160,12 @@ class SIM7020MqttClient(Client):
         await asyncio.sleep(10000000.0)
 
     async def _send_punches(self, punches: list[Punch]) -> list[bool]:
+        punches_proto = Punches()
+        for punch in punches:
+            punches_proto.punches.append(punch)
+        if self._include_sending_timestamp:
+            punches_proto.sending_timestamp.GetCurrentTime()
         async with self._lock:
-            punches_proto = Punches()
-            for punch in punches:
-                punches_proto.punches.append(punch)
-            if self._include_sending_timestamp:
-                punches_proto.sending_timestamp.GetCurrentTime()
             res = await self._sim7020.mqtt_send(
                 self.topic_punches, punches_proto.SerializeToString(), qos=1
             )
@@ -207,6 +207,6 @@ class SIM7020MqttClient(Client):
         async with self._lock:
             res = await self._sim7020.mqtt_send(topic, message, qos)
             if isinstance(res, str):
-                logging.error("MQTT send failed: {res}")
+                logging.error(f"MQTT sending of {message_type} failed: {res}")
                 return False
             return res
