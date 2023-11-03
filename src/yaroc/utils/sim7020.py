@@ -3,7 +3,6 @@ import shlex
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Callable
 
 from ..pb.status_pb2 import Disconnected, Status
 from ..utils.sys_info import is_raspberrypi, is_time_off
@@ -33,7 +32,6 @@ class SIM7020Interface:
         will_topic: str,
         client_name: str,
         connect_timeout: float,
-        connection_callback: Callable[[str], None],
         broker_url: str,
         broker_port: int,
     ):
@@ -54,9 +52,8 @@ class SIM7020Interface:
         self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
         self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         self.async_at.add_callback("+CLTS: ", self.set_clock)
-        self.async_at.add_callback("+CPIN", lambda x: None)
-        self.async_at.add_callback('+CEREG: 1,"', connection_callback)
-        self.async_at.add_callback("+CMQDISCON:", connection_callback)
+        self.async_at.add_callback('+CEREG: 1,"', self.mqtt_connect_callback)
+        self.async_at.add_callback("+CMQDISCON:", self.mqtt_connect_callback)
         response = self.async_at.call(
             'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
         )
@@ -116,6 +113,9 @@ class SIM7020Interface:
         finally:
             return self._mqtt_id
 
+    async def mqtt_connect_callback(self, s: str):
+        self.mqtt_connect()
+
     async def mqtt_connect(self):
         if time_since(
             self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
@@ -123,7 +123,7 @@ class SIM7020Interface:
             await self._mqtt_connect_internal()
             self._mqtt_id_timestamp = datetime.now()
 
-    def set_clock(self, modem_clock: str):
+    async def set_clock(self, modem_clock: str):
         tim = is_time_off(modem_clock, datetime.now(timezone.utc))
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
@@ -143,7 +143,7 @@ class SIM7020Interface:
 
         response = self.async_at.call("AT+CCLK?", "CCLK: (.*)")
         if response.query is not None:
-            self.set_clock(response.query[0])
+            await self.set_clock(response.query[0])
 
         response = self.async_at.call(
             "AT+CMQNEW?",

@@ -5,7 +5,7 @@ import re
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Dict, List, Tuple
+from typing import Awaitable, Callable, Dict, List, Tuple
 
 from serial_asyncio import open_serial_connection
 
@@ -17,16 +17,17 @@ class ATResponse:
     success: bool = False
 
 
+Callback = Callable[[str], Awaitable[None]]
+Coroutines = list[Awaitable[None]]
+
+
 class AsyncATCom:
     def __init__(
         self, reader: StreamReader, writer: StreamWriter, async_loop: asyncio.AbstractEventLoop
     ):
-        self.callbacks: Dict[str, Callable[[str], None]] = {}
-        self.add_callback("+CLTS", lambda x: None)
-        self.add_callback("+CPIN", lambda x: None)
+        self.callbacks: Dict[str, Callback] = {}
         self.delay = 0.05  # TODO: make configurable
 
-        self._lock = asyncio.Lock()
         self._reader = reader
         self._writer = writer
         self._loop = async_loop
@@ -40,10 +41,10 @@ class AsyncATCom:
         reader, writer = asyncio.run_coroutine_threadsafe(open_port(port), async_loop).result()
         return AsyncATCom(reader, writer, async_loop)
 
-    def add_callback(self, prefix: str, fn: Callable[[str], None]):
+    def add_callback(self, prefix: str, fn: Callback):
         self.callbacks[prefix] = fn
 
-    def match_callback(self, line: str) -> tuple[Callable[[str], None], str] | None:
+    def match_callback(self, line: str) -> tuple[Callback, str] | None:
         for prefix, callback in self.callbacks.items():
             if line.startswith(prefix):
                 return callback, line[len(prefix) :]
@@ -54,17 +55,18 @@ class AsyncATCom:
 
     async def _call_until_with_timeout(
         self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
-    ) -> list[str] | str:
-        async with self._lock:
-            try:
-                async with asyncio.timeout(timeout):
-                    result = await self._call_until(command, last_line)
-                    self._last_at_response = datetime.now()
-                    return result
-            except asyncio.TimeoutError:
-                return f"Timed out: {command}"
+    ) -> tuple[list[str], Coroutines] | tuple[str, []]:
+        try:
+            async with asyncio.timeout(timeout):
+                result, coroutines = await self._call_until(command, last_line)
+                self._last_at_response = datetime.now()
+                return result, coroutines
+        except asyncio.TimeoutError:
+            return "Timed out", []
 
-    async def _call_until(self, command: str, last_line: str = "OK|ERROR") -> list[str]:
+    async def _call_until(
+        self, command: str, last_line: str = "OK|ERROR"
+    ) -> tuple[list[str], Coroutines]:
         """Call until 'last_line' matches"""
         pre_read = []
         try:
@@ -90,14 +92,15 @@ class AsyncATCom:
             if regex.match(line):
                 break
 
+        coroutines = []
         for line in itertools.chain(pre_read, full_response):
             ret = self.match_callback(line)
             if ret is not None:
                 callback, rest = ret
-                callback(rest)
+                coroutines.append(callback(rest))
                 continue
 
-        return full_response
+        return full_response, coroutines
 
     def call(
         self,
@@ -106,15 +109,16 @@ class AsyncATCom:
         fields: List[int] = [],
         timeout: float = 20,
     ) -> ATResponse:
-        full_response = asyncio.run_coroutine_threadsafe(
+        full_response, coroutines = asyncio.run_coroutine_threadsafe(
             self._call_until_with_timeout(command, timeout), self._loop
         ).result()
+        # TODO: do something with the returned coroutines
         res = ATResponse(full_response)
         if isinstance(full_response, str):
             logging.error(f"{command} failed: {full_response}")
             return res
         logging.debug(f"{command} {full_response}")
-        if len(res.full_response) == 0 or res.full_response[-1] == "ERROR":
+        if res.full_response[-1] == "ERROR":
             return res
         if match is None:
             res.success = True

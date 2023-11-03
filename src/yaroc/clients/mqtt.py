@@ -147,8 +147,6 @@ class SIM7020MqttClient(Client):
             self.topic_status,
             name,
             connect_timeout,
-            # self._handle_registration,
-            (lambda x: None),  # TODO: make it work with async
             broker_url,
             broker_port,
         )
@@ -160,10 +158,6 @@ class SIM7020MqttClient(Client):
 
     async def loop(self):
         await asyncio.sleep(10000000.0)
-
-    async def _handle_registration(self, line: str):
-        async with self._lock:
-            await self._sim7020.mqtt_connect()
 
     async def _send_punches(self, punches: list[Punch]) -> list[bool]:
         async with self._lock:
