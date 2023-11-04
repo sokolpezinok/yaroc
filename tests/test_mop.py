@@ -12,13 +12,14 @@ TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <cls id="1" ord="10" radio="74,100074,200074">A</cls>
   <cls id="2" ord="40" radio="74">C</cls>
   <org id="22" nat="SVK">Klub OB Sokol Pezinok</org>
+  <org id="22" nat="SVK">Hadveo Banská Bystric</org>
   <cmp id="10" card="2078195">
     <base org="22" cls="2" stat="1" st="360000" rt="29800" bib="47">Sara Doe</base>
     <radio>74,25220</radio>
     <input it="0" tstat="1" />
   </cmp>
   <cmp id="11" card="2111071">
-    <base org="22" cls="2" stat="20" st="-1" rt="0">John Doe</base>
+    <base org="47" cls="2" stat="20" st="-1" rt="0">John Doe</base>
     <input it="0" tstat="1" />
   </cmp>
   <cmp id="12" card="2211361">
@@ -36,16 +37,16 @@ class TestMeos(unittest.TestCase):
         competitors = MopClient._competitors_from_meos_xml(xml)
         self.assertEqual(
             competitors[0],
-            MeosCompetitor(name="Sara Doe", card=2078195, bib=47, id=10),
+            MeosCompetitor(name="Sara Doe", club=22, card=2078195, bib=47, id=10),
         )
         self.assertEqual(
             competitors[1],
-            MeosCompetitor(name="John Doe", card=2111071, bib=None, id=11),
+            MeosCompetitor(name="John Doe", club=47, card=2111071, bib=None, id=11),
         )
 
     def test_result_to_xml(self):
         result = MeosResult(
-            competitor=MeosCompetitor(name="Sara Doe", card=2078, bib=47, id=7),
+            competitor=MeosCompetitor(name="Sara Doe", club=47, card=2078, bib=47, id=7),
             category=MeosCategory(name="C", id="2"),
             stat=1,
             start=timedelta(hours=10),
@@ -54,7 +55,7 @@ class TestMeos(unittest.TestCase):
         self.assertEqual(
             ET.tostring(MopClient._result_to_xml(result)),
             (
-                b'<cmp card="2078" id="7"><base org="22" st="360000" rt="29800" cls="2" stat="1">'
+                b'<cmp card="2078" id="7"><base org="47" st="360000" rt="29800" cls="2" stat="1">'
                 b"Sara Doe</base></cmp>"
             ),
         )
@@ -66,7 +67,7 @@ class TestMeos(unittest.TestCase):
         self.assertEqual(
             results[0],
             MeosResult(
-                competitor=MeosCompetitor(name="Sara Doe", card=2078195, bib=47, id=10),
+                competitor=MeosCompetitor(name="Sara Doe", card=2078195, club=22, bib=47, id=10),
                 category=MeosCategory(name="C", id="2"),
                 stat=1,
                 start=timedelta(hours=10),
@@ -76,7 +77,7 @@ class TestMeos(unittest.TestCase):
         self.assertEqual(
             results[1],
             MeosResult(
-                competitor=MeosCompetitor(name="John Doe", card=2111071, bib=None, id=11),
+                competitor=MeosCompetitor(name="John Doe", card=2111071, club=47, bib=None, id=11),
                 category=MeosCategory(name="C", id="2"),
                 stat=20,
                 start=None,
@@ -86,7 +87,7 @@ class TestMeos(unittest.TestCase):
         self.assertEqual(
             results[2],
             MeosResult(
-                competitor=MeosCompetitor(name="Ronald Doe", card=2211361, bib=83, id=12),
+                competitor=MeosCompetitor(name="Ronald Doe", card=2211361, club=22, bib=83, id=12),
                 category=MeosCategory(name="C", id="2"),
                 stat=4,
                 start=timedelta(hours=10, minutes=25),
@@ -96,7 +97,7 @@ class TestMeos(unittest.TestCase):
 
     def test_update_result(self):
         result = MeosResult(
-            competitor=MeosCompetitor(name="Sara Doe", card=2078, bib=47, id=7),
+            competitor=MeosCompetitor(name="Sara Doe", card=2078, club=22, bib=47, id=7),
             category=MeosCategory(name="C", id="2"),
             stat=0,
             start=timedelta(hours=10, minutes=3),
@@ -108,7 +109,7 @@ class TestMeos(unittest.TestCase):
 
     def test_update_result_no_start(self):
         result = MeosResult(
-            competitor=MeosCompetitor(name="Sara Doe", card=2078, bib=47, id=7),
+            competitor=MeosCompetitor(name="Sara Doe", card=2078, club=22, bib=47, id=7),
             category=MeosCategory(name="C", id="2"),
             stat=0,
             start=None,

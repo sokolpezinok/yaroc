@@ -20,6 +20,7 @@ class MeosCategory:
 @dataclass
 class MeosCompetitor:
     name: str
+    club: int | None
     card: int | None
     bib: int | None
     id: int | None
@@ -61,7 +62,8 @@ class MopClient:
         card, bib = MopClient._parse_int(cmp.get("card")), MopClient._parse_int(base.get("bib"))
         id = MopClient._parse_int(cmp.get("id"))
         name = "" if base.text is None else base.text
-        return MeosCompetitor(name=name, card=card, bib=bib, id=id)
+        club = MopClient._parse_int(base.get("org"))
+        return MeosCompetitor(name=name, club=club, card=card, bib=bib, id=id)
 
     @staticmethod
     def _results_from_meos_xml(xml: ET.Element) -> List[MeosResult]:
@@ -128,9 +130,10 @@ class MopClient:
         st = "-1" if result.start is None else str(result.start.seconds * 10)
         rt = "0" if result.time is None else str(result.time.seconds * 10)
         cls = str(result.category.id)
+        org = "0" if competitor.club is None else str(competitor.club)
         base = ET.Element(
             "base",
-            {"org": "22", "st": st, "rt": rt, "cls": cls, "stat": str(result.stat)},
+            {"org": org, "st": st, "rt": rt, "cls": cls, "stat": str(result.stat)},
         )
         base.text = competitor.name
         root.append(base)
