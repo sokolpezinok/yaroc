@@ -51,14 +51,14 @@ class AsyncATCom:
 
     async def _call_until_with_timeout(
         self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
-    ) -> tuple[list[str], Coroutines] | tuple[str, []]:
+    ) -> tuple[list[str], Coroutines] | str:
         try:
             async with asyncio.timeout(timeout):
                 result, coroutines = await self._call_until(command, last_line)
                 self._last_at_response = datetime.now()
                 return result, coroutines
         except asyncio.TimeoutError:
-            return "Timed out", []
+            return "Timed out"
 
     async def _call_until(
         self, command: str, last_line: str = "OK|ERROR"
@@ -106,12 +106,13 @@ class AsyncATCom:
         timeout: float = 20,
     ) -> ATResponse:
         async with self._lock:
-            full_response, coroutines = await self._call_until_with_timeout(command, timeout)
-        # TODO: do something with the returned coroutines
+            ret = await self._call_until_with_timeout(command, timeout)
+            if isinstance(ret, str):
+                logging.error(f"{command} failed: {ret}")
+                return ATResponse("")
+            full_response, coroutines = ret
+            # TODO: do something with the returned coroutines
         res = ATResponse(full_response)
-        if isinstance(full_response, str):
-            logging.error(f"{command} failed: {full_response}")
-            return res
         logging.debug(f"{command} {full_response}")
         if res.full_response[-1] == "ERROR":
             return res

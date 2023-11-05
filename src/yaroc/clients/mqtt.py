@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import random
+from asyncio import Lock
 from datetime import datetime, timedelta
 from typing import Tuple
-from asyncio import Lock
 
 from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError

@@ -105,7 +105,9 @@ class SIM7020Interface:
             # If there hasn't been a successful send for a long time, do not trust the detection
             return self._mqtt_id
         try:
-            response = await self.async_at.call("AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"')
+            response = await self.async_at.call(
+                "AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"'
+            )
             if response.query is not None:
                 self._mqtt_id = int(response.query[0])
         finally:
