@@ -196,7 +196,9 @@ class MopClient:
 
         try:
             async with self.client.post(
-                "https://api.oresults.eu/meos", data=ET.tostring(root), headers=headers
+                "https://api.oresults.eu/meos",
+                data=ET.tostring(root, encoding="utf-8"),
+                headers=headers,
             ) as response:
                 if response.status == 200:
                     logging.info("Sending to OResults successful")
