@@ -126,7 +126,7 @@ class MopClient:
     @staticmethod
     def _result_to_xml(result: MeosResult) -> ET.Element:
         competitor = result.competitor
-        root = ET.Element("cmp", {"card": str(result.competitor.card), "id": str(competitor.id)})
+        root = ET.Element("cmp", {"id": str(competitor.id)})
         st = "-1" if result.start is None else str(result.start.seconds * 10)
         rt = "0" if result.time is None else str(result.time.seconds * 10)
         cls = str(result.category.id)

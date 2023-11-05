@@ -55,7 +55,7 @@ class TestMeos(unittest.TestCase):
         self.assertEqual(
             ET.tostring(MopClient._result_to_xml(result)),
             (
-                b'<cmp card="2078" id="7"><base org="47" st="360000" rt="29800" cls="2" stat="1">'
+                b'<cmp id="7"><base org="47" st="360000" rt="29800" cls="2" stat="1">'
                 b"Sara Doe</base></cmp>"
             ),
         )
