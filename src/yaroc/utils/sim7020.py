@@ -130,6 +130,9 @@ class SIM7020Interface:
         if tim is not None:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
+    async def ping(self):
+        await self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
+
     async def _mqtt_connect_internal(self) -> int | str:
         await self.async_at.call("ATE0")
         if isinstance(self._mqtt_id, int):
@@ -161,8 +164,7 @@ class SIM7020Interface:
             timeout=150,  # Timeout is very long for this command
         )
         if response.query is None:
-            await self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
-            time.sleep(10)  # 2 pings, 5 seconds each
+            await self.ping()
             self._mqtt_id = "MQTT connection unsuccessful"
             return self._mqtt_id
         try:
@@ -178,7 +180,7 @@ class SIM7020Interface:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
                 self._mqtt_id = mqtt_id
             else:
-                # TODO: Ping here too
+                await self.ping()
                 self._mqtt_id = "MQTT connection unsuccessful"
         except Exception as err:
             self._mqtt_id = f"MQTT connection unsuccessful: {err}"
