@@ -35,7 +35,7 @@ class MqttForwader:
         elif isinstance(payload, str):
             return payload.encode("utf-8")
         else:
-            return bytes()  # TODO: indicate error
+            raise TypeError("Unexpected type of a message payload")
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
