@@ -102,7 +102,9 @@ class SIM7020Interface:
     async def _detect_mqtt_id(self) -> int | str:
         self._mqtt_id = "Expired MQTT connection"
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
-            # If there hasn't been a successful send for a long time, do not trust the detection
+            logging.warn(
+                "Too long since a successful send, ignore modem's claim about being connected"
+            )
             return self._mqtt_id
         try:
             response = await self.async_at.call(
@@ -183,14 +185,18 @@ class SIM7020Interface:
 
         return self._mqtt_id
 
+    async def restart_modem(self):
+        await self.async_at.call("AT+CFUN=0", "", timeout=10)
+        await self.async_at.call("AT+CFUN=1", "")
+        self._last_success = datetime.now()  # Do not restart too often
+
     async def mqtt_send(self, topic: str, message: bytes, qos: int = 0) -> bool | str:
         await self.mqtt_connect()
 
         if isinstance(self._mqtt_id, str):
-            if time_since(self._last_success, RESTART_TIME):  # TODO: wrap into a function
-                await self.async_at.call("AT+CFUN=0", "", timeout=10)
-                await self.async_at.call("AT+CFUN=1", "")
-                self._last_success = datetime.now()  # Do not restart too often
+            if time_since(self._last_success, RESTART_TIME):
+                logging.info("Too long since the last successful MQTT send, restarting modem")
+                self.restart_modem()
             return self._mqtt_id
 
         message_hex = message.hex()
