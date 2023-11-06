@@ -114,7 +114,7 @@ class SIM7020Interface:
             return self._mqtt_id
 
     async def mqtt_connect_callback(self, s: str):
-        self.mqtt_connect()
+        await self.mqtt_connect()
 
     async def mqtt_connect(self):
         if time_since(

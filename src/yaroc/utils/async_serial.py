@@ -111,9 +111,11 @@ class AsyncATCom:
                 logging.error(f"{command} failed: {ret}")
                 return ATResponse("")
             full_response, coroutines = ret
-            # TODO: do something with the returned coroutines
         res = ATResponse(full_response)
         logging.debug(f"{command} {full_response}")
+        for coro in coroutines:
+            await coro
+
         if res.full_response[-1] == "ERROR":
             return res
         if match is None:
