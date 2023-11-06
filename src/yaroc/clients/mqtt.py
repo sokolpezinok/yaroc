@@ -49,7 +49,6 @@ class MqttClient(Client):
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
-        self.mm = ModemManager()
 
         disconnected = Disconnected()
         disconnected.client_name = self.name
@@ -115,6 +114,7 @@ class MqttClient(Client):
             return False
 
     async def loop(self):
+        self.mm = await ModemManager.new()
         while True:
             try:
                 async with self.client:

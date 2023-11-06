@@ -1,10 +1,10 @@
 import logging
 from enum import Enum
+from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
+from typing import Any
 
-from gi.repository import GLib
-from pydbus import SystemBus
-
-MODEM_MANAGER = ".ModemManager1"
+MODEM_MANAGER = "org.freedesktop.ModemManager1"
 
 
 class SmsState(Enum):
@@ -21,7 +21,7 @@ class SmsState(Enum):
 
 class NetworkType:
     Unknown = 0
-    Nbiot = 1
+    NbIot = 1
     Gsm = 2
     Umts = 3
     Lte = 4
@@ -29,54 +29,73 @@ class NetworkType:
 
 
 class ModemManager:
-    def __init__(self):
-        self.bus = SystemBus()
+    def __init__(self, bus: MessageBus, modem_manager, introspection):
+        self.bus = bus
+        self.mm = modem_manager
+        self.introspection = introspection
+
+    @staticmethod
+    async def new():
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         MODEM_MANAGER_PATH = "/org/freedesktop/ModemManager1"
-        self.modem_manager = self.bus.get(MODEM_MANAGER, MODEM_MANAGER_PATH)
+        introspection = await bus.introspect(MODEM_MANAGER, MODEM_MANAGER_PATH)
+        mm = bus.get_proxy_object(MODEM_MANAGER, MODEM_MANAGER_PATH, introspection)
+        return ModemManager(bus, mm, introspection)
 
-    def get_modems(self) -> list[str]:
-        # TODO: add filtering options
-        return list(self.modem_manager.GetManagedObjects())
+    async def get_modems(self) -> list[str]:
+        method = self.mm.get_interface("org.freedesktop.DBus.ObjectManager")
+        return list((await method.call_get_managed_objects()).keys())
 
-    def enable(self, modem_path: str):
-        modem = self.bus.get(MODEM_MANAGER, modem_path)
-        modem.Enable(True)
+    async def get_modem_interface(self, modem_path, method) -> Any:
+        introspection = await self.bus.introspect(MODEM_MANAGER, modem_path)
+        modem = self.bus.get_proxy_object(MODEM_MANAGER, modem_path, introspection)
+        return modem.get_interface(method)
 
-    def create_sms(self, modem_path: str, number: str, text: str) -> str:
-        modem = self.bus.get(MODEM_MANAGER, modem_path)
-        sms_path = modem.Create(
-            {
-                "text": GLib.Variant("s", text),
-                "number": GLib.Variant("s", number),
-            }
+    async def enable(self, modem_path: str):
+        interface = await self.get_modem_interface(
+            modem_path, "org.freedesktop.ModemManager1.Modem"
         )
-        return sms_path
+        await interface.call_enable(True)
 
-    def send_sms(self, sms_path: str) -> bool:
-        try:
-            sms = self.bus.get(MODEM_MANAGER, sms_path)
-            sms.Send()
-            return True
-        except Exception as err:
-            logging.error(err)
-            return False
+    # def create_sms(self, modem_path: str, number: str, text: str) -> str:
+    #     modem = self.bus.get(MODEM_MANAGER, modem_path)
+    #     sms_path = modem.Create(
+    #         {
+    #             "text": GLib.Variant("s", text),
+    #             "number": GLib.Variant("s", number),
+    #         }
+    #     )
+    #     return sms_path
+    #
+    # def send_sms(self, sms_path: str) -> bool:
+    #     try:
+    #         sms = self.bus.get(MODEM_MANAGER, sms_path)
+    #         sms.Send()
+    #         return True
+    #     except Exception as err:
+    #         logging.error(err)
+    #         return False
+    #
+    # def sms_state(self, sms_path: str) -> SmsState:
+    #     sms = self.bus.get(MODEM_MANAGER, sms_path)
+    #     return SmsState(sms.State)
 
-    def sms_state(self, sms_path: str) -> SmsState:
-        sms = self.bus.get(MODEM_MANAGER, sms_path)
-        return SmsState(sms.State)
+    async def signal_setup(self, modem_path: str, rate_secs: int):
+        interface = await self.get_modem_interface(
+            modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
+        )
+        await interface.call_setup(rate_secs)
 
-    def signal_setup(self, modem_path: str, rate_secs: int):
-        modem = self.bus.get(MODEM_MANAGER, modem_path)
-        modem["org.freedesktop.ModemManager1.Modem.Signal"].Setup(rate_secs)
+    async def get_signal(self, modem_path: str) -> tuple[float, int]:
+        interface = await self.get_modem_interface(
+            modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
+        )
+        lte = await interface.get_lte()
+        if 'rssi' in lte:
+            return (lte['rssi'].value, NetworkType.Lte)
+        umts = await interface.get_umts()
+        if 'rssi' in umts:
+            return (umts['rssi'].value, NetworkType.Umts)
 
-    def get_signal(self, modem_path: str) -> tuple[float, int]:
-        modem = self.bus.get(MODEM_MANAGER, modem_path)
-        # TODO: Do this nicer, without try/except
-        try:
-            return (modem.Lte["rssi"], NetworkType.Lte)
-        except Exception:
-            try:
-                return (modem.Umts["rssi"], NetworkType.Umts)
-            except Exception:
-                logging.error("Error getting signal")
-                return (0.0, NetworkType.Unknown)
+        logging.error("Error getting signal")
+        return (0.0, NetworkType.Unknown)
