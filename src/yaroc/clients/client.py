@@ -48,9 +48,9 @@ class ClientGroup:
         handles = [client.send_mini_call_home(mch) for client in self.clients]
         return await asyncio.gather(*handles)
 
-    async def send_punch(self, punch: SiPunch) -> list[bool]:
+    async def send_punch(self, punch: SiPunch, process_time: datetime | None = None) -> list[bool]:
         handles = [
-            client.send_punch(punch.card, punch.time, punch.code, punch.mode)
+            client.send_punch(punch.card, punch.time, punch.code, punch.mode, process_time)
             for client in self.clients
         ]
         return await asyncio.gather(*handles)

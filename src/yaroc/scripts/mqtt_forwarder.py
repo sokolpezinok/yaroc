@@ -10,19 +10,20 @@ from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ..clients.client import Client
+from ..clients.client import ClientGroup
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 from ..utils.container import Container, create_clients
+from ..utils.si import SiPunch
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
 
 
 class MqttForwader:
-    def __init__(self, clients: Dict[str, list[Client]], dns: Dict[str, str]):
-        self.clients = clients
+    def __init__(self, client_groups: Dict[str, ClientGroup], dns: Dict[str, str]):
+        self.client_groups = client_groups
         self.dns = dns
 
     @staticmethod
@@ -67,11 +68,8 @@ class MqttForwader:
             log_message += f", {self.dns[mac_addr]}"
 
             logging.info(log_message)
-            handles = [
-                client.send_punch(punch.card, si_time, punch.code, punch.mode, process_time)
-                for client in self.clients[mac_addr]
-            ]
-            await asyncio.gather(*handles)
+            si_punch = SiPunch(punch.card, punch.code, si_time, punch.mode)
+            await self.client_groups[mac_addr].send_punch(si_punch, process_time)
 
     def _handle_coords(self, payload: PayloadType, now: datetime):
         coords = Coordinates.FromString(MqttForwader._payload_to_bytes(payload))
@@ -108,8 +106,7 @@ class MqttForwader:
                 log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
-            handles = [client.send_mini_call_home(mch) for client in self.clients[mac_addr]]
-            await asyncio.gather(*handles)
+            await self.client_groups[mac_addr].send_mini_call_home(mch)
 
     async def _on_message(self, msg: Message):
         now = datetime.now().astimezone()
@@ -134,9 +131,8 @@ class MqttForwader:
 
     async def loop(self):
         async_loop = asyncio.get_event_loop()
-        for clients in self.clients.values():
-            for client in clients:
-                asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
+        for client_group in self.client_groups.values():
+            asyncio.run_coroutine_threadsafe(client_group.loop(), async_loop)
 
         while True:
             try:
@@ -148,7 +144,7 @@ class MqttForwader:
                 ) as client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with client.messages() as messages:
-                        for mac_addr in self.clients.keys():
+                        for mac_addr in self.client_groups.keys():
                             await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
                         async for message in messages:
                             await self._on_message(message)
@@ -168,14 +164,14 @@ def main():
     container.init_resources()
     container.wire(modules=["yaroc.utils.container"])
 
-    client_map = {}
+    client_groups = {}
     dns = {}
     for name, mac_address in config["mac-addresses"].items():
         clients = create_clients(container.client_factories, mac_address=mac_address)
         if len(clients) == 0:
             logging.info(f"Listening to {name}/{mac_address} without forwarding")
-        client_map[str(mac_address)] = clients
+        client_groups[str(mac_address)] = ClientGroup(clients)
         dns[str(mac_address)] = name
 
-    forwarder = MqttForwader(client_map, dns)
+    forwarder = MqttForwader(client_groups, dns)
     asyncio.run(forwarder.loop())
