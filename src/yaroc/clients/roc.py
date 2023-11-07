@@ -38,6 +38,11 @@ class RocClient(Client):
         process_time: datetime | None = None,
     ) -> bool:
         def length(x: int):
+            if x == 0:
+                return 1
+            if x < 0:
+                return length(-x) + 1
+
             return int(math.log10(x)) + 1
 
         if process_time is None:
