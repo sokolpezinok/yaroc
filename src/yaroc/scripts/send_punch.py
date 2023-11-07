@@ -5,7 +5,7 @@ import tomllib
 
 from dependency_injector.wiring import Provide, inject
 
-from ..clients.client import Client
+from ..clients.client import Client, ClientGroup
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.container import Container, create_clients
 from ..utils.si import SiManager
@@ -19,7 +19,7 @@ class PunchSender:
     ):
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
-        self.clients = clients
+        self.client_group = ClientGroup(clients)
         self.si_manager = si_manager
         self._mch_interval = 20
 
@@ -29,16 +29,14 @@ class PunchSender:
             time_start = time.time()
             mini_call_home = create_sys_minicallhome()
             mini_call_home.codes = str(self.si_manager)
-            await self.send_mini_call_home(mini_call_home)
+            await self.client_group.send_mini_call_home(mini_call_home)
             await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
-            handles = [
-                client.send_punch(si_punch.card, si_punch.time, si_punch.code, si_punch.mode)
-                for client in self.clients
-            ]
-            await asyncio.gather(*handles)
+            await self.client_group.send_punch(
+                si_punch.card, si_punch.time, si_punch.code, si_punch.mode
+            )
 
     async def udev_events(self):
         async for device in self.si_manager.udev_events():
@@ -49,19 +47,14 @@ class PunchSender:
                 mch.codes = f"siadded-{device_name}"
             else:
                 mch.codes = f"siremoved-{device_name}"
-            await self.send_mini_call_home(mch)
-
-    async def send_mini_call_home(self, mch: MiniCallHome):
-        handles = [client.send_mini_call_home(mch) for client in self.clients]
-        await asyncio.gather(*handles)
+            await self.client_group.send_mini_call_home(mch)
 
     async def loop(self):
-        async_loop = asyncio.get_event_loop()
-        for client in self.clients:
-            asyncio.run_coroutine_threadsafe(client.loop(), async_loop)
-
         await asyncio.gather(
-            self.periodic_mini_call_home(), self.send_punches(), self.udev_events()
+            self.periodic_mini_call_home(),
+            self.send_punches(),
+            self.udev_events(),
+            self.client_group.loop(),
         )
 
 

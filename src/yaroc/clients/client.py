@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
+import asyncio
 from datetime import datetime
 
 from ..pb.status_pb2 import MiniCallHome
+from ..utils.si import SiPunch
 
 
 class Client(ABC):
@@ -32,3 +34,23 @@ class Client(ABC):
     @abstractmethod
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         pass
+
+
+class ClientGroup:
+    def __init__(self, clients: list[Client]):
+        self.clients = clients
+
+    async def loop(self):
+        loops = [client.loop() for client in self.clients]
+        await asyncio.gather(*loops)
+
+    async def send_mini_call_home(self, mch: MiniCallHome) -> list[bool]:
+        handles = [client.send_mini_call_home(mch) for client in self.clients]
+        return await asyncio.gather(*handles)
+
+    async def send_punch(self, punch: SiPunch) -> list[bool]:
+        handles = [
+            client.send_punch(punch.card, punch.time, punch.code, punch.mode)
+            for client in self.clients
+        ]
+        return await asyncio.gather(*handles)
