@@ -151,6 +151,10 @@ class MqttForwader:
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
                 await asyncio.sleep(5.0)
+            except asyncio.exceptions.CancelledError:
+                logging.error("Interrupted, exiting")
+                import sys
+                sys.exit(0)
 
 
 def main():
