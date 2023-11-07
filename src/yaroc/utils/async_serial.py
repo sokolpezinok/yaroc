@@ -33,9 +33,12 @@ class AsyncATCom:
 
     @staticmethod
     async def from_port(port: str):
-        async with asyncio.timeout(10):
-            reader, writer = await open_serial_connection(url=port, baudrate=115200, rtscts=False)
-            return AsyncATCom(reader, writer)
+        try:
+            async with asyncio.timeout(10):
+                reader, writer = await open_serial_connection(url=port, baudrate=115200, rtscts=False)
+                return AsyncATCom(reader, writer)
+        except Exception as e:
+            logging.error(e)
 
     def add_callback(self, prefix: str, fn: Callback):
         self.callbacks[prefix] = fn

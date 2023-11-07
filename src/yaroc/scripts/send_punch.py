@@ -24,6 +24,7 @@ class PunchSender:
         self._mch_interval = 20
 
     async def periodic_mini_call_home(self):
+        await asyncio.sleep(5.0)
         while True:
             time_start = time.time()
             mini_call_home = create_sys_minicallhome()
@@ -52,11 +53,7 @@ class PunchSender:
 
     async def send_mini_call_home(self, mch: MiniCallHome):
         handles = [client.send_mini_call_home(mch) for client in self.clients]
-        res = await asyncio.gather(*handles)
-        if all(res):
-            logging.info("MiniCallHome sent")
-        else:
-            logging.error("MiniCallHome not sent")
+        await asyncio.gather(*handles)
 
     async def loop(self):
         async_loop = asyncio.get_event_loop()

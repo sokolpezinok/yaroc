@@ -107,7 +107,6 @@ class MqttClient(Client):
     async def _send(self, topic: str, msg: bytes, qos: int) -> bool:
         try:
             await self.client.publish(topic, payload=msg, qos=qos)
-            logging.info("Message sent")
             return True
         except MqttCodeError as e:
             logging.error(f"Message not sent: {e}")
