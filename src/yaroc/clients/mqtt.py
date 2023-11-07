@@ -82,11 +82,11 @@ class MqttClient(Client):
         punches = Punches()
         punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
         punches.sending_timestamp.GetCurrentTime()
-        return await self._send(self.topic_punches, punches.SerializeToString(), qos=1)
+        return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
 
     async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> bool:
         coords = create_coords_proto(lat, lon, alt, timestamp)
-        return await self._send(self.topic_coords, coords.SerializeToString(), qos=0)
+        return await self._send(self.topic_coords, coords.SerializeToString(), 0, "Coordinates")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         try:
@@ -102,14 +102,15 @@ class MqttClient(Client):
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return await self._send(self.topic_status, status.SerializeToString(), qos=0)
+        return await self._send(self.topic_status, status.SerializeToString(), 0, "MiniCallHome")
 
-    async def _send(self, topic: str, msg: bytes, qos: int) -> bool:
+    async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
             await self.client.publish(topic, payload=msg, qos=qos)
+            logging.info(f"{message_type} sent via MQTT")
             return True
         except MqttCodeError as e:
-            logging.error(f"Message not sent: {e}")
+            logging.error(f"{message_type} not sent: {e}")
             return False
 
     async def loop(self):
