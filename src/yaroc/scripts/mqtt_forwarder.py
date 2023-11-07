@@ -21,8 +21,9 @@ BROKER_PORT = 1883
 
 
 class MqttForwader:
-    def __init__(self, clients: Dict[str, list[Client]]):
+    def __init__(self, clients: Dict[str, list[Client]], dns: Dict[str, str]):
         self.clients = clients
+        self.dns = dns
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -63,7 +64,7 @@ class MqttForwader:
                     f"processed {process_time:%H:%M:%S.%f}, latency "
                     f"{(now - process_time).total_seconds():6.2f}s"
                 )
-            log_message += f", MAC {mac_addr}"
+            log_message += f", {self.dns[mac_addr]}"
 
             logging.info(log_message)
             handles = [
@@ -97,7 +98,7 @@ class MqttForwader:
             total_latency = now - orig_time
             if mch.freq > 0.0:
                 log_message = (
-                    f"At {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C, "
+                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C, "
                     f"{mch.signal_dbm:4}dBm, "
                 )
                 if mch.cellid > 0:
@@ -105,7 +106,7 @@ class MqttForwader:
                 log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
                 log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
-            log_message += f"latency {total_latency.total_seconds():6.2f}s, MAC {mac_addr}"
+            log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
             handles = [client.send_mini_call_home(mch) for client in self.clients[mac_addr]]
             await asyncio.gather(*handles)
@@ -168,11 +169,13 @@ def main():
     container.wire(modules=["yaroc.utils.container"])
 
     client_map = {}
-    for mac_address in config["mac-addresses"]:
+    dns = {}
+    for name, mac_address in config["mac-addresses"].items():
         clients = create_clients(container.client_factories, mac_address=mac_address)
         if len(clients) == 0:
-            logging.info(f"Listening to {mac_address} without forwarding")
+            logging.info(f"Listening to {name}/{mac_address} without forwarding")
         client_map[str(mac_address)] = clients
+        dns[str(mac_address)] = name
 
-    forwarder = MqttForwader(client_map)
+    forwarder = MqttForwader(client_map, dns)
     asyncio.run(forwarder.loop())
