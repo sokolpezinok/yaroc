@@ -9,6 +9,7 @@ import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import MiniCallHome
+from ..clients.client import Client
 
 
 @dataclass
@@ -35,7 +36,7 @@ class MeosResult:
     time: timedelta | None
 
 
-class MopClient:
+class MopClient(Client):
     """Class for Meos online protocol (MOP)"""
 
     STAT_OK = 1
