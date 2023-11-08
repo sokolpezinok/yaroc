@@ -1,8 +1,9 @@
 import logging
 from enum import Enum
+from typing import Any
+
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
-from typing import Any
 
 MODEM_MANAGER = "org.freedesktop.ModemManager1"
 
@@ -91,11 +92,11 @@ class ModemManager:
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
         lte = await interface.get_lte()
-        if 'rssi' in lte:
-            return (lte['rssi'].value, NetworkType.Lte)
+        if "rssi" in lte:
+            return (lte["rssi"].value, NetworkType.Lte)
         umts = await interface.get_umts()
-        if 'rssi' in umts:
-            return (umts['rssi'].value, NetworkType.Umts)
+        if "rssi" in umts:
+            return (umts["rssi"].value, NetworkType.Umts)
 
         logging.error("Error getting signal")
         return (0.0, NetworkType.Unknown)

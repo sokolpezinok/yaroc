@@ -34,8 +34,9 @@ class PunchSender:
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
-            await self.client_group.send_punch(
-                si_punch.card, si_punch.time, si_punch.code, si_punch.mode
+            asyncio.run_coroutine_threadsafe(
+                self.client_group.send_punch(si_punch),
+                asyncio.get_event_loop(),
             )
 
     async def udev_events(self):

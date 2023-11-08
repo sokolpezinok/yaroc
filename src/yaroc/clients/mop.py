@@ -8,8 +8,8 @@ from typing import List
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
-from ..pb.status_pb2 import MiniCallHome
 from ..clients.client import Client
+from ..pb.status_pb2 import MiniCallHome
 
 
 @dataclass

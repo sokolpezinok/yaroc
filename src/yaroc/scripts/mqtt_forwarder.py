@@ -154,6 +154,7 @@ class MqttForwader:
             except asyncio.exceptions.CancelledError:
                 logging.error("Interrupted, exiting")
                 import sys
+
                 sys.exit(0)
 
 
