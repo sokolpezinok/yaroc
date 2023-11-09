@@ -4,7 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from threading import Event, Lock, Thread
+from threading import Event, Thread
 from typing import AsyncIterator, Dict
 
 import pyudev
@@ -122,7 +122,6 @@ class UdevSiManager(SiManager):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
-        self._si_workers_lock = Lock()
         self._si_workers: Dict[str, SiWorker] = {}
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -135,18 +134,53 @@ class UdevSiManager(SiManager):
         logging.info("Starting udev-based SportIdent device manager")
 
     def __str__(self) -> str:
-        with self._si_workers_lock:
-            return ",".join(str(worker) for worker in self._si_workers.values())
+        return ",".join(str(worker) for worker in self._si_workers.values())
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         while True:
             yield await self._queue.get()
 
+    def _connect_sportident(self, device: Device):
+        try:
+            si: SIReader = SIReaderReadout(device.device_node)
+            if si.get_type() == SIReader.M_SRR:
+                si.disconnect()
+                si = SIReaderSRR(device.device_node)
+            elif si.get_type() == SIReader.M_CONTROL or si.get_type() == SIReader.M_BC_CONTROL:
+                si.disconnect()
+                si = SIReaderControl(device.device_node)
+            else:
+                logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
+                return
+
+            self._si_workers[device.device_node] = SiWorker(si, self._queue, self._loop)
+            logging.info(f"Connected to {si.port}")
+        except Exception as err:
+            logging.error(f"Failed to connect to an SI station at {device.device_node}: {err}")
+
+    async def _handle_device_internal(self, action: str, device: Device):
+        device_node = device.device_node
+        if action == "add":
+            if device_node in self._si_workers:
+                return
+            logging.info(f"Inserted SportIdent device {device_node}")
+            if self._is_sportident(device):
+                self._connect_sportident(device)
+        elif device.action == "remove":
+            if device_node in self._si_workers:
+                logging.info(f"Removed device {device_node}")
+                si_worker = self._si_workers[device_node]
+                si_worker.close()
+                del self._si_workers[device_node]
+
     async def udev_events(self) -> AsyncIterator[Device]:
         while True:
-            yield await self._device_queue.get()
+            action, device = await self._device_queue.get()
+            await self._handle_device_internal(action, device)
+            yield device
 
-    def _is_sportident(self, device: Device):
+    @staticmethod
+    def _is_sportident(device: Device):
         try:
             return (
                 device.subsystem == "tty"
@@ -157,7 +191,8 @@ class UdevSiManager(SiManager):
             # pyudev sucks, it throws an exception when you're only doing a lookup
             return False
 
-    def _is_sandberg(self, device: Device):
+    @staticmethod
+    def _is_sandberg(device: Device):
         try:
             return (
                 device.subsystem == "tty"
@@ -171,45 +206,10 @@ class UdevSiManager(SiManager):
     def stop(self):
         self._observer.stop()
 
-    def connect_sportident(self, device: Device):
-        try:
-            si: SIReader = SIReaderReadout(device.device_node)
-            if si.get_type() == SIReader.M_SRR:
-                si.disconnect()
-                si = SIReaderSRR(device.device_node)
-            elif si.get_type() == SIReader.M_CONTROL or si.get_type() == SIReader.M_BC_CONTROL:
-                si.disconnect()
-                si = SIReaderControl(device.device_node)
-            else:
-                logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
-                return
-
-            with self._si_workers_lock:
-                self._si_workers[device.device_node] = SiWorker(si, self._queue, self._loop)
-                logging.info(f"Connected to {si.port}")
-        except Exception as err:
-            logging.error(f"Failed to connect to an SI station at {device.device_node}: {err}")
-
     def _handle_udev_event(self, action, device: Device):
         if not self._is_sportident(device) and not self._is_sandberg(device):
             return
-        device_node = device.device_node
-        asyncio.run_coroutine_threadsafe(self._device_queue.put(device), self._loop)
-        if action == "add":
-            with self._si_workers_lock:
-                if device_node in self._si_workers:
-                    return
-            logging.info(f"Inserted SportIdent device {device_node}")
-            if self._is_sportident(device):
-                self.connect_sportident(device)
-
-        elif device.action == "remove":
-            with self._si_workers_lock:
-                if device_node in self._si_workers:
-                    logging.info(f"Removed device {device_node}")
-                    si_worker = self._si_workers[device_node]
-                    si_worker.close()
-                    del self._si_workers[device_node]
+        asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
 
 
 class FakeSiManager(SiManager):
