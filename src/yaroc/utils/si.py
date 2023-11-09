@@ -3,7 +3,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Event, Lock, Thread
 from typing import AsyncIterator, Dict
 
@@ -24,6 +24,22 @@ class SiPunch:
     code: int
     time: datetime
     mode: int
+
+
+def decode_srr_msg(b: bytes) -> SiPunch:
+    data = b[4:-1]
+    code = int.from_bytes([data[0] & 1, data[1]])
+    data = data[2:]
+    card = int.from_bytes(data[:4])
+    data = data[4:]
+    dow = (data[0] & 0b1110) >> 1
+    dow = (dow - 1) % 7
+    seconds = int.from_bytes(data[1:3]) + (data[0] & 1) * (12 * 60 * 60)
+    tim = timedelta(seconds=seconds, milliseconds=data[3] // 256 * 1000)
+    mode = data[4] & 15
+
+    ref_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    return SiPunch(card, code, ref_day + tim, mode)
 
 
 class SiWorker:
