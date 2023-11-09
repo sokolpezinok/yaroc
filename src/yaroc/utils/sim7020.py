@@ -45,7 +45,7 @@ class SIM7020Interface:
         self._broker_port = broker_port
 
         self.async_at = async_at
-        self.async_at.add_callback("+CLTS: ", self.set_clock)
+        self.async_at.add_callback("+CLTS:", self.mqtt_connect_callback)
         self.async_at.add_callback('+CEREG: 1,"', self.mqtt_connect_callback)
         self.async_at.add_callback("+CMQDISCON:", self.mqtt_connect_callback)
         status = Status()
@@ -102,9 +102,7 @@ class SIM7020Interface:
     async def _detect_mqtt_id(self) -> int | str:
         self._mqtt_id = "Expired MQTT connection"
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
-            logging.warn(
-                "Too long since a successful send, ignore modem's claim about being connected"
-            )
+            logging.warn("Too long since a successful send, force a reconnect")
             return self._mqtt_id
         try:
             response = await self.async_at.call(
@@ -123,6 +121,8 @@ class SIM7020Interface:
             self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
         ) and isinstance(await self._detect_mqtt_id(), str):
             await self._mqtt_connect_internal()
+            if isinstance(self._mqtt_id, str):
+                logging.error(f"MQTT connection failed: {self._mqtt_id}")
             self._mqtt_id_timestamp = datetime.now()
 
     async def set_clock(self, modem_clock: str):
@@ -165,7 +165,7 @@ class SIM7020Interface:
         )
         if response.query is None:
             await self.ping()
-            self._mqtt_id = "MQTT connection unsuccessful"
+            self._mqtt_id = "Connection unsuccessful"
             return self._mqtt_id
         try:
             mqtt_id = int(response.query[0])
@@ -181,9 +181,9 @@ class SIM7020Interface:
                 self._mqtt_id = mqtt_id
             else:
                 await self.ping()
-                self._mqtt_id = "MQTT connection unsuccessful"
+                self._mqtt_id = "Connection unsuccessful"
         except Exception as err:
-            self._mqtt_id = f"MQTT connection unsuccessful: {err}"
+            self._mqtt_id = f"{err}"
 
         return self._mqtt_id
 
