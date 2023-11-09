@@ -9,7 +9,7 @@ from typing import AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
-
+from serial_asyncio import open_serial_connection
 from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 DEFAULT_TIMEOUT_MS = 3.0
@@ -26,20 +26,57 @@ class SiPunch:
     mode: int
 
 
-def decode_srr_msg(b: bytes) -> SiPunch:
-    data = b[4:-1]
-    code = int.from_bytes([data[0] & 1, data[1]])
-    data = data[2:]
-    card = int.from_bytes(data[:4])
-    data = data[4:]
-    dow = (data[0] & 0b1110) >> 1
-    dow = (dow - 1) % 7
-    seconds = int.from_bytes(data[1:3]) + (data[0] & 1) * (12 * 60 * 60)
-    tim = timedelta(seconds=seconds, milliseconds=data[3] // 256 * 1000)
-    mode = data[4] & 15
+class RawSiWorker:
+    def __init__(self):
+        self._finished = Event()
+        self.codes: set[int] = set()
 
-    ref_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    return SiPunch(card, code, ref_day + tim, mode)
+    async def loop(self, queue: asyncio.Queue, port: str):
+        async with asyncio.timeout(10):
+            reader, writer = await open_serial_connection(url=port, baudrate=38400, rtscts=False)
+
+        while not self._finished.is_set():
+            try:
+                msg = await reader.read(20)  # TODO: readuntil?
+                if len(msg) == 0:
+                    await asyncio.sleep(1.0)
+                    continue
+
+                punch = RawSiWorker.decode_srr_msg(msg)
+                now = datetime.now()
+                logging.info(
+                    f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
+                )
+                await queue.put(punch)
+                self.codes.add(punch.code)
+            except Exception as err:
+                logging.error("Loop crashing", err)
+
+    def decode_srr_msg(b: bytes) -> SiPunch:
+        data = b[4:-1]
+        code = int.from_bytes([data[0] & 1, data[1]])
+        data = data[2:]
+        card = int.from_bytes(data[:4])
+        series = card // 2**16
+        if series >= 1 and series <= 4:
+            card += series * 34464
+
+        data = data[4:]
+        dow = (data[0] & 0b1110) >> 1
+        dow = (dow - 1) % 7
+        seconds = int.from_bytes(data[1:3]) + (data[0] & 1) * (12 * 60 * 60)
+        tim = timedelta(seconds=seconds, milliseconds=data[3] // 256 * 1000)
+        mode = data[4] & 0b1111
+
+        ref_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        return SiPunch(card, code, ref_day + tim, mode)
+
+    def __str__(self):
+        codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
+        return f"{codes_str}-lora"
+
+    def close(self):
+        self._finished.set()
 
 
 class SiWorker:
@@ -166,6 +203,16 @@ class UdevSiManager(SiManager):
             logging.info(f"Inserted SportIdent device {device_node}")
             if self._is_sportident(device):
                 self._connect_sportident(device)
+            elif self._is_sandberg(device):
+                try:
+                    worker = RawSiWorker()
+                    asyncio.run_coroutine_threadsafe(
+                        worker.loop(self._queue, device_node), asyncio.get_event_loop()
+                    )
+                    self._si_workers[device_node] = worker
+                    logging.info(f"Asynchronously connected to {device_node}")
+                except Exception as e:
+                    logging.error(e)
         elif device.action == "remove":
             if device_node in self._si_workers:
                 logging.info(f"Removed device {device_node}")
