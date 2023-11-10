@@ -11,7 +11,7 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.code, 47)
         self.assertEqual(punch.mode, 2)
 
-        # TODO: implement (and test) day of week
-        self.assertEqual(punch.time.second, 3)
-        self.assertEqual(punch.time.minute, 0)
         self.assertEqual(punch.time.hour, 10)
+        self.assertEqual(punch.time.minute, 0)
+        self.assertEqual(punch.time.second, 3)
+        self.assertEqual(punch.time.microsecond, 792969)

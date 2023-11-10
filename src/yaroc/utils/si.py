@@ -71,21 +71,24 @@ class SiWorker:
     def decode_srr_msg(b: bytes) -> SiPunch:
         data = b[4:-1]
         code = int.from_bytes([data[0] & 1, data[1]])
-        data = data[2:]
-        card = int.from_bytes(data[:4])
+        card = int.from_bytes(data[2:6])
         series = card // 2**16
         if series >= 1 and series <= 4:
             card += series * 34464
 
-        data = data[4:]
+        data = data[6:]
         dow = (data[0] & 0b1110) >> 1
         dow = (dow - 1) % 7
         seconds = int.from_bytes(data[1:3]) + (data[0] & 1) * (12 * 60 * 60)
-        tim = timedelta(seconds=seconds, milliseconds=data[3] // 256 * 1000)
+        tim = timedelta(seconds=seconds, milliseconds=data[3] / 256 * 1000)
         mode = data[4] & 0b1111
 
         ref_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-        return SiPunch(card, code, ref_day + tim, mode)
+        ref_day -= timedelta(days=(ref_day.weekday() - dow) % 7)
+        punch_time = ref_day + tim
+        if punch_time > datetime.now() + timedelta(hours=2):  # Allow for some desync
+            punch_time -= timedelta(days=7)
+        return SiPunch(card, code, punch_time, mode)
 
     def __str__(self):
         codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
