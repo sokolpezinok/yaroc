@@ -4,13 +4,12 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from threading import Event, Thread
+from threading import Event
 from typing import AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
 from serial_asyncio import open_serial_connection
-from sportident import SIReader, SIReaderControl, SIReaderReadout, SIReaderSRR
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -26,7 +25,7 @@ class SiPunch:
     mode: int
 
 
-class RawSiWorker:
+class SiWorker:
     def __init__(self):
         self._finished = Event()
         self.codes: set[int] = set()
@@ -34,6 +33,15 @@ class RawSiWorker:
     async def loop(self, queue: asyncio.Queue, port: str):
         async with asyncio.timeout(10):
             reader, writer = await open_serial_connection(url=port, baudrate=38400, rtscts=False)
+            # if si.get_type() == SIReader.M_SRR:
+            #     si.disconnect()
+            #     si = SIReaderSRR(device.device_node)
+            # elif si.get_type() == SIReader.M_CONTROL or si.get_type() == SIReader.M_BC_CONTROL:
+            #     si.disconnect()
+            #     si = SIReaderControl(device.device_node)
+            # else:
+            #     logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
+            #     return
 
         while not self._finished.is_set():
             try:
@@ -42,7 +50,7 @@ class RawSiWorker:
                     await asyncio.sleep(1.0)
                     continue
 
-                punch = RawSiWorker.decode_srr_msg(msg)
+                punch = SiWorker.decode_srr_msg(msg)
                 now = datetime.now()
                 logging.info(
                     f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
@@ -78,62 +86,6 @@ class RawSiWorker:
 
     def close(self):
         self._finished.set()
-
-
-class SiWorker:
-    def __init__(self, si: SIReader, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
-        self.si = si
-        self.finished = Event()
-        self._queue = queue
-        self._loop = loop
-        self.thread = Thread(target=self._worker_fn, daemon=True)
-        self.thread.start()
-        self.codes: set[int] = set()
-
-    def _worker_fn(self):
-        while True:
-            if self.finished.is_set():
-                return
-
-            if self.si.poll_sicard():
-                card_data = self.si.read_sicard()
-            else:
-                time.sleep(1.0)
-                continue
-
-            now = datetime.now()
-            card_number = card_data["card_number"]
-            series = card_number // 2**16
-            if series >= 1 and series <= 4:
-                card_number += series * 34464
-
-            messages = []
-            for punch in card_data["punches"]:
-                (code, tim) = punch
-                messages.append((code, tim, BEACON_CONTROL))
-            if isinstance(card_data["start"], datetime):
-                messages.append((1, card_data["start"], START_MODE))
-            if isinstance(card_data["finish"], datetime):
-                messages.append((2, card_data["finish"], FINISH_MODE))
-
-            for code, tim, mode in messages:
-                logging.info(f"{card_number} punched {code} at {tim}, received after {now-tim}")
-                asyncio.run_coroutine_threadsafe(
-                    self._queue.put(SiPunch(card_number, code, tim, mode)), self._loop
-                )
-                self.codes.add(code)
-
-    def __str__(self):
-        codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
-        if isinstance(self.si, SIReaderSRR):
-            return f"{codes_str}-srr"
-        if isinstance(self.si, SIReaderControl):
-            return f"{codes_str}-control"
-
-    def close(self, timeout: float = DEFAULT_TIMEOUT_MS):
-        self.finished.set()
-        self.si.disconnect()
-        self.thread.join(timeout)
 
 
 class SiManager(ABC):
@@ -178,42 +130,22 @@ class UdevSiManager(SiManager):
         while True:
             yield await self._queue.get()
 
-    def _connect_sportident(self, device: Device):
-        try:
-            si: SIReader = SIReaderReadout(device.device_node)
-            if si.get_type() == SIReader.M_SRR:
-                si.disconnect()
-                si = SIReaderSRR(device.device_node)
-            elif si.get_type() == SIReader.M_CONTROL or si.get_type() == SIReader.M_BC_CONTROL:
-                si.disconnect()
-                si = SIReaderControl(device.device_node)
-            else:
-                logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
-                return
-
-            self._si_workers[device.device_node] = SiWorker(si, self._queue, self._loop)
-            logging.info(f"Connected to {si.port}")
-        except Exception as err:
-            logging.error(f"Failed to connect to an SI station at {device.device_node}: {err}")
-
-    async def _handle_device_internal(self, action: str, device: Device):
+    def _handle_device_internal(self, action: str, device: Device):
         device_node = device.device_node
         if action == "add":
             if device_node in self._si_workers:
                 return
             logging.info(f"Inserted SportIdent device {device_node}")
-            if self._is_sportident(device):
-                self._connect_sportident(device)
-            elif self._is_sandberg(device):
-                try:
-                    worker = RawSiWorker()
-                    asyncio.run_coroutine_threadsafe(
-                        worker.loop(self._queue, device_node), asyncio.get_event_loop()
-                    )
-                    self._si_workers[device_node] = worker
-                    logging.info(f"Asynchronously connected to {device_node}")
-                except Exception as e:
-                    logging.error(e)
+
+            try:
+                worker = SiWorker()
+                asyncio.run_coroutine_threadsafe(
+                    worker.loop(self._queue, device_node), asyncio.get_event_loop()
+                )
+                self._si_workers[device_node] = worker
+                logging.info(f"Asynchronously connected to {device_node}")
+            except Exception as e:
+                logging.error(e)
         elif action == "remove":
             if device_node in self._si_workers:
                 logging.info(f"Removed device {device_node}")
@@ -224,7 +156,7 @@ class UdevSiManager(SiManager):
     async def udev_events(self) -> AsyncIterator[Device]:
         while True:
             action, device = await self._device_queue.get()
-            await self._handle_device_internal(action, device)
+            self._handle_device_internal(action, device)
             yield device
 
     @staticmethod
@@ -281,7 +213,7 @@ class FakeSiManager(SiManager):
         return ""
 
     async def punches(self) -> AsyncIterator[SiPunch]:
-        for i in range(31, 1000):
+        for i in range(30, 1000):
             time_start = time.time()
             yield SiPunch(46283, (i + 1) % 1000, datetime.now(), 18)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
