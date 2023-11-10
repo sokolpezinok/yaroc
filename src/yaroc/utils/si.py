@@ -5,7 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from threading import Event
-from typing import AsyncIterator, Dict
+from typing import AsyncIterator, Dict, Any
+from concurrent.futures import Future
 
 import pyudev
 from pyudev import Device
@@ -31,8 +32,13 @@ class SiWorker:
         self.codes: set[int] = set()
 
     async def loop(self, queue: asyncio.Queue, port: str):
-        async with asyncio.timeout(10):
-            reader, writer = await open_serial_connection(url=port, baudrate=38400, rtscts=False)
+        try:
+            async with asyncio.timeout(10):
+                reader, writer = await open_serial_connection(
+                    url=port, baudrate=38400, rtscts=False
+                )
+        except Exception as err:
+            logging.error(f"Error connecting to {port}: {err}")
             # if si.get_type() == SIReader.M_SRR:
             #     si.disconnect()
             #     si = SIReaderSRR(device.device_node)
@@ -58,7 +64,8 @@ class SiWorker:
                 await queue.put(punch)
                 self.codes.add(punch.code)
             except Exception as err:
-                logging.error("Loop crashing", err)
+                logging.error(f"Loop crashing: {err}")
+                return
 
     @staticmethod
     def decode_srr_msg(b: bytes) -> SiPunch:
@@ -112,7 +119,7 @@ class UdevSiManager(SiManager):
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
-        self._si_workers: Dict[str, SiWorker] = {}
+        self._si_workers: Dict[str, tuple[SiWorker, Future[Any]]] = {}
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
@@ -139,17 +146,17 @@ class UdevSiManager(SiManager):
 
             try:
                 worker = SiWorker()
-                asyncio.run_coroutine_threadsafe(
+                fut = asyncio.run_coroutine_threadsafe(
                     worker.loop(self._queue, device_node), asyncio.get_event_loop()
                 )
-                self._si_workers[device_node] = worker
+                self._si_workers[device_node] = (worker, fut)
                 logging.info(f"Asynchronously connected to {device_node}")
             except Exception as e:
                 logging.error(e)
         elif action == "remove":
             if device_node in self._si_workers:
                 logging.info(f"Removed device {device_node}")
-                si_worker = self._si_workers[device_node]
+                (si_worker, _) = self._si_workers[device_node]
                 si_worker.close()
                 del self._si_workers[device_node]
 

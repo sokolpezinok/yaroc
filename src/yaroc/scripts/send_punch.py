@@ -40,6 +40,7 @@ class PunchSender:
             )
 
     async def udev_events(self):
+        await asyncio.sleep(10.0)
         async for device in self.si_manager.udev_events():
             mch = MiniCallHome()
             mch.time.GetCurrentTime()
