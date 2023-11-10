@@ -198,7 +198,7 @@ class SIM7020Interface:
         if isinstance(self._mqtt_id, str):
             if time_since(self._last_success, RESTART_TIME):
                 logging.info("Too long since the last successful MQTT send, restarting modem")
-                self.restart_modem()
+                await self.restart_modem()
             return self._mqtt_id
 
         message_hex = message.hex()
