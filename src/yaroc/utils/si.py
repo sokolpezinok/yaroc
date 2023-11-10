@@ -52,6 +52,7 @@ class RawSiWorker:
             except Exception as err:
                 logging.error("Loop crashing", err)
 
+    @staticmethod
     def decode_srr_msg(b: bytes) -> SiPunch:
         data = b[4:-1]
         code = int.from_bytes([data[0] & 1, data[1]])
@@ -161,7 +162,7 @@ class UdevSiManager(SiManager):
         self.monitor.filter_by("tty")
         self._si_workers: Dict[str, SiWorker] = {}
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
-        self._device_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
 
         for device in context.list_devices():
@@ -213,7 +214,7 @@ class UdevSiManager(SiManager):
                     logging.info(f"Asynchronously connected to {device_node}")
                 except Exception as e:
                     logging.error(e)
-        elif device.action == "remove":
+        elif action == "remove":
             if device_node in self._si_workers:
                 logging.info(f"Removed device {device_node}")
                 si_worker = self._si_workers[device_node]
