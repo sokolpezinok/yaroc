@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pyo3 = { version = "0.20.0", features = ["extension-module"] }
 regex = "1.10.2"
 serialport = "4.2.2"
 thiserror = "1.0.50"
@@ -13,3 +14,7 @@ tokio-serial = "5.4.4"
 [[bin]]
 name = "main"
 path = "src/main.rs"
+
+[lib]
+name = "yaroc"
+crate-type = ["cdylib"]
