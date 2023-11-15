@@ -170,13 +170,9 @@ class UdevSiManager(SiManager):
             yield device
 
     @staticmethod
-    def _is_sportident(device: Device):
+    def _is_sl(device: Device):
         try:
-            return (
-                device.subsystem == "tty"
-                and device.properties["ID_VENDOR_ID"] == "10c4"
-                and device.properties["ID_MODEL_ID"] == "800a"
-            )
+            return device.subsystem == "tty" and device.properties["ID_VENDOR_ID"] == "10c4"
         except Exception:
             # pyudev sucks, it throws an exception when you're only doing a lookup
             return False
@@ -197,7 +193,7 @@ class UdevSiManager(SiManager):
         self._observer.stop()
 
     def _handle_udev_event(self, action, device: Device):
-        if not self._is_sportident(device) and not self._is_sandberg(device):
+        if not self._is_sl(device) and not self._is_sandberg(device):
             return
         asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
 
