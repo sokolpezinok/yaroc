@@ -16,5 +16,5 @@ name = "main"
 path = "src/main.rs"
 
 [lib]
-name = "yaroc"
+name = "yaroc_rs"
 crate-type = ["cdylib"]
