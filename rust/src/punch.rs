@@ -1,3 +1,5 @@
+use chrono::prelude::*;
+
 /// Reimplementation of Sportident checksum algorithm in Rust
 ///
 /// Note that they call it CRC but it is buggy. See the last test that leads to a checksum of 0 for
@@ -29,9 +31,8 @@ pub fn sportident_checksum(message: &[u8]) -> u16 {
     }
     chksum
 }
-use chrono::prelude::*;
 
-fn time_to_bytes(time: DateTime<Utc>) -> [u8; 4] {
+fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
     let mut res = [0; 4];
     res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
     let secs = if time.hour() >= 12 {
@@ -49,7 +50,7 @@ fn time_to_bytes(time: DateTime<Utc>) -> [u8; 4] {
     res
 }
 
-fn punch_to_bytes(code: u16, time: DateTime<Utc>, card: u32, mode: u8) -> [u8; 20] {
+pub fn punch_to_bytes(code: u16, time: NaiveDateTime, card: u32, mode: u8) -> [u8; 20] {
     let mut res = [0; 20];
     res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
     res[4..6].copy_from_slice(&code.to_be_bytes());
@@ -81,24 +82,26 @@ mod test_checksum {
 }
 
 mod test_punch {
-    use std::time::Duration;
-
     use chrono::prelude::*;
 
     use super::{punch_to_bytes, time_to_bytes};
 
     #[test]
     fn test_time_to_bytes() {
-        let time: DateTime<Utc> =
-            Utc.with_ymd_and_hms(2023, 11, 23, 10, 0, 3).unwrap() + Duration::from_micros(792969);
+        let time = NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
+            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
+        );
         let bytes = time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
     }
 
     #[test]
     fn test_punch() {
-        let time: DateTime<Utc> =
-            Utc.with_ymd_and_hms(2023, 11, 23, 10, 0, 3).unwrap() + Duration::from_micros(792969);
+        let time = NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
+            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
+        );
         let punch = punch_to_bytes(47, time, 1715004, 2);
         assert_eq!(
             &punch,
