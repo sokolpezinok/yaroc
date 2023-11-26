@@ -29,6 +29,26 @@ pub fn sportident_checksum(message: &[u8]) -> u16 {
     }
     chksum
 }
+use chrono::prelude::*;
+
+fn time_to_bytes(time: DateTime<Utc>) -> [u8; 4] {
+    let mut res = [0; 4];
+    res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
+    let secs = if time.hour() >= 12 {
+        res[0] |= 1;
+        const HALF_DAY_SECS: u32 = 12 * 60 * 60;
+        time.num_seconds_from_midnight() - HALF_DAY_SECS
+    } else {
+        time.num_seconds_from_midnight()
+    };
+
+    let secs = u16::try_from(secs).unwrap().to_be_bytes();
+    res[1] = secs[0];
+    res[2] = secs[1];
+    const MILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
+    res[3] = u8::try_from(time.nanosecond() / MILLION_BY_256).unwrap();
+    res
+}
 
 #[cfg(test)]
 mod test_checksum {
@@ -44,5 +64,21 @@ mod test_checksum {
 
         let s = b"\x01\x80\x05";
         assert_eq!(sportident_checksum(s), 0);
+    }
+}
+
+mod test_time {
+    use std::time::Duration;
+
+    use chrono::prelude::*;
+
+    use super::time_to_bytes;
+
+    #[test]
+    fn test_time_to_bytes() {
+        let date: DateTime<Utc> =
+            Utc.with_ymd_and_hms(2023, 11, 23, 10, 0, 3).unwrap() + Duration::from_micros(792969);
+        let bytes = time_to_bytes(date);
+        assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
     }
 }
