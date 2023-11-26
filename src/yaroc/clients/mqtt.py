@@ -71,6 +71,9 @@ class MqttClient(Client):
     def __del__(self):
         self.client.loop_stop()
 
+    async def send_raw_punch(self, raw: bytes) -> bool:
+        pass
+
     async def send_punch(
         self,
         card_number: int,

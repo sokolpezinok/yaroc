@@ -46,16 +46,16 @@ class MqttForwader:
             logging.error(f"Error while parsing protobuf: {err}")
             return
         for punch in punches.punches:
-            si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-            if now - si_time > timedelta(days=7):
-                # If too much in the past, assume the date is wrong and push it one week forward
-                si_time += timedelta(days=7)
-                process_time = si_time
+            if len(punch.raw) > 0:
+                si_punch = SiPunch.from_raw(punch.raw)
             else:
-                process_time = si_time + timedelta(seconds=punch.process_time_ms / 1000)
+                si_time = MqttForwader._prototime_to_datetime(punch.si_time)
+                si_punch = SiPunch(punch.card, punch.code, si_time, punch.mode)
+            process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
+
             log_message = (
-                f"{self.dns[mac_addr]} {punch.card:7} punched {punch.code:03} "
-                f"at {si_time:%H:%M:%S.%f}, "
+                f"{self.dns[mac_addr]} {si_punch.card:7} punched {si_punch.code:03} "
+                f"at {si_punch.time:%H:%M:%S.%f}, "
             )
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
@@ -70,7 +70,6 @@ class MqttForwader:
                 )
 
             logging.info(log_message)
-            si_punch = SiPunch(punch.card, punch.code, si_time, punch.mode)
             await self.client_groups[mac_addr].send_punch(si_punch, process_time)
 
     def _handle_coords(self, payload: PayloadType, now: datetime):
