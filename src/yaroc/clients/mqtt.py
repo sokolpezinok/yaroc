@@ -16,6 +16,7 @@ from ..pb.utils import create_coords_proto, create_punch_proto
 from ..utils.async_serial import AsyncATCom
 from ..utils.modem_manager import ModemManager
 from ..utils.retries import BackoffBatchedRetries
+from ..utils.si import SiPunch
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
@@ -71,19 +72,13 @@ class MqttClient(Client):
     def __del__(self):
         self.client.loop_stop()
 
-    async def send_raw_punch(self, raw: bytes) -> bool:
-        pass
-
     async def send_punch(
         self,
-        card_number: int,
-        si_time: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
         punches = Punches()
-        punches.punches.append(create_punch_proto(card_number, si_time, code, mode, process_time))
+        punches.punches.append(create_punch_proto(punch, process_time))
         punches.sending_timestamp.GetCurrentTime()
         return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
 
@@ -182,15 +177,10 @@ class SIM7020MqttClient(Client):
 
     async def send_punch(
         self,
-        card_number: int,
-        si_time: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
-        res = await self._retries.send(
-            create_punch_proto(card_number, si_time, code, mode, process_time)
-        )
+        res = await self._retries.send(create_punch_proto(punch, process_time))
         return res if res is not None else False
 
     async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> bool:

@@ -8,6 +8,7 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.modem_manager import NetworkType
+from ..utils.si import SiPunch
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
@@ -31,10 +32,7 @@ class RocClient(Client):
 
     async def send_punch(
         self,
-        card_number: int,
-        sitime: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
         def length(x: int):
@@ -48,16 +46,16 @@ class RocClient(Client):
         if process_time is None:
             process_time = datetime.now()
         data = {
-            "control1": str(code),
-            "sinumber1": str(card_number),
-            "stationmode1": str(mode),
-            "date1": sitime.strftime("%Y-%m-%d"),
-            "sitime1": sitime.strftime("%H:%M:%S"),
-            "ms1": sitime.strftime("%f")[:3],
+            "control1": str(punch.code),
+            "sinumber1": str(punch.card),
+            "stationmode1": str(punch.mode),
+            "date1": punch.time.strftime("%Y-%m-%d"),
+            "sitime1": punch.time.strftime("%H:%M:%S"),
+            "ms1": punch.time.strftime("%f")[:3],
             "roctime1": str(process_time)[:19],
             "macaddr": self.macaddr,
             "1": "f",
-            "length": str(118 + sum(map(length, [code, card_number, mode]))),
+            "length": str(118 + sum(map(length, [punch.code, punch.card, punch.mode]))),
         }
 
         try:

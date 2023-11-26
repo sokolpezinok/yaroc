@@ -10,6 +10,7 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..clients.client import Client
 from ..pb.status_pb2 import MiniCallHome
+from ..utils.si import SiPunch
 
 
 @dataclass
@@ -169,24 +170,22 @@ class MopClient(Client):
 
     async def send_punch(
         self,
-        card_number: int,
-        sitime: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
-        sitime.replace(microsecond=0)
+        si_time = punch.time
+        si_time.replace(microsecond=0)
         idx = -1
         for i, res in enumerate(self.results):
-            if res.competitor.card == card_number:
+            if res.competitor.card == punch.card:
                 idx = i
 
         if idx != -1:
             result = self.results[idx]
-            MopClient.update_result(result, code, sitime)
+            MopClient.update_result(result, punch.code, si_time)
             return await self.send_result(result)
         else:
-            logging.error(f"Competitor with card {card_number} not in database")
+            logging.error(f"Competitor with card {punch.card} not in database")
             return False
             # TODO: log to a file
 

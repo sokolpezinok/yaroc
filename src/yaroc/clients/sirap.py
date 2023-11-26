@@ -6,6 +6,7 @@ from typing import Literal
 from ..pb.status_pb2 import MiniCallHome
 # TODO: consider using https://pypi.org/project/backoff/
 from ..utils.retries import BackoffRetries
+from ..utils.si import SiPunch
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -66,14 +67,10 @@ class SirapClient(Client):
 
     async def send_punch(
         self,
-        card_number: int,
-        sitime: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
-        del mode
-        message = SirapClient._serialize_punch(card_number, sitime.time(), code)
+        message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
         return await self._backoff_sender.backoff_send(message)
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:

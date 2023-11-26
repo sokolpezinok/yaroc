@@ -21,16 +21,9 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_raw_punch(self, raw: bytes) -> bool:
-        pass
-
-    @abstractmethod
     async def send_punch(
         self,
-        card_number: int,
-        si_time: datetime,
-        code: int,
-        mode: int,
+        punch: SiPunch,
         process_time: datetime | None = None,
     ) -> bool:
         pass
@@ -53,8 +46,5 @@ class ClientGroup:
         return await asyncio.gather(*handles)
 
     async def send_punch(self, punch: SiPunch, process_time: datetime | None = None) -> list[bool]:
-        handles = [
-            client.send_punch(punch.card, punch.time, punch.code, punch.mode, process_time)
-            for client in self.clients
-        ]
+        handles = [client.send_punch(punch, process_time) for client in self.clients]
         return await asyncio.gather(*handles)

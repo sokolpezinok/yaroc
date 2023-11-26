@@ -5,6 +5,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from .coords_pb2 import Coordinates
 from .punches_pb2 import Punch
+from ..utils.si import SiPunch
 
 
 def _datetime_to_prototime(time: datetime) -> Timestamp:
@@ -13,17 +14,15 @@ def _datetime_to_prototime(time: datetime) -> Timestamp:
     return ret
 
 
-def create_punch_proto(
-    card_number: int, si_time: datetime, code: int, mode: int, process_time: datetime | None = None
-) -> Punch:
+def create_punch_proto(si_punch: SiPunch, process_time: datetime | None = None) -> Punch:
     punch = Punch()
-    punch.card = card_number
-    punch.code = code
-    punch.mode = mode
-    punch.si_time.CopyFrom(_datetime_to_prototime(si_time))
+    punch.card = si_punch.card
+    punch.code = si_punch.code
+    punch.mode = si_punch.mode
+    punch.si_time.CopyFrom(_datetime_to_prototime(si_punch.time))
     if process_time is None:
         process_time = datetime.now()
-    process_time_latency = process_time - si_time
+    process_time_latency = process_time - si_punch.time
     punch.process_time_ms = max(round(1000 * process_time_latency.total_seconds()), 0)
     return punch
 
