@@ -14,15 +14,15 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1asrc/yaroc/pb/punches.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"w\n\x05Punch\x12\x0c\n\x04\x63ode\x18\x01 \x01(\r\x12\x0c\n\x04\x63\x61rd\x18\x02 \x01(\r\x12+\n\x07si_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fprocess_time_ms\x18\x04 \x01(\r\x12\x0c\n\x04mode\x18\x05 \x01(\r\"Y\n\x07Punches\x12\x17\n\x07punches\x18\x01 \x03(\x0b\x32\x06.Punch\x12\x35\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestampb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1asrc/yaroc/pb/punches.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x84\x01\n\x05Punch\x12\x0c\n\x04\x63ode\x18\x01 \x01(\r\x12\x0c\n\x04\x63\x61rd\x18\x02 \x01(\r\x12+\n\x07si_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fprocess_time_ms\x18\x04 \x01(\r\x12\x0c\n\x04mode\x18\x05 \x01(\r\x12\x0b\n\x03raw\x18\x06 \x01(\x0c\"Y\n\x07Punches\x12\x17\n\x07punches\x18\x01 \x03(\x0b\x32\x06.Punch\x12\x35\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestampb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'src.yaroc.pb.punches_pb2', globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
-  _PUNCH._serialized_start=63
-  _PUNCH._serialized_end=182
-  _PUNCHES._serialized_start=184
-  _PUNCHES._serialized_end=273
+  _PUNCH._serialized_start=64
+  _PUNCH._serialized_end=196
+  _PUNCHES._serialized_start=198
+  _PUNCHES._serialized_end=287
 # @@protoc_insertion_point(module_scope)

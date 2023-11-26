@@ -7,6 +7,7 @@ message Punch {
   google.protobuf.Timestamp si_time = 3;
   uint32 process_time_ms = 4;
   uint32 mode = 5;
+  bytes raw = 6;
 }
 
 message Punches {
