@@ -26,9 +26,8 @@ pub fn sportident_checksum(message: &[u8]) -> u16 {
             }
             val <<= 1;
         }
-        chksum &= 0xffff;
     }
-    chksum as u16
+    chksum
 }
 
 #[cfg(test)]
