@@ -2,15 +2,16 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
+from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from threading import Event
-from typing import AsyncIterator, Dict, Any
-from concurrent.futures import Future
+from typing import Any, AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
 from serial_asyncio import open_serial_connection
+from yaroc_rs import punch_to_bytes
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -48,6 +49,12 @@ class SiPunch:
         if punch_time > datetime.now() + timedelta(hours=2):  # Allow for some desync
             punch_time -= timedelta(days=7)
         return SiPunch(card, code, punch_time, mode, payload)
+
+    @staticmethod
+    def new(card: int, code: int, punch_time: datetime, mode: int):
+        return SiPunch(
+            card, code, punch_time, mode, punch_to_bytes(card, code, punch_time.timestamp(), mode)
+        )
 
 
 class SiWorker:
@@ -222,7 +229,7 @@ class FakeSiManager(SiManager):
     async def punches(self) -> AsyncIterator[SiPunch]:
         for i in range(30, 1000):
             time_start = time.time()
-            yield SiPunch(46283, (i + 1) % 1000, datetime.now(), 18)
+            yield SiPunch.new(46283, (i + 1) % 1000, datetime.now(), 18)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
     async def udev_events(self) -> AsyncIterator[Device]:

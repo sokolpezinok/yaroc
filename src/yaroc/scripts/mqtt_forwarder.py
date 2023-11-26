@@ -50,7 +50,7 @@ class MqttForwader:
                 si_punch = SiPunch.from_raw(punch.raw)
             else:
                 si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-                si_punch = SiPunch(punch.card, punch.code, si_time, punch.mode)
+                si_punch = SiPunch.new(punch.card, punch.code, si_time, punch.mode)
             process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
 
             log_message = (
