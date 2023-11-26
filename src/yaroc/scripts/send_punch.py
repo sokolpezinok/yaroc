@@ -52,12 +52,18 @@ class PunchSender:
             await self.client_group.send_mini_call_home(mch)
 
     async def loop(self):
-        await asyncio.gather(
-            self.periodic_mini_call_home(),
-            self.send_punches(),
-            self.udev_events(),
-            self.client_group.loop(),
-        )
+        try:
+            await asyncio.gather(
+                self.periodic_mini_call_home(),
+                self.send_punches(),
+                self.udev_events(),
+                self.client_group.loop(),
+            )
+        except asyncio.exceptions.CancelledError:
+            logging.error("Interrupted, exiting")
+            import sys
+
+            sys.exit(0)
 
 
 async def main():

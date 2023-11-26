@@ -69,9 +69,6 @@ class MqttClient(Client):
             logger=logging.getLogger(),
         )
 
-    def __del__(self):
-        self.client.loop_stop()
-
     async def send_punch(
         self,
         punch: SiPunch,
