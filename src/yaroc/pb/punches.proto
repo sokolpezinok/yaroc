@@ -2,12 +2,8 @@ syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 
 message Punch {
-  uint32 code = 1;
-  uint32 card = 2;
-  google.protobuf.Timestamp si_time = 3;
-  uint32 process_time_ms = 4;
-  uint32 mode = 5;
-  bytes raw = 6;
+  bytes raw = 1;
+  uint32 process_time_ms = 2;
 }
 
 message Punches {
