@@ -43,10 +43,23 @@ fn time_to_bytes(time: DateTime<Utc>) -> [u8; 4] {
     };
 
     let secs = u16::try_from(secs).unwrap().to_be_bytes();
-    res[1] = secs[0];
-    res[2] = secs[1];
+    res[1..3].copy_from_slice(&secs);
     const MILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
     res[3] = u8::try_from(time.nanosecond() / MILLION_BY_256).unwrap();
+    res
+}
+
+fn punch_to_bytes(code: u16, time: DateTime<Utc>, card: u32, mode: u8) -> [u8; 20] {
+    let mut res = [0; 20];
+    res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
+    res[4..6].copy_from_slice(&code.to_be_bytes());
+    res[6..10].copy_from_slice(&card.to_be_bytes());
+    res[10..14].copy_from_slice(&time_to_bytes(time));
+    res[14] = mode;
+    // res[15..17] could be fixed or a sequence. It's ignored right now.
+    let chksum = sportident_checksum(&res[2..17]).to_le_bytes();
+    res[17..19].copy_from_slice(&chksum);
+    res[19] = 0x03;
     res
 }
 
@@ -67,18 +80,29 @@ mod test_checksum {
     }
 }
 
-mod test_time {
+mod test_punch {
     use std::time::Duration;
 
     use chrono::prelude::*;
 
-    use super::time_to_bytes;
+    use super::{punch_to_bytes, time_to_bytes};
 
     #[test]
     fn test_time_to_bytes() {
-        let date: DateTime<Utc> =
+        let time: DateTime<Utc> =
             Utc.with_ymd_and_hms(2023, 11, 23, 10, 0, 3).unwrap() + Duration::from_micros(792969);
-        let bytes = time_to_bytes(date);
+        let bytes = time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
+    }
+
+    #[test]
+    fn test_punch() {
+        let time: DateTime<Utc> =
+            Utc.with_ymd_and_hms(2023, 11, 23, 10, 0, 3).unwrap() + Duration::from_micros(792969);
+        let punch = punch_to_bytes(47, time, 1715004, 2);
+        assert_eq!(
+            &punch,
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x00\xe3\x51\x03"
+        );
     }
 }
