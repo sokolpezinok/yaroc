@@ -32,6 +32,15 @@ pub fn sportident_checksum(message: &[u8]) -> u16 {
     chksum
 }
 
+fn card_to_bytes(mut card: u32) -> [u8; 4] {
+    let series = card / 100_000;
+    const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
+    if series >= 1 && series <= 4 {
+        card -= series * EARLY_SERIES_COMPLEMENT;
+    }
+    card.to_be_bytes()
+}
+
 fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
     let mut res = [0; 4];
     res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
@@ -54,7 +63,7 @@ pub fn punch_to_bytes(code: u16, time: NaiveDateTime, card: u32, mode: u8) -> [u
     let mut res = [0; 20];
     res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
     res[4..6].copy_from_slice(&code.to_be_bytes());
-    res[6..10].copy_from_slice(&card.to_be_bytes());
+    res[6..10].copy_from_slice(&card_to_bytes(card));
     res[10..14].copy_from_slice(&time_to_bytes(time));
     res[14] = mode;
     // res[15..17] could be fixed or a sequence. It's ignored right now.
@@ -84,7 +93,18 @@ mod test_checksum {
 mod test_punch {
     use chrono::prelude::*;
 
+    use crate::punch::card_to_bytes;
+
     use super::{punch_to_bytes, time_to_bytes};
+
+    #[test]
+    fn test_card_series() {
+        let bytes = card_to_bytes(416534);
+        assert_eq!(bytes, [0, 0x04, 0x40, 0x96]);
+
+        let bytes = card_to_bytes(81110151);
+        assert_eq!(bytes, [4, 0xd5, 0xa4, 0x87]);
+    }
 
     #[test]
     fn test_time_to_bytes() {
