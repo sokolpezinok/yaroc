@@ -51,8 +51,8 @@ class MqttForwader:
         punch: SiPunch,
         mac_addr: str,
         now: datetime,
-        send_time: datetime | None,
-        override_mac: str | None,
+        send_time: datetime | None = None,
+        override_mac: str | None = None,
     ):
         log_message = (
             f"{self.dns[mac_addr]} {punch.card:7} punched {punch.code:03} "

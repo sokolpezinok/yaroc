@@ -1,5 +1,9 @@
 import asyncio
+import logging
 from abc import ABC, abstractmethod
+
+import serial
+from serial_asyncio import open_serial_connection
 
 from yaroc.rs import SiPunch
 
@@ -26,7 +30,35 @@ class Client(ABC):
 
     @abstractmethod
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        pass
+        return True
+
+
+class SerialClient(Client):
+    def __init__(self, port: str):
+        self.port = port
+        self.writer = None
+
+    async def loop(self):
+        try:
+            async with asyncio.timeout(10):
+                _, self.writer = await open_serial_connection(
+                    url=self.port, baudrate=38400, rtscts=False
+                )
+            logging.info(f"Connected to SRR sink at {self.port}")
+        except Exception as err:
+            logging.error(f"Error connecting to {self.port}: {err}")
+            return
+
+    async def send_punch(self, punch: SiPunch) -> bool:
+        try:
+            self.writer.write(bytes(punch.raw))
+            return True
+        except serial.serialutil.SerialException as err:
+            logging.error(f"Fatal serial exception: {err}")
+            return False
+
+    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        return True
 
 
 class ClientGroup:
