@@ -61,7 +61,7 @@ exclude = ".git|.hg|.mypy_cache|.venv|_build|build|dist|_pb2.py"
 
 [tool.flake8]
 max-line-length = 100
-exclude = "*pb2.py,.venv"
+exclude = "**/*pb2.py"
 
 [tool.isort]
 include_trailing_comma = true
