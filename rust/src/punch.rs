@@ -41,7 +41,7 @@ fn card_to_bytes(mut card: u32) -> [u8; 4] {
     card.to_be_bytes()
 }
 
-fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
+fn time_to_bytes(time: DateTime<FixedOffset>) -> [u8; 4] {
     let mut res = [0; 4];
     res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
     let secs = if time.hour() >= 12 {
@@ -59,7 +59,7 @@ fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
     res
 }
 
-pub fn punch_to_bytes(code: u16, time: NaiveDateTime, card: u32, mode: u8) -> [u8; 20] {
+pub fn punch_to_bytes(code: u16, time: DateTime<FixedOffset>, card: u32, mode: u8) -> [u8; 20] {
     let mut res = [0; 20];
     res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
     res[4..6].copy_from_slice(&code.to_be_bytes());
@@ -108,20 +108,26 @@ mod test_punch {
 
     #[test]
     fn test_time_to_bytes() {
+        let tz = FixedOffset::east_opt(7200).unwrap();
         let time = NaiveDateTime::new(
             NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
             NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
-        );
+        )
+        .and_local_timezone(tz)
+        .unwrap();
         let bytes = time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
     }
 
     #[test]
     fn test_punch() {
+        let tz = FixedOffset::east_opt(7200).unwrap();
         let time = NaiveDateTime::new(
             NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
             NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
-        );
+        )
+        .and_local_timezone(tz)
+        .unwrap();
         let punch = punch_to_bytes(47, time, 1715004, 2);
         assert_eq!(
             &punch,

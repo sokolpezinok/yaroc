@@ -43,17 +43,28 @@ class SiPunch:
         tim = timedelta(seconds=seconds, milliseconds=data[3] / 256 * 1000)
         mode = data[4] & 0b1111
 
-        ref_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        now = datetime.now().astimezone()
+        ref_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         ref_day -= timedelta(days=(ref_day.weekday() - dow) % 7)
         punch_time = ref_day + tim
-        if punch_time > datetime.now() + timedelta(hours=2):  # Allow for some desync
+        if punch_time > now + timedelta(hours=2):  # Allow for some desync
             punch_time -= timedelta(days=7)
         return SiPunch(card, code, punch_time, mode, payload)
 
     @staticmethod
     def new(card: int, code: int, punch_time: datetime, mode: int):
         return SiPunch(
-            card, code, punch_time, mode, punch_to_bytes(card, code, punch_time.timestamp(), mode)
+            card,
+            code,
+            punch_time,
+            mode,
+            punch_to_bytes(
+                card,
+                code,
+                punch_time.timestamp(),
+                punch_time.tzinfo.utcoffset(punch_time).total_seconds(),
+                mode,
+            ),
         )
 
 
@@ -229,7 +240,7 @@ class FakeSiManager(SiManager):
     async def punches(self) -> AsyncIterator[SiPunch]:
         for i in range(30, 1000):
             time_start = time.time()
-            yield SiPunch.new(46283, (i + 1) % 1000, datetime.now(), 18)
+            yield SiPunch.new(46283, (i + 1) % 1000, datetime.now().astimezone(), 18)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
     async def udev_events(self) -> AsyncIterator[Device]:

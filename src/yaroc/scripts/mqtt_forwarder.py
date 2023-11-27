@@ -46,11 +46,7 @@ class MqttForwader:
             logging.error(f"Error while parsing protobuf: {err}")
             return
         for punch in punches.punches:
-            if len(punch.raw) > 0:
-                si_punch = SiPunch.from_raw(punch.raw)
-            else:
-                si_time = MqttForwader._prototime_to_datetime(punch.si_time)
-                si_punch = SiPunch.new(punch.card, punch.code, si_time, punch.mode)
+            si_punch = SiPunch.from_raw(punch.raw)
             process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
 
             log_message = (

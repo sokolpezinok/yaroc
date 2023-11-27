@@ -75,7 +75,10 @@ class MqttClient(Client):
         process_time: datetime | None = None,
     ) -> bool:
         punches = Punches()
-        punches.punches.append(create_punch_proto(punch, process_time))
+        try:
+            punches.punches.append(create_punch_proto(punch, process_time))
+        except Exception as err:
+            logging.error(f"{err} creation of Punch proto failed")
         punches.sending_timestamp.GetCurrentTime()
         return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
 
