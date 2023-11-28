@@ -37,6 +37,7 @@ pub fn punch_to_bytes<'a>(
 pub fn yaroc_rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sportident_checksum, m)?)?;
     m.add_function(wrap_pyfunction!(punch_to_bytes, m)?)?;
+    m.add_class::<crate::punch::SiPunch>()?;
     Ok(())
 }
 

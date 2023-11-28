@@ -1,4 +1,13 @@
 use chrono::prelude::*;
+use pyo3::prelude::*;
+
+#[pyclass]
+pub struct SiPunch {
+    card: u32,
+    code: u16,
+    time: DateTime<FixedOffset>,
+    mode: u8,
+}
 
 /// Reimplementation of Sportident checksum algorithm in Rust
 ///
