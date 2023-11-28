@@ -177,15 +177,25 @@ mod test_punch {
 
     #[test]
     fn test_time_to_bytes() {
-        let tz = FixedOffset::east_opt(7200).unwrap();
         let time = NaiveDateTime::new(
             NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
             NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
         )
-        .and_local_timezone(tz)
-        .unwrap();
+        .and_local_timezone(Local)
+        .unwrap()
+        .fixed_offset();
         let bytes = time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
+
+        let time = NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
+            NaiveTime::from_hms_milli_opt(10, 0, 3, 999).unwrap(),
+        )
+        .and_local_timezone(Local)
+        .unwrap()
+        .fixed_offset();
+        let bytes = time_to_bytes(time);
+        assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xff]);
     }
 
     #[test]
