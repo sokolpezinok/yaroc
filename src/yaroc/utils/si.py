@@ -61,8 +61,7 @@ class SiPunch:
             punch_to_bytes(
                 card,
                 code,
-                punch_time.timestamp(),
-                punch_time.tzinfo.utcoffset(punch_time).total_seconds(),
+                punch_time,
                 mode,
             ),
         )
