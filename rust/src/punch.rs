@@ -6,13 +6,25 @@ use pyo3::prelude::*;
 pub struct SiPunch {
     card: u32,
     code: u16,
-    time: DateTime<Local>,
+    time: DateTime<FixedOffset>,
     mode: u8,
+    raw: [u8; 20],
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
+const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 
 impl SiPunch {
+    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
+        Self {
+            card,
+            code,
+            time,
+            mode,
+            raw: punch_to_bytes(code, time, card, mode),
+        }
+    }
+
     pub fn from_raw(payload: [u8; 20]) -> Self {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
@@ -32,11 +44,12 @@ impl SiPunch {
 
         let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
             + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
-        let nanos = u32::from(data[3]) * (1_000_000_000 / 256);
+        let nanos = u32::from(data[3]) * BILLION_BY_256;
         let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
         let datetime = NaiveDateTime::new(date, time)
             .and_local_timezone(Local)
-            .unwrap();
+            .unwrap()
+            .fixed_offset();
         // if punch_time > now + timedelta(hours=2):  # Allow for some desync
         //     punch_time -= timedelta(days=7)
 
@@ -45,6 +58,7 @@ impl SiPunch {
             code,
             time: datetime,
             mode: data[4] & 0b1111,
+            raw: payload,
         }
     }
 }
@@ -102,8 +116,7 @@ fn time_to_bytes(time: DateTime<FixedOffset>) -> [u8; 4] {
 
     let secs = u16::try_from(secs).unwrap().to_be_bytes();
     res[1..3].copy_from_slice(&secs);
-    const MILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
-    res[3] = u8::try_from(time.nanosecond() / MILLION_BY_256).unwrap();
+    res[3] = u8::try_from(time.nanosecond() / BILLION_BY_256).unwrap();
     res
 }
 
