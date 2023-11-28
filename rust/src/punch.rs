@@ -1,12 +1,52 @@
-use chrono::prelude::*;
+use chrono::{prelude::*, Days};
 use pyo3::prelude::*;
 
+#[derive(Debug)]
 #[pyclass]
 pub struct SiPunch {
     card: u32,
     code: u16,
-    time: DateTime<FixedOffset>,
+    time: DateTime<Local>,
     mode: u8,
+}
+
+const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
+
+impl SiPunch {
+    pub fn from_raw(payload: [u8; 20]) -> Self {
+        let data = &payload[4..19];
+        let code = u16::from_be_bytes([data[0] & 1, data[1]]);
+        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap());
+        let series = card / (1 << 16);
+        if series >= 1 && series <= 4 {
+            card += series * EARLY_SERIES_COMPLEMENT;
+        }
+
+        // Time
+        let data = &data[6..];
+        let dow = (data[0] & 0b1110) >> 1;
+        let dow = (dow - 1) % 7;
+        let today = Local::now().date_naive();
+        let days = (today.weekday().num_days_from_sunday() + 7 - u32::from(dow)) % 7;
+        let date = today.checked_sub_days(Days::new(u64::from(days))).unwrap();
+
+        let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
+            + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
+        let nanos = u32::from(data[3]) * (1_000_000_000 / 256);
+        let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
+        let datetime = NaiveDateTime::new(date, time)
+            .and_local_timezone(Local)
+            .unwrap();
+        // if punch_time > now + timedelta(hours=2):  # Allow for some desync
+        //     punch_time -= timedelta(days=7)
+
+        Self {
+            card,
+            code,
+            time: datetime,
+            mode: data[4] & 0b1111,
+        }
+    }
 }
 
 /// Reimplementation of Sportident checksum algorithm in Rust
@@ -43,7 +83,6 @@ pub fn sportident_checksum(message: &[u8]) -> u16 {
 
 fn card_to_bytes(mut card: u32) -> [u8; 4] {
     let series = card / 100_000;
-    const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
     if series >= 1 && series <= 4 {
         card -= series * EARLY_SERIES_COMPLEMENT;
     }
@@ -104,7 +143,7 @@ mod test_punch {
 
     use crate::punch::card_to_bytes;
 
-    use super::{punch_to_bytes, time_to_bytes};
+    use super::{punch_to_bytes, time_to_bytes, SiPunch};
 
     #[test]
     fn test_card_series() {
@@ -141,6 +180,21 @@ mod test_punch {
         assert_eq!(
             &punch,
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x00\xe3\x51\x03"
+        );
+    }
+
+    #[test]
+    fn test_from_raw() {
+        let msg = b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03";
+        let punch = SiPunch::from_raw(*msg);
+
+        assert_eq!(punch.card, 1715004);
+        assert_eq!(punch.code, 47);
+        assert_eq!(punch.mode, 2);
+
+        assert_eq!(
+            &punch.time.to_rfc3339()[..30],
+            "2023-11-22T10:00:03.792968750+"
         );
     }
 }
