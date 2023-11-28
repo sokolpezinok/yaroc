@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime
 
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 
 class TestSportident(unittest.TestCase):

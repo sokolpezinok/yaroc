@@ -5,7 +5,7 @@ from datetime import datetime
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 from ..pb.status_pb2 import MiniCallHome
 from ..utils.modem_manager import NetworkType

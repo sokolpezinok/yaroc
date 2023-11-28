@@ -9,7 +9,7 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 from ..clients.client import ClientGroup
 from ..pb.coords_pb2 import Coordinates

@@ -2,7 +2,7 @@ from datetime import datetime
 from math import floor
 
 from google.protobuf.timestamp_pb2 import Timestamp
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 from .coords_pb2 import Coordinates
 from .punches_pb2 import Punch

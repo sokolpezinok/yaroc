@@ -7,7 +7,7 @@ pub fn sportident_checksum(message: &[u8]) -> Vec<u8> {
 }
 
 #[pymodule]
-pub fn yaroc_rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sportident_checksum, m)?)?;
     m.add_class::<crate::punch::SiPunch>()?;
     Ok(())

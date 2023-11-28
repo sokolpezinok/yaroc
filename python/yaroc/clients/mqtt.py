@@ -9,7 +9,7 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status

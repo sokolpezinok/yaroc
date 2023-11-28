@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Dict
 import pyudev
 from pyudev import Device
 from serial_asyncio import open_serial_connection
-from yaroc_rs import SiPunch
+from yaroc.rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
