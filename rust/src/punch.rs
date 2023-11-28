@@ -158,12 +158,13 @@ mod test_checksum {
     }
 }
 
+#[cfg(test)]
 mod test_punch {
     use chrono::prelude::*;
 
     use crate::punch::card_to_bytes;
 
-    use super::{punch_to_bytes, time_to_bytes, SiPunch};
+    use super::{punch_to_bytes, time_to_bytes};
 
     #[test]
     fn test_card_series() {
