@@ -9,6 +9,7 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
+from yaroc_rs import SiPunch
 
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
@@ -16,7 +17,6 @@ from ..pb.utils import create_coords_proto, create_punch_proto
 from ..utils.async_serial import AsyncATCom
 from ..utils.modem_manager import ModemManager
 from ..utils.retries import BackoffBatchedRetries
-from ..utils.si import SiPunch
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
@@ -78,7 +78,7 @@ class MqttClient(Client):
         try:
             punches.punches.append(create_punch_proto(punch, process_time))
         except Exception as err:
-            logging.error(f"{err} creation of Punch proto failed")
+            logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.GetCurrentTime()
         return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
 

@@ -2,8 +2,9 @@ import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from yaroc_rs import SiPunch
+
 from ..pb.status_pb2 import MiniCallHome
-from ..utils.si import SiPunch
 
 
 class Client(ABC):

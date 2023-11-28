@@ -3,67 +3,19 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Event
 from typing import Any, AsyncIterator, Dict
 
 import pyudev
 from pyudev import Device
 from serial_asyncio import open_serial_connection
+from yaroc_rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
 FINISH_MODE = 4
 BEACON_CONTROL = 18
-
-
-@dataclass
-class SiPunch:
-    card: int
-    code: int
-    time: datetime
-    mode: int
-    raw: bytes = b""
-
-    @staticmethod
-    def from_raw(payload: bytes):
-        data = payload[4:-1]
-        code = int.from_bytes([data[0] & 1, data[1]])
-        card = int.from_bytes(data[2:6])
-        series = card // 2**16
-        if series >= 1 and series <= 4:
-            card += series * 34464
-
-        data = data[6:]
-        dow = (data[0] & 0b1110) >> 1
-        dow = (dow - 1) % 7
-        seconds = int.from_bytes(data[1:3]) + (data[0] & 1) * (12 * 60 * 60)
-        tim = timedelta(seconds=seconds, milliseconds=data[3] / 256 * 1000)
-        mode = data[4] & 0b1111
-
-        now = datetime.now().astimezone()
-        ref_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        ref_day -= timedelta(days=(ref_day.weekday() - dow) % 7)
-        punch_time = ref_day + tim
-        if punch_time > now + timedelta(hours=2):  # Allow for some desync
-            punch_time -= timedelta(days=7)
-        return SiPunch(card, code, punch_time, mode, payload)
-
-    @staticmethod
-    def new(card: int, code: int, punch_time: datetime, mode: int):
-        return SiPunch(
-            card,
-            code,
-            punch_time,
-            mode,
-            punch_to_bytes(
-                card,
-                code,
-                punch_time,
-                mode,
-            ),
-        )
 
 
 class SiWorker:

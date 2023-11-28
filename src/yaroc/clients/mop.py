@@ -7,10 +7,10 @@ from typing import List
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
+from yaroc_rs import SiPunch
 
 from ..clients.client import Client
 from ..pb.status_pb2 import MiniCallHome
-from ..utils.si import SiPunch
 
 
 @dataclass

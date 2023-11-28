@@ -9,13 +9,13 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
+from yaroc_rs import SiPunch
 
 from ..clients.client import ClientGroup
 from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 from ..utils.container import Container, create_clients
-from ..utils.si import SiPunch
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -46,7 +46,10 @@ class MqttForwader:
             logging.error(f"Error while parsing protobuf: {err}")
             return
         for punch in punches.punches:
-            si_punch = SiPunch.from_raw(punch.raw)
+            try:
+                si_punch = SiPunch.from_raw(punch.raw)
+            except Exception as err:
+                logging.error(f"Error while constructing SiPunch: {err}")
             process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
 
             log_message = (

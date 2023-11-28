@@ -3,10 +3,11 @@ import logging
 from datetime import datetime, time, timedelta
 from typing import Literal
 
+from yaroc_rs import SiPunch
+
 from ..pb.status_pb2 import MiniCallHome
 # TODO: consider using https://pypi.org/project/backoff/
 from ..utils.retries import BackoffRetries
-from ..utils.si import SiPunch
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
