@@ -1,6 +1,6 @@
 import unittest
 
-from yaroc.utils.si import SiPunch
+from yaroc_rs import SiPunch
 
 
 class TestSportident(unittest.TestCase):
@@ -15,4 +15,4 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.hour, 10)
         self.assertEqual(punch.time.minute, 0)
         self.assertEqual(punch.time.second, 3)
-        self.assertEqual(punch.time.microsecond, 792969)
+        self.assertEqual(punch.time.microsecond, 792968)

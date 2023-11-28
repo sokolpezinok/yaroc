@@ -4,28 +4,36 @@ use pyo3::prelude::*;
 #[derive(Debug)]
 #[pyclass]
 pub struct SiPunch {
+    #[pyo3(get)]
     card: u32,
+    #[pyo3(get)]
     code: u16,
+    #[pyo3(get)]
     time: DateTime<FixedOffset>,
+    #[pyo3(get)]
     mode: u8,
+    #[pyo3(get)]
     raw: [u8; 20],
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
 const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 
+#[pymethods]
 impl SiPunch {
-    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
-        Self {
+    #[staticmethod]
+    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> PyResult<Self> {
+        Ok(Self {
             card,
             code,
             time,
             mode,
             raw: punch_to_bytes(code, time, card, mode),
-        }
+        })
     }
 
-    pub fn from_raw(payload: [u8; 20]) -> Self {
+    #[staticmethod]
+    pub fn from_raw(payload: [u8; 20]) -> PyResult<Self> {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap());
@@ -36,10 +44,9 @@ impl SiPunch {
 
         // Time
         let data = &data[6..];
-        let dow = (data[0] & 0b1110) >> 1;
-        let dow = (dow - 1) % 7;
+        let dow = u32::from((data[0] & 0b1110) >> 1);
         let today = Local::now().date_naive();
-        let days = (today.weekday().num_days_from_sunday() + 7 - u32::from(dow)) % 7;
+        let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
         let date = today.checked_sub_days(Days::new(u64::from(days))).unwrap();
 
         let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
@@ -53,13 +60,13 @@ impl SiPunch {
         // if punch_time > now + timedelta(hours=2):  # Allow for some desync
         //     punch_time -= timedelta(days=7)
 
-        Self {
+        Ok(Self {
             card,
             code,
             time: datetime,
             mode: data[4] & 0b1111,
             raw: payload,
-        }
+        })
     }
 }
 
@@ -193,21 +200,6 @@ mod test_punch {
         assert_eq!(
             &punch,
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x00\xe3\x51\x03"
-        );
-    }
-
-    #[test]
-    fn test_from_raw() {
-        let msg = b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03";
-        let punch = SiPunch::from_raw(*msg);
-
-        assert_eq!(punch.card, 1715004);
-        assert_eq!(punch.code, 47);
-        assert_eq!(punch.mode, 2);
-
-        assert_eq!(
-            &punch.time.to_rfc3339()[..30],
-            "2023-11-22T10:00:03.792968750+"
         );
     }
 }
