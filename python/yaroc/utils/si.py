@@ -56,7 +56,7 @@ class SerialSiWorker(SiWorker):
                 reader, writer = await open_serial_connection(
                     url=self.port, baudrate=38400, rtscts=False
                 )
-            logging.info(f"Connected to SRR source at {device_node}")
+            logging.info(f"Connected to SRR source at {self.port}")
         except Exception as err:
             logging.error(f"Error connecting to {self.port}: {err}")
 
@@ -88,6 +88,7 @@ class BtSerialSiWorker(SiWorker):
     def __init__(self, mac_addr: str):
         super().__init__()
         self.name = "lora"
+        self.mac_addr = mac_addr
 
     async def loop(self, queue: asyncio.Queue):
         sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
