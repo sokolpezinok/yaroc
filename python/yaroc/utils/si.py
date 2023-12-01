@@ -46,7 +46,7 @@ class SiWorker:
 
     async def process_punch(self, data: bytes, queue: asyncio.Queue):
         punch = SiPunch.from_raw(data)
-        now = datetime.now()
+        now = datetime.now().astimezone()
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
         )
