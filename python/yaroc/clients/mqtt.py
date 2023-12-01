@@ -9,6 +9,7 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
+
 from yaroc.rs import SiPunch
 
 from ..pb.punches_pb2 import Punch, Punches

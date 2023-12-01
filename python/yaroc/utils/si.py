@@ -1,6 +1,6 @@
 import asyncio
-import socket
 import logging
+import socket
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator, Dict
 import pyudev
 from pyudev import Device
 from serial_asyncio import open_serial_connection
+
 from yaroc.rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0

@@ -7,6 +7,7 @@ from typing import List
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
+
 from yaroc.rs import SiPunch
 
 from ..clients.client import Client

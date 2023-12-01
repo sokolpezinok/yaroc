@@ -2,10 +2,11 @@ from datetime import datetime
 from math import floor
 
 from google.protobuf.timestamp_pb2 import Timestamp
+
 from yaroc.rs import SiPunch
 
-from .status_pb2 import Coordinates
 from .punches_pb2 import Punch
+from .status_pb2 import Coordinates
 
 
 def _datetime_to_prototime(time: datetime) -> Timestamp:
