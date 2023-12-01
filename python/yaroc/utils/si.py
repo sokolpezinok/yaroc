@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -23,14 +24,40 @@ class SiWorker:
         self._finished = Event()
         self.codes: set[int] = set()
 
-    async def loop(self, queue: asyncio.Queue, port: str):
+    async def process_punch(self, data: bytes, queue: asyncio.Queue):
+        punch = SiPunch.from_raw(data)
+        now = datetime.now()
+        logging.info(
+            f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
+        )
+        await queue.put(punch)
+        self.codes.add(punch.code)
+
+    def __str__(self):
+        codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
+        return f"{codes_str}-{self.name}"
+
+    def close(self):
+        self._finished.set()
+
+
+class SerialSiWorker(SiWorker):
+    """Serial port worker"""
+
+    def __init__(self, port: str):
+        super().__init__()
+        self.name = "srr"
+        self.port = port
+
+    async def loop(self, queue: asyncio.Queue):
         try:
             async with asyncio.timeout(10):
                 reader, writer = await open_serial_connection(
-                    url=port, baudrate=38400, rtscts=False
+                    url=self.port, baudrate=38400, rtscts=False
                 )
+            logging.info(f"Connected to SRR source at {device_node}")
         except Exception as err:
-            logging.error(f"Error connecting to {port}: {err}")
+            logging.error(f"Error connecting to {self.port}: {err}")
 
         while not self._finished.is_set():
             try:
@@ -53,12 +80,33 @@ class SiWorker:
         await queue.put(punch)
         self.codes.add(punch.code)
 
-    def __str__(self):
-        codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
-        return f"{codes_str}-srr"
 
-    def close(self):
-        self._finished.set()
+class BtSerialSiWorker(SiWorker):
+    """Bluetooth serial worker"""
+
+    def __init__(self, mac_addr: str):
+        super().__init__()
+        self.name = "lora"
+
+    async def loop(self, queue: asyncio.Queue):
+        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        try:
+            sock.connect((self.mac_addr, 1))
+        except Exception as err:
+            logging.error(f"Error connecting to {self.mac_addr}: {err}")
+
+        loop = asyncio.get_event_loop()
+        while not self._finished.is_set():
+            try:
+                data = await loop.sock_recv(sock, 20)
+                if len(data) == 0:
+                    await asyncio.sleep(1.0)
+                    continue
+                await self.process_punch(data, queue)
+
+            except Exception as err:
+                logging.error(f"Loop crashing: {err}")
+                return
 
 
 class SiManager(ABC):
@@ -111,12 +159,11 @@ class UdevSiManager(SiManager):
             logging.info(f"Inserted SportIdent device {device_node}")
 
             try:
-                worker = SiWorker()
+                worker = SerialSiWorker(device_node)
                 fut = asyncio.run_coroutine_threadsafe(
-                    worker.loop(self._queue, device_node), asyncio.get_event_loop()
+                    worker.loop(self._queue), asyncio.get_event_loop()
                 )
                 self._si_workers[device_node] = (worker, fut)
-                logging.info(f"Asynchronously connected to {device_node}")
             except Exception as e:
                 logging.error(e)
         elif action == "remove":
