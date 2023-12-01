@@ -24,6 +24,7 @@ class PunchSender:
         self._mch_interval = 20
 
     async def periodic_mini_call_home(self):
+        # TODO: get rid of the following sleep
         await asyncio.sleep(5.0)
         while True:
             time_start = time.time()
@@ -40,7 +41,8 @@ class PunchSender:
             )
 
     async def udev_events(self):
-        await asyncio.sleep(10.0)
+        # TODO: get rid of the following sleep
+        await asyncio.sleep(3.0)  # sleep to allow for connecting
         async for device in self.si_manager.udev_events():
             mch = MiniCallHome()
             mch.time.GetCurrentTime()
@@ -54,6 +56,7 @@ class PunchSender:
     async def loop(self):
         try:
             await asyncio.gather(
+                self.si_manager.loop(),
                 self.periodic_mini_call_home(),
                 self.send_punches(),
                 self.udev_events(),

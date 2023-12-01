@@ -27,7 +27,7 @@ class SiWorker:
 
     async def process_punch(self, data: bytes, queue: asyncio.Queue):
         punch = SiPunch.from_raw(data)
-        now = datetime.now()
+        now = datetime.now().astimezone()
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
         )
@@ -62,7 +62,7 @@ class SerialSiWorker(SiWorker):
 
         while not self._finished.is_set():
             try:
-                data = await reader.read(20)  # TODO: readuntil?
+                data = await reader.read(20)
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
@@ -71,15 +71,6 @@ class SerialSiWorker(SiWorker):
             except Exception as err:
                 logging.error(f"Loop crashing: {err}")
                 return
-
-    async def process_punch(self, data: bytes, queue: asyncio.Queue):
-        punch = SiPunch.from_raw(data)
-        now = datetime.now().astimezone()
-        logging.info(
-            f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
-        )
-        await queue.put(punch)
-        self.codes.add(punch.code)
 
 
 class BtSerialSiWorker(SiWorker):
@@ -92,12 +83,13 @@ class BtSerialSiWorker(SiWorker):
 
     async def loop(self, queue: asyncio.Queue):
         sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        sock.setblocking(False)
+        loop = asyncio.get_event_loop()
         try:
-            sock.connect((self.mac_addr, 1))
+            await loop.sock_connect(sock, (self.mac_addr, 1))
         except Exception as err:
             logging.error(f"Error connecting to {self.mac_addr}: {err}")
 
-        loop = asyncio.get_event_loop()
         while not self._finished.is_set():
             try:
                 data = await loop.sock_recv(sock, 20)
@@ -131,7 +123,7 @@ class UdevSiManager(SiManager):
     si_manager.stop()
     """
 
-    def __init__(self) -> None:
+    def __init__(self, bt_mac_address: str | None = None) -> None:
         context = pyudev.Context()
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
@@ -139,6 +131,7 @@ class UdevSiManager(SiManager):
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
+        self.bt_mac_address = bt_mac_address
 
         for device in context.list_devices():
             self._handle_udev_event("add", device)
@@ -148,6 +141,19 @@ class UdevSiManager(SiManager):
 
     def __str__(self) -> str:
         return ",".join(str(worker) for worker in self._si_workers.values())
+
+    async def loop(self):
+        # TODO: add a while-loop
+        try:
+            if self.bt_mac_address is not None:
+                worker = BtSerialSiWorker(self.bt_mac_address)
+                fut = asyncio.run_coroutine_threadsafe(
+                    worker.loop(self._queue), asyncio.get_event_loop()
+                )
+                self._si_workers[self.bt_mac_address] = (worker, fut)
+                # TODO: fut.add_done_callback()
+        except Exception as err:
+            logging.error(f"Bluetooth serial init failed: {err}")
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         while True:
