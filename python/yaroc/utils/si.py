@@ -31,15 +31,6 @@ class SiWorker:
                 )
         except Exception as err:
             logging.error(f"Error connecting to {port}: {err}")
-            # if si.get_type() == SIReader.M_SRR:
-            #     si.disconnect()
-            #     si = SIReaderSRR(device.device_node)
-            # elif si.get_type() == SIReader.M_CONTROL or si.get_type() == SIReader.M_BC_CONTROL:
-            #     si.disconnect()
-            #     si = SIReaderControl(device.device_node)
-            # else:
-            #     logging.warn(f"Station {si.port} not an SRR dongle or not set in autosend mode")
-            #     return
 
         while not self._finished.is_set():
             try:
@@ -47,21 +38,24 @@ class SiWorker:
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
+                await self.process_punch(data, queue)
 
-                punch = SiPunch.from_raw(data)
-                now = datetime.now()
-                logging.info(
-                    f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
-                )
-                await queue.put(punch)
-                self.codes.add(punch.code)
             except Exception as err:
                 logging.error(f"Loop crashing: {err}")
                 return
 
+    async def process_punch(self, data: bytes, queue: asyncio.Queue):
+        punch = SiPunch.from_raw(data)
+        now = datetime.now()
+        logging.info(
+            f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
+        )
+        await queue.put(punch)
+        self.codes.add(punch.code)
+
     def __str__(self):
         codes_str = ",".join(map(str, self.codes)) if len(self.codes) >= 1 else "0"
-        return f"{codes_str}-lora"
+        return f"{codes_str}-srr"
 
     def close(self):
         self._finished.set()
