@@ -4,7 +4,7 @@ from math import floor
 from google.protobuf.timestamp_pb2 import Timestamp
 from yaroc.rs import SiPunch
 
-from .coords_pb2 import Coordinates
+from .status_pb2 import Coordinates
 from .punches_pb2 import Punch
 
 

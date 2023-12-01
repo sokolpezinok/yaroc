@@ -1,9 +1,0 @@
-syntax = "proto3";
-import "google/protobuf/timestamp.proto";
-
-message Coordinates {
-  double latitude = 1;
-  double longitude = 2;
-  double altitude = 3;
-  google.protobuf.Timestamp time = 4;
-}
