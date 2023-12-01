@@ -13,7 +13,7 @@ from yaroc.rs import SiPunch
 
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
-from ..pb.utils import create_coords_proto, create_punch_proto
+from ..pb.utils import create_punch_proto
 from ..utils.async_serial import AsyncATCom
 from ..utils.modem_manager import ModemManager
 from ..utils.retries import BackoffBatchedRetries
@@ -25,10 +25,9 @@ BROKER_PORT = 1883
 CONNECT_TIMEOUT = 45
 
 
-def topics_from_mac(mac_address: str) -> Tuple[str, str, str, str]:
+def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
     return (
         f"yaroc/{mac_address}/p",
-        f"yaroc/{mac_address}/coords",
         f"yaroc/{mac_address}/status",
         f"yaroc/{mac_address}/cmd",
     )
@@ -44,9 +43,7 @@ class MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = BROKER_PORT,
     ):
-        self.topic_punches, self.topic_coords, self.topic_status, self.topic_cmd = topics_from_mac(
-            mac_address
-        )
+        self.topic_punches, self.topic_status, self.topic_cmd = topics_from_mac(mac_address)
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
@@ -81,10 +78,6 @@ class MqttClient(Client):
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.GetCurrentTime()
         return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
-
-    async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> bool:
-        coords = create_coords_proto(lat, lon, alt, timestamp)
-        return await self._send(self.topic_coords, coords.SerializeToString(), 0, "Coordinates")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         try:
@@ -139,7 +132,7 @@ class SIM7020MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = 1883,
     ):
-        self.topic_punches, self.topic_coords, self.topic_status, _ = topics_from_mac(mac_address)
+        self.topic_punches, self.topic_status, self.topic_cmd = topics_from_mac(mac_address)
         name = f"{name_prefix}-{mac_address}"
         self._sim7020 = SIM7020Interface(
             async_at,
@@ -182,10 +175,6 @@ class SIM7020MqttClient(Client):
     ) -> bool:
         res = await self._retries.send(create_punch_proto(punch, process_time))
         return res if res is not None else False
-
-    async def send_coords(self, lat: float, lon: float, alt: float, timestamp: datetime) -> bool:
-        coords = create_coords_proto(lat, lon, alt, timestamp)
-        return await self._send(self.topic_coords, coords.SerializeToString(), "GPS coordinates")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         async with self._lock:

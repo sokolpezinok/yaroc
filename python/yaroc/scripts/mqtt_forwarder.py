@@ -12,7 +12,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from yaroc.rs import SiPunch
 
 from ..clients.client import ClientGroup
-from ..pb.coords_pb2 import Coordinates
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 from ..utils.container import Container, create_clients
@@ -71,16 +70,6 @@ class MqttForwader:
             logging.info(log_message)
             await self.client_groups[mac_addr].send_punch(si_punch, process_time)
 
-    def _handle_coords(self, payload: PayloadType, now: datetime):
-        coords = Coordinates.FromString(MqttForwader._payload_to_bytes(payload))
-        orig_time = MqttForwader._prototime_to_datetime(coords.time)
-        total_latency = now - orig_time
-        log_message = (
-            f"{orig_time}: {coords.latitude},{coords.longitude}, altitude "
-            f"{coords.altitude}. Latency {total_latency}s."
-        )
-        logging.info(log_message)
-
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
             status = Status.FromString(MqttForwader._payload_to_bytes(payload))
@@ -124,8 +113,6 @@ class MqttForwader:
 
         if topic.endswith("/p"):
             await self._handle_punches(mac_addr, msg.payload, now)
-        elif topic.endswith("/coords"):
-            self._handle_coords(msg.payload, now)
         elif topic.endswith("/status"):
             await self._handle_status(mac_addr, msg.payload, now)
 
