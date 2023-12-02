@@ -9,6 +9,7 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
+from meshtastic.mqtt_pb2 import ServiceEnvelope
 
 from yaroc.rs import SiPunch
 
@@ -39,6 +40,32 @@ class MqttForwader:
         else:
             raise TypeError("Unexpected type of a message payload")
 
+    async def _process_punch(
+        self,
+        punch: SiPunch,
+        mac_addr: str,
+        now: datetime,
+        process_time: datetime,
+        send_time: datetime | None,
+    ):
+        log_message = (
+            f"{self.dns[mac_addr]} {punch.card:7} punched {punch.code:03} "
+            f"at {punch.time:%H:%M:%S.%f}, "
+        )
+        if send_time is None:
+            log_message += (
+                f"processed {process_time:%H:%M:%S.%f}, "
+                f"latency {(now - process_time).total_seconds():6.2f}s"
+            )
+        else:
+            log_message += (
+                f"sent {send_time:%H:%M:%S.%f}, network latency "
+                f"{(now - send_time).total_seconds():6.2f}s"
+            )
+
+        logging.info(log_message)
+        await self.client_groups[mac_addr].send_punch(punch, process_time)
+
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
             punches = Punches.FromString(MqttForwader._payload_to_bytes(payload))
@@ -52,24 +79,28 @@ class MqttForwader:
                 logging.error(f"Error while constructing SiPunch: {err}")
             process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
 
-            log_message = (
-                f"{self.dns[mac_addr]} {si_punch.card:7} punched {si_punch.code:03} "
-                f"at {si_punch.time:%H:%M:%S.%f}, "
-            )
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
-                log_message += (
-                    f"sent {send_time:%H:%M:%S.%f}, network latency "
-                    f"{(now - send_time).total_seconds():6.2f}s"
-                )
             else:
-                log_message += (
-                    f"processed {process_time:%H:%M:%S.%f}, latency "
-                    f"{(now - process_time).total_seconds():6.2f}s"
-                )
+                send_time = None
+            await self._process_punch(si_punch, mac_addr, now, process_time, send_time)
 
-            logging.info(log_message)
-            await self.client_groups[mac_addr].send_punch(si_punch, process_time)
+    async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
+        try:
+            se = ServiceEnvelope.FromString(payload)
+        except Exception as err:
+            logging.error(f"Error while parsing protobuf: {err}")
+            return
+        if se.packet.decoded.portnum != 64:
+            logging.debug(f"Ignoring message with portnum {se.packet.decoded.pornum}")
+            return
+
+        try:
+            punch = SiPunch.from_raw(se.packet.decoded.payload)
+            process_time = punch.time
+            await self._process_punch(punch, "8c8caa504e8a", now, process_time, None)
+        except Exception as err:
+            logging.error(f"Error while ZZ constructing SiPunch: {err}")
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -98,24 +129,31 @@ class MqttForwader:
             logging.info(log_message)
             await self.client_groups[mac_addr].send_mini_call_home(mch)
 
+    @staticmethod
+    def extract_mac(topic: str) -> str:
+        match = re.match("yaroc/([0-9a-f]{12})/.*", topic)
+        if match is None or len(match.groups()) == 0:
+            logging.error(f"Invalid topic: {topic}")
+            raise Exception(f"Invalid topic {topic}")
+
+        groups = match.groups()
+        return groups[0]
+
     async def _on_message(self, msg: Message):
         now = datetime.now().astimezone()
         topic = msg.topic.value
-        match = re.match("yaroc/([0-9a-f]{12})/.*", topic)
-        if match is None:
-            logging.error(f"Invalid topic: {topic}")
-            return
 
-        groups = match.groups()
-        if len(groups) == 0:
-            logging.debug(f"Topic {topic} doesn't match")
-            return
-        mac_addr = groups[0]
-
-        if topic.endswith("/p"):
-            await self._handle_punches(mac_addr, msg.payload, now)
-        elif topic.endswith("/status"):
-            await self._handle_status(mac_addr, msg.payload, now)
+        try:
+            if topic.endswith("/p"):
+                mac_addr = MqttForwader.extract_mac(topic)
+                await self._handle_punches(mac_addr, msg.payload, now)
+            elif topic.endswith("/status"):
+                mac_addr = MqttForwader.extract_mac(topic)
+                await self._handle_status(mac_addr, msg.payload, now)
+            elif topic.startswith("yar/2/c/serial/"):
+                await self._handle_meshtastic_serial(msg.payload, now)
+        except Exception as err:
+            logging.error(f"Failed processing message: {err}")
 
     async def loop(self):
         async_loop = asyncio.get_event_loop()
@@ -134,6 +172,7 @@ class MqttForwader:
                     async with client.messages() as messages:
                         for mac_addr in self.client_groups.keys():
                             await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
+                        await client.subscribe("yar/2/c/serial/#", qos=1)
                         async for message in messages:
                             await self._on_message(message)
             except MqttError:
