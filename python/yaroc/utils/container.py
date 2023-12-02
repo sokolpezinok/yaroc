@@ -11,7 +11,7 @@ from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
-from ..utils.si import FakeSiManager, UdevSiManager
+from ..utils.si import SiManager
 
 
 def get_log_level(log_level: str | None) -> int:
@@ -47,11 +47,7 @@ class Container(containers.DeclarativeContainer):
         roc=providers.Factory(RocClient),
         sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
-    si_manager = providers.Selector(
-        config.si_punches,
-        udev=providers.Factory(UdevSiManager),
-        fake=providers.Factory(FakeSiManager),
-    )
+    si_manager = providers.Factory(SiManager)
 
 
 @inject
