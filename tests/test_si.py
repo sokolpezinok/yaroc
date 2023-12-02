@@ -10,7 +10,7 @@ class TestSportident(unittest.TestCase):
         punch = SiPunch.new(1715004, 47, t, 2)
         self.assertEqual(
             bytes(punch.raw),
-            b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x00\xe3\x51\x03",
+            b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01P\xe3\x03",
         )
 
     def test_decode(self):

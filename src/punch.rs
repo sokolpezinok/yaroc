@@ -134,8 +134,9 @@ pub fn punch_to_bytes(code: u16, time: DateTime<FixedOffset>, card: u32, mode: u
     res[6..10].copy_from_slice(&card_to_bytes(card));
     res[10..14].copy_from_slice(&time_to_bytes(time));
     res[14] = mode;
-    // res[15..17] could be fixed or a sequence. It's ignored right now.
-    let chksum = sportident_checksum(&res[2..17]).to_le_bytes();
+    // res[15..17] is set to 0 out of 1, corresponding to the setting "send last punch"
+    res[16] = 1;
+    let chksum = sportident_checksum(&res[2..17]).to_be_bytes();
     res[17..19].copy_from_slice(&chksum);
     res[19] = 0x03;
     res
@@ -210,7 +211,7 @@ mod test_punch {
         let punch = punch_to_bytes(47, time, 1715004, 2);
         assert_eq!(
             &punch,
-            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x00\xe3\x51\x03"
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
         );
     }
 }
