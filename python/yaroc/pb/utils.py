@@ -15,13 +15,9 @@ def _datetime_to_prototime(time: datetime) -> Timestamp:
     return ret
 
 
-def create_punch_proto(si_punch: SiPunch, process_time: datetime | None = None) -> Punch:
+def create_punch_proto(si_punch: SiPunch) -> Punch:
     punch = Punch()
     punch.raw = bytes(si_punch.raw)
-    if process_time is None:
-        process_time = datetime.now().astimezone()
-    process_time_latency = process_time - si_punch.time
-    punch.process_time_ms = max(round(1000 * process_time_latency.total_seconds()), 0)
     return punch
 
 

@@ -1,6 +1,5 @@
 import asyncio
 from abc import ABC, abstractmethod
-from datetime import datetime
 
 from yaroc.rs import SiPunch
 
@@ -22,11 +21,7 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_punch(
-        self,
-        punch: SiPunch,
-        process_time: datetime | None = None,
-    ) -> bool:
+    async def send_punch(self, punch: SiPunch) -> bool:
         pass
 
     @abstractmethod
@@ -46,6 +41,6 @@ class ClientGroup:
         handles = [client.send_mini_call_home(mch) for client in self.clients]
         return await asyncio.gather(*handles)
 
-    async def send_punch(self, punch: SiPunch, process_time: datetime | None = None) -> list[bool]:
-        handles = [client.send_punch(punch, process_time) for client in self.clients]
+    async def send_punch(self, punch: SiPunch) -> list[bool]:
+        handles = [client.send_punch(punch) for client in self.clients]
         return await asyncio.gather(*handles)

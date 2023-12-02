@@ -169,11 +169,7 @@ class MopClient(Client):
                 result.time = tim - result.start
             result.stat = MopClient.STAT_OK
 
-    async def send_punch(
-        self,
-        punch: SiPunch,
-        process_time: datetime | None = None,
-    ) -> bool:
+    async def send_punch(self, punch: SiPunch) -> bool:
         si_time = punch.time
         si_time.replace(microsecond=0)
         idx = -1

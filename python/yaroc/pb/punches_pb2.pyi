@@ -7,12 +7,10 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Punch(_message.Message):
-    __slots__ = ["process_time_ms", "raw"]
-    PROCESS_TIME_MS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["raw"]
     RAW_FIELD_NUMBER: _ClassVar[int]
-    process_time_ms: int
     raw: bytes
-    def __init__(self, raw: _Optional[bytes] = ..., process_time_ms: _Optional[int] = ...) -> None: ...
+    def __init__(self, raw: _Optional[bytes] = ...) -> None: ...
 
 class Punches(_message.Message):
     __slots__ = ["punches", "sending_timestamp"]

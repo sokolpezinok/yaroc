@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dpython/yaroc/pb/punches.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"-\n\x05Punch\x12\x0b\n\x03raw\x18\x01 \x01(\x0c\x12\x17\n\x0fprocess_time_ms\x18\x02 \x01(\r\"Y\n\x07Punches\x12\x17\n\x07punches\x18\x01 \x03(\x0b\x32\x06.Punch\x12\x35\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestampb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dpython/yaroc/pb/punches.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x14\n\x05Punch\x12\x0b\n\x03raw\x18\x01 \x01(\x0c\"Y\n\x07Punches\x12\x17\n\x07punches\x18\x01 \x03(\x0b\x32\x06.Punch\x12\x35\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestampb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'python.yaroc.pb.punches_pb2', globals())
@@ -22,7 +22,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
   _PUNCH._serialized_start=66
-  _PUNCH._serialized_end=111
-  _PUNCHES._serialized_start=113
-  _PUNCHES._serialized_end=202
+  _PUNCH._serialized_end=86
+  _PUNCHES._serialized_start=88
+  _PUNCHES._serialized_end=177
 # @@protoc_insertion_point(module_scope)

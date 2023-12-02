@@ -66,11 +66,7 @@ class SirapClient(Client):
             + SirapClient._time_to_bytes(si_daytime)
         )
 
-    async def send_punch(
-        self,
-        punch: SiPunch,
-        process_time: datetime | None = None,
-    ) -> bool:
+    async def send_punch(self, punch: SiPunch) -> bool:
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
         return await self._backoff_sender.backoff_send(message)
 

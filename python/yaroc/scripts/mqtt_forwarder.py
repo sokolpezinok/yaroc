@@ -45,7 +45,6 @@ class MqttForwader:
         punch: SiPunch,
         mac_addr: str,
         now: datetime,
-        process_time: datetime,
         send_time: datetime | None,
     ):
         log_message = (
@@ -53,10 +52,7 @@ class MqttForwader:
             f"at {punch.time:%H:%M:%S.%f}, "
         )
         if send_time is None:
-            log_message += (
-                f"processed {process_time:%H:%M:%S.%f}, "
-                f"latency {(now - process_time).total_seconds():6.2f}s"
-            )
+            log_message += f"latency {(now - punch.time).total_seconds():6.2f}s"
         else:
             log_message += (
                 f"sent {send_time:%H:%M:%S.%f}, network latency "
@@ -64,7 +60,7 @@ class MqttForwader:
             )
 
         logging.info(log_message)
-        await self.client_groups[mac_addr].send_punch(punch, process_time)
+        await self.client_groups[mac_addr].send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -77,13 +73,12 @@ class MqttForwader:
                 si_punch = SiPunch.from_raw(punch.raw)
             except Exception as err:
                 logging.error(f"Error while constructing SiPunch: {err}")
-            process_time = si_punch.time + timedelta(seconds=punch.process_time_ms / 1000)
 
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
             else:
                 send_time = None
-            await self._process_punch(si_punch, mac_addr, now, process_time, send_time)
+            await self._process_punch(si_punch, mac_addr, now, send_time)
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
@@ -97,8 +92,7 @@ class MqttForwader:
 
         try:
             punch = SiPunch.from_raw(se.packet.decoded.payload)
-            process_time = punch.time
-            await self._process_punch(punch, "8c8caa504e8a", now, process_time, None)
+            await self._process_punch(punch, "8c8caa504e8a", now, None)
         except Exception as err:
             logging.error(f"Error while ZZ constructing SiPunch: {err}")
 
