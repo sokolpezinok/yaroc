@@ -159,7 +159,7 @@ class SIM7020Interface:
             await self.mqtt_disconnect(int(response.query[0]))
 
         response = await self.async_at.call(
-            f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,200',
+            f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,400',
             "CMQNEW: ([0-9])",
             timeout=150,  # Timeout is very long for this command
         )
