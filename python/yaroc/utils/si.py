@@ -112,6 +112,10 @@ class SiManager(ABC):
     async def udev_events(self):
         pass
 
+    @abstractmethod
+    async def loop(self):
+        pass
+
 
 class UdevSiManager(SiManager):
     """
@@ -245,3 +249,6 @@ class FakeSiManager(SiManager):
     async def udev_events(self) -> AsyncIterator[Device]:
         await asyncio.sleep(10000000)
         yield None
+
+    async def loop(self):
+        pass
