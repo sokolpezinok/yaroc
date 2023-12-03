@@ -86,6 +86,9 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
+        if not se.packet.HasField('decoded'):
+            logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
+            return
         if se.packet.decoded.portnum != 64:
             logging.debug(f"Ignoring message with portnum {se.packet.decoded.pornum}")
             return
