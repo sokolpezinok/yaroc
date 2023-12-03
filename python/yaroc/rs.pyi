@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import ClassVar as _ClassVar
 
-
 class SiPunch(object):
     CARD_FIELD_NUMBER: _ClassVar[int]
     CODE_FIELD_NUMBER: _ClassVar[int]

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import socket
 import time
+from concurrent.futures import Future
 from datetime import datetime
 from threading import Event
 from typing import AsyncIterator, Dict
@@ -134,20 +135,20 @@ class FakeSiWorker(SiWorker):
 
 class SiManager:
     """
-    Dynamically manages connecting and disconnecting SportIdent devices: SRR dongles or bluetooth
-    serial sources.
+    Dynamically manages connecting and disconnecting SportIdent devices, typically SRR dongles.
+
+    Also allows adding a list of pre-configured devices, e.g. Bluetooth serial device.
     """
 
     def __init__(self, workers: list[SiWorker]) -> None:
         context = pyudev.Context()
-        print(workers)
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
         self._si_workers: set[SiWorker] = set(workers)
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
-        self._udev_workers: Dict[str, SiWorker] = {}
+        self._udev_workers: Dict[str, tuple[SiWorker, Future]] = {}
 
         for device in context.list_devices():
             self._handle_udev_event("add", device)
@@ -160,9 +161,10 @@ class SiManager:
 
     async def loop(self):
         loops = []
-        for worker in self._initial_workers:
-            self._si_workers.add(worker)
-            loops.append(worker.loop(self._queue))
+        for worker in self._si_workers:
+            if not isinstance(worker, SerialSiWorker):
+                self._si_workers.add(worker)
+                loops.append(worker.loop(self._queue))
         await asyncio.gather(*loops)
 
     async def punches(self) -> AsyncIterator[SiPunch]:
@@ -178,15 +180,17 @@ class SiManager:
 
             try:
                 worker = SerialSiWorker(device_node)
-                asyncio.run_coroutine_threadsafe(worker.loop(self._queue), asyncio.get_event_loop())
+                fut = asyncio.run_coroutine_threadsafe(
+                    worker.loop(self._queue), asyncio.get_event_loop()
+                )
                 self._si_workers.add(worker)
-                self._udev_workers[device_node] = worker
+                self._udev_workers[device_node] = (worker, fut)
             except Exception as e:
                 logging.error(e)
         elif action == "remove":
-            if device_node in self._si_workers:
+            if device_node in self._udev_workers:
                 logging.info(f"Removed device {device_node}")
-                si_worker = self._udev_workers[device_node]
+                si_worker, _ = self._udev_workers[device_node]
                 si_worker.close()
                 self._si_workers.discard(si_worker)
 
