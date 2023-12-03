@@ -28,9 +28,9 @@ CONNECT_TIMEOUT = 45
 
 def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
     return (
-        f"yaroc/{mac_address}/p",
-        f"yaroc/{mac_address}/status",
-        f"yaroc/{mac_address}/cmd",
+        f"yar/{mac_address}/p",
+        f"yar/{mac_address}/status",
+        f"yar/{mac_address}/cmd",
     )
 
 

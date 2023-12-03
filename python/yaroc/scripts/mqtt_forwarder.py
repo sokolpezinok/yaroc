@@ -125,7 +125,7 @@ class MqttForwader:
 
     @staticmethod
     def extract_mac(topic: str) -> str:
-        match = re.match("yaroc/([0-9a-f]{12})/.*", topic)
+        match = re.match("yar/([0-9a-f]{12})/.*", topic)
         if match is None or len(match.groups()) == 0:
             logging.error(f"Invalid topic: {topic}")
             raise Exception(f"Invalid topic {topic}")
@@ -165,7 +165,7 @@ class MqttForwader:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with client.messages() as messages:
                         for mac_addr in self.client_groups.keys():
-                            await client.subscribe(f"yaroc/{mac_addr}/#", qos=1)
+                            await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                         await client.subscribe("yar/2/c/serial/#", qos=1)
                         async for message in messages:
                             await self._on_message(message)
