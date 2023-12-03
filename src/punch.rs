@@ -36,29 +36,13 @@ impl SiPunch {
     pub fn from_raw(payload: [u8; 20]) -> PyResult<Self> {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
-        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap());
+        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
         let series = card / (1 << 16);
         if series >= 1 && series <= 4 {
             card += series * EARLY_SERIES_COMPLEMENT;
         }
-
-        // Time
         let data = &data[6..];
-        let dow = u32::from((data[0] & 0b1110) >> 1);
-        let today = Local::now().date_naive();
-        let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
-        let date = today.checked_sub_days(Days::new(u64::from(days))).unwrap();
-
-        let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
-            + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
-        let nanos = u32::from(data[3]) * BILLION_BY_256;
-        let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
-        let datetime = NaiveDateTime::new(date, time)
-            .and_local_timezone(Local)
-            .unwrap()
-            .fixed_offset();
-        // if punch_time > now + timedelta(hours=2):  # Allow for some desync
-        //     punch_time -= timedelta(days=7)
+        let datetime = bytes_to_datetime(data);
 
         Ok(Self {
             card,
@@ -70,11 +54,27 @@ impl SiPunch {
     }
 }
 
+fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
+    let dow = u32::from((data[0] & 0b1110) >> 1);
+    let today = Local::now().date_naive();
+    let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
+    let date = today.checked_sub_days(Days::new(u64::from(days))).unwrap();
+
+    let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
+        + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
+    let nanos = u32::from(data[3]) * BILLION_BY_256;
+    let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
+    NaiveDateTime::new(date, time)
+        .and_local_timezone(Local)
+        .unwrap()
+        .fixed_offset()
+}
+
 /// Reimplementation of Sportident checksum algorithm in Rust
 ///
 /// Note that they call it CRC but it is buggy. See the last test that leads to a checksum of 0 for
 /// a polynomial that's not divisible by 0x8005.
-pub fn sportident_checksum(message: &[u8]) -> u16 {
+fn sportident_checksum(message: &[u8]) -> u16 {
     let to_add = 2 - message.len() % 2;
     let suffix = vec![b'\x00'; to_add];
     let mut msg = Vec::from(message);
