@@ -11,7 +11,7 @@ from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
-from ..utils.si import SiManager
+from ..utils.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker
 
 
 def get_log_level(log_level: str | None) -> int:
@@ -26,6 +26,18 @@ def get_log_level(log_level: str | None) -> int:
     else:
         print(f"Wrong log-level setting {log_level}")
         sys.exit(1)
+
+
+def create_si_workers(
+    source_factories: providers.FactoryAggregate,
+    source_config: Dict[str, Any],
+) -> list[SiWorker]:
+    workers: list[SiWorker] = []
+    if source_config.get("fake", {}).get("enable", False):
+        workers.append(source_factories.fake())
+    if source_config.get("bt", {}).get("enable", False):
+        workers.append(source_factories.bt(source_config["bt"]["mac_addr"]))
+    return workers
 
 
 class Container(containers.DeclarativeContainer):
@@ -47,7 +59,12 @@ class Container(containers.DeclarativeContainer):
         roc=providers.Factory(RocClient),
         sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
-    si_manager = providers.Factory(SiManager)
+    source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
+        fake=providers.Factory(FakeSiWorker),
+        bt=providers.Factory(BtSerialSiWorker),
+    )
+    workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
+    si_manager = providers.Factory(SiManager, workers)
 
 
 @inject

@@ -47,6 +47,9 @@ class SerialSiWorker(SiWorker):
         self.name = "srr"
         self.port = port
 
+    def __hash__(self):
+        return self.port.__hash__()
+
     async def loop(self, queue: asyncio.Queue):
         try:
             async with asyncio.timeout(10):
@@ -77,6 +80,10 @@ class BtSerialSiWorker(SiWorker):
         super().__init__()
         self.name = "lora"
         self.mac_addr = mac_addr
+        logging.info(f"Starting a bluetooth serial worker, connecting to {mac_addr}")
+
+    def __hash__(self):
+        return self.mac_addr.__hash__()
 
     async def loop(self, queue: asyncio.Queue):
         sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
@@ -86,6 +93,7 @@ class BtSerialSiWorker(SiWorker):
             await loop.sock_connect(sock, (self.mac_addr, 1))
         except Exception as err:
             logging.error(f"Error connecting to {self.mac_addr}: {err}")
+        logging.info(f"Connected to {self.mac_addr}")
 
         while not self._finished.is_set():
             try:
@@ -109,9 +117,12 @@ class FakeSiWorker(SiWorker):
         self._punch_interval = punch_interval_secs
         self.name = "fake"
         logging.info(
-            "Starting a fake SportIdent device manager, sending a punch every "
+            "Starting a fake SportIdent worker, sending a punch every "
             f"{self._punch_interval} seconds"
         )
+
+    def __hash__(self):
+        return "fake".__hash__()
 
     async def loop(self, queue: asyncio.Queue):
         for i in range(31, 1000):
@@ -127,16 +138,16 @@ class SiManager:
     serial sources.
     """
 
-    def __init__(self, bt_mac_address: str | None = None, add_fake: bool = True) -> None:
+    def __init__(self, workers: list[SiWorker]) -> None:
         context = pyudev.Context()
+        print(workers)
         self.monitor = pyudev.Monitor.from_netlink(context)
         self.monitor.filter_by("tty")
-        self._si_workers: Dict[str, SiWorker] = {}
+        self._si_workers: set[SiWorker] = set(workers)
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
-        self.bt_mac_address = bt_mac_address
-        self.add_fake = add_fake
+        self._udev_workers: Dict[str, SiWorker] = {}
 
         for device in context.list_devices():
             self._handle_udev_event("add", device)
@@ -145,21 +156,12 @@ class SiManager:
         logging.info("Starting udev-based SportIdent device manager")
 
     def __str__(self) -> str:
-        return ",".join(str(worker) for worker in self._si_workers.values())
+        return ",".join(str(worker) for worker in self._si_workers)
 
     async def loop(self):
         loops = []
-        try:
-            if self.bt_mac_address is not None:
-                worker = BtSerialSiWorker(self.bt_mac_address)
-                self._si_workers[self.bt_mac_address] = worker
-                loops.append(worker.loop(self._queue))
-        except Exception as err:
-            logging.error(f"Bluetooth serial init failed: {err}")
-
-        if self.add_fake:
-            worker = FakeSiWorker()
-            self._si_workers["fake"] = worker
+        for worker in self._initial_workers:
+            self._si_workers.add(worker)
             loops.append(worker.loop(self._queue))
         await asyncio.gather(*loops)
 
@@ -170,22 +172,23 @@ class SiManager:
     def _handle_device_internal(self, action: str, device: Device):
         device_node = device.device_node
         if action == "add":
-            if device_node in self._si_workers:
+            if device_node in self._udev_workers:
                 return
             logging.info(f"Inserted SportIdent device {device_node}")
 
             try:
                 worker = SerialSiWorker(device_node)
                 asyncio.run_coroutine_threadsafe(worker.loop(self._queue), asyncio.get_event_loop())
-                self._si_workers[device_node] = worker
+                self._si_workers.add(worker)
+                self._udev_workers[device_node] = worker
             except Exception as e:
                 logging.error(e)
         elif action == "remove":
             if device_node in self._si_workers:
                 logging.info(f"Removed device {device_node}")
-                si_worker = self._si_workers[device_node]
+                si_worker = self._udev_workers[device_node]
                 si_worker.close()
-                del self._si_workers[device_node]
+                self._si_workers.discard(si_worker)
 
     async def udev_events(self) -> AsyncIterator[Device]:
         while True:
