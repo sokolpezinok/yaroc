@@ -8,6 +8,7 @@ from threading import Event
 from typing import AsyncIterator, Dict
 
 import pyudev
+import serial
 from pyudev import Device
 from serial_asyncio import open_serial_connection
 
@@ -70,8 +71,12 @@ class SerialSiWorker(SiWorker):
                 punch = SiPunch.from_raw(data)
                 await self.process_punch(punch, queue)
 
+            except serial.serialutil.SerialException as err:
+                logging.error(f"Fatal serial exception: {err}")
+                return
             except Exception as err:
                 logging.error(f"Loop crashing: {err}")
+                return
 
 
 class BtSerialSiWorker(SiWorker):
@@ -193,6 +198,7 @@ class SiManager:
                 si_worker, _ = self._udev_workers[device_node]
                 si_worker.close()
                 self._si_workers.discard(si_worker)
+                del self._udev_workers[device_node]
 
     async def udev_events(self) -> AsyncIterator[Device]:
         while True:
