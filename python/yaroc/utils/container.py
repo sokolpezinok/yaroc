@@ -11,7 +11,7 @@ from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..utils.async_serial import AsyncATCom
-from ..utils.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker
+from ..utils.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker, UdevSiFactory
 
 
 def get_log_level(log_level: str | None) -> int:
@@ -34,6 +34,8 @@ def create_si_workers(
 ) -> list[SiWorker]:
     workers: list[SiWorker] = []
     if source_config is not None:
+        if source_config.get("udev", {}).get("enable", False):
+            workers.append(source_factories.udev())
         if source_config.get("fake", {}).get("enable", False):
             workers.append(source_factories.fake())
         if source_config.get("bt", {}).get("enable", False):
@@ -61,6 +63,7 @@ class Container(containers.DeclarativeContainer):
         sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
+        udev=providers.Factory(UdevSiFactory),
         fake=providers.Factory(FakeSiWorker),
         bt=providers.Factory(BtSerialSiWorker),
     )

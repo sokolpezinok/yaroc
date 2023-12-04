@@ -2,11 +2,11 @@ import asyncio
 import logging
 import socket
 import time
+from asyncio import Queue
 from concurrent.futures import Future
 from datetime import datetime
 from threading import Event
 from typing import AsyncIterator, Dict
-from asyncio import Queue
 
 import pyudev
 import serial
