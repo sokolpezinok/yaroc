@@ -34,7 +34,7 @@ def create_si_workers(
 ) -> list[SiWorker]:
     workers: list[SiWorker] = []
     if source_config is not None:
-        if source_config.get("udev", {}).get("enable", False):
+        if source_config.get("usb", {}).get("enable", False):
             workers.append(source_factories.udev())
         if source_config.get("fake", {}).get("enable", False):
             workers.append(source_factories.fake())

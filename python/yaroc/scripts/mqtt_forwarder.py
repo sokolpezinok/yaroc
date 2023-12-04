@@ -124,7 +124,7 @@ class MqttForwader:
                     log_message += f"cell {mch.cellid:X}, "
                 log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
-                log_message = f"{self.dns[mac_addr]} {orig_time:%H:%M:%S.%f}: {mch.codes}, "
+                log_message = f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
             await self.client_groups[mac_addr].send_mini_call_home(mch)
