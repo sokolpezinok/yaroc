@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 import tomllib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict
 
 from aiomqtt import Client as MqttClient
@@ -10,6 +10,8 @@ from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 from meshtastic.mqtt_pb2 import ServiceEnvelope
+from meshtastic.portnums_pb2 import SERIAL_APP, TELEMETRY_APP
+from meshtastic.telemetry_pb2 import Telemetry
 
 from yaroc.rs import SiPunch
 
@@ -86,18 +88,19 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
-        if not se.packet.HasField('decoded'):
+        if not se.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
-        if se.packet.decoded.portnum != 64:
+        if se.packet.decoded.portnum != SERIAL_APP:
             logging.debug(f"Ignoring message with portnum {se.packet.decoded.pornum}")
             return
 
         try:
             punch = SiPunch.from_raw(se.packet.decoded.payload)
+            # TODO: change MAC address
             await self._process_punch(punch, "8c8caa504e8a", now, None)
         except Exception as err:
-            logging.error(f"Error while ZZ constructing SiPunch: {err}")
+            logging.error(f"Error while constructing SiPunch: {err}")
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -114,17 +117,43 @@ class MqttForwader:
             total_latency = now - orig_time
             if mch.freq > 0.0:
                 log_message = (
-                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S.%f}: {mch.cpu_temperature:5.2f}°C, "
+                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: {mch.cpu_temperature:5.2f}°C, "
                     f"{mch.signal_dbm:4}dBm, "
                 )
                 if mch.cellid > 0:
                     log_message += f"cell {mch.cellid:X}, "
                 log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
-                log_message = f"At {orig_time:%H:%M:%S.%f}: {mch.codes}, "
+                log_message = f"{self.dns[mac_addr]} {orig_time:%H:%M:%S.%f}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
             await self.client_groups[mac_addr].send_mini_call_home(mch)
+
+    async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
+        try:
+            se = ServiceEnvelope.FromString(payload)
+        except Exception as err:
+            logging.error(f"Error while parsing protobuf: {err}")
+            return
+        if not se.packet.HasField("decoded"):
+            logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
+            return
+        if se.packet.decoded.portnum != TELEMETRY_APP:
+            return
+
+        try:
+            telemetry = Telemetry.FromString(se.packet.decoded.payload)
+            orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
+            total_latency = now - orig_time
+            metrics = telemetry.device_metrics
+
+            log_message = (
+                f"RAK {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
+                f"{metrics.voltage:4.3f}V, latency {total_latency.total_seconds():6.2f}s"
+            )
+            logging.info(log_message)
+        except Exception as err:
+            logging.error(f"Error while constructing Telemetry: {err}")
 
     @staticmethod
     def extract_mac(topic: str) -> str:
@@ -147,6 +176,8 @@ class MqttForwader:
             elif topic.endswith("/status"):
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
+            elif topic.startswith("yar/2/c/LongFast/"):
+                await self._handle_meshtastic_status(msg.payload, now)
             elif topic.startswith("yar/2/c/serial/"):
                 await self._handle_meshtastic_serial(msg.payload, now)
         except Exception as err:
@@ -170,6 +201,7 @@ class MqttForwader:
                         for mac_addr in self.client_groups.keys():
                             await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                         await client.subscribe("yar/2/c/serial/#", qos=1)
+                        await client.subscribe("yar/2/c/LongFast/#", qos=1)
                         async for message in messages:
                             await self._on_message(message)
             except MqttError:
