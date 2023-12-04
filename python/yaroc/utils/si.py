@@ -6,6 +6,7 @@ from concurrent.futures import Future
 from datetime import datetime
 from threading import Event
 from typing import AsyncIterator, Dict
+from asyncio import Queue
 
 import pyudev
 import serial
@@ -25,7 +26,7 @@ class SiWorker:
         self._finished = Event()
         self.codes: set[int] = set()
 
-    async def process_punch(self, punch: SiPunch, queue: asyncio.Queue):
+    async def process_punch(self, punch: SiPunch, queue: Queue):
         now = datetime.now().astimezone()
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
@@ -52,7 +53,7 @@ class SerialSiWorker(SiWorker):
     def __hash__(self):
         return self.port.__hash__()
 
-    async def loop(self, queue: asyncio.Queue):
+    async def loop(self, queue: Queue):
         try:
             async with asyncio.timeout(10):
                 reader, writer = await open_serial_connection(
@@ -91,7 +92,7 @@ class BtSerialSiWorker(SiWorker):
     def __hash__(self):
         return self.mac_addr.__hash__()
 
-    async def loop(self, queue: asyncio.Queue):
+    async def loop(self, queue: Queue):
         sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         sock.setblocking(False)
         loop = asyncio.get_event_loop()
@@ -115,98 +116,46 @@ class BtSerialSiWorker(SiWorker):
                 return
 
 
-class FakeSiWorker(SiWorker):
-    """Creates fake SportIdent events, useful for benchmarks and tests."""
+class UdevSiFactory(SiWorker):
+    def __init__(self):
+        self._udev_workers: Dict[str, tuple[SiWorker, Future]] = {}
+        self._device_queue: Queue[tuple[str, Device]] = Queue()
+        context = pyudev.Context()
+        self.monitor = pyudev.Monitor.from_netlink(context)
+        self.monitor.filter_by("tty")
 
-    def __init__(self, punch_interval_secs: int = 12):
-        super().__init__()
-        self._punch_interval = punch_interval_secs
-        self.name = "fake"
-        logging.info(
-            "Starting a fake SportIdent worker, sending a punch every "
-            f"{self._punch_interval} seconds"
-        )
+        for device in context.list_devices():
+            self._handle_udev_event("add", device)
+        self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
+        self._observer.start()
+        logging.info("Starting udev-based SportIdent device manager")
 
-    def __hash__(self):
-        return "fake".__hash__()
-
-    async def loop(self, queue: asyncio.Queue):
-        for i in range(31, 1000):
-            time_start = time.time()
-            punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18)
-            await self.process_punch(punch, queue)
-            await asyncio.sleep(self._punch_interval - (time.time() - time_start))
-
-
-class SiManager:
-    """
-    Dynamically manages connecting and disconnecting SportIdent devices, typically SRR dongles.
-
-    Also allows adding a list of pre-configured devices, e.g. Bluetooth serial device.
-    """
-
-    def __init__(self, workers: list[SiWorker], process_udev_events: bool = True) -> None:
-        self._si_workers: set[SiWorker] = set(workers)
-        self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
-        self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
-        self._loop = asyncio.get_event_loop()
-
-        if process_udev_events:
-            self._udev_workers: Dict[str, tuple[SiWorker, Future]] = {}
-            context = pyudev.Context()
-            self.monitor = pyudev.Monitor.from_netlink(context)
-            self.monitor.filter_by("tty")
-
-            for device in context.list_devices():
-                self._handle_udev_event("add", device)
-            self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
-            self._observer.start()
-            logging.info("Starting udev-based SportIdent device manager")
-
-    def __str__(self) -> str:
-        return ",".join(str(worker) for worker in self._si_workers)
-
-    async def loop(self):
-        loops = []
-        for worker in self._si_workers:
-            if not isinstance(worker, SerialSiWorker):
-                self._si_workers.add(worker)
-                loops.append(worker.loop(self._queue))
-        await asyncio.gather(*loops)
-
-    async def punches(self) -> AsyncIterator[SiPunch]:
-        while True:
-            yield await self._queue.get()
-
-    def _handle_device_internal(self, action: str, device: Device):
-        device_node = device.device_node
-        if action == "add":
-            if device_node in self._udev_workers:
-                return
-            logging.info(f"Inserted SportIdent device {device_node}")
-
-            try:
-                worker = SerialSiWorker(device_node)
-                fut = asyncio.run_coroutine_threadsafe(
-                    worker.loop(self._queue), asyncio.get_event_loop()
-                )
-                self._si_workers.add(worker)
-                self._udev_workers[device_node] = (worker, fut)
-            except Exception as e:
-                logging.error(e)
-        elif action == "remove":
-            if device_node in self._udev_workers:
-                logging.info(f"Removed device {device_node}")
-                si_worker, _ = self._udev_workers[device_node]
-                si_worker.close()
-                self._si_workers.discard(si_worker)
-                del self._udev_workers[device_node]
-
-    async def udev_events(self) -> AsyncIterator[Device]:
+    async def loop(self, queue: Queue[SiPunch]):
+        # async def loop(self) -> AsyncIterator[Device]:
+        # yield device
         while True:
             action, device = await self._device_queue.get()
-            self._handle_device_internal(action, device)
-            yield device
+
+            device_node = device.device_node
+            if action == "add":
+                if device_node in self._udev_workers:
+                    return
+                logging.info(f"Inserted SportIdent device {device_node}")
+
+                try:
+                    worker = SerialSiWorker(device_node)
+                    fut = asyncio.run_coroutine_threadsafe(
+                        worker.loop(queue), asyncio.get_event_loop()
+                    )
+                    self._udev_workers[device_node] = (worker, fut)
+                except Exception as e:
+                    logging.error(e)
+            elif action == "remove":
+                if device_node in self._udev_workers:
+                    logging.info(f"Removed device {device_node}")
+                    si_worker, _ = self._udev_workers[device_node]
+                    si_worker.close()
+                    del self._udev_workers[device_node]
 
     @staticmethod
     def _is_sl(device: Device):
@@ -234,4 +183,56 @@ class SiManager:
     def _handle_udev_event(self, action, device: Device):
         if not self._is_sl(device) and not self._is_sandberg(device):
             return
-        asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
+        asyncio.run_coroutine_threadsafe(
+            self._device_queue.put((action, device)), asyncio.get_event_loop()
+        )
+
+
+class FakeSiWorker(SiWorker):
+    """Creates fake SportIdent events, useful for benchmarks and tests."""
+
+    def __init__(self, punch_interval_secs: int = 12):
+        super().__init__()
+        self._punch_interval = punch_interval_secs
+        self.name = "fake"
+        logging.info(
+            "Starting a fake SportIdent worker, sending a punch every "
+            f"{self._punch_interval} seconds"
+        )
+
+    def __hash__(self):
+        return "fake".__hash__()
+
+    async def loop(self, queue: Queue):
+        for i in range(31, 1000):
+            time_start = time.time()
+            punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18)
+            await self.process_punch(punch, queue)
+            await asyncio.sleep(self._punch_interval - (time.time() - time_start))
+
+
+class SiManager:
+    """
+    Dynamically manages connecting and disconnecting SportIdent devices, typically SRR dongles.
+
+    Also allows adding a list of pre-configured devices, e.g. Bluetooth serial device.
+    """
+
+    def __init__(self, workers: list[SiWorker]) -> None:
+        self._si_workers: set[SiWorker] = set(workers)
+        self._queue: Queue[SiPunch] = Queue()
+
+    def __str__(self) -> str:
+        return ",".join(str(worker) for worker in self._si_workers)
+
+    async def loop(self):
+        loops = []
+        for worker in self._si_workers:
+            if not isinstance(worker, SerialSiWorker):
+                self._si_workers.add(worker)
+                loops.append(worker.loop(self._queue))
+        await asyncio.gather(*loops)
+
+    async def punches(self) -> AsyncIterator[SiPunch]:
+        while True:
+            yield await self._queue.get()
