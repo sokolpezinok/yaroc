@@ -43,11 +43,11 @@ class PunchSender:
     async def udev_events(self):
         # TODO: get rid of the following sleep
         await asyncio.sleep(3.0)  # sleep to allow for connecting
-        async for device in self.si_manager.udev_events():
+        async for action, device in self.si_manager.udev_events():
             mch = MiniCallHome()
             mch.time.GetCurrentTime()
-            device_name = device.device_node.removeprefix("/dev/").lower()
-            if device.action == "add" or device.action is None:
+            device_name = device.removeprefix("/dev/").lower()
+            if action == "add" or action is None:
                 mch.codes = f"siadded-{device_name}"
             else:
                 mch.codes = f"siremoved-{device_name}"
