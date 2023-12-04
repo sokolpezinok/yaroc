@@ -145,21 +145,23 @@ class SiManager:
     Also allows adding a list of pre-configured devices, e.g. Bluetooth serial device.
     """
 
-    def __init__(self, workers: list[SiWorker]) -> None:
-        context = pyudev.Context()
-        self.monitor = pyudev.Monitor.from_netlink(context)
-        self.monitor.filter_by("tty")
+    def __init__(self, workers: list[SiWorker], process_udev_events: bool = True) -> None:
         self._si_workers: set[SiWorker] = set(workers)
         self._queue: asyncio.Queue[SiPunch] = asyncio.Queue()
         self._device_queue: asyncio.Queue[tuple[str, Device]] = asyncio.Queue()
         self._loop = asyncio.get_event_loop()
-        self._udev_workers: Dict[str, tuple[SiWorker, Future]] = {}
 
-        for device in context.list_devices():
-            self._handle_udev_event("add", device)
-        self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
-        self._observer.start()
-        logging.info("Starting udev-based SportIdent device manager")
+        if process_udev_events:
+            self._udev_workers: Dict[str, tuple[SiWorker, Future]] = {}
+            context = pyudev.Context()
+            self.monitor = pyudev.Monitor.from_netlink(context)
+            self.monitor.filter_by("tty")
+
+            for device in context.list_devices():
+                self._handle_udev_event("add", device)
+            self._observer = pyudev.MonitorObserver(self.monitor, self._handle_udev_event)
+            self._observer.start()
+            logging.info("Starting udev-based SportIdent device manager")
 
     def __str__(self) -> str:
         return ",".join(str(worker) for worker in self._si_workers)
