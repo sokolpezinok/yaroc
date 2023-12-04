@@ -30,13 +30,14 @@ def get_log_level(log_level: str | None) -> int:
 
 def create_si_workers(
     source_factories: providers.FactoryAggregate,
-    source_config: Dict[str, Any],
+    source_config: Dict[str, Any] | None,
 ) -> list[SiWorker]:
     workers: list[SiWorker] = []
-    if source_config.get("fake", {}).get("enable", False):
-        workers.append(source_factories.fake())
-    if source_config.get("bt", {}).get("enable", False):
-        workers.append(source_factories.bt(source_config["bt"]["mac_addr"]))
+    if source_config is not None:
+        if source_config.get("fake", {}).get("enable", False):
+            workers.append(source_factories.fake())
+        if source_config.get("bt", {}).get("enable", False):
+            workers.append(source_factories.bt(source_config["bt"]["mac_addr"]))
     return workers
 
 
