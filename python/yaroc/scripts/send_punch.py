@@ -70,20 +70,20 @@ class PunchSender:
 
 
 async def main():
-    mac_addr = eth_mac_addr()
-    assert mac_addr is not None
-
     with open("send-punch.toml", "rb") as f:
         config = tomllib.load(f)
     if "si_punches" not in config:
         config["si_punches"] = "udev"
 
+    if "mac_addr" not in config:
+        config["mac_addr"] = eth_mac_addr()
+    assert config["mac_addr"] is not None
+
     container = Container()
     container.config.from_dict(config)
-    container.config.mac_addr.from_value(mac_addr)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container", __name__])
-    logging.info(f"Starting SendPunch for MAC {mac_addr}")
+    logging.info(f"Starting SendPunch for MAC {config['mac_addr']}")
 
     clients = [
         await c if isinstance(c, asyncio.Future) else c
