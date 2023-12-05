@@ -82,7 +82,7 @@ class MqttForwader:
                 send_time = None
             await self._process_punch(si_punch, mac_addr, now, send_time)
 
-    async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
+    async def _handle_meshtastic_serial(self, payload: PayloadType, mac_addr: str, now: datetime):
         try:
             se = ServiceEnvelope.FromString(payload)
         except Exception as err:
@@ -129,7 +129,7 @@ class MqttForwader:
             logging.info(log_message)
             await self.client_groups[mac_addr].send_mini_call_home(mch)
 
-    async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
+    async def _handle_meshtastic_status(self, payload: PayloadType, mac_addr: str, now: datetime):
         try:
             se = ServiceEnvelope.FromString(payload)
         except Exception as err:
@@ -148,7 +148,7 @@ class MqttForwader:
             metrics = telemetry.device_metrics
 
             log_message = (
-                f"RAK {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
+                f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
                 f"{metrics.voltage:4.3f}V, latency {total_latency.total_seconds():6.2f}s"
             )
             logging.info(log_message)
@@ -158,6 +158,16 @@ class MqttForwader:
     @staticmethod
     def extract_mac(topic: str) -> str:
         match = re.match("yar/([0-9a-f]{12})/.*", topic)
+        if match is None or len(match.groups()) == 0:
+            logging.error(f"Invalid topic: {topic}")
+            raise Exception(f"Invalid topic {topic}")
+
+        groups = match.groups()
+        return groups[0]
+
+    @staticmethod
+    def extract_mac_meshtastic(topic: str) -> str:
+        match = re.match("yar/2/c/.*/!([0-9a-f]{8})*", topic)
         if match is None or len(match.groups()) == 0:
             logging.error(f"Invalid topic: {topic}")
             raise Exception(f"Invalid topic {topic}")
@@ -177,9 +187,11 @@ class MqttForwader:
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
             elif topic.startswith("yar/2/c/LongFast/"):
-                await self._handle_meshtastic_status(msg.payload, now)
+                mac_addr = MqttForwader.extract_mac_meshtastic(topic)
+                await self._handle_meshtastic_status(msg.payload, mac_addr, now)
             elif topic.startswith("yar/2/c/serial/"):
-                await self._handle_meshtastic_serial(msg.payload, now)
+                mac_addr = MqttForwader.extract_mac_meshtastic(topic)
+                await self._handle_meshtastic_serial(msg.payload, mac_addr, now)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
 
