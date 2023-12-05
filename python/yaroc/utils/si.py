@@ -12,7 +12,6 @@ import pyudev
 import serial
 from pyudev import Device
 from serial_asyncio import open_serial_connection
-from typing import Iterator
 
 from yaroc.rs import SiPunch
 
@@ -35,12 +34,8 @@ class SiWorker:
         self._codes.add(punch.code)
 
     def __str__(self):
-        codes = list(self.codes())
-        codes_str = ",".join(map(str, codes)) if len(codes) >= 1 else "0"
+        codes_str = ",".join(map(str, self._codes)) if len(self._codes) >= 1 else "0"
         return f"{codes_str}-{self.name}"
-
-    def codes(self) -> Iterator[int]:
-        return self._codes
 
 
 class SerialSiWorker(SiWorker):
@@ -50,6 +45,7 @@ class SerialSiWorker(SiWorker):
         super().__init__()
         self.port = port
         self._finished = Event()
+        self.name = "srr"
 
     async def loop(self, queue: Queue[SiPunch]):
         try:
@@ -119,7 +115,6 @@ class BtSerialSiWorker(SiWorker):
 
 class UdevSiFactory(SiWorker):
     def __init__(self):
-        self.name = "srr"
         self._udev_workers: Dict[str, tuple[SerialSiWorker, Future]] = {}
         self._device_queue: Queue[tuple[str, Device]] = Queue()
 
@@ -186,16 +181,13 @@ class UdevSiFactory(SiWorker):
     def _handle_udev_event(self, action, device: Device):
         if not self._is_sl(device) and not self._is_sandberg(device):
             return
-        asyncio.run_coroutine_threadsafe(
-            self._device_queue.put((action, device)), self._loop
-        )
+        asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
 
-    def codes(self):
-        union = set()
+    def __str__(self):
+        res = []
         for worker, _ in self._udev_workers.values():
-            for c in worker.codes():
-                union.add(c)
-        return union
+            res.append(str(worker))
+        return ",".join(res)
 
 
 class FakeSiWorker(SiWorker):
