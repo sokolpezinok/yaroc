@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, time, timedelta
+from datetime import time, timedelta
 from typing import Literal
 
 from yaroc.rs import SiPunch

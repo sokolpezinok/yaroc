@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from asyncio import Lock
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Tuple
 
 from aiomqtt import Client as AioMqttClient
