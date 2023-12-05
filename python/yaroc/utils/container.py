@@ -50,7 +50,8 @@ class Container(containers.DeclarativeContainer):
     logging = providers.Resource(
         logging.basicConfig,
         level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.device)
