@@ -25,9 +25,12 @@ BROKER_PORT = 1883
 
 
 class MqttForwader:
-    def __init__(self, client_groups: Dict[str, ClientGroup], dns: Dict[str, str]):
+    def __init__(
+        self, client_groups: Dict[str, ClientGroup], dns: Dict[str, str], meshtastic_mac: str
+    ):
         self.client_groups = client_groups
         self.dns = dns
+        self.meshtastic_mac = meshtastic_mac
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -97,8 +100,7 @@ class MqttForwader:
 
         try:
             punch = SiPunch.from_raw(se.packet.decoded.payload)
-            # TODO: change MAC address
-            await self._process_punch(punch, "8c8caa504e8a", now, None)
+            await self._process_punch(punch, self.meshtastic_mac, now, None)
         except Exception as err:
             logging.error(f"Error while constructing SiPunch: {err}")
 
@@ -246,5 +248,5 @@ def main():
         client_groups[str(mac_address)] = ClientGroup(clients)
         dns[str(mac_address)] = name
 
-    forwarder = MqttForwader(client_groups, dns)
+    forwarder = MqttForwader(client_groups, dns, config["meshtastic_mac"])
     asyncio.run(forwarder.loop())
