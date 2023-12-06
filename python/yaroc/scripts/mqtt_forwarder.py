@@ -9,8 +9,9 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
+from meshtastic.mesh_pb2 import Position
 from meshtastic.mqtt_pb2 import ServiceEnvelope
-from meshtastic.portnums_pb2 import SERIAL_APP, TELEMETRY_APP
+from meshtastic.portnums_pb2 import POSITION_APP, SERIAL_APP, TELEMETRY_APP
 from meshtastic.telemetry_pb2 import Telemetry
 
 from yaroc.rs import SiPunch
@@ -140,22 +141,34 @@ class MqttForwader:
         if not se.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
-        if se.packet.decoded.portnum != TELEMETRY_APP:
-            return
+        if se.packet.decoded.portnum == TELEMETRY_APP:
+            try:
+                telemetry = Telemetry.FromString(se.packet.decoded.payload)
+                orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
+                total_latency = now - orig_time
+                metrics = telemetry.device_metrics
 
-        try:
-            telemetry = Telemetry.FromString(se.packet.decoded.payload)
-            orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
-            total_latency = now - orig_time
-            metrics = telemetry.device_metrics
+                log_message = (
+                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
+                    f"{metrics.voltage:4.3f}V, latency {total_latency.total_seconds():6.2f}s"
+                )
+                logging.info(log_message)
+            except Exception as err:
+                logging.error(f"Error while constructing Telemetry: {err}")
+        elif se.packet.decoded.portnum == POSITION_APP:
+            try:
+                position = Position.FromString(se.packet.decoded.payload)
+                orig_time = datetime.fromtimestamp(position.time).astimezone()
+                total_latency = now - orig_time
+                lat, lon = position.latitude_i / 10**7, position.longitude_i / 10**7
 
-            log_message = (
-                f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
-                f"{metrics.voltage:4.3f}V, latency {total_latency.total_seconds():6.2f}s"
-            )
-            logging.info(log_message)
-        except Exception as err:
-            logging.error(f"Error while constructing Telemetry: {err}")
+                log_message = (
+                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
+                    f"latency {total_latency.total_seconds():6.2f}s"
+                )
+                logging.info(log_message)
+            except Exception as err:
+                logging.error(f"Error while constructing Position: {err}")
 
     @staticmethod
     def extract_mac(topic: str) -> str:
