@@ -52,6 +52,7 @@ class MqttForwader:
         mac_addr: str,
         now: datetime,
         send_time: datetime | None,
+        override_mac: str | None,
     ):
         log_message = (
             f"{self.dns[mac_addr]} {punch.card:7} punched {punch.code:03} "
@@ -66,7 +67,8 @@ class MqttForwader:
             )
 
         logging.info(log_message)
-        await self.client_groups[mac_addr].send_punch(punch)
+        final_mac = override_mac if override_mac is not None else mac_addr
+        await self.client_groups[final_mac].send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -86,7 +88,7 @@ class MqttForwader:
                 send_time = None
             await self._process_punch(si_punch, mac_addr, now, send_time)
 
-    async def _handle_meshtastic_serial(self, payload: PayloadType, mac_addr: str, now: datetime):
+    async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
             se = ServiceEnvelope.FromString(payload)
         except Exception as err:
@@ -98,12 +100,16 @@ class MqttForwader:
         if se.packet.decoded.portnum != SERIAL_APP:
             logging.debug(f"Ignoring message with portnum {se.packet.decoded.portnum}")
             return
+        _, node_id = se.packet.ListFields()[0]  # TODO: couldn't use `se.packet.from`
+        mac_addr = f"{node_id:08x}"
 
         try:
             punch = SiPunch.from_raw(se.packet.decoded.payload)
-            await self._process_punch(punch, self.meshtastic_mac, now, None)
+            await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac)
         except Exception as err:
-            logging.error(f"Error while constructing SiPunch: {err}")
+            logging.error(
+                f"Cannot construct SiPunch from {mac_addr} {se.packet.decoded.payload}: {err}"
+            )
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -132,7 +138,7 @@ class MqttForwader:
             logging.info(log_message)
             await self.client_groups[mac_addr].send_mini_call_home(mch)
 
-    async def _handle_meshtastic_status(self, payload: PayloadType, mac_addr: str, now: datetime):
+    async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
         try:
             se = ServiceEnvelope.FromString(payload)
         except Exception as err:
@@ -141,6 +147,8 @@ class MqttForwader:
         if not se.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
+        _, node_id = se.packet.ListFields()[0]  # TODO: couldn't use `se.packet.from`
+        mac_addr = f"{node_id:08x}"
         if se.packet.decoded.portnum == TELEMETRY_APP:
             try:
                 telemetry = Telemetry.FromString(se.packet.decoded.payload)
@@ -180,16 +188,6 @@ class MqttForwader:
         groups = match.groups()
         return groups[0]
 
-    @staticmethod
-    def extract_mac_meshtastic(topic: str) -> str:
-        match = re.match("yar/2/c/.*/!([0-9a-f]{8})*", topic)
-        if match is None or len(match.groups()) == 0:
-            logging.error(f"Invalid topic: {topic}")
-            raise Exception(f"Invalid topic {topic}")
-
-        groups = match.groups()
-        return groups[0]
-
     async def _on_message(self, msg: Message):
         now = datetime.now().astimezone()
         topic = msg.topic.value
@@ -202,11 +200,9 @@ class MqttForwader:
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
             elif topic.startswith("yar/2/c/LongFast/"):
-                mac_addr = MqttForwader.extract_mac_meshtastic(topic)
-                await self._handle_meshtastic_status(msg.payload, mac_addr, now)
+                await self._handle_meshtastic_status(msg.payload, now)
             elif topic.startswith("yar/2/c/serial/"):
-                mac_addr = MqttForwader.extract_mac_meshtastic(topic)
-                await self._handle_meshtastic_serial(msg.payload, mac_addr, now)
+                await self._handle_meshtastic_serial(msg.payload, now)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
 
