@@ -2,19 +2,18 @@ import asyncio
 import logging
 import random
 from asyncio import Lock
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import Tuple
 
 from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttError
 from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
 
-from yaroc.rs import SiPunch
-
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_punch_proto
+from ..rs import SiPunch
 from ..utils.async_serial import AsyncATCom
 from ..utils.modem_manager import ModemManager
 from ..utils.retries import BackoffBatchedRetries
@@ -26,12 +25,19 @@ BROKER_PORT = 1883
 CONNECT_TIMEOUT = 45
 
 
-def topics_from_mac(mac_address: str) -> Tuple[str, str, str]:
-    return (
-        f"yar/{mac_address}/p",
-        f"yar/{mac_address}/status",
-        f"yar/{mac_address}/cmd",
-    )
+@dataclass
+class Topics:
+    punch: str
+    status: str
+    command: str
+
+    @staticmethod
+    def from_mac(mac_address: str):
+        return Topics(
+            f"yar/{mac_address}/p",
+            f"yar/{mac_address}/status",
+            f"yar/{mac_address}/cmd",
+        )
 
 
 class MqttClient(Client):
@@ -44,7 +50,7 @@ class MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = BROKER_PORT,
     ):
-        self.topic_punches, self.topic_status, self.topic_cmd = topics_from_mac(mac_address)
+        self.topics = Topics.from_mac(mac_address)
         self.name = f"{name_prefix}-{mac_address}"
         self.broker_url = broker_url
         self.broker_port = broker_port
@@ -54,7 +60,7 @@ class MqttClient(Client):
 
         status = Status()
         status.disconnected.CopyFrom(disconnected)
-        will = Will(topic=self.topic_status, payload=status.SerializeToString(), qos=1)
+        will = Will(topic=self.topics.status, payload=status.SerializeToString(), qos=1)
 
         self.client = AioMqttClient(
             self.broker_url,
@@ -77,7 +83,7 @@ class MqttClient(Client):
         except Exception as err:
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.GetCurrentTime()
-        return await self._send(self.topic_punches, punches.SerializeToString(), 1, "Punch")
+        return await self._send(self.topics.punch, punches.SerializeToString(), 1, "Punch")
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
         try:
@@ -93,7 +99,7 @@ class MqttClient(Client):
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return await self._send(self.topic_status, status.SerializeToString(), 0, "MiniCallHome")
+        return await self._send(self.topics.status, status.SerializeToString(), 0, "MiniCallHome")
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
@@ -111,7 +117,7 @@ class MqttClient(Client):
                 async with self.client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with self.client.messages() as messages:
-                        await self.client.subscribe(self.topic_cmd)
+                        await self.client.subscribe(self.topics.command)
                         async for message in messages:
                             logging.info("Got a command message, processing is not implemented")
 
@@ -132,11 +138,11 @@ class SIM7020MqttClient(Client):
         broker_url: str = BROKER_URL,
         broker_port: int = 1883,
     ):
-        self.topic_punches, self.topic_status, self.topic_cmd = topics_from_mac(mac_address)
+        self.topics = Topics.from_mac(mac_address)
         name = f"{name_prefix}-{mac_address}"
         self._sim7020 = SIM7020Interface(
             async_at,
-            self.topic_status,
+            self.topics.status,
             name,
             connect_timeout,
             broker_url,
@@ -161,7 +167,7 @@ class SIM7020MqttClient(Client):
             punches_proto.sending_timestamp.GetCurrentTime()
         async with self._lock:
             res = await self._sim7020.mqtt_send(
-                self.topic_punches, punches_proto.SerializeToString(), qos=1
+                self.topics.punch, punches_proto.SerializeToString(), qos=1
             )
             if isinstance(res, str):
                 logging.error(f"Sending of punches failed: {res}")
@@ -185,7 +191,7 @@ class SIM7020MqttClient(Client):
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
-        return await self._send(self.topic_status, status.SerializeToString(), "MiniCallHome")
+        return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
         async with self._lock:
