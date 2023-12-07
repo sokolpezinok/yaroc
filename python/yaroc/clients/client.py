@@ -41,13 +41,22 @@ class SerialClient(Client):
     async def loop(self):
         try:
             async with asyncio.timeout(10):
-                _, self.writer = await open_serial_connection(
-                    url=self.port, baudrate=38400, rtscts=False
+                reader, self.writer = await open_serial_connection(
+                    url=self.port,
+                    baudrate=38400,
+                    timeout=5,
                 )
             logging.info(f"Connected to SRR sink at {self.port}")
         except Exception as err:
             logging.error(f"Error connecting to {self.port}: {err}")
             return
+
+        while True:
+            data = await reader.readuntil(b"\x03")
+            if data == b"\xff\x02\x02\xf0\x01Mm\n\x03":
+                logging.info("Responding to MeOS")
+                self.writer.write(b"\xff\x02\xf0\x03")
+                self.writer.write(b"\x12\x8cMb?\x03")
 
     async def send_punch(self, punch: SiPunch) -> bool:
         try:
