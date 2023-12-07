@@ -5,7 +5,7 @@ from typing import Any, Dict
 from dependency_injector import containers, providers
 from dependency_injector.wiring import Provide, inject
 
-from ..clients.client import Client
+from ..clients.client import Client, SerialClient
 from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
@@ -57,6 +57,7 @@ class Container(containers.DeclarativeContainer):
     async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.device)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
+        serial=providers.Factory(SerialClient, config.client.serial.port),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient),
@@ -79,6 +80,9 @@ def create_clients(
     client_config: Dict[str, Any] = Provide[Container.config.client],
 ) -> list[Client]:
     clients: list[Client] = []
+    if client_config.get("serial", {}).get("enable", False):
+        clients.append(client_factories.serial())
+        logging.info(f"Enabled serial client at {client_config['serial']['port']}")
     if client_config.get("sim7020", {}).get("enable", False):
         clients.append(client_factories.sim7020(mac_address))
         logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
