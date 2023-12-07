@@ -28,7 +28,8 @@ class SiWorker:
     async def process_punch(self, punch: SiPunch, queue: Queue):
         now = datetime.now().astimezone()
         logging.info(
-            f"{punch.card} punched {punch.code} at {punch.time}, received after {now-punch.time}"
+            f"{punch.card} punched {punch.code} at {punch.time:%H:%M:%S.%f}, received after "
+            f"{(now-punch.time).total_seconds():3.2f}s"
         )
         await queue.put(punch)
         self._codes.add(punch.code)
