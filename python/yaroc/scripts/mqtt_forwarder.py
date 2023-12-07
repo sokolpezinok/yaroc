@@ -96,7 +96,7 @@ class MqttForwader:
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
         if se.packet.decoded.portnum != SERIAL_APP:
-            logging.debug(f"Ignoring message with portnum {se.packet.decoded.pornum}")
+            logging.debug(f"Ignoring message with portnum {se.packet.decoded.portnum}")
             return
 
         try:
