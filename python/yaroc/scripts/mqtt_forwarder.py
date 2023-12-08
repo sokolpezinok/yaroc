@@ -26,10 +26,8 @@ BROKER_PORT = 1883
 
 
 class MqttForwader:
-    def __init__(
-        self, client_groups: Dict[str, ClientGroup], dns: Dict[str, str], meshtastic_mac: str
-    ):
-        self.client_groups = client_groups
+    def __init__(self, client_group: ClientGroup, dns: Dict[str, str], meshtastic_mac: str):
+        self.client_group = client_group
         self.dns = dns
         self.meshtastic_mac = meshtastic_mac
 
@@ -68,7 +66,7 @@ class MqttForwader:
 
         logging.info(log_message)
         final_mac = override_mac if override_mac is not None else mac_addr
-        await self.client_groups[final_mac].send_punch(punch)
+        await self.client_group.send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -136,7 +134,7 @@ class MqttForwader:
                 log_message = f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: {mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
-            await self.client_groups[mac_addr].send_mini_call_home(mch)
+            await self.client_group.send_mini_call_home(mch)
 
     async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
         try:
@@ -208,8 +206,7 @@ class MqttForwader:
 
     async def loop(self):
         async_loop = asyncio.get_event_loop()
-        for client_group in self.client_groups.values():
-            asyncio.run_coroutine_threadsafe(client_group.loop(), async_loop)
+        asyncio.run_coroutine_threadsafe(self.client_group.loop(), async_loop)
 
         while True:
             try:
@@ -221,7 +218,7 @@ class MqttForwader:
                 ) as client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with client.messages() as messages:
-                        for mac_addr in self.client_groups.keys():
+                        for mac_addr in self.dns.keys():
                             await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                         await client.subscribe("yar/2/c/serial/#", qos=1)
                         await client.subscribe("yar/2/c/LongFast/#", qos=1)
@@ -248,14 +245,15 @@ def main():
     container.init_resources()
     container.wire(modules=["yaroc.utils.container"])
 
-    client_groups = {}
     dns = {}
+    mac_address = list(config["mac-addresses"].values())[0]
+    clients = create_clients(container.client_factories, mac_address=mac_address)
+    if len(clients) == 0:
+        logging.info("Listening without forwarding")
+    client_group = ClientGroup(clients)
+
     for name, mac_address in config["mac-addresses"].items():
-        clients = create_clients(container.client_factories, mac_address=mac_address)
-        if len(clients) == 0:
-            logging.info(f"Listening to {name}/{mac_address} without forwarding")
-        client_groups[str(mac_address)] = ClientGroup(clients)
         dns[str(mac_address)] = name
 
-    forwarder = MqttForwader(client_groups, dns, config["meshtastic_mac"])
+    forwarder = MqttForwader(client_group, dns, config["meshtastic_mac"])
     asyncio.run(forwarder.loop())
