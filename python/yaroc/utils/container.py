@@ -5,7 +5,7 @@ from typing import Any, Dict
 from dependency_injector import containers, providers
 from dependency_injector.wiring import Provide, inject
 
-from ..clients.client import Client, SerialClient
+from ..clients.client import Client, ClientGroup, SerialClient
 from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
@@ -74,16 +74,16 @@ class Container(containers.DeclarativeContainer):
 
 
 @inject
-def create_clients(
+async def create_clients(
     client_factories: providers.FactoryAggregate,
     client_config: Dict[str, Any] = Provide[Container.config.client],
-) -> list[Client]:
+) -> ClientGroup:
     clients: list[Client] = []
     if client_config.get("serial", {}).get("enable", False):
         clients.append(client_factories.serial())
         logging.info(f"Enabled serial client at {client_config['serial']['port']}")
     if client_config.get("sim7020", {}).get("enable", False):
-        clients.append(client_factories.sim7020())
+        clients.append(await client_factories.sim7020())
         logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
     if client_config.get("sirap", {}).get("enable", False):
         clients.append(client_factories.sirap())
@@ -97,4 +97,4 @@ def create_clients(
     if client_config.get("mop", {}).get("enable", False):
         clients.append(client_factories.mop())
         logging.info("Enabled MOP client")
-    return clients
+    return ClientGroup(clients)

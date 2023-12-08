@@ -6,7 +6,7 @@ import tomllib
 
 from dependency_injector.wiring import Provide, inject
 
-from ..clients.client import Client, ClientGroup
+from ..clients.client import ClientGroup
 from ..pb.status_pb2 import MiniCallHome
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
@@ -17,13 +17,13 @@ class PunchSender:
     @inject
     def __init__(
         self,
-        clients: list[Client],
+        client_group: ClientGroup,
         mac_addr: str,
         si_manager: SiPunchManager = Provide[Container.si_manager],
     ):
-        if len(clients) == 0:
+        if client_group.len() == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
-        self.client_group = ClientGroup(clients)
+        self.client_group = client_group
         self.si_manager = si_manager
         self.mac_addr = mac_addr
         self._mch_interval = 20
@@ -92,11 +92,8 @@ async def main():
     container.wire(modules=["yaroc.utils.container", __name__])
     logging.info(f"Starting SendPunch for MAC {config['hostname']}/{config['mac_addr']}")
 
-    clients = [
-        await c if isinstance(c, asyncio.Future) else c
-        for c in create_clients(container.client_factories)
-    ]
-    ps = PunchSender(clients, config["mac_addr"])
+    client_group = await create_clients(container.client_factories)
+    ps = PunchSender(client_group, config["mac_addr"])
     await ps.loop()
 
 

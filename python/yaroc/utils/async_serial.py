@@ -40,7 +40,7 @@ class AsyncATCom:
                 )
                 return AsyncATCom(reader, writer)
         except Exception as e:
-            logging.error(e)
+            logging.error(f"Error while initializing AT port: {e}")
 
     def add_callback(self, prefix: str, fn: Callback):
         self.callbacks[prefix] = fn

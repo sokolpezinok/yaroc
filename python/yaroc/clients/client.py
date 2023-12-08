@@ -34,6 +34,7 @@ class Client(ABC):
 
 class SerialClient(Client):
     """Serial client emulating an SRR dongle."""
+
     def __init__(self, port: str):
         self.port = port
         self.writer = None
@@ -88,6 +89,9 @@ class SerialClient(Client):
 class ClientGroup:
     def __init__(self, clients: list[Client]):
         self.clients = clients
+
+    def len(self) -> int:
+        return len(self.clients)
 
     async def loop(self):
         loops = [client.loop() for client in self.clients]
