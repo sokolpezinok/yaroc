@@ -54,9 +54,21 @@ class SerialClient(Client):
         while True:
             data = await reader.readuntil(b"\x03")
             if data == b"\xff\x02\x02\xf0\x01Mm\n\x03":
-                logging.info("Responding to MeOS")
-                self.writer.write(b"\xff\x02\xf0\x03")
-                self.writer.write(b"\x12\x8cMb?\x03")
+                logging.info("Responding to orienteering software")
+                self.writer.write(b"\xff\x02\xf0\x03\x12\x8cMb?\x03")
+                data = await reader.readuntil(b"\x03")
+                if data == b"\x02\x83\x02\x00\x80\xbf\x17\x03":
+                    # MeOS
+                    msg = (
+                        b"\xff\x02\x83\x83\x12\x8c\x00\r\x00\x12\x8c\x04450\x16\x0b\x0fo!\xff\xff"
+                        b"\xff\x02\x06\x00\x1b\x17?\x18\x18\x06)\x08\x05>\xfe\n\xeb\n\xeb\xff\xff"
+                        b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x92\xba\x1aB\x01\xff\xff"
+                        b"\xe1\xff\xff\xff\xff\xff\x01\x01\x01\x0b\x07\x0c\x00\r]\x0eD\x0f\xec\x10-"
+                        b"\x11;\x12s\x13#\x14;\x15\x01\x19\x1d\x1a\x1c\x1b\xc7\x1c\x00\x1d\xb0!\xb6"
+                        b'"\x10#\xea$\n%\x00&\x11,\x88-1.\x0b\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+                        b"\xff\xff\xff\xff\xff\xf9\xc3\x03"
+                    )
+                    self.writer.write(msg)
 
     async def send_punch(self, punch: SiPunch) -> bool:
         try:
