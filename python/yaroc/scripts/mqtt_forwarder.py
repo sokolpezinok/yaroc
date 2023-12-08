@@ -76,7 +76,7 @@ class MqttForwader:
             return
         for punch in punches.punches:
             try:
-                si_punch = SiPunch.from_raw(punch.raw)
+                si_punch = SiPunch.from_raw(punch.raw, mac_addr)
             except Exception as err:
                 logging.error(f"Error while constructing SiPunch: {err}")
 
@@ -102,7 +102,7 @@ class MqttForwader:
         mac_addr = f"{node_id:08x}"
 
         try:
-            punch = SiPunch.from_raw(se.packet.decoded.payload)
+            punch = SiPunch.from_raw(se.packet.decoded.payload, mac_addr)
             await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac)
         except Exception as err:
             logging.error(

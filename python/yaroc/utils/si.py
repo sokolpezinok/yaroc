@@ -42,7 +42,7 @@ class SiWorker:
 class SerialSiWorker(SiWorker):
     """Serial port worker"""
 
-    def __init__(self, port: str):
+    def __init__(self, port: str, mac_addr: str):
         super().__init__()
         self.port = port
         self._finished = Event()
@@ -64,7 +64,7 @@ class SerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data)
+                punch = SiPunch.from_raw(data, self.mac_addr)
                 await self.process_punch(punch, queue)
 
             except serial.serialutil.SerialException as err:
@@ -106,7 +106,7 @@ class BtSerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data)
+                punch = SiPunch.from_raw(data, self.mac_addr)
                 await self.process_punch(punch, queue)
 
             except Exception as err:
@@ -115,9 +115,10 @@ class BtSerialSiWorker(SiWorker):
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self):
+    def __init__(self, mac_addr: str):
         self._udev_workers: Dict[str, tuple[SerialSiWorker, Future]] = {}
         self._device_queue: Queue[tuple[str, Device]] = Queue()
+        self.mac_addr = mac_addr
 
     async def loop(self, queue: Queue[SiPunch], device_queue: Queue[tuple[str, str]]):
         self._loop = asyncio.get_event_loop()
@@ -140,7 +141,7 @@ class UdevSiFactory(SiWorker):
                 logging.info(f"Inserted SportIdent device {device_node}")
 
                 try:
-                    worker = SerialSiWorker(device_node)
+                    worker = SerialSiWorker(device_node, self.mac_addr)
                     fut = asyncio.run_coroutine_threadsafe(
                         worker.loop(queue), asyncio.get_event_loop()
                     )
@@ -194,9 +195,10 @@ class UdevSiFactory(SiWorker):
 class FakeSiWorker(SiWorker):
     """Creates fake SportIdent events, useful for benchmarks and tests."""
 
-    def __init__(self, punch_interval_secs: int = 12):
+    def __init__(self, mac_addr: str, punch_interval_secs: int = 12):
         super().__init__()
         self._punch_interval = punch_interval_secs
+        self.mac_addr = mac_addr
         self.name = "fake"
         logging.info(
             "Starting a fake SportIdent worker, sending a punch every "
@@ -210,7 +212,7 @@ class FakeSiWorker(SiWorker):
         del _dev_queue
         for i in range(31, 1000):
             time_start = time.time()
-            punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18)
+            punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18, self.mac_addr)
             await self.process_punch(punch, queue)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 

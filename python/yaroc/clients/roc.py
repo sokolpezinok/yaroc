@@ -19,9 +19,6 @@ ROC_RECEIVEDATA = "https://roc.olresultat.se/ver7.1/receivedata.php"
 class RocClient(Client):
     """Class for sending punches to ROC"""
 
-    def __init__(self, macaddr: str):
-        self.macaddr = macaddr
-
     async def loop(self):
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
         retry_options = ExponentialRetry(attempts=5, start_timeout=3)
@@ -52,7 +49,7 @@ class RocClient(Client):
             "sitime1": punch.time.strftime("%H:%M:%S"),
             "ms1": punch.time.strftime("%f")[:3],
             "roctime1": str(now)[:19],
-            "macaddr": self.macaddr,
+            "macaddr": f"{punch.mac_addr:08x}",
             "1": "f",
             "length": str(118 + sum(map(length, [punch.code, punch.card, punch.mode]))),
         }
@@ -79,7 +76,7 @@ class RocClient(Client):
         params = {
             "function": "callhome",
             "command": "setmini",
-            "macaddr": self.macaddr,
+            "macaddr": mch.mac_address,
             "failedcallhomes": "0",
             "localipaddress": mch.local_ip,
             "codes": mch.codes,

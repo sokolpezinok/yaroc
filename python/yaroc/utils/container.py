@@ -65,8 +65,8 @@ class Container(containers.DeclarativeContainer):
         sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
     )
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
-        udev=providers.Factory(UdevSiFactory),
-        fake=providers.Factory(FakeSiWorker),
+        udev=providers.Factory(UdevSiFactory, config.mac_addr),
+        fake=providers.Factory(FakeSiWorker, config.mac_addr),
         bt=providers.Factory(BtSerialSiWorker),
     )
     workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
@@ -94,7 +94,7 @@ def create_clients(
         clients.append(client_factories.mqtt(mac_address))
     if client_config.get("roc", {}).get("enable", False):
         logging.info("Enabled ROC client")
-        clients.append(client_factories.roc(mac_address))
+        clients.append(client_factories.roc())
     if client_config.get("mop", {}).get("enable", False):
         clients.append(client_factories.mop())
         logging.info("Enabled MOP client")

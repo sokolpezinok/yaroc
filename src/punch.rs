@@ -13,6 +13,8 @@ pub struct SiPunch {
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get)]
+    mac_addr: u64,
+    #[pyo3(get)]
     raw: [u8; 20],
 }
 
@@ -22,18 +24,27 @@ const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 #[pymethods]
 impl SiPunch {
     #[staticmethod]
-    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> PyResult<Self> {
+    pub fn new(
+        card: u32,
+        code: u16,
+        time: DateTime<FixedOffset>,
+        mode: u8,
+        mac_addr: &str,
+    ) -> PyResult<Self> {
+        let mac_addr = u64::from_str_radix(mac_addr, 16).map_err(|err| PyErr::from(err))?;
         Ok(Self {
             card,
             code,
             time,
             mode,
+            mac_addr,
             raw: punch_to_bytes(code, time, card, mode),
         })
     }
 
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20]) -> PyResult<Self> {
+    pub fn from_raw(payload: [u8; 20], mac_addr: &str) -> PyResult<Self> {
+        let mac_addr = u64::from_str_radix(mac_addr, 16).map_err(|err| PyErr::from(err))?;
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -49,6 +60,7 @@ impl SiPunch {
             code,
             time: datetime,
             mode: data[4] & 0b1111,
+            mac_addr,
             raw: payload,
         })
     }
