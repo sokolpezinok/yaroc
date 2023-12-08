@@ -45,8 +45,9 @@ class SerialSiWorker(SiWorker):
     def __init__(self, port: str, mac_addr: str):
         super().__init__()
         self.port = port
-        self._finished = Event()
         self.name = "srr"
+        self.mac_addr = mac_addr
+        self._finished = Event()
 
     async def loop(self, queue: Queue[SiPunch]):
         try:

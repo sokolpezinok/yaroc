@@ -10,6 +10,7 @@ class SiPunch(object):
     code: int
     time: datetime
     mode: int
+    mac_addr: str
     raw: bytes
 
     @staticmethod
