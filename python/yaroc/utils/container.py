@@ -60,9 +60,9 @@ class Container(containers.DeclarativeContainer):
         serial=providers.Factory(SerialClient, config.client.serial.port),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
-        mqtt=providers.Factory(MqttClient),
+        mqtt=providers.Factory(MqttClient, config.hostname, config.mac_addr),
         roc=providers.Factory(RocClient),
-        sim7020=providers.Factory(SIM7020MqttClient, async_at=async_at),
+        sim7020=providers.Factory(SIM7020MqttClient, config.mac_addr, async_at=async_at),
     )
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
         udev=providers.Factory(UdevSiFactory, config.mac_addr),
@@ -76,7 +76,6 @@ class Container(containers.DeclarativeContainer):
 @inject
 def create_clients(
     client_factories: providers.FactoryAggregate,
-    mac_address: str = Provide[Container.config.mac_addr],
     client_config: Dict[str, Any] = Provide[Container.config.client],
 ) -> list[Client]:
     clients: list[Client] = []
@@ -84,14 +83,14 @@ def create_clients(
         clients.append(client_factories.serial())
         logging.info(f"Enabled serial client at {client_config['serial']['port']}")
     if client_config.get("sim7020", {}).get("enable", False):
-        clients.append(client_factories.sim7020(mac_address))
+        clients.append(client_factories.sim7020())
         logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
     if client_config.get("sirap", {}).get("enable", False):
         clients.append(client_factories.sirap())
         logging.info("Enabled SIRAP client")
     if client_config.get("mqtt", {}).get("enable", False):
         logging.info("Enabled MQTT client")
-        clients.append(client_factories.mqtt(mac_address))
+        clients.append(client_factories.mqtt())
     if client_config.get("roc", {}).get("enable", False):
         logging.info("Enabled ROC client")
         clients.append(client_factories.roc())

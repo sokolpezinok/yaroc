@@ -17,8 +17,8 @@ from meshtastic.telemetry_pb2 import Telemetry
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
+from ..rs import SiPunch
 from ..utils.container import Container, create_clients
-from .rs import SiPunch
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -245,8 +245,7 @@ def main():
     container.wire(modules=["yaroc.utils.container"])
 
     dns = {}
-    mac_address = list(config["mac-addresses"].values())[0]
-    clients = create_clients(container.client_factories, mac_address=mac_address)
+    clients = create_clients(container.client_factories)
     if len(clients) == 0:
         logging.info("Listening without forwarding")
     client_group = ClientGroup(clients)

@@ -39,9 +39,10 @@ def is_raspberrypi() -> bool:
         return detected
 
 
-def create_sys_minicallhome() -> MiniCallHome:
+def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.GetCurrentTime()
+    mch.mac_address = mac_addr
 
     cpu_freq = psutil.cpu_freq()
     mch.freq = floor(cpu_freq.current)

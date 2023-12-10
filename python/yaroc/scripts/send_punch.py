@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import socket
 import time
 import tomllib
 
@@ -15,12 +16,16 @@ from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 class PunchSender:
     @inject
     def __init__(
-        self, clients: list[Client], si_manager: SiManager = Provide[Container.si_manager]
+        self,
+        clients: list[Client],
+        mac_addr: str,
+        si_manager: SiManager = Provide[Container.si_manager],
     ):
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.client_group = ClientGroup(clients)
         self.si_manager = si_manager
+        self.mac_addr = mac_addr
         self._mch_interval = 20
 
     async def periodic_mini_call_home(self):
@@ -28,7 +33,7 @@ class PunchSender:
         await asyncio.sleep(5.0)
         while True:
             time_start = time.time()
-            mini_call_home = create_sys_minicallhome()
+            mini_call_home = create_sys_minicallhome(self.mac_addr)
             mini_call_home.codes = str(self.si_manager)
             await self.client_group.send_mini_call_home(mini_call_home)
             await asyncio.sleep(self._mch_interval - (time.time() - time_start))
@@ -46,6 +51,7 @@ class PunchSender:
         async for action, device in self.si_manager.udev_events():
             mch = MiniCallHome()
             mch.time.GetCurrentTime()
+            mch.mac_address = self.mac_addr
             device_name = device.removeprefix("/dev/").lower()
             if action == "add" or action is None:
                 mch.codes = f"siadded-{device_name}"
@@ -78,18 +84,19 @@ async def main():
     if "mac_addr" not in config:
         config["mac_addr"] = eth_mac_addr()
     assert config["mac_addr"] is not None
+    config["hostname"] = socket.gethostname()
 
     container = Container()
     container.config.from_dict(config)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container", __name__])
-    logging.info(f"Starting SendPunch for MAC {config['mac_addr']}")
+    logging.info(f"Starting SendPunch for MAC {config['hostname']}/{config['mac_addr']}")
 
     clients = [
         await c if isinstance(c, asyncio.Future) else c
         for c in create_clients(container.client_factories)
     ]
-    ps = PunchSender(clients)
+    ps = PunchSender(clients, config["mac_addr"])
     await ps.loop()
 
 
