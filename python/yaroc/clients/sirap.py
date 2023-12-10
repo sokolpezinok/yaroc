@@ -3,10 +3,8 @@ import logging
 from datetime import time, timedelta
 from typing import Literal
 
-from yaroc.rs import SiPunch
-
 from ..pb.status_pb2 import MiniCallHome
-# TODO: consider using https://pypi.org/project/backoff/
+from ..rs import SiPunch
 from ..utils.retries import BackoffRetries
 from .client import Client
 

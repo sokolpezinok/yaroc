@@ -14,12 +14,11 @@ from meshtastic.mqtt_pb2 import ServiceEnvelope
 from meshtastic.portnums_pb2 import POSITION_APP, SERIAL_APP, TELEMETRY_APP
 from meshtastic.telemetry_pb2 import Telemetry
 
-from yaroc.rs import SiPunch
-
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status
 from ..utils.container import Container, create_clients
+from .rs import SiPunch
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883

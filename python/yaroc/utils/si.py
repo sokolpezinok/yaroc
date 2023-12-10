@@ -13,7 +13,7 @@ import serial
 from pyudev import Device
 from serial_asyncio import open_serial_connection
 
-from yaroc.rs import SiPunch
+from ..rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3

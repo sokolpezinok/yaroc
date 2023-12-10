@@ -9,6 +9,7 @@ T = TypeVar("T")
 A = TypeVar("A")
 
 
+# TODO: consider using https://pypi.org/project/backoff/
 class BackoffRetries(Generic[A, T]):
     """
     A sender that does exponential backoff in case of failed send operations

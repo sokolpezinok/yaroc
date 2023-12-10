@@ -3,8 +3,7 @@ from math import floor
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from yaroc.rs import SiPunch
-
+from ..rs import SiPunch
 from .punches_pb2 import Punch
 from .status_pb2 import Coordinates
 

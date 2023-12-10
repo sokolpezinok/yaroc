@@ -5,9 +5,8 @@ from abc import ABC, abstractmethod
 import serial
 from serial_asyncio import open_serial_connection
 
-from yaroc.rs import SiPunch
-
 from ..pb.status_pb2 import MiniCallHome
+from ..rs import SiPunch
 
 
 class Client(ABC):
