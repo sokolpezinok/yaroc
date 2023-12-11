@@ -10,8 +10,8 @@ from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
+from ..sources.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker, UdevSiFactory
 from ..utils.async_serial import AsyncATCom
-from ..utils.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker, UdevSiFactory
 
 
 def get_log_level(log_level: str | None) -> int:

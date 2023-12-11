@@ -8,8 +8,8 @@ from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client, ClientGroup
 from ..pb.status_pb2 import MiniCallHome
+from ..sources.si import SiManager
 from ..utils.container import Container, create_clients
-from ..utils.si import SiManager
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
 
