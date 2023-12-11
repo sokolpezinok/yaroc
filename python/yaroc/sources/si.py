@@ -4,6 +4,7 @@ import socket
 import time
 from asyncio import Queue
 from concurrent.futures import Future
+from dataclasses import dataclass
 from datetime import datetime
 from threading import Event
 from typing import AsyncIterator, Dict
@@ -13,12 +14,26 @@ import serial
 from pyudev import Device
 from serial_asyncio import open_serial_connection
 
+from ..pb.status_pb2 import MiniCallHome as MCHProto
+from ..pb.status_pb2 import Status
 from ..rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
 FINISH_MODE = 4
 BEACON_CONTROL = 18
+
+
+@dataclass
+class DeviceEvent:
+    added: bool
+    device: str
+
+
+@dataclass
+class MiniCallHome:
+    # TODO: do not store full proto
+    proto: MCHProto
 
 
 class SiWorker:
@@ -91,7 +106,7 @@ class BtSerialSiWorker(SiWorker):
     def __hash__(self):
         return self.mac_addr.__hash__()
 
-    async def loop(self, queue: Queue):
+    async def loop(self, queue: Queue, _status_queue):
         sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
         sock.setblocking(False)
         loop = asyncio.get_event_loop()
@@ -121,7 +136,7 @@ class UdevSiFactory(SiWorker):
         self._device_queue: Queue[tuple[str, Device]] = Queue()
         self.mac_addr = mac_addr
 
-    async def loop(self, queue: Queue[SiPunch], device_queue: Queue[tuple[str, str]]):
+    async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent | MiniCallHome]):
         self._loop = asyncio.get_event_loop()
         context = pyudev.Context()
         monitor = pyudev.Monitor.from_netlink(context)
@@ -147,7 +162,7 @@ class UdevSiFactory(SiWorker):
                         worker.loop(queue), asyncio.get_event_loop()
                     )
                     self._udev_workers[device_node] = (worker, fut)
-                    await device_queue.put(("add", device_node))
+                    await status_queue.put(DeviceEvent(True, device_node))
                 except Exception as e:
                     logging.error(e)
             elif action == "remove":
@@ -156,10 +171,10 @@ class UdevSiFactory(SiWorker):
                     si_worker, _ = self._udev_workers[device_node]
                     si_worker.close()
                     del self._udev_workers[device_node]
-                    await device_queue.put(("remove", device_node))
+                    await status_queue.put(DeviceEvent(False, device_node))
 
     @staticmethod
-    def _is_sl(device: Device):
+    def _is_silabs(device: Device):
         try:
             return device.subsystem == "tty" and device.properties["ID_VENDOR_ID"] == "10c4"
         except Exception:
@@ -182,7 +197,7 @@ class UdevSiFactory(SiWorker):
         self._observer.stop()
 
     def _handle_udev_event(self, action, device: Device):
-        if not self._is_sl(device) and not self._is_sandberg(device):
+        if not self._is_silabs(device) and not self._is_sandberg(device):
             return
         asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
 
@@ -209,8 +224,8 @@ class FakeSiWorker(SiWorker):
     def __hash__(self):
         return "fake".__hash__()
 
-    async def loop(self, queue: Queue, _dev_queue):
-        del _dev_queue
+    async def loop(self, queue: Queue, _status_queue):
+        del _status_queue
         for i in range(31, 1000):
             time_start = time.time()
             punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18, self.mac_addr)
@@ -218,6 +233,7 @@ class FakeSiWorker(SiWorker):
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
 
+# TODO: This name doesn't fit anymore
 class SiManager:
     """
     Dynamically manages connecting and disconnecting SportIdent devices, typically SRR dongles.
@@ -228,7 +244,7 @@ class SiManager:
     def __init__(self, workers: list[SiWorker]) -> None:
         self._si_workers: set[SiWorker] = set(workers)
         self._queue: Queue[SiPunch] = Queue()
-        self._udev_queue: Queue[tuple[str, str]] = Queue()
+        self._status_queue: Queue[DeviceEvent | MiniCallHome] = Queue()
 
     def __str__(self) -> str:
         return ",".join(str(worker) for worker in self._si_workers)
@@ -238,13 +254,13 @@ class SiManager:
         for worker in self._si_workers:
             if not isinstance(worker, SerialSiWorker):
                 self._si_workers.add(worker)
-                loops.append(worker.loop(self._queue, self._udev_queue))
+                loops.append(worker.loop(self._queue, self._status_queue))
         await asyncio.gather(*loops)
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         while True:
             yield await self._queue.get()
 
-    async def udev_events(self) -> AsyncIterator[tuple[str, str]]:
+    async def statuses(self) -> AsyncIterator[DeviceEvent | MiniCallHome]:
         while True:
-            yield await self._udev_queue.get()
+            yield await self._status_queue.get()

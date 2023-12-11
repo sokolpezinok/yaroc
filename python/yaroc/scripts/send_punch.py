@@ -8,7 +8,7 @@ from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client, ClientGroup
 from ..pb.status_pb2 import MiniCallHome
-from ..sources.si import SiManager
+from ..sources.si import DeviceEvent, SiManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
@@ -48,16 +48,17 @@ class PunchSender:
     async def udev_events(self):
         # TODO: get rid of the following sleep
         await asyncio.sleep(3.0)  # sleep to allow for connecting
-        async for action, device in self.si_manager.udev_events():
-            mch = MiniCallHome()
-            mch.time.GetCurrentTime()
-            mch.mac_address = self.mac_addr
-            device_name = device.removeprefix("/dev/").lower()
-            if action == "add" or action is None:
-                mch.codes = f"siadded-{device_name}"
-            else:
-                mch.codes = f"siremoved-{device_name}"
-            await self.client_group.send_mini_call_home(mch)
+        async for status in self.si_manager.statuses():
+            if isinstance(status, DeviceEvent):
+                mch = MiniCallHome()
+                mch.time.GetCurrentTime()
+                mch.mac_address = self.mac_addr
+                device_name = status.device.removeprefix("/dev/").lower()
+                if status.added:
+                    mch.codes = f"siadded-{device_name}"
+                else:
+                    mch.codes = f"siremoved-{device_name}"
+                await self.client_group.send_mini_call_home(mch)
 
     async def loop(self):
         try:
