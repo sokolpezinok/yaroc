@@ -64,7 +64,8 @@ class MqttForwader:
             )
 
         logging.info(log_message)
-        final_mac = override_mac if override_mac is not None else mac_addr
+        if override_mac is not None:
+            punch.mac_addr = override_mac
         await self.client_group.send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):

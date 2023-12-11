@@ -19,6 +19,7 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.card, 1715004)
         self.assertEqual(punch.code, 47)
         self.assertEqual(punch.mode, 2)
+        self.assertEqual(punch.mac_addr, "abcdef123456")
 
         self.assertEqual(punch.time.weekday(), 3)
         self.assertEqual(punch.time.hour, 10)
