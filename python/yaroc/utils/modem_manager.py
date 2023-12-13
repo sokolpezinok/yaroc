@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 from typing import Any
 
+from dbus_next import Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 
@@ -58,16 +59,18 @@ class ModemManager:
         )
         await interface.call_enable(True)
 
-    # def create_sms(self, modem_path: str, number: str, text: str) -> str:
-    #     modem = self.bus.get(MODEM_MANAGER, modem_path)
-    #     sms_path = modem.Create(
-    #         {
-    #             "text": GLib.Variant("s", text),
-    #             "number": GLib.Variant("s", number),
-    #         }
-    #     )
-    #     return sms_path
-    #
+    async def create_sms(self, modem_path: str, number: str, text: str) -> str:
+        interface = await self.get_modem_interface(
+            modem_path, "org.freedesktop.ModemManager1.Modem.Messaging"
+        )
+        sms_path = await interface.call_create(
+            {
+                "text": Variant("s", text),
+                "number": Variant("s", number),
+            }
+        )
+        return sms_path
+
     # def send_sms(self, sms_path: str) -> bool:
     #     try:
     #         sms = self.bus.get(MODEM_MANAGER, sms_path)
@@ -77,9 +80,11 @@ class ModemManager:
     #         logging.error(err)
     #         return False
     #
-    # def sms_state(self, sms_path: str) -> SmsState:
-    #     sms = self.bus.get(MODEM_MANAGER, sms_path)
-    #     return SmsState(sms.State)
+    async def sms_state(self, sms_path: str) -> SmsState:
+        introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
+        sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
+        interface = sms.get_interface("org.freedesktop.ModemManager1.Sms")
+        return await interface.get_state()
 
     async def signal_setup(self, modem_path: str, rate_secs: int):
         interface = await self.get_modem_interface(
