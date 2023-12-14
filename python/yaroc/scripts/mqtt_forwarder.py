@@ -21,14 +21,11 @@ def main():
     container.init_resources()
     container.wire(modules=["yaroc.utils.container"])
 
-    dns = {}
     clients = create_clients(container.client_factories)
     if len(clients) == 0:
         logging.info("Listening without forwarding")
     client_group = ClientGroup(clients)
 
-    for name, mac_address in config["mac-addresses"].items():
-        dns[str(mac_address)] = name
-
+    dns = {mac_address: name for name, mac_address in config["mac-addresses"].items()}
     forwarder = MqttForwader(client_group, dns, config["meshtastic_mac"])
     asyncio.run(forwarder.loop())
