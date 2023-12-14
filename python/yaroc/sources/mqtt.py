@@ -41,6 +41,11 @@ class MqttForwader:
         else:
             raise TypeError("Unexpected type of a message payload")
 
+    def _resolve(self, mac_addr: str) -> str:
+        if mac_addr in self.dns:
+            return self.dns[mac_addr]
+        return f"MAC {mac_addr}"
+
     async def _process_punch(
         self,
         punch: SiPunch,
@@ -120,16 +125,14 @@ class MqttForwader:
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
             total_latency = now - orig_time
+            log_message = f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: "
             if mch.freq > 0.0:
-                log_message = (
-                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: {mch.cpu_temperature:5.2f}°C, "
-                    f"{mch.signal_dbm:4}dBm, "
-                )
+                log_message += f"{mch.cpu_temperature:5.2f}°C, {mch.signal_dbm:4}dBm, "
                 if mch.cellid > 0:
                     log_message += f"cell {mch.cellid:X}, "
                 log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
-                log_message = f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: {mch.codes}, "
+                log_message += f"{mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
             await self.client_group.send_mini_call_home(mch)
@@ -153,8 +156,9 @@ class MqttForwader:
                 metrics = telemetry.device_metrics
 
                 log_message = (
-                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: battery {metrics.battery_level}%, "
-                    f"{metrics.voltage:4.3f}V, latency {total_latency.total_seconds():6.2f}s"
+                    f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: battery "
+                    f"{metrics.battery_level}%, {metrics.voltage:4.3f}V, "
+                    f"latency {total_latency.total_seconds():6.2f}s"
                 )
                 logging.info(log_message)
             except Exception as err:
@@ -167,7 +171,7 @@ class MqttForwader:
                 lat, lon = position.latitude_i / 10**7, position.longitude_i / 10**7
 
                 log_message = (
-                    f"{self.dns[mac_addr]} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
+                    f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
                     f"latency {total_latency.total_seconds():6.2f}s"
                 )
                 logging.info(log_message)
