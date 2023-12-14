@@ -14,8 +14,6 @@ import serial
 from pyudev import Device
 from serial_asyncio import open_serial_connection
 
-from ..pb.status_pb2 import MiniCallHome as MCHProto
-from ..pb.status_pb2 import Status
 from ..rs import SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
@@ -28,12 +26,6 @@ BEACON_CONTROL = 18
 class DeviceEvent:
     added: bool
     device: str
-
-
-@dataclass
-class MiniCallHome:
-    # TODO: do not store full proto
-    proto: MCHProto
 
 
 class SiWorker:
@@ -136,7 +128,7 @@ class UdevSiFactory(SiWorker):
         self._device_queue: Queue[tuple[str, Device]] = Queue()
         self.mac_addr = mac_addr
 
-    async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent | MiniCallHome]):
+    async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
         context = pyudev.Context()
         monitor = pyudev.Monitor.from_netlink(context)
@@ -244,7 +236,7 @@ class SiManager:
     def __init__(self, workers: list[SiWorker]) -> None:
         self._si_workers: set[SiWorker] = set(workers)
         self._queue: Queue[SiPunch] = Queue()
-        self._status_queue: Queue[DeviceEvent | MiniCallHome] = Queue()
+        self._status_queue: Queue[DeviceEvent] = Queue()
 
     def __str__(self) -> str:
         return ",".join(str(worker) for worker in self._si_workers)
@@ -261,6 +253,6 @@ class SiManager:
         while True:
             yield await self._queue.get()
 
-    async def statuses(self) -> AsyncIterator[DeviceEvent | MiniCallHome]:
+    async def device_events(self) -> AsyncIterator[DeviceEvent]:
         while True:
             yield await self._status_queue.get()
