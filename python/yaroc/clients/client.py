@@ -33,6 +33,7 @@ class Client(ABC):
 
 
 class SerialClient(Client):
+    """Serial client emulating an SRR dongle."""
     def __init__(self, port: str):
         self.port = port
         self.writer = None
@@ -70,6 +71,9 @@ class SerialClient(Client):
                     self.writer.write(msg)
 
     async def send_punch(self, punch: SiPunch) -> bool:
+        if self.writer is None:
+            logging.error("Serial client not connected")
+            return False
         try:
             self.writer.write(bytes(punch.raw))
             return True
