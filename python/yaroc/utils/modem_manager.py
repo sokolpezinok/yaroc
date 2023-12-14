@@ -71,15 +71,17 @@ class ModemManager:
         )
         return sms_path
 
-    # def send_sms(self, sms_path: str) -> bool:
-    #     try:
-    #         sms = self.bus.get(MODEM_MANAGER, sms_path)
-    #         sms.Send()
-    #         return True
-    #     except Exception as err:
-    #         logging.error(err)
-    #         return False
-    #
+    async def send_sms(self, sms_path: str) -> bool:
+        try:
+            introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
+            sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
+            interface = sms.get_interface("org.freedesktop.ModemManager1.Sms")
+            await interface.call_send()
+            return True
+        except Exception as err:
+            logging.error(err)
+            return False
+
     async def sms_state(self, sms_path: str) -> SmsState:
         introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
         sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
@@ -102,6 +104,9 @@ class ModemManager:
         umts = await interface.get_umts()
         if "rssi" in umts:
             return (umts["rssi"].value, NetworkType.Umts)
+        gsm = await interface.get_gsm()
+        if "rssi" in gsm:
+            return (umts["gsm"].value, NetworkType.Gsm)
 
         logging.error("Error getting signal")
         return (0.0, NetworkType.Unknown)

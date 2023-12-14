@@ -15,7 +15,7 @@ from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
 from ..pb.utils import create_punch_proto
 from ..rs import SiPunch
 from ..utils.async_serial import AsyncATCom
-from ..utils.modem_manager import ModemManager
+from ..utils.modem_manager import ModemManager, NetworkType
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
@@ -200,6 +200,7 @@ class SIM7020MqttClient(Client):
                 (dbm, cellid) = res
                 mch.signal_dbm = dbm
                 mch.cellid = cellid
+                mch.network_type = NetworkType.NbIot
 
         status = Status()
         status.mini_call_home.CopyFrom(mch)
