@@ -75,7 +75,7 @@ class ModemManager:
         try:
             introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
             sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
-            interface = sms.get_interface("org.freedesktop.ModemManager1.Sms")
+            interface: Any = sms.get_interface("org.freedesktop.ModemManager1.Sms")
             await interface.call_send()
             return True
         except Exception as err:
@@ -85,7 +85,7 @@ class ModemManager:
     async def sms_state(self, sms_path: str) -> SmsState:
         introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
         sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
-        interface = sms.get_interface("org.freedesktop.ModemManager1.Sms")
+        interface: Any = sms.get_interface("org.freedesktop.ModemManager1.Sms")
         return await interface.get_state()
 
     async def signal_setup(self, modem_path: str, rate_secs: int):

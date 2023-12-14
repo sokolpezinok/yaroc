@@ -151,6 +151,8 @@ class MqttForwader:
         if se.packet.decoded.portnum == TELEMETRY_APP:
             try:
                 telemetry = Telemetry.FromString(se.packet.decoded.payload)
+                if not telemetry.HasField("device_metrics"):
+                    return
                 orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
                 total_latency = now - orig_time
                 metrics = telemetry.device_metrics
