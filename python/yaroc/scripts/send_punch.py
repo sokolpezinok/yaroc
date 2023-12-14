@@ -8,7 +8,7 @@ from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import Client, ClientGroup
 from ..pb.status_pb2 import MiniCallHome
-from ..sources.si import SiManager
+from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
 
@@ -19,7 +19,7 @@ class PunchSender:
         self,
         clients: list[Client],
         mac_addr: str,
-        si_manager: SiManager = Provide[Container.si_manager],
+        si_manager: SiPunchManager = Provide[Container.si_manager],
     ):
         if len(clients) == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")

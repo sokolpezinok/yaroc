@@ -225,12 +225,12 @@ class FakeSiWorker(SiWorker):
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
 
-# TODO: This name doesn't fit anymore
-class SiManager:
+class SiPunchManager:
     """
-    Dynamically manages connecting and disconnecting SportIdent devices, typically SRR dongles.
+    Manages devices delivering SportIdent punch data, typically SRR dongles but also punches
+    delivered by radio (LoRa) or Bluetooth.
 
-    Also allows adding a list of pre-configured devices, e.g. Bluetooth serial device.
+    Also issues an event whenever a devices has been connected or removed.
     """
 
     def __init__(self, workers: list[SiWorker]) -> None:

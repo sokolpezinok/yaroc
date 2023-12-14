@@ -10,7 +10,7 @@ from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
-from ..sources.si import BtSerialSiWorker, FakeSiWorker, SiManager, SiWorker, UdevSiFactory
+from ..sources.si import BtSerialSiWorker, FakeSiWorker, SiPunchManager, SiWorker, UdevSiFactory
 from ..utils.async_serial import AsyncATCom
 
 
@@ -70,7 +70,7 @@ class Container(containers.DeclarativeContainer):
         bt=providers.Factory(BtSerialSiWorker),
     )
     workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
-    si_manager = providers.Factory(SiManager, workers)
+    si_manager = providers.Factory(SiPunchManager, workers)
 
 
 @inject
