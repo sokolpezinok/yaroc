@@ -48,7 +48,7 @@ class RocClient(Client):
             "sitime1": punch.time.strftime("%H:%M:%S"),
             "ms1": punch.time.strftime("%f")[:3],
             "roctime1": str(now)[:19],
-            "macaddr": f"{punch.mac_addr:08x}",
+            "macaddr": punch.mac_addr,
             "1": "f",
             "length": str(118 + sum(map(length, [punch.code, punch.card, punch.mode]))),
         }
