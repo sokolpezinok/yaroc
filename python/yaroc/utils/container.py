@@ -79,25 +79,25 @@ class Container(containers.DeclarativeContainer):
 @inject
 async def create_clients(
     client_factories: providers.FactoryAggregate,
-    client_config: Dict[str, Any] = Provide[Container.config.client],
+    config: Dict[str, Any] = Provide[Container.config.client],
 ) -> ClientGroup:
     clients: list[Client] = []
-    if client_config.get("serial", {}).get("enable", False):
+    if config.get("serial", {}).get("enable", False):
         clients.append(client_factories.serial())
-        logging.info(f"Enabled serial client at {client_config['serial']['port']}")
-    if client_config.get("sim7020", {}).get("enable", False):
+        logging.info(f"Enabled serial client at {config['serial']['port']}")
+    if config.get("sim7020", {}).get("enable", False):
         clients.append(await client_factories.sim7020())
-        logging.info(f"Enabled SIM7020 MQTT client at {client_config['sim7020']['device']}")
-    if client_config.get("sirap", {}).get("enable", False):
+        logging.info(f"Enabled SIM7020 MQTT client at {config['sim7020']['device']}")
+    if config.get("sirap", {}).get("enable", False):
         clients.append(client_factories.sirap())
         logging.info("Enabled SIRAP client")
-    if client_config.get("mqtt", {}).get("enable", False):
+    if config.get("mqtt", {}).get("enable", False):
         logging.info("Enabled MQTT client")
         clients.append(client_factories.mqtt())
-    if client_config.get("roc", {}).get("enable", False):
+    if config.get("roc", {}).get("enable", False):
         logging.info("Enabled ROC client")
         clients.append(client_factories.roc())
-    if client_config.get("mop", {}).get("enable", False):
+    if config.get("mop", {}).get("enable", False):
         clients.append(client_factories.mop())
         logging.info("Enabled MOP client")
     return ClientGroup(clients)
