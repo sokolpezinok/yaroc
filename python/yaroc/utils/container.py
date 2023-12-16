@@ -35,10 +35,13 @@ def create_si_workers(
     workers: list[SiWorker] = []
     if source_config is not None:
         if source_config.get("usb", {}).get("enable", False):
+            logging.info("Enabled USB punch source")
             workers.append(source_factories.udev())
         if source_config.get("fake", {}).get("enable", False):
+            logging.info("Enabled fake punch source")
             workers.append(source_factories.fake())
         if source_config.get("bt", {}).get("enable", False):
+            logging.info("Enabled Bluetooth punch source")
             workers.append(source_factories.bt(source_config["bt"]["mac_addr"]))
     return workers
 
