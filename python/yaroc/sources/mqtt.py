@@ -23,10 +23,17 @@ BROKER_PORT = 1883
 
 
 class MqttForwader:
-    def __init__(self, client_group: ClientGroup, dns: Dict[str, str], meshtastic_mac: str):
+    def __init__(
+        self,
+        client_group: ClientGroup,
+        dns: Dict[str, str],
+        meshtastic_mac: str,
+        meshtastic_channel: str,
+    ):
         self.client_group = client_group
         self.dns = dns
         self.meshtastic_mac = meshtastic_mac
+        self.meshtastic_channel = meshtastic_channel
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -201,7 +208,7 @@ class MqttForwader:
             elif topic.endswith("/status"):
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
-            elif topic.startswith("yar/2/c/LongFast/"):
+            elif topic.startswith(f"yar/2/c/{self.meshtastic_channel}/"):
                 await self._handle_meshtastic_status(msg.payload, now)
             elif topic.startswith("yar/2/c/serial/"):
                 await self._handle_meshtastic_serial(msg.payload, now)
@@ -225,7 +232,7 @@ class MqttForwader:
                         for mac_addr in self.dns.keys():
                             await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                         await client.subscribe("yar/2/c/serial/#", qos=1)
-                        await client.subscribe("yar/2/c/LongFast/#", qos=1)
+                        await client.subscribe(f"yar/2/c/{self.meshtastic_channel}/#", qos=1)
                         async for message in messages:
                             await self._on_message(message)
             except MqttError:
