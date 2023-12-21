@@ -173,6 +173,8 @@ class MqttForwader:
             except Exception as err:
                 logging.error(f"Error while constructing Telemetry: {err}")
         elif se.packet.decoded.portnum == POSITION_APP:
+            if se.packet.to != 4294967295:  # Request packets are ignored
+                return
             try:
                 position = Position.FromString(se.packet.decoded.payload)
                 orig_time = datetime.fromtimestamp(position.time).astimezone()
