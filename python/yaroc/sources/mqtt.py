@@ -169,6 +169,8 @@ class MqttForwader:
                     f"{metrics.battery_level}%, {metrics.voltage:4.3f}V, "
                     f"latency {total_latency.total_seconds():6.2f}s"
                 )
+                if se.packet.rx_rssi != 0:
+                    log_message += f", {se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
                 logging.info(log_message)
             except Exception as err:
                 logging.error(f"Error while constructing Telemetry: {err}")
@@ -185,6 +187,8 @@ class MqttForwader:
                     f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
                     f"latency {total_latency.total_seconds():6.2f}s"
                 )
+                if se.packet.rx_rssi != 0:
+                    log_message += f", {se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
                 logging.info(log_message)
             except Exception as err:
                 logging.error(f"Error while constructing Position: {err}")
