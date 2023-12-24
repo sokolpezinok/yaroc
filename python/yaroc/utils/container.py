@@ -57,7 +57,7 @@ class Container(containers.DeclarativeContainer):
         datefmt="%H:%M:%S",
     )
 
-    async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.device)
+    async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.port)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
         serial=providers.Factory(SerialClient, config.client.serial.port),
@@ -87,7 +87,7 @@ async def create_clients(
         logging.info(f"Enabled serial client at {config['serial']['port']}")
     if config.get("sim7020", {}).get("enable", False):
         clients.append(await client_factories.sim7020())
-        logging.info(f"Enabled SIM7020 MQTT client at {config['sim7020']['device']}")
+        logging.info(f"Enabled SIM7020 MQTT client at {config['sim7020']['port']}")
     if config.get("sirap", {}).get("enable", False):
         clients.append(client_factories.sirap())
         logging.info("Enabled SIRAP client")
