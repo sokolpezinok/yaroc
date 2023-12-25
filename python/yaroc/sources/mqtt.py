@@ -222,8 +222,7 @@ class MqttForwader:
             logging.error(f"Failed processing message: {err}")
 
     async def loop(self):
-        async_loop = asyncio.get_event_loop()
-        asyncio.run_coroutine_threadsafe(self.client_group.loop(), async_loop)
+        asyncio.create_task(self.client_group.loop())
 
         while True:
             try:
@@ -240,7 +239,7 @@ class MqttForwader:
                         await client.subscribe("yar/2/c/serial/#", qos=1)
                         await client.subscribe(f"yar/2/c/{self.meshtastic_channel}/#", qos=1)
                         async for message in messages:
-                            await self._on_message(message)
+                            asyncio.create_task(self._on_message(message))
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
                 await asyncio.sleep(5.0)

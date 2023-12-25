@@ -3,7 +3,7 @@ import logging
 import socket
 import time
 from asyncio import Queue
-from concurrent.futures import Future
+from asyncio.tasks import Task
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Event
@@ -124,7 +124,7 @@ class BtSerialSiWorker(SiWorker):
 
 class UdevSiFactory(SiWorker):
     def __init__(self, mac_addr: str):
-        self._udev_workers: Dict[str, tuple[SerialSiWorker, Future]] = {}
+        self._udev_workers: Dict[str, tuple[SerialSiWorker, Task]] = {}
         self._device_queue: Queue[tuple[str, Device]] = Queue()
         self.mac_addr = mac_addr
 
@@ -150,10 +150,8 @@ class UdevSiFactory(SiWorker):
 
                 try:
                     worker = SerialSiWorker(device_node, self.mac_addr)
-                    fut = asyncio.run_coroutine_threadsafe(
-                        worker.loop(queue), asyncio.get_event_loop()
-                    )
-                    self._udev_workers[device_node] = (worker, fut)
+                    task = asyncio.create_task(worker.loop(queue))
+                    self._udev_workers[device_node] = (worker, task)
                     await status_queue.put(DeviceEvent(True, device_node))
                 except Exception as e:
                     logging.error(e)

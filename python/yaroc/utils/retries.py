@@ -140,7 +140,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         while datetime.now() < deadline:
             async with retried_message.processed:
                 await self._queue.put(retried_message)
-                asyncio.run_coroutine_threadsafe(self._send_and_notify(), asyncio.get_event_loop())
+                asyncio.create_task(self._send_and_notify())
                 await retried_message.processed.wait()
                 if retried_message.returned is not None:
                     return retried_message.returned

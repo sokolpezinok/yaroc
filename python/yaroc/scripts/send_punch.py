@@ -40,10 +40,7 @@ class PunchSender:
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
-            asyncio.run_coroutine_threadsafe(
-                self.client_group.send_punch(si_punch),
-                asyncio.get_event_loop(),
-            )
+            asyncio.create_task(self.client_group.send_punch(si_punch))
 
     async def udev_events(self):
         # TODO: get rid of the following sleep
