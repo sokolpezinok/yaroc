@@ -57,6 +57,12 @@ class PunchSender:
             await self.client_group.send_mini_call_home(mch)
 
     async def loop(self):
+        def handle_exception(loop, context):
+            msg = context.get("exception", context["message"])
+            logging.error(f"Caught exception: {msg}")
+
+        asyncio.get_event_loop().set_exception_handler(handle_exception)
+
         try:
             await asyncio.gather(
                 self.si_manager.loop(),
