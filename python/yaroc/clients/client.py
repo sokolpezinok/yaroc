@@ -95,12 +95,12 @@ class ClientGroup:
 
     async def loop(self):
         loops = [client.loop() for client in self.clients]
-        await asyncio.gather(*loops)
+        await asyncio.gather(*loops, return_exceptions=True)
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> list[bool]:
+    async def send_mini_call_home(self, mch: MiniCallHome) -> list[bool | BaseException]:
         handles = [client.send_mini_call_home(mch) for client in self.clients]
-        return await asyncio.gather(*handles)
+        return await asyncio.gather(*handles, return_exceptions=True)
 
-    async def send_punch(self, punch: SiPunch) -> list[bool]:
+    async def send_punch(self, punch: SiPunch) -> list[bool | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
         return await asyncio.gather(*handles)
