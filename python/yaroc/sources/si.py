@@ -80,6 +80,7 @@ class SerialSiWorker(SiWorker):
                 return
             except Exception as err:
                 logging.error(f"Loop crashing: {err}")
+                await asyncio.sleep(5.0)
                 return
 
     def close(self):
@@ -137,8 +138,11 @@ class UdevSiFactory(SiWorker):
         observer.start()
         logging.info("Starting udev-based SportIdent device manager")
 
-        for device in context.list_devices():
-            self._handle_udev_event("add", device)
+        try:
+            for device in context.list_devices():
+                self._handle_udev_event("add", device)
+        except Exception as e:
+            logging.error(e)
         while True:
             action, device = await self._device_queue.get()
 
@@ -242,10 +246,9 @@ class SiPunchManager:
     async def loop(self):
         loops = []
         for worker in self._si_workers:
-            if not isinstance(worker, SerialSiWorker):
-                self._si_workers.add(worker)
-                loops.append(worker.loop(self._queue, self._status_queue))
-        await asyncio.gather(*loops)
+            self._si_workers.add(worker)
+            loops.append(worker.loop(self._queue, self._status_queue))
+        await asyncio.gather(*loops, return_exceptions=True)
 
     async def punches(self) -> AsyncIterator[SiPunch]:
         while True:
