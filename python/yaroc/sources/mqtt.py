@@ -108,7 +108,7 @@ class MqttForwader:
         if se.packet.decoded.portnum != SERIAL_APP:
             logging.debug(f"Ignoring message with portnum {se.packet.decoded.portnum}")
             return
-        _, node_id = se.packet.ListFields()[0]  # TODO: couldn't use `se.packet.from`
+        node_id = getattr(se.packet, "from")
         mac_addr = f"{node_id:08x}"
 
         try:
@@ -153,7 +153,7 @@ class MqttForwader:
         if not se.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
-        _, node_id = se.packet.ListFields()[0]  # TODO: couldn't use `se.packet.from`
+        node_id = getattr(se.packet, "from")
         mac_addr = f"{node_id:08x}"
         if se.packet.decoded.portnum == TELEMETRY_APP:
             try:
