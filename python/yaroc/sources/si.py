@@ -205,7 +205,7 @@ class UdevSiFactory(SiWorker):
 class FakeSiWorker(SiWorker):
     """Creates fake SportIdent events, useful for benchmarks and tests."""
 
-    def __init__(self, mac_addr: str, punch_interval_secs: int = 12):
+    def __init__(self, mac_addr: str, punch_interval_secs: float = 12):
         super().__init__()
         self._punch_interval = punch_interval_secs
         self.mac_addr = mac_addr
