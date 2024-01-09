@@ -24,6 +24,7 @@ dependencies = [
   'dependency-injector==4.41.*',
   'gpiozero==1.6.*',
   'meshtastic==2.2.*',
+  'pillow==9.4.*',
   'protobuf==4.22.*',
   'psutil==5.9.*',
   'pyserial-asyncio==0.6',
@@ -38,6 +39,7 @@ dev = [
   "isort",
   "mypy",
   "Flake8-pyproject",
+  "types-Pillow",
   "types-protobuf",
   "types-psutil",
 ]
