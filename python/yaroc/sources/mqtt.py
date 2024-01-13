@@ -98,7 +98,7 @@ class MqttForwader:
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
-            se = ServiceEnvelope.FromString(payload)
+            se = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
@@ -116,7 +116,7 @@ class MqttForwader:
             await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac)
         except Exception as err:
             logging.error(
-                f"Cannot construct SiPunch from {mac_addr} {se.packet.decoded.payload}: {err}"
+                f"Cannot construct SiPunch from {mac_addr} {se.packet.decoded.payload!r}: {err}"
             )
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
@@ -146,7 +146,7 @@ class MqttForwader:
 
     async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
         try:
-            se = ServiceEnvelope.FromString(payload)
+            se = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
