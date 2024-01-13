@@ -10,7 +10,7 @@ from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 from meshtastic.mesh_pb2 import Position
 from meshtastic.mqtt_pb2 import ServiceEnvelope
-from meshtastic.portnums_pb2 import POSITION_APP, SERIAL_APP, TELEMETRY_APP
+from meshtastic.portnums_pb2 import POSITION_APP, RANGE_TEST_APP, SERIAL_APP, TELEMETRY_APP
 from meshtastic.telemetry_pb2 import Telemetry
 
 from ..clients.client import ClientGroup
@@ -153,6 +153,7 @@ class MqttForwader:
         if not se.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
+
         node_id = getattr(se.packet, "from")
         mac_addr = f"{node_id:08x}"
         if se.packet.decoded.portnum == TELEMETRY_APP:
@@ -192,6 +193,17 @@ class MqttForwader:
                 logging.info(log_message)
             except Exception as err:
                 logging.error(f"Error while constructing Position: {err}")
+        elif se.packet.decoded.portnum == RANGE_TEST_APP:
+            if se.packet.rx_rssi == 0:
+                return
+
+            recv_time = datetime.fromtimestamp(se.packet.rx_time).astimezone()
+            seq_number = se.packet.decoded.payload.decode("ascii")
+            log_message = (
+                f"{self._resolve(mac_addr)} {recv_time:%H:%M:%S}: range test {seq_number}, "
+                f"{se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
+            )
+            logging.info(log_message)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
