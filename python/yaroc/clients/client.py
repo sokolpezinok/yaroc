@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from typing import Sequence
 
 import serial
 from serial_asyncio import open_serial_connection
@@ -93,7 +94,8 @@ class ClientGroup:
     def len(self) -> int:
         return len(self.clients)
 
-    def handle_results(results):
+    @staticmethod
+    def handle_results(results: Sequence[bool | BaseException]):
         for result in results:
             if isinstance(result, Exception):
                 # TODO: write client name too
@@ -103,13 +105,13 @@ class ClientGroup:
         loops = [client.loop() for client in self.clients]
         await asyncio.gather(*loops, return_exceptions=True)
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> list[bool | BaseException]:
+    async def send_mini_call_home(self, mch: MiniCallHome) -> Sequence[bool | BaseException]:
         handles = [client.send_mini_call_home(mch) for client in self.clients]
         results = await asyncio.gather(*handles, return_exceptions=True)
         ClientGroup.handle_results(results)
         return results
 
-    async def send_punch(self, punch: SiPunch) -> list[bool | BaseException]:
+    async def send_punch(self, punch: SiPunch) -> Sequence[bool | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
         results = await asyncio.gather(*handles)
         ClientGroup.handle_results(results)

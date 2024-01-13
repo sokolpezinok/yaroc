@@ -4,7 +4,7 @@ import itertools
 from PIL import Image, ImageDraw, ImageFont
 
 
-def draw_table(table: list[list[str]], width: int, height: int, horiz_pad: int = 1) -> Image:
+def draw_table(table: list[list[str]], width: int, height: int, horiz_pad: int = 1) -> Image.Image:
     """Draws a table as an image of size width x height from the given text in `table`."""
     image = Image.new("1", (width, height), 0xFF)
     draw = ImageDraw.Draw(image)
