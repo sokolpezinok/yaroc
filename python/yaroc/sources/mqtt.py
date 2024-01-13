@@ -10,7 +10,12 @@ from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 from meshtastic.mesh_pb2 import Position
 from meshtastic.mqtt_pb2 import ServiceEnvelope
-from meshtastic.portnums_pb2 import POSITION_APP, RANGE_TEST_APP, SERIAL_APP, TELEMETRY_APP
+from meshtastic.portnums_pb2 import (
+    POSITION_APP,
+    RANGE_TEST_APP,
+    SERIAL_APP,
+    TELEMETRY_APP,
+)
 from meshtastic.telemetry_pb2 import Telemetry
 
 from ..clients.client import ClientGroup

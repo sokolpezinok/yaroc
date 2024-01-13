@@ -10,7 +10,13 @@ from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
-from ..sources.si import BtSerialSiWorker, FakeSiWorker, SiPunchManager, SiWorker, UdevSiFactory
+from ..sources.si import (
+    BtSerialSiWorker,
+    FakeSiWorker,
+    SiPunchManager,
+    SiWorker,
+    UdevSiFactory,
+)
 from ..utils.async_serial import AsyncATCom
 
 

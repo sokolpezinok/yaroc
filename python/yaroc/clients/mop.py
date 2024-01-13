@@ -61,7 +61,8 @@ class MopClient(Client):
 
     @staticmethod
     def _competitor_from_mop(cmp: ET.Element, base: ET.Element) -> MeosCompetitor:
-        card, bib = MopClient._parse_int(cmp.get("card")), MopClient._parse_int(base.get("bib"))
+        card = MopClient._parse_int(cmp.get("card"))
+        bib = MopClient._parse_int(base.get("bib"))
         id = MopClient._parse_int(cmp.get("id"))
         name = "" if base.text is None else base.text
         club = MopClient._parse_int(base.get("org"))

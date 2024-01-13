@@ -73,7 +73,10 @@ class SirapClient(Client):
 
     @staticmethod
     def _serialize_card(
-        card_number: int, start: time | None, finish: time | None, punches: list[tuple[int, time]]
+        card_number: int,
+        start: time | None,
+        finish: time | None,
+        punches: list[tuple[int, time]],
     ) -> bytes:
         def serialize_card_punch(code: int, si_daytime: time) -> bytes:
             return code.to_bytes(4, ENDIAN) + SirapClient._time_to_bytes(si_daytime)

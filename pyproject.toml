@@ -34,20 +34,15 @@ dependencies = [
 
 [project.optional-dependencies] # Optional
 dev = [
-  "black",
-  "flake8",
-  "isort",
+  "ruff",
   "mypy",
-  "Flake8-pyproject",
   "types-Pillow",
   "types-protobuf",
   "types-psutil",
 ]
-pylsp = [
-  "pyls-flake8",
-  "pyls-isort",
+lsp = [
+  "ruff-lsp",
   "pylsp-mypy",
-  "python-lsp-black",
 ]
 test = ["pytest"]
 
@@ -64,16 +59,14 @@ python-source = "python"
 module-name = "yaroc.rs"
 features = ["pyo3/extension-module"]
 
-[tool.black]
+[tool.ruff]
 line-length = 100
-exclude = ".git|.hg|.mypy_cache|.venv|_build|build|dist|_pb2.py"
+exclude = ["*_pb2.py", "*_pb2.pyi"]
 
-[tool.flake8]
-max-line-length = 100
-exclude = "**/*pb2.py"
+[tool.ruff.format]
+skip-magic-trailing-comma = false
 
-[tool.isort]
-include_trailing_comma = true
-line_length = 100
-multi_line_output = 3
-skip_glob = "**/*_pb2.py,**/*_pb2.pyi"
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+fixable = ["ALL"]
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
