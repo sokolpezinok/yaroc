@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from ..pb.status_pb2 import Disconnected, Status
-from ..utils.sys_info import is_raspberrypi, is_time_off
+from ..utils.sys_info import RaspberryModel, is_time_off, raspberrypi_model
 from .async_serial import AsyncATCom
 
 
@@ -80,7 +80,7 @@ class SIM7020Interface:
         if res.success:
             logging.info("SIM7020 is powered on")
         else:
-            if is_raspberrypi():
+            if raspberrypi_model() != RaspberryModel.Unknown:
                 logging.info("Powering on SIM7020")
                 import RPi.GPIO as GPIO
 

@@ -9,6 +9,7 @@ from math import floor
 import psutil
 
 from ..pb.status_pb2 import MiniCallHome
+from ..rs import RaspberryModel
 
 
 def eth_mac_addr() -> str | None:
@@ -29,14 +30,13 @@ def local_ip() -> str | None:
     return None
 
 
-def is_raspberrypi() -> bool:
-    detected = False
+def raspberrypi_model() -> RaspberryModel:
+    model = RaspberryModel.Unknown
     try:
         with io.open("/sys/firmware/devicetree/base/model", "r") as m:
-            if "raspberry pi" in m.read().lower():
-                detected = True
+            model = RaspberryModel.from_string(m.read())
     finally:
-        return detected
+        return model
 
 
 def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
@@ -57,7 +57,8 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
     if ip:
         mch.local_ip = ip
 
-    if is_raspberrypi():
+    model = raspberrypi_model()
+    if model != RaspberryModel.Unknown:
         import gpiozero
 
         mch.cpu_temperature = gpiozero.CPUTemperature().temperature

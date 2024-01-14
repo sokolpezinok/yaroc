@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import ClassVar as _ClassVar
 
 class SiPunch(object):
@@ -17,3 +18,25 @@ class SiPunch(object):
     def new(card: int, code: int, time: datetime, mode: int, mac_addr: str) -> "SiPunch": ...
     @staticmethod
     def from_raw(payload: bytes, mac_addr: str) -> "SiPunch": ...
+
+class RaspberryModel(Enum):
+    Unknown = (0,)
+    V1A = (1,)
+    V1B = (2,)
+    V1Ap = (3,)
+    V1Bp = (4,)
+    V2A = (5,)
+    V2B = (6,)
+    V3A = (7,)
+    V3B = (8,)
+    V3Ap = (9,)
+    V3Bp = (10,)
+    V4A = (11,)
+    V4B = (12,)
+    V5A = (13,)
+    V5B = (14,)
+    VZero = (15,)
+    VZeroW = (16,)
+
+    @staticmethod
+    def from_string(model_info: str) -> "RaspberryModel": ...
