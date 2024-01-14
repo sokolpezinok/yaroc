@@ -183,19 +183,19 @@ class MqttForwader:
 
     async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
         try:
-            se = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
+            service_envelope = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
-        if not se.packet.HasField("decoded"):
+        if not service_envelope.packet.HasField("decoded"):
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
 
-        node_id = getattr(se.packet, "from")
-        mac_addr = f"{node_id:08x}"
-        if se.packet.decoded.portnum == TELEMETRY_APP:
+        mac_addr = MqttForwader.meshtastic_mac(service_envelope)
+        packet = service_envelope.packet
+        if packet.decoded.portnum == TELEMETRY_APP:
             try:
-                telemetry = Telemetry.FromString(se.packet.decoded.payload)
+                telemetry = Telemetry.FromString(packet.decoded.payload)
                 if not telemetry.HasField("device_metrics"):
                     return
             except Exception as err:
@@ -211,14 +211,13 @@ class MqttForwader:
                 f"{metrics.battery_level}%, {metrics.voltage:4.3f}V, "
                 f"latency {total_latency.total_seconds():6.2f}s"
             )
-            if se.packet.rx_rssi != 0:
-                log_message += f", {se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
-            logging.info(log_message)
-        elif se.packet.decoded.portnum == POSITION_APP:
-            if se.packet.to != 2**32 - 1:  # Request packets are ignored
+            if packet.rx_rssi != 0:
+                log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+        elif packet.decoded.portnum == POSITION_APP:
+            if packet.to != 2**32 - 1:  # Request packets are ignored
                 return
             try:
-                position = Position.FromString(se.packet.decoded.payload)
+                position = Position.FromString(packet.decoded.payload)
             except Exception as err:
                 logging.error(f"Error while constructing Position: {err}")
                 return
@@ -231,20 +230,20 @@ class MqttForwader:
                 f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
                 f"latency {total_latency.total_seconds():6.2f}s"
             )
-            if se.packet.rx_rssi != 0:
-                log_message += f", {se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
-            logging.info(log_message)
-        elif se.packet.decoded.portnum == RANGE_TEST_APP:
-            if se.packet.rx_rssi == 0:
+            if packet.rx_rssi != 0:
+                log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+        elif packet.decoded.portnum == RANGE_TEST_APP:
+            if packet.rx_rssi == 0:
                 return
 
-            recv_time = datetime.fromtimestamp(se.packet.rx_time).astimezone()
-            seq_number = se.packet.decoded.payload.decode("ascii")
+            recv_time = datetime.fromtimestamp(packet.rx_time).astimezone()
+            seq_number = packet.decoded.payload.decode("ascii")
             log_message = (
                 f"{self._resolve(mac_addr)} {recv_time:%H:%M:%S}: range test {seq_number}, "
-                f"{se.packet.rx_rssi}dBm, {se.packet.rx_snr}SNR"
+                f"{packet.rx_rssi}dBm, {packet.rx_snr}SNR"
             )
-            logging.info(log_message)
+
+        logging.info(log_message)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
