@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, Set, TypeAlias
+from typing import Dict, Set
 
 
 class CellularConnectionState(Enum):
@@ -102,4 +102,36 @@ class MeshtasticRocStatus:
         self.last_update = datetime.now().astimezone()
 
 
-RocStatus: TypeAlias = CellularRocStatus | MeshtasticRocStatus
+class StatusTracker:
+    """Class for tracking the status of all nodes"""
+
+    def __init__(self):
+        self.cellular_status: Dict[str, CellularRocStatus] = {}
+        self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
+
+    def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
+        return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
+
+    def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
+        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
+
+    def generate_info_table(self):
+        table = []
+        for mac_addr, status in self.cellular_status.items():
+            row = [self._resolve(mac_addr)]
+            map = status.to_dict()
+            row.append(map.get("dbm", ""))
+            row.append(map.get("code", ""))
+            row.append(map.get("last_update", ""))
+            row.append(map.get("last_punch", ""))
+            table.append(row)
+
+        for mac_addr, status in self.meshtastic_status.items():
+            row = [self._resolve(mac_addr)]
+            map = status.to_dict()
+            row.append(map.get("dbm", ""))
+            row.append(map.get("code", ""))
+            row.append(map.get("last_update", ""))
+            row.append(map.get("last_punch", ""))
+            table.append(row)
+        return table

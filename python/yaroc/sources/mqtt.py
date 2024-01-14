@@ -22,7 +22,7 @@ from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
 from ..rs import SiPunch
-from ..utils.status import CellularRocStatus, MeshtasticRocStatus
+from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -40,8 +40,7 @@ class MqttForwader:
         self.dns = dns
         self.meshtastic_mac = meshtastic_mac
         self.meshtastic_channel = meshtastic_channel
-        self.cellular_status: Dict[str, CellularRocStatus] = {}
-        self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
+        self.tracker = StatusTracker()
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -55,33 +54,6 @@ class MqttForwader:
             return payload.encode("utf-8")
         else:
             raise TypeError("Unexpected type of a message payload")
-
-    def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
-        return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
-
-    def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
-        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
-
-    def generate_info_table(self):
-        table = []
-        for mac_addr, status in self.cellular_status.items():
-            row = [self._resolve(mac_addr)]
-            map = status.to_dict()
-            row.append(map.get("dbm", ""))
-            row.append(map.get("code", ""))
-            row.append(map.get("last_update", ""))
-            row.append(map.get("last_punch", ""))
-            table.append(row)
-
-        for mac_addr, status in self.meshtastic_status.items():
-            row = [self._resolve(mac_addr)]
-            map = status.to_dict()
-            row.append(map.get("dbm", ""))
-            row.append(map.get("code", ""))
-            row.append(map.get("last_update", ""))
-            row.append(map.get("last_punch", ""))
-            table.append(row)
-        return table
 
     def _resolve(self, mac_addr: str) -> str:
         if mac_addr in self.dns:
@@ -119,7 +91,7 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
-        roc_status = self.get_cellular_status(mac_addr)
+        roc_status = self.tracker.get_cellular_status(mac_addr)
         for punch in punches.punches:
             try:
                 si_punch = SiPunch.from_raw(punch.raw, mac_addr)
@@ -156,6 +128,8 @@ class MqttForwader:
         mac_addr = MqttForwader.meshtastic_mac(service_envelope)
         try:
             punch = SiPunch.from_raw(packet.decoded.payload, mac_addr)
+            msh_status = self.tracker.get_meshtastic_status(mac_addr)
+            msh_status.punch(punch.time, punch.code)
             await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac)
         except Exception as err:
             logging.error(f"Cannot parse SiPunch from {mac_addr} {packet.decoded.payload!r}: {err}")
@@ -167,7 +141,7 @@ class MqttForwader:
             logging.error(f"Error while parsing protobuf: {err}")
             return
         oneof = status.WhichOneof("msg")
-        roc_status = self.get_cellular_status(mac_addr)
+        roc_status = self.tracker.get_cellular_status(mac_addr)
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
             roc_status.disconnect()
@@ -202,7 +176,7 @@ class MqttForwader:
 
         mac_addr = MqttForwader.meshtastic_mac(service_envelope)
         packet = service_envelope.packet
-        msh_status = self.get_meshtastic_status(mac_addr)
+        msh_status = self.tracker.get_meshtastic_status(mac_addr)
         if packet.decoded.portnum == TELEMETRY_APP:
             try:
                 telemetry = Telemetry.FromString(packet.decoded.payload)
