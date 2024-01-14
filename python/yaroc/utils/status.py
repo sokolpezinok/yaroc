@@ -1,7 +1,11 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, Set
+from typing import Callable, Dict, Set
+
+import epaper
+
+from ..utils.table import draw_table
 
 
 class CellularConnectionState(Enum):
@@ -105,9 +109,14 @@ class MeshtasticRocStatus:
 class StatusTracker:
     """Class for tracking the status of all nodes"""
 
-    def __init__(self):
+    def __init__(self, dns_resolver: Callable[[str], str], display_model: str | None = None):
         self.cellular_status: Dict[str, CellularRocStatus] = {}
         self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
+        self.dns_resolver = dns_resolver
+        if display_model is not None:
+            self.epd = epaper.epaper(display_model).EPD()
+            self.epd.init(0)
+            self.epd.Clear()
 
     def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
         return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
@@ -118,7 +127,7 @@ class StatusTracker:
     def generate_info_table(self):
         table = []
         for mac_addr, status in self.cellular_status.items():
-            row = [self._resolve(mac_addr)]
+            row = [self.dns_resolver(mac_addr)]
             map = status.to_dict()
             row.append(map.get("dbm", ""))
             row.append(map.get("code", ""))
@@ -127,7 +136,7 @@ class StatusTracker:
             table.append(row)
 
         for mac_addr, status in self.meshtastic_status.items():
-            row = [self._resolve(mac_addr)]
+            row = [self.dns_resolver(mac_addr)]
             map = status.to_dict()
             row.append(map.get("dbm", ""))
             row.append(map.get("code", ""))
@@ -135,3 +144,7 @@ class StatusTracker:
             row.append(map.get("last_punch", ""))
             table.append(row)
         return table
+
+    def draw_table(self):
+        image = draw_table(self.generate_info_table(), self.epd.height, self.epd.width)
+        self.epd.display(self.epd.getbuffer(image))

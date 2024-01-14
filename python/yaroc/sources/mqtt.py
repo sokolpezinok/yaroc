@@ -40,7 +40,7 @@ class MqttForwader:
         self.dns = dns
         self.meshtastic_mac = meshtastic_mac
         self.meshtastic_channel = meshtastic_channel
-        self.tracker = StatusTracker()
+        self.tracker = StatusTracker(self._resolve)
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
