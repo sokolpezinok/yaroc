@@ -2,8 +2,8 @@ import asyncio
 import logging
 import socket
 import time
-import tomllib
 
+import tomllib
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import ClientGroup
