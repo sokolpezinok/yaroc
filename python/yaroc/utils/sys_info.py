@@ -69,7 +69,7 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
             logging.error(err)
             logging.error(result.stdout)
 
-        mch.hw_model = model
+        mch.hw_model = int(model)
 
     else:
         temperatures = psutil.sensors_temperatures()
