@@ -77,7 +77,7 @@ class RocClient(Client):
             "command": "setmini",
             "macaddr": mch.mac_address,
             "failedcallhomes": "0",
-            "localipaddress": mch.local_ip,
+            "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
             "codes": mch.codes,
             "totaldatatx": str(mch.totaldatarx),
             "totaldatarx": str(mch.totaldatatx),
@@ -86,8 +86,8 @@ class RocClient(Client):
             "networktype": network_type,
             "volts": str(mch.volts),
             "freq": str(mch.freq),
-            "minFreq": str(mch.min_freq),
-            "maxFreq": str(mch.max_freq),
+            "minFreq": 600,  # TODO: match HW model
+            "maxFreq": 1200,
         }
         try:
             async with self.client.get(ROC_RECEIVEDATA, params=params) as response:

@@ -21,12 +21,13 @@ def eth_mac_addr() -> str | None:
     return None
 
 
-def local_ip() -> str | None:
+def local_ip() -> int | None:
     for name, addresses in psutil.net_if_addrs().items():
         if name != "lo":
             for address in addresses:
                 if address.family == socket.AF_INET:
-                    return address.address
+                    bytes = map(int, address.address.split("."))
+                    return int.from_bytes(bytes)
     return None
 
 
@@ -46,8 +47,6 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
 
     cpu_freq = psutil.cpu_freq()
     mch.freq = floor(cpu_freq.current)
-    mch.min_freq = floor(cpu_freq.min)
-    mch.max_freq = floor(cpu_freq.max)
 
     net_counters = psutil.net_io_counters()
     mch.totaldatarx = net_counters.bytes_recv
@@ -69,6 +68,8 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
         except Exception as err:
             logging.error(err)
             logging.error(result.stdout)
+
+        mch.hw_model = model
 
     else:
         temperatures = psutil.sensors_temperatures()

@@ -107,9 +107,10 @@ class MqttClient(Client):
         except Exception as e:
             logging.error(f"Error while getting signal strength: {e}")
 
-        status = Status()
-        status.mini_call_home.CopyFrom(mch)
         topics = self.get_topics(mch.mac_address)
+        status = Status()
+        mch.ClearField("mac_address")
+        status.mini_call_home.CopyFrom(mch)
         return await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
@@ -194,6 +195,7 @@ class SIM7020MqttClient(Client):
         return res if res is not None else False
 
     async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+        mch.ClearField("mac_address")
         async with self._lock:
             res = await self._sim7020.get_signal_info()
             if res is not None:
