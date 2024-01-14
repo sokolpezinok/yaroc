@@ -20,8 +20,9 @@ from meshtastic.telemetry_pb2 import Telemetry
 
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
-from ..pb.status_pb2 import Status
+from ..pb.status_pb2 import Status as StatusProto
 from ..rs import SiPunch
+from ..utils.status import CellularRocStatus, MeshtasticRocStatus
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -39,6 +40,8 @@ class MqttForwader:
         self.dns = dns
         self.meshtastic_mac = meshtastic_mac
         self.meshtastic_channel = meshtastic_channel
+        self.cellular_status: Dict[str, CellularRocStatus] = {}
+        self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -52,6 +55,24 @@ class MqttForwader:
             return payload.encode("utf-8")
         else:
             raise TypeError("Unexpected type of a message payload")
+
+    def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
+        return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
+
+    def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
+        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
+
+    def generate_info_table(self):
+        table = []
+        for mac_addr, status in self.cellular_status.items():
+            row = [self._resolve(mac_addr)]
+            map = status.to_dict()
+            row.append(map.get("dbm", ""))
+            row.append(map.get("code", ""))
+            row.append(map.get("last_update", ""))
+            row.append(map.get("last_punch", ""))
+            table.append(row)
+        return table
 
     def _resolve(self, mac_addr: str) -> str:
         if mac_addr in self.dns:
@@ -89,12 +110,14 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
+        roc_status = self.get_cellular_status(mac_addr)
         for punch in punches.punches:
             try:
                 si_punch = SiPunch.from_raw(punch.raw, mac_addr)
             except Exception as err:
                 logging.error(f"Error while constructing SiPunch: {err}")
 
+            roc_status.punch(si_punch.time, si_punch.code)
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
             else:
@@ -126,13 +149,15 @@ class MqttForwader:
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
-            status = Status.FromString(MqttForwader._payload_to_bytes(payload))
+            status = StatusProto.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
         oneof = status.WhichOneof("msg")
+        roc_status = self.get_cellular_status(mac_addr)
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
+            roc_status.disconnect()
         elif oneof == "mini_call_home":
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
@@ -142,6 +167,9 @@ class MqttForwader:
                 log_message += f"{mch.cpu_temperature:5.2f}°C, {mch.signal_dbm:4}dBm, "
                 if mch.cellid > 0:
                     log_message += f"cell {mch.cellid:X}, "
+                    roc_status.connection_state(mch.signal_dbm, mch.cellid)
+                elif mch.signal_dbm != 0:
+                    roc_status.connection_state(mch.signal_dbm, 0)
                 log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
             else:
                 log_message += f"{mch.codes}, "
