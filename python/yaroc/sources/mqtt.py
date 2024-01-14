@@ -213,6 +213,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+            logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
             if packet.to != 2**32 - 1:  # Request packets are ignored
                 return
@@ -232,6 +233,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+            logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
             if packet.rx_rssi == 0:
                 return
@@ -242,8 +244,8 @@ class MqttForwader:
                 f"{self._resolve(mac_addr)} {recv_time:%H:%M:%S}: range test {seq_number}, "
                 f"{packet.rx_rssi}dBm, {packet.rx_snr}SNR"
             )
+            logging.info(log_message)
 
-        logging.info(log_message)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
