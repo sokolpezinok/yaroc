@@ -75,11 +75,31 @@ class CellularRocStatus:
 class MeshtasticRocStatus:
     voltage: float = 0.0
     position: Position | None = None
+    codes: Set[int] = field(default_factory=set)
     last_update: datetime | None = None
     last_punch: datetime | None = None
 
     def to_dict(self) -> Dict[str, str]:
-        return {}
+        res = {}
+        if len(self.codes) > 0:
+            res["code"] = ",".join(map(str, self.codes))
+        if self.last_update is not None:
+            res["last_update"] = human_time(datetime.now().astimezone() - self.last_update)
+        if self.last_punch is not None:
+            res["last_punch"] = human_time(datetime.now().astimezone() - self.last_punch)
+        return res
+
+    def punch(self, timestamp: datetime, code: int):
+        self.last_punch = timestamp
+        self.codes.add(code)
+
+    def update_voltage(self, voltage: float):
+        self.voltage = voltage
+        self.last_update = datetime.now().astimezone()
+
+    def update_position(self, lat: float, lon: float, timestamp: datetime):
+        self.position = Position(lat, lon, 0, timestamp)
+        self.last_update = datetime.now().astimezone()
 
 
 RocStatus: TypeAlias = CellularRocStatus | MeshtasticRocStatus

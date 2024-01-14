@@ -72,6 +72,15 @@ class MqttForwader:
             row.append(map.get("last_update", ""))
             row.append(map.get("last_punch", ""))
             table.append(row)
+
+        for mac_addr, status in self.meshtastic_status.items():
+            row = [self._resolve(mac_addr)]
+            map = status.to_dict()
+            row.append(map.get("dbm", ""))
+            row.append(map.get("code", ""))
+            row.append(map.get("last_update", ""))
+            row.append(map.get("last_punch", ""))
+            table.append(row)
         return table
 
     def _resolve(self, mac_addr: str) -> str:
@@ -193,6 +202,7 @@ class MqttForwader:
 
         mac_addr = MqttForwader.meshtastic_mac(service_envelope)
         packet = service_envelope.packet
+        msh_status = self.get_meshtastic_status(mac_addr)
         if packet.decoded.portnum == TELEMETRY_APP:
             try:
                 telemetry = Telemetry.FromString(packet.decoded.payload)
@@ -205,6 +215,7 @@ class MqttForwader:
             orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
             total_latency = now - orig_time
             metrics = telemetry.device_metrics
+            msh_status.update_voltage(metrics.voltage)
 
             log_message = (
                 f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: battery "
@@ -226,6 +237,7 @@ class MqttForwader:
             orig_time = datetime.fromtimestamp(position.time).astimezone()
             total_latency = now - orig_time
             lat, lon = position.latitude_i / 10**7, position.longitude_i / 10**7
+            msh_status.update_position(lat, lon, orig_time)
 
             log_message = (
                 f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
@@ -245,7 +257,6 @@ class MqttForwader:
                 f"{packet.rx_rssi}dBm, {packet.rx_snr}SNR"
             )
             logging.info(log_message)
-
 
     @staticmethod
     def extract_mac(topic: str) -> str:
