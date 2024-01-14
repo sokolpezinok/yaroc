@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Dict
 
@@ -260,8 +261,17 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
 
+    async def draw_table(self):
+        await asyncio.sleep(20.0)
+        while True:
+            time_start = time.time()
+            logging.info("Drawing new status table")
+            self.tracker.draw_table()  # Move to another thread
+            await asyncio.sleep(60 - (time.time() - time_start))
+
     async def loop(self):
         asyncio.create_task(self.client_group.loop())
+        asyncio.create_task(self.draw_table())
 
         while True:
             try:

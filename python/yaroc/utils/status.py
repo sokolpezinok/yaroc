@@ -146,5 +146,12 @@ class StatusTracker:
         return table
 
     def draw_table(self):
-        image = draw_table(self.generate_info_table(), self.epd.height, self.epd.width)
+        image = draw_table(
+            [
+                ["name", "dBm", "code", "last info", "last punch"],
+            ]
+            + self.generate_info_table(),
+            self.epd.height,
+            self.epd.width,
+        )
         self.epd.display(self.epd.getbuffer(image))
