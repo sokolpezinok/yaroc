@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import IntEnum
 from typing import ClassVar as _ClassVar
 
 class SiPunch(object):
@@ -19,7 +19,7 @@ class SiPunch(object):
     @staticmethod
     def from_raw(payload: bytes, mac_addr: str) -> "SiPunch": ...
 
-class RaspberryModel(Enum):
+class RaspberryModel(IntEnum):
     Unknown = (0,)
     V1A = (1,)
     V1B = (2,)

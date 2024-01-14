@@ -33,12 +33,12 @@ class MqttForwader:
         self,
         client_group: ClientGroup,
         dns: Dict[str, str],
-        meshtastic_mac: str,
+        meshtastic_mac_addr: str,
         meshtastic_channel: str,
     ):
         self.client_group = client_group
         self.dns = dns
-        self.meshtastic_mac = meshtastic_mac
+        self.meshtastic_mac_addr = meshtastic_mac_addr
         self.meshtastic_channel = meshtastic_channel
         self.tracker = StatusTracker(self._resolve)
 
@@ -107,7 +107,7 @@ class MqttForwader:
             await self._process_punch(si_punch, mac_addr, now, send_time)
 
     @staticmethod
-    def meshtastic_mac(service_envelop: ServiceEnvelope) -> str:
+    def extract_msh_mac(service_envelop: ServiceEnvelope) -> str:
         node_id = getattr(service_envelop.packet, "from")
         return f"{node_id:08x}"
 
@@ -125,12 +125,12 @@ class MqttForwader:
             logging.debug(f"Ignoring message with portnum {packet.decoded.portnum}")
             return
 
-        mac_addr = MqttForwader.meshtastic_mac(service_envelope)
+        mac_addr = MqttForwader.extract_msh_mac(service_envelope)
         try:
             punch = SiPunch.from_raw(packet.decoded.payload, mac_addr)
             msh_status = self.tracker.get_meshtastic_status(mac_addr)
             msh_status.punch(punch.time, punch.code)
-            await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac)
+            await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac_addr)
         except Exception as err:
             logging.error(f"Cannot parse SiPunch from {mac_addr} {packet.decoded.payload!r}: {err}")
 
@@ -174,7 +174,7 @@ class MqttForwader:
             logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
             return
 
-        mac_addr = MqttForwader.meshtastic_mac(service_envelope)
+        mac_addr = MqttForwader.extract_msh_mac(service_envelope)
         packet = service_envelope.packet
         msh_status = self.tracker.get_meshtastic_status(mac_addr)
         if packet.decoded.portnum == TELEMETRY_APP:
