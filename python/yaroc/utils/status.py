@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Callable, Dict, Set
 
-import epaper
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -114,6 +113,8 @@ class StatusTracker:
         self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
         self.dns_resolver = dns_resolver
         if display_model is not None:
+            import epaper
+
             self.epd = epaper.epaper(display_model).EPD()
             self.epd.init(0)
             self.epd.Clear()
@@ -137,9 +138,9 @@ class StatusTracker:
             row.append(map.get("last_punch", ""))
             table.append(row)
 
-        for mac_addr, status in self.meshtastic_status.items():
+        for mac_addr, msh_status in self.meshtastic_status.items():
             row = [self.dns_resolver(mac_addr)]
-            map = status.to_dict()
+            map = msh_status.to_dict()
             row.append(map.get("dbm", ""))
             row.append(map.get("code", ""))
             row.append(map.get("last_update", ""))
@@ -163,12 +164,12 @@ class StatusTracker:
         if any([len(row) != col_count for row in table]):
             raise Exception("Wrong number of columns")
 
-        cols = [max(font.getlength(row[z]) for row in table) for z in range(col_count)]
+        cols = [int(max(font.getlength(row[z]) for row in table)) for z in range(col_count)]
 
-        def calc_row_start(row: int):
+        def calc_row_start(row: int) -> int:
             return row * char_height + row - 1
 
-        def calc_col_start(col: int, partial_sum: int):
+        def calc_col_start(col: int, partial_sum: int) -> int:
             return col * total_horiz_pad + partial_sum
 
         real_height = calc_row_start(row_count)
@@ -178,8 +179,8 @@ class StatusTracker:
             x = calc_col_start(i + 1, partial_sum)
             draw.line((x, 0, x, real_height), fill=0)
 
-        for row in range(1, row_count):
-            y = calc_row_start(row)
+        for row_idx in range(1, row_count):
+            y = calc_row_start(row_idx)
             draw.line((0, y, real_width, y), fill=0)
 
         for row_idx, row in enumerate(table):
