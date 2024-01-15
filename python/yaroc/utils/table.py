@@ -11,44 +11,34 @@ def draw_table(table: list[list[str]], width: int, height: int, horiz_pad: int =
     char_height = 12
     font = ImageFont.truetype("DejaVuSans.ttf", char_height)
 
-    row_count = len(table)
-    row_len = len(table[0])
-    if any([len(row) != row_len for row in table]):
+    total_horiz_pad = 1 + horiz_pad * 2
+    row_count, col_count = len(table), len(table[0])
+    if any([len(row) != col_count for row in table]):
         raise Exception("Wrong number of columns")
 
-    cols = []
-    for z in range(row_len):
-        cols.append(max(font.getlength(row[z]) for row in table))
+    cols = [max(font.getlength(row[z]) for row in table) for z in range(col_count)]
 
-    total_horiz_pad = 1 + horiz_pad * 2
-    real_width = sum(cols) + len(cols) * total_horiz_pad
-    real_height = char_height * row_count + row_count
+    def calc_row_start(row: int):
+        return row * char_height + row - 1
 
-    for i, column in enumerate(itertools.accumulate(cols[:-1])):
-        pos = total_horiz_pad * (i + 1) + column
-        draw.line((pos, 0, pos, real_height), fill=0)
+    def calc_col_start(col: int, partial_sum: int):
+        return col * total_horiz_pad + partial_sum
 
-    for y in range(1, row_count):
-        pos = y + y * char_height
-        draw.line((0, pos, real_width, pos), fill=0)
+    real_height = calc_row_start(row_count)
+    real_width = calc_col_start(len(cols), sum(cols))
 
-    for i, row in enumerate(table):
-        y = i + i * char_height
-        for j, column in enumerate(itertools.accumulate([0] + cols)):
-            xx = total_horiz_pad * j + column
-            if j < len(row):
-                draw.text((xx + 1, y), row[j], font=font, fill=0)
+    for i, partial_sum in enumerate(itertools.accumulate(cols[:-1])):
+        x = calc_col_start(i + 1, partial_sum)
+        draw.line((x, 0, x, real_height), fill=0)
+
+    for row in range(1, row_count):
+        y = calc_row_start(row)
+        draw.line((0, y, real_width, y), fill=0)
+
+    for row_idx, row in enumerate(table):
+        y = calc_row_start(row_idx)
+        for col_idx, partial_sum in enumerate(itertools.accumulate([0] + cols[:-1])):
+            x = calc_col_start(col_idx, partial_sum)
+            draw.text((x + horiz_pad, y), row[col_idx], font=font, fill=0)
 
     return image
-
-
-im = draw_table(
-    [
-        ["name", "dBm", "code", "last info", "last punch"],
-        ["spe01", "-75", "55", "2min ago", "1min ago" + "\u2713"],
-        ["spe02", "-82", "64", "20s ago", "15 min ago"],
-    ],
-    296,
-    152,
-)
-im.show()
