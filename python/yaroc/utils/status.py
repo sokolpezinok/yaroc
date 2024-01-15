@@ -117,6 +117,8 @@ class StatusTracker:
             self.epd = epaper.epaper(display_model).EPD()
             self.epd.init(0)
             self.epd.Clear()
+        else:
+            self.epd = None
 
     def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
         return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
@@ -124,7 +126,7 @@ class StatusTracker:
     def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
         return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
 
-    def generate_info_table(self):
+    def generate_info_table(self) -> list[list[str]]:
         table = []
         for mac_addr, status in self.cellular_status.items():
             row = [self.dns_resolver(mac_addr)]
@@ -189,6 +191,8 @@ class StatusTracker:
         return image
 
     def draw_status(self):
+        if self.epd is None:
+            return
         image = StatusTracker.draw_table(
             [
                 ["name", "dBm", "code", "last info", "last punch"],
