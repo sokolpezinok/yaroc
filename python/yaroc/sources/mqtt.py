@@ -266,7 +266,7 @@ class MqttForwader:
         while True:
             time_start = time.time()
             logging.info("Drawing new status table")
-            self.tracker.draw_table()  # Move to another thread
+            self.tracker.draw_status()  # Move to another thread
             await asyncio.sleep(60 - (time.time() - time_start))
 
     async def loop(self):
