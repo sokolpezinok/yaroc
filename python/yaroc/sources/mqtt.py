@@ -273,6 +273,13 @@ class MqttForwader:
         asyncio.create_task(self.client_group.loop())
         asyncio.create_task(self.draw_table())
 
+        online_macs, radio_macs = [], []
+        for mac in self.dns.keys():
+            if len(mac) == 12:
+                online_macs.append(mac)
+            elif len(mac) == 8:
+                radio_macs.append(mac)
+
         while True:
             try:
                 async with MqttClient(
@@ -283,10 +290,14 @@ class MqttForwader:
                 ) as client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
                     async with client.messages() as messages:
-                        for mac_addr in self.dns.keys():
+                        for mac_addr in online_macs:
                             await client.subscribe(f"yar/{mac_addr}/#", qos=1)
-                        await client.subscribe("yar/2/c/serial/#", qos=1)
-                        await client.subscribe(f"yar/2/c/{self.meshtastic_channel}/#", qos=1)
+                        for mac_addr in radio_macs:
+                            await client.subscribe(f"yar/2/c/serial/!{mac_addr}", qos=1)
+                            await client.subscribe(
+                                f"yar/2/c/{self.meshtastic_channel}/!{mac_addr}", qos=1
+                            )
+
                         async for message in messages:
                             asyncio.create_task(self._on_message(message))
             except MqttError:
