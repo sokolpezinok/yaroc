@@ -36,12 +36,13 @@ class MqttForwader:
         dns: Dict[str, str],
         meshtastic_mac_addr: str,
         meshtastic_channel: str,
+        display_model: str | None = None,
     ):
         self.client_group = client_group
         self.dns = dns
         self.meshtastic_mac_addr = meshtastic_mac_addr
         self.meshtastic_channel = meshtastic_channel
-        self.tracker = StatusTracker(self._resolve)
+        self.tracker = StatusTracker(self._resolve, display_model)
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:

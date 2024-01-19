@@ -31,6 +31,7 @@ async def main():
         dns,
         config["meshtastic"]["mac_override"],
         config["meshtastic"]["main_channel"],
+        config.get("display", None),
     )
     await forwarder.loop()
 
