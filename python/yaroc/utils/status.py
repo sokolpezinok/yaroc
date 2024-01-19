@@ -78,6 +78,7 @@ class CellularRocStatus:
 class MeshtasticRocStatus:
     voltage: float = 0.0
     position: Position | None = None
+    dbm: int | None = None
     codes: Set[int] = field(default_factory=set)
     last_update: datetime | None = None
     last_punch: datetime | None = None
@@ -86,6 +87,8 @@ class MeshtasticRocStatus:
         res = {}
         if len(self.codes) > 0:
             res["code"] = ",".join(map(str, self.codes))
+        if self.dbm is not None:
+            res["dbm"] = f"{self.dbm}"
         if self.last_update is not None:
             res["last_update"] = human_time(datetime.now().astimezone() - self.last_update)
         if self.last_punch is not None:
@@ -98,6 +101,10 @@ class MeshtasticRocStatus:
 
     def update_voltage(self, voltage: float):
         self.voltage = voltage
+        self.last_update = datetime.now().astimezone()
+
+    def update_dbm(self, dbm: int):
+        self.dbm = dbm
         self.last_update = datetime.now().astimezone()
 
     def update_position(self, lat: float, lon: float, timestamp: datetime):

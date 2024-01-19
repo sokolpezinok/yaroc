@@ -199,6 +199,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+                msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
             if packet.to != 2**32 - 1:  # Request packets are ignored
@@ -220,6 +221,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+                msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
             if packet.rx_rssi == 0:
