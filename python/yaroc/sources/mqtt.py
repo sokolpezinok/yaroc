@@ -166,7 +166,9 @@ class MqttForwader:
             logging.info(log_message)
             await self.client_group.send_mini_call_home(mch)
 
-    async def _handle_meshtastic_status(self, payload: PayloadType, now: datetime):
+    async def _handle_meshtastic_status(
+        self, recv_mac_addr: str, payload: PayloadType, now: datetime
+    ):
         try:
             service_envelope = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
@@ -200,6 +202,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):3.1f}km"
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
@@ -222,6 +225,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
+                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):3.1f}km"
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
@@ -258,7 +262,8 @@ class MqttForwader:
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
             elif topic.startswith(f"yar/2/c/{self.meshtastic_channel}/"):
-                await self._handle_meshtastic_status(msg.payload, now)
+                mac_addr = topic[10 + len(self.meshtastic_channel) :]
+                await self._handle_meshtastic_status(mac_addr, msg.payload, now)
             elif topic.startswith("yar/2/c/serial/"):
                 await self._handle_meshtastic_serial(msg.payload, now)
         except Exception as err:

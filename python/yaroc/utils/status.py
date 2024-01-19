@@ -1,11 +1,12 @@
 import itertools
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Callable, Dict, Set
 
 from PIL import Image, ImageDraw, ImageFont
+
+from ..rs import geo_distance
 
 
 class CellularConnectionState(Enum):
@@ -155,6 +156,17 @@ class StatusTracker:
             row.append(map.get("last_punch", ""))
             table.append(row)
         return table
+
+    def distance_km(self, mac_addr1: str, mac_addr2: str) -> float | None:
+        msh_status1 = self.get_meshtastic_status(mac_addr1)
+        msh_status2 = self.get_meshtastic_status(mac_addr2)
+        if msh_status1 is None or msh_status2 is None:
+            return None
+        pos1 = msh_status1.position
+        pos2 = msh_status2.position
+        if pos1 is None or pos2 is None:
+            return None
+        return geo_distance(pos1.lat, pos1.lon, pos2.lat, pos2.lon) / 1000
 
     @staticmethod
     def draw_table(
