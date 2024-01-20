@@ -19,4 +19,4 @@ path = "src/main.rs"
 
 [lib]
 name = "yaroc_rs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
