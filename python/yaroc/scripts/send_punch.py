@@ -20,13 +20,14 @@ class PunchSender:
         client_group: ClientGroup,
         mac_addr: str,
         si_manager: SiPunchManager = Provide[Container.si_manager],
+        mch_interval: int = 30,
     ):
         if client_group.len() == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.client_group = client_group
         self.si_manager = si_manager
         self.mac_addr = mac_addr
-        self._mch_interval = 20
+        self._mch_interval = mch_interval
 
     async def periodic_mini_call_home(self):
         # TODO: get rid of the following sleep
