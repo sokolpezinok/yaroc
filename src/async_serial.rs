@@ -80,22 +80,19 @@ impl AsyncSerial {
         .await;
         std::mem::drop(serial);
 
-        match result {
-            Ok(read_result) => match read_result {
-                Ok(_) => {
-                    self.last_at_response = Local::now();
-                    let buffer = String::from_utf8(buffer)
-                        .map_err(|e| AsyncSerialError::ReadError(Box::new(e)))?;
-                    Ok(buffer
-                        .split("\r\n")
-                        .filter(|line| !line.is_empty())
-                        .map(|line| line.trim_end().to_owned())
-                        .collect())
-                }
-                Err(e) => Err(AsyncSerialError::ReadError(Box::new(e))),
-            },
-            Err(_) => Err(AsyncSerialError::Timeout(timeout)),
-        }
+        let read_len = result
+            .map_err(|_| AsyncSerialError::Timeout(timeout))?
+            .map_err(|e| AsyncSerialError::ReadError(Box::new(e)))?;
+        self.last_at_response = Local::now();
+
+        buffer.truncate(read_len);
+        let buffer =
+            String::from_utf8(buffer).map_err(|e| AsyncSerialError::ReadError(Box::new(e)))?;
+        Ok(buffer
+            .split("\r\n")
+            .filter(|line| !line.is_empty())
+            .map(|line| line.trim_end().to_owned())
+            .collect())
     }
 
     fn search(lines: Vec<String>, needle: &str, ids: &[&str]) -> HashMap<String, String> {
