@@ -1,11 +1,13 @@
 use std::{collections::HashMap, error::Error, time::Duration};
 
+use chrono::Local;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 pub struct AsyncSerial {
     serial: tokio::sync::Mutex<SerialStream>,
     buffer_size: usize,
+    last_at_response: chrono::DateTime<Local>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -27,6 +29,7 @@ impl AsyncSerial {
         Ok(Self {
             serial: tokio::sync::Mutex::new(serial),
             buffer_size: 1024,
+            last_at_response: Local::now(),
         })
     }
 
@@ -80,6 +83,7 @@ impl AsyncSerial {
         match result {
             Ok(read_result) => match read_result {
                 Ok(_) => {
+                    self.last_at_response = Local::now();
                     let buffer = String::from_utf8(buffer)
                         .map_err(|e| AsyncSerialError::ReadError(Box::new(e)))?;
                     Ok(buffer
