@@ -214,4 +214,5 @@ class SIM7020MqttClient(Client):
             if isinstance(res, str):
                 logging.error(f"MQTT sending of {message_type} failed: {res}")
                 return False
+            logging.info(f"{message_type} sent via MQTT")
             return res
