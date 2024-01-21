@@ -19,14 +19,16 @@ class PunchSender:
         self,
         client_group: ClientGroup,
         mac_addr: str,
+        mch_interval: int | None = 30,
         si_manager: SiPunchManager = Provide[Container.si_manager],
-        mch_interval: int = 30,
     ):
         if client_group.len() == 0:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.client_group = client_group
         self.si_manager = si_manager
         self.mac_addr = mac_addr
+        if mch_interval is None:
+            mch_interval = 30
         self._mch_interval = mch_interval
 
     async def periodic_mini_call_home(self):
@@ -97,7 +99,7 @@ async def main():
     logging.info(f"Starting SendPunch for MAC {config['hostname']}/{config['mac_addr']}")
 
     client_group = await create_clients(container.client_factories)
-    ps = PunchSender(client_group, config["mac_addr"])
+    ps = PunchSender(client_group, config["mac_addr"], config.get("call_home_interval", None))
     await ps.loop()
 
 
