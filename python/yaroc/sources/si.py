@@ -7,12 +7,13 @@ from asyncio.tasks import Task
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Event
-from typing import AsyncIterator, Dict
+from typing import Any, AsyncIterator, Dict
 
-import pyudev
 import serial
-from pyudev import Device
+from pyudev import Context, Device
 from serial_asyncio import open_serial_connection
+from usbmonitor import USBMonitor
+from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
 
 from ..rs import SiPunch
 
@@ -57,14 +58,21 @@ class SerialSiWorker(SiWorker):
         self._finished = Event()
 
     async def loop(self, queue: Queue[SiPunch]):
-        try:
-            async with asyncio.timeout(10):
-                reader, writer = await open_serial_connection(
-                    url=self.port, baudrate=38400, rtscts=False
-                )
-            logging.info(f"Connected to SRR source at {self.port}")
-        except Exception as err:
-            logging.error(f"Error connecting to {self.port}: {err}")
+        successful = False
+        for i in range(3):
+            try:
+                async with asyncio.timeout(10):
+                    reader, writer = await open_serial_connection(
+                        url=self.port, baudrate=38400, rtscts=False
+                    )
+                logging.info(f"Connected to SRR source at {self.port}")
+                successful = True
+                break
+            except Exception as err:
+                logging.error(f"Error connecting to {self.port}: {err}")
+                await asyncio.sleep(5.0)
+        if not successful:
+            return
 
         while not self._finished.is_set():
             try:
@@ -131,23 +139,27 @@ class UdevSiFactory(SiWorker):
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
-        context = pyudev.Context()
-        monitor = pyudev.Monitor.from_netlink(context)
-        monitor.filter_by("tty")
-        observer = pyudev.MonitorObserver(monitor, self._handle_udev_event)
-        observer.start()
-        logging.info("Starting udev-based SportIdent device manager")
+        logging.info("Starting USB SportIdent device manager")
+        self.monitor = USBMonitor(({ID_VENDOR_ID: "10c4"}, {ID_VENDOR_ID: "1a86"}))
+        self.monitor.start_monitoring(
+            on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
+        )
 
-        try:
-            for device in context.list_devices():
-                self._handle_udev_event("add", device)
-        except Exception as e:
-            logging.error(e)
+        for device_id, parent_device_info in self.monitor.get_available_devices().items():
+            self._add_usb_device(device_id, parent_device_info)
+        context = Context()
+
         while True:
-            action, device = await self._device_queue.get()
+            action, parent_device_info = await self._device_queue.get()
+            parent_device_node = parent_device_info[DEVNAME]
 
-            device_node = device.device_node
             if action == "add":
+                await asyncio.sleep(3.0)  # Give the TTY subystem more time
+                parent_device = Device.from_device_file(context, parent_device_node)
+                lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
+                if len(lst) == 0:
+                    continue
+                device_node = lst[0].device_node
                 if device_node in self._udev_workers:
                     return
                 logging.info(f"Inserted SportIdent device {device_node}")
@@ -155,49 +167,48 @@ class UdevSiFactory(SiWorker):
                 try:
                     worker = SerialSiWorker(device_node, self.mac_addr)
                     task = asyncio.create_task(worker.loop(queue))
-                    self._udev_workers[device_node] = (worker, task)
+                    self._udev_workers[parent_device_node] = (worker, task, device_node)
                     await status_queue.put(DeviceEvent(True, device_node))
                 except Exception as e:
                     logging.error(e)
             elif action == "remove":
-                if device_node in self._udev_workers:
+                if parent_device_node in self._udev_workers:
+                    si_worker, _, device_node = self._udev_workers[parent_device_node]
                     logging.info(f"Removed device {device_node}")
-                    si_worker, _ = self._udev_workers[device_node]
                     si_worker.close()
-                    del self._udev_workers[device_node]
+                    del self._udev_workers[parent_device_node]
                     await status_queue.put(DeviceEvent(False, device_node))
 
     @staticmethod
-    def _is_silabs(device: Device):
-        try:
-            return device.subsystem == "tty" and device.properties["ID_VENDOR_ID"] == "10c4"
-        except Exception:
-            # pyudev sucks, it throws an exception when you're only doing a lookup
-            return False
+    def _is_silabs(device_info: dict[str, Any]):
+        return device_info[ID_VENDOR_ID] == "10c4"
 
     @staticmethod
-    def _is_sandberg(device: Device):
-        try:
-            return (
-                device.subsystem == "tty"
-                and device.properties["ID_VENDOR_ID"] == "1a86"
-                and device.properties["ID_MODEL_ID"] == "55d4"
-            )
-        except Exception:
-            # pyudev sucks, it throws an exception when you're only doing a lookup
-            return False
+    def _is_sandberg(device_info: dict[str, Any]):
+        return device_info[ID_VENDOR_ID] == "1a86" and device_info[ID_MODEL_ID] == "55d4"
 
     def stop(self):
         self._observer.stop()
+        self.monitor.stop_monitoring()
 
-    def _handle_udev_event(self, action, device: Device):
-        if not self._is_silabs(device) and not self._is_sandberg(device):
-            return
-        asyncio.run_coroutine_threadsafe(self._device_queue.put((action, device)), self._loop)
+    def _add_usb_device(self, device_id: str, device_info: dict[str, Any]):
+        try:
+            if not self._is_silabs(device_info) and not self._is_sandberg(device_info):
+                return
+            asyncio.run_coroutine_threadsafe(
+                self._device_queue.put(("add", device_info)), self._loop
+            )
+        except Exception as err:
+            logging.error(err)
+
+    def _remove_usb_device(self, device_id, device_info: dict[str, Any]):
+        asyncio.run_coroutine_threadsafe(
+            self._device_queue.put(("remove", device_info)), self._loop
+        )
 
     def __str__(self):
         res = []
-        for worker, _ in self._udev_workers.values():
+        for worker, _, _ in self._udev_workers.values():
             res.append(str(worker))
         return ",".join(res)
 
