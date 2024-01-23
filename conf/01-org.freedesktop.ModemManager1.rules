@@ -1,0 +1,6 @@
+polkit.addRule(function(action, subject) {
+    if (/^org\.freedesktop\.ModemManager1\.(Device\.Control|Messaging)$/.test(action.id) &&
+        subject.isInGroup("plugdev")) {
+        return "yes";
+    }
+});
