@@ -275,6 +275,7 @@ class SiPunchManager:
         for worker in self._si_workers:
             self._si_workers.add(worker)
             loops.append(worker.loop(self._queue, self._status_queue))
+        await asyncio.sleep(3)  # Allow some time for an MQTT connection
         await asyncio.gather(*loops, return_exceptions=True)
 
     async def punches(self) -> AsyncIterator[SiPunch]:
