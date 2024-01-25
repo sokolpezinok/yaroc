@@ -11,6 +11,8 @@ import psutil
 from ..pb.status_pb2 import MiniCallHome
 from ..rs import RaspberryModel
 
+FREQ_MULTIPLIER: int = 20
+
 
 def eth_mac_addr() -> str | None:
     for name, addresses in psutil.net_if_addrs().items():
@@ -46,7 +48,9 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
     mch.mac_address = mac_addr
 
     cpu_freq = psutil.cpu_freq()
-    mch.freq = floor(cpu_freq.current)
+    mch.freq = floor(cpu_freq.current / FREQ_MULTIPLIER)
+    mch.max_freq = floor(cpu_freq.max / FREQ_MULTIPLIER)
+    mch.min_freq = floor(cpu_freq.min / FREQ_MULTIPLIER)
 
     net_counters = psutil.net_io_counters()
     mch.totaldatarx = net_counters.bytes_recv
@@ -68,8 +72,6 @@ def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
         except Exception as err:
             logging.error(err)
             logging.error(result.stdout)
-
-        mch.hw_model = int(model)
 
     else:
         temperatures = psutil.sensors_temperatures()

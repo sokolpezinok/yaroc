@@ -9,6 +9,7 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 from ..pb.status_pb2 import MiniCallHome
 from ..rs import SiPunch
 from ..utils.modem_manager import NetworkType
+from ..utils.sys_info import FREQ_MULTIPLIER
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
@@ -85,9 +86,9 @@ class RocClient(Client):
             "temperature": str(mch.cpu_temperature),
             "networktype": network_type,
             "volts": str(mch.volts),
-            "freq": str(mch.freq),
-            "minFreq": 600,  # TODO: match HW model
-            "maxFreq": 1200,
+            "freq": str(mch.freq * FREQ_MULTIPLIER),
+            "minFreq": str(mch.min_freq * FREQ_MULTIPLIER),
+            "maxFreq": str(mch.max_freq * FREQ_MULTIPLIER),
         }
         try:
             async with self.client.get(ROC_RECEIVEDATA, params=params) as response:

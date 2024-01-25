@@ -159,7 +159,7 @@ class MqttForwader:
                     roc_status.connection_state(mch.signal_dbm, mch.cellid)
                 elif mch.signal_dbm != 0:
                     roc_status.connection_state(mch.signal_dbm, 0)
-                log_message += f"{mch.volts:3.2f}V, {mch.freq:4}MHz, "
+                log_message += f"{mch.volts:3.2f}V, {mch.freq * 20:4}MHz, "
             else:
                 log_message += f"{mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"

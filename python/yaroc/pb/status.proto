@@ -15,20 +15,21 @@ message MiniCallHome {
   uint32 local_ip = 2;
   float cpu_temperature = 3;
   uint32 freq = 4;
-  uint32 hw_model = 5;
-  float volts = 6;
-  int32 signal_dbm = 7;
-  uint32 cellid = 8;
-  uint32 network_type = 9;
-  string codes = 10;
-  uint64 totaldatarx = 11;
-  uint64 totaldatatx = 12;
-  google.protobuf.Timestamp time = 13;
+  uint32 min_freq = 5;
+  uint32 max_freq = 6;
+  float volts = 7;
+  int32 signal_dbm = 8;
+  uint32 cellid = 9;
+  uint32 network_type = 10;
+  string codes = 11;
+  uint64 totaldatarx = 12;
+  uint64 totaldatatx = 13;
+  google.protobuf.Timestamp time = 14;
 }
 
 message Status {
   oneof msg {
     Disconnected disconnected = 1;
-    MiniCallHome mini_call_home = 3;
+    MiniCallHome mini_call_home = 2;
   }
 }
