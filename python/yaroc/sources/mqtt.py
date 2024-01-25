@@ -164,6 +164,7 @@ class MqttForwader:
                 log_message += f"{mch.codes}, "
             log_message += f"latency {total_latency.total_seconds():6.2f}s"
             logging.info(log_message)
+            mch.mac_address = mac_addr
             await self.client_group.send_mini_call_home(mch)
 
     async def _handle_meshtastic_status(
