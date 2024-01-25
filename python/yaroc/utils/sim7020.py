@@ -77,23 +77,23 @@ class SIM7020Interface:
     async def power_on(self):
         await self.async_at.call("ATE0", timeout=1)
         res = await self.async_at.call("AT", "OK", timeout=1)
-        if res.success:
-            logging.info("SIM7020 is powered on")
+        if raspberrypi_model() == RaspberryModel.Unknown:
+            logging.error("Cannot power on the module, press the power button")
         else:
-            if raspberrypi_model() != RaspberryModel.Unknown:
-                logging.info("Powering on SIM7020")
-                import RPi.GPIO as GPIO
+            import RPi.GPIO as GPIO
 
-                POWER_KEY = 4
-                GPIO.setmode(GPIO.BCM)
-                GPIO.setwarnings(False)
-                GPIO.setup(POWER_KEY, GPIO.OUT)
+            POWER_KEY = 4
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+            GPIO.setup(POWER_KEY, GPIO.OUT)
+            if res.success:
+                logging.info("SIM7020 is powered on")
+            else:
+                logging.info("Powering on SIM7020")
                 GPIO.output(POWER_KEY, GPIO.HIGH)
                 time.sleep(1)
                 GPIO.output(POWER_KEY, GPIO.LOW)
                 time.sleep(3)
-            else:
-                logging.error("Cannot power on the module, press the power button")
 
     async def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
