@@ -96,7 +96,7 @@ class RocClient(Client):
                     logging.info("MiniCallHome sent to ROC")
                     return True
                 else:
-                    logging.error("ROC error {}: {}", response.status, await response.text())
+                    logging.error(f"ROC error {response.status}: {await response.text()}")
                     return False
         except Exception as e:
             logging.error(f"ROC error: {e}")
