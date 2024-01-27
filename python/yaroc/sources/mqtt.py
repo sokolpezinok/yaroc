@@ -167,11 +167,11 @@ class MqttForwader:
             mch.mac_address = mac_addr
             await self.client_group.send_mini_call_home(mch)
 
-    def distance_format(self, mac1: str, mac2: str):
-        distance = self.tracker.distance_km(mac1, mac2)
+    def distance_format(self, receiver: str, sender: str):
+        distance = self.tracker.distance_km(receiver, sender)
         if distance is None:
             return ""
-        return f", {distance:.3g}km"
+        return f", {distance:.3g}km from {self._resolve(receiver)}"
 
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
