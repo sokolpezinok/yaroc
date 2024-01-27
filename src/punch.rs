@@ -7,9 +7,9 @@ pub struct SiPunch {
     #[pyo3(get)]
     card: u32,
     #[pyo3(get)]
-    code: u16,
+    pub code: u16,
     #[pyo3(get)]
-    time: DateTime<FixedOffset>,
+    pub time: DateTime<FixedOffset>,
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get, set)]

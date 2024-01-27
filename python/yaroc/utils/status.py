@@ -9,13 +9,6 @@ from PIL import Image, ImageDraw, ImageFont
 from ..rs import Position
 
 
-class CellularConnectionState(Enum):
-    Unknown = 0
-    Unregistered = 1
-    Registered = 2
-    MqttConnected = 3
-
-
 def human_time(delta: timedelta) -> str:
     if delta.total_seconds() < 10:
         return f"{delta.total_seconds():.1f}s ago"
@@ -27,6 +20,13 @@ def human_time(delta: timedelta) -> str:
     if minutes < 60:
         return f"{minutes:.0f}m ago"
     return f"{minutes / 60:.1f}h ago"
+
+
+class CellularConnectionState(Enum):
+    Unknown = 0
+    Unregistered = 1
+    Registered = 2
+    MqttConnected = 3
 
 
 @dataclass
