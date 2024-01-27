@@ -167,6 +167,12 @@ class MqttForwader:
             mch.mac_address = mac_addr
             await self.client_group.send_mini_call_home(mch)
 
+    def distance_format(self, mac1: str, mac2: str):
+        distance = self.tracker.distance_km(mac1, mac2)
+        if distance is None:
+            return ""
+        return f", {distance:.3g}km"
+
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
@@ -203,7 +209,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):.3g}km"
+                log_message += self.distance_format(recv_mac_addr, mac_addr)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
@@ -226,7 +232,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):.3g}km"
+                log_message += self.distance_format(recv_mac_addr, mac_addr)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
