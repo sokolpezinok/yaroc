@@ -203,7 +203,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):3.1f}km"
+                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):.3g}km"
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
@@ -226,7 +226,7 @@ class MqttForwader:
             )
             if packet.rx_rssi != 0:
                 log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):3.1f}km"
+                log_message += f", {self.tracker.distance_km(recv_mac_addr, mac_addr):.3g}km"
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
