@@ -41,4 +41,12 @@ class RaspberryModel(IntEnum):
     @staticmethod
     def from_string(model_info: str) -> "RaspberryModel": ...
 
-def geo_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float: ...
+class Position(object):
+    lat: float
+    lon: float
+    elevation: float
+    timestamp: datetime
+
+    @staticmethod
+    def new(card: int, code: int, time: datetime, mode: int, mac_addr: str) -> "SiPunch": ...
+    def distance_m(self, other: Position) -> float: ...

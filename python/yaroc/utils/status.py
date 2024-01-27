@@ -6,7 +6,7 @@ from typing import Callable, Dict, Set
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import geo_distance
+from ..rs import Position
 
 
 class CellularConnectionState(Enum):
@@ -14,14 +14,6 @@ class CellularConnectionState(Enum):
     Unregistered = 1
     Registered = 2
     MqttConnected = 3
-
-
-@dataclass
-class Position:
-    lat: float
-    lon: float
-    elevation: float
-    timestamp: datetime
 
 
 def human_time(delta: timedelta) -> str:
@@ -110,7 +102,7 @@ class MeshtasticRocStatus:
         self.last_update = datetime.now().astimezone()
 
     def update_position(self, lat: float, lon: float, timestamp: datetime):
-        self.position = Position(lat, lon, 0, timestamp)
+        self.position = Position.new(lat, lon, timestamp)
         self.last_update = datetime.now().astimezone()
 
 
@@ -166,7 +158,7 @@ class StatusTracker:
         pos2 = msh_status2.position
         if pos1 is None or pos2 is None:
             return None
-        return geo_distance(pos1.lat, pos1.lon, pos2.lat, pos2.lon) / 1000
+        return pos1.distance_m(pos2) / 1000
 
     @staticmethod
     def draw_table(
