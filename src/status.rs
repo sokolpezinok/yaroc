@@ -7,6 +7,7 @@ use geoutils::Location;
 
 use crate::punch::SiPunch;
 
+#[derive(Clone)]
 #[pyclass]
 pub struct Position {
     pub lat: f64,
@@ -106,6 +107,57 @@ impl CellularRocStatus {
                 CellularConnectionState::Registered(dbm, _) => Some(dbm),
                 _ => None,
             },
+            last_update: self.last_update,
+            last_punch: self.last_punch,
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Default)]
+pub struct MeshtasticRocStatus {
+    voltage: Option<f64>,
+    dbm: Option<i16>,
+    #[pyo3(get)]
+    position: Option<Position>,
+    codes: HashSet<u16>,
+    #[pyo3(get)]
+    last_update: Option<DateTime<FixedOffset>>,
+    #[pyo3(get)]
+    last_punch: Option<DateTime<FixedOffset>>,
+}
+
+#[pymethods]
+impl MeshtasticRocStatus {
+    #[staticmethod]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn update_voltage(&mut self, voltage: f64) {
+        self.voltage = Some(voltage);
+        self.last_update = Some(Local::now().into());
+    }
+
+    pub fn update_dbm(&mut self, dbm: i16) {
+        self.dbm = Some(dbm);
+        self.last_update = Some(Local::now().into());
+    }
+
+    pub fn update_position(&mut self, lat: f64, lon: f64, timestamp: DateTime<FixedOffset>) {
+        self.position = Some(Position::new(lat, lon, timestamp));
+        self.last_update = Some(Local::now().into());
+    }
+
+    pub fn punch(&mut self, punch: &SiPunch) {
+        self.last_punch = Some(punch.time);
+        self.codes.insert(punch.code);
+    }
+
+    pub fn serialize(&self, name: &str) -> NodeInfo {
+        NodeInfo {
+            name: name.to_owned(),
+            dbm: self.dbm,
             last_update: self.last_update,
             last_punch: self.last_punch,
         }

@@ -1,15 +1,16 @@
 import itertools
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
-from typing import Callable, Dict, Set
+from datetime import datetime
+from typing import Callable, Dict
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import CellularRocStatus, Position
+from ..rs import CellularRocStatus, MeshtasticRocStatus
 
 
-def human_time(delta: timedelta) -> str:
+def human_time(timestamp: datetime | None) -> str:
+    if timestamp is None:
+        return ""
+    delta = datetime.now().astimezone() - timestamp
     if delta.total_seconds() < 10:
         return f"{delta.total_seconds():.1f}s ago"
     if delta.total_seconds() < 60:
@@ -20,51 +21,6 @@ def human_time(delta: timedelta) -> str:
     if minutes < 60:
         return f"{minutes:.0f}m ago"
     return f"{minutes / 60:.1f}h ago"
-
-
-class CellularConnectionState(Enum):
-    Unknown = 0
-    Unregistered = 1
-    Registered = 2
-    MqttConnected = 3
-
-
-@dataclass
-class MeshtasticRocStatus:
-    voltage: float = 0.0
-    position: Position | None = None
-    dbm: int | None = None
-    codes: Set[int] = field(default_factory=set)
-    last_update: datetime | None = None
-    last_punch: datetime | None = None
-
-    def to_dict(self) -> Dict[str, str]:
-        res = {}
-        if len(self.codes) > 0:
-            res["code"] = ",".join(map(str, self.codes))
-        if self.dbm is not None:
-            res["dbm"] = f"{self.dbm}"
-        if self.last_update is not None:
-            res["last_update"] = human_time(datetime.now().astimezone() - self.last_update)
-        if self.last_punch is not None:
-            res["last_punch"] = human_time(datetime.now().astimezone() - self.last_punch)
-        return res
-
-    def punch(self, timestamp: datetime, code: int):
-        self.last_punch = timestamp
-        self.codes.add(code)
-
-    def update_voltage(self, voltage: float):
-        self.voltage = voltage
-        self.last_update = datetime.now().astimezone()
-
-    def update_dbm(self, dbm: int):
-        self.dbm = dbm
-        self.last_update = datetime.now().astimezone()
-
-    def update_position(self, lat: float, lon: float, timestamp: datetime):
-        self.position = Position.new(lat, lon, timestamp)
-        self.last_update = datetime.now().astimezone()
 
 
 class StatusTracker:
@@ -87,7 +43,7 @@ class StatusTracker:
         return self.cellular_status.setdefault(mac_addr, CellularRocStatus.new())
 
     def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
-        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
+        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus.new())
 
     def generate_info_table(self) -> list[list[str]]:
         table = []
@@ -97,25 +53,18 @@ class StatusTracker:
             row.append(node_info.name)
             row.append(node_info.dbm if node_info.dbm is not None else "")
             row.append("")
-            row.append(
-                human_time(datetime.now().astimezone() - node_info.last_update)
-                if node_info.last_update is not None
-                else ""
-            )
-            row.append(
-                human_time(datetime.now().astimezone() - node_info.last_punch)
-                if node_info.last_punch is not None
-                else ""
-            )
+            row.append(human_time(node_info.last_update))
+            row.append(human_time(node_info.last_punch))
             table.append(row)
 
         for mac_addr, msh_status in self.meshtastic_status.items():
-            row = [self.dns_resolver(mac_addr)]
-            map = msh_status.to_dict()
-            row.append(map.get("dbm", ""))
-            row.append(map.get("code", ""))
-            row.append(map.get("last_update", ""))
-            row.append(map.get("last_punch", ""))
+            row = []
+            node_info = msh_status.serialize(self.dns_resolver(mac_addr))
+            row.append(node_info.name)
+            row.append(node_info.dbm if node_info.dbm is not None else "")
+            row.append("")
+            row.append(human_time(node_info.last_update))
+            row.append(human_time(node_info.last_punch))
             table.append(row)
         return table
 
