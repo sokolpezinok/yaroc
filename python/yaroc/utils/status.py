@@ -48,14 +48,16 @@ class StatusTracker:
     def generate_info_table(self) -> list[list[str]]:
         table = []
         for mac_addr, status in chain(self.cellular_status.items(), self.meshtastic_status.items()):
-            row = []
             node_info = status.serialize(self.dns_resolver(mac_addr))
-            row.append(node_info.name)
-            row.append(str(node_info.dbm) if node_info.dbm is not None else "")
-            row.append("")
-            row.append(human_time(node_info.last_update))
-            row.append(human_time(node_info.last_punch))
-            table.append(row)
+            table.append(
+                [
+                    node_info.name,
+                    str(node_info.dbm) if node_info.dbm is not None else "",
+                    "",
+                    human_time(node_info.last_update),
+                    human_time(node_info.last_punch),
+                ]
+            )
         return table
 
     def distance_km(self, mac_addr1: str, mac_addr2: str) -> float | None:
