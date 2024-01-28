@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.31"
 geoutils = "0.5.1"
+meshtastic = "0.1.5"
+prost = "0.12.3"
 pyo3 = { version = "0.20.0", features = ["extension-module", "chrono"] }
 regex = "1.9.6"
 serde = { version = "1.0.196", features = ["derive"] }

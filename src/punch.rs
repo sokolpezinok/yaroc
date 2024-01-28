@@ -1,4 +1,9 @@
 use chrono::{prelude::*, Days};
+use meshtastic::protobufs::mesh_packet::PayloadVariant;
+use meshtastic::protobufs::PortNum;
+use meshtastic::protobufs::{Data, ServiceEnvelope};
+use meshtastic::Message;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 #[derive(Debug)]
@@ -61,6 +66,23 @@ impl SiPunch {
             mac_addr: mac_addr.to_owned(),
             raw: payload,
         })
+    }
+
+    #[staticmethod]
+    pub fn from_msh_serial(payload: &[u8]) -> PyResult<Self> {
+        let service_envelope = ServiceEnvelope::decode(payload)
+            .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
+        let packet = service_envelope.packet.expect("Packet missing");
+        let mac = format!("{:8x}", packet.from);
+        const SERIAL_APP: i32 = PortNum::SerialApp as i32;
+        match packet.payload_variant {
+            Some(PayloadVariant::Decoded(Data {
+                portnum: SERIAL_APP,
+                payload,
+                ..
+            })) => Self::from_raw(payload.try_into().unwrap(), &mac),
+            _ => Err(PyValueError::new_err("Encrypted message or wrong portnum")),
+        }
     }
 }
 

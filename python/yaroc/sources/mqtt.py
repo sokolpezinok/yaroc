@@ -14,7 +14,6 @@ from meshtastic.mqtt_pb2 import ServiceEnvelope
 from meshtastic.portnums_pb2 import (
     POSITION_APP,
     RANGE_TEST_APP,
-    SERIAL_APP,
     TELEMETRY_APP,
 )
 from meshtastic.telemetry_pb2 import Telemetry
@@ -115,26 +114,14 @@ class MqttForwader:
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
-            service_envelope = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
+            punch = SiPunch.from_msh_serial(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
-            logging.error(f"Error while parsing protobuf: {err}")
-            return
-        packet = service_envelope.packet
-        if not packet.HasField("decoded"):
-            logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
-            return
-        if packet.decoded.portnum != SERIAL_APP:
-            logging.debug(f"Ignoring message with portnum {packet.decoded.portnum}")
+            logging.error(f"Error while constructing protobuf: {err}")
             return
 
-        mac_addr = MqttForwader.extract_msh_mac(service_envelope)
-        try:
-            punch = SiPunch.from_raw(packet.decoded.payload, mac_addr)
-            msh_status = self.tracker.get_meshtastic_status(mac_addr)
-            msh_status.punch(punch)
-            await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac_addr)
-        except Exception as err:
-            logging.error(f"Cannot parse SiPunch from {mac_addr} {packet.decoded.payload!r}: {err}")
+        msh_status = self.tracker.get_meshtastic_status(punch.mac_addr)
+        msh_status.punch(punch)
+        await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac_addr)
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
