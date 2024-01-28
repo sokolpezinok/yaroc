@@ -61,11 +61,11 @@ class StatusTracker:
             )
         return table
 
-    def distance_km(self, mac_addr1: str, mac_addr2: str) -> float | None:
+    def distance_km(self, mac_addr1: str, mac_addr2: str) -> tuple[float, str] | None:
         msh_status1 = self.get_meshtastic_status(mac_addr1)
         msh_status2 = self.get_meshtastic_status(mac_addr2)
         try:
-            return msh_status1.distance_m(msh_status2) / 1000
+            return (msh_status1.distance_m(msh_status2), self.dns_resolver(mac_addr1))
         except Exception as _:
             return None
 

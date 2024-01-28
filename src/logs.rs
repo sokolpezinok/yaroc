@@ -7,15 +7,29 @@ use chrono::{DateTime, Duration};
 use crate::status::Position;
 
 #[pyclass]
+#[derive(Clone)]
+pub struct DbmSnr {
+    dbm: i16,
+    snr: f32,
+    distance: Option<(f32, String)>,
+}
+
+#[pymethods]
+impl DbmSnr {
+    #[new]
+    pub fn new(dbm: i16, snr: f32, distance: Option<(f32, String)>) -> Self {
+        Self { dbm, snr, distance }
+    }
+}
+
+#[pyclass]
 pub struct MshLogMessage {
-    #[pyo3(set)]
     name: String,
     #[pyo3(set)]
     voltage_battery: Option<(f64, u32)>,
     position: Option<Position>,
     #[pyo3(set)]
-    dbm_snr: Option<(i16, f32, Option<f32>)>, // TODO: create a struct for this
-    #[pyo3(set)]
+    dbm_snr: Option<DbmSnr>,
     timestamp: DateTime<FixedOffset>,
     latency: Duration,
 }
@@ -67,15 +81,13 @@ impl MshLogMessage {
         }
         let millis = slf.latency.num_milliseconds() as f64 / 1000.0;
         write!(&mut buf, ", latency {:4.2}s", millis)?;
-        if let Some((dbm, snr, distance)) = slf.dbm_snr {
+        if let Some(DbmSnr { dbm, snr, distance }) = &slf.dbm_snr {
             match distance {
                 None => write!(&mut buf, ", {}dbm {:.2}SNR", dbm, snr)?,
-                Some(meters) => write!(
+                Some((meters, name)) => write!(
                     &mut buf,
-                    ", {}dBm {:.2}SNR {:.2}km",  // TODO: distance from
-                    dbm,
-                    snr,
-                    meters / 1000.0
+                    ", {dbm}dBm {snr:.2}SNR {:.2}km from {name}", // TODO: distance from
+                    meters / 1000.0,
                 )?,
             }
         }

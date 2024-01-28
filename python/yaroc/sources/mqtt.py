@@ -22,7 +22,7 @@ from meshtastic.telemetry_pb2 import Telemetry
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import MshLogMessage, SiPunch
+from ..rs import DbmSnr, MshLogMessage, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -199,7 +199,7 @@ class MqttForwader:
             log_message.voltage_battery = (metrics.voltage, metrics.battery_level)
             if packet.rx_rssi != 0:
                 distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
-                log_message.dbm_snr = (packet.rx_rssi, packet.rx_snr, distance)
+                log_message.dbm_snr = DbmSnr(packet.rx_rssi, packet.rx_snr, distance)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
@@ -218,7 +218,7 @@ class MqttForwader:
             log_message.set_position(lat, lon, 0, orig_time)
             if packet.rx_rssi != 0:
                 distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
-                log_message.dbm_snr = (packet.rx_rssi, packet.rx_snr, distance)
+                log_message.dbm_snr = DbmSnr(packet.rx_rssi, packet.rx_snr, distance)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:
