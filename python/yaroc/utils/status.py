@@ -6,7 +6,7 @@ from typing import Callable, Dict, Set
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import Position
+from ..rs import CellularRocStatus, Position
 
 
 def human_time(delta: timedelta) -> str:
@@ -27,45 +27,6 @@ class CellularConnectionState(Enum):
     Unregistered = 1
     Registered = 2
     MqttConnected = 3
-
-
-@dataclass
-class CellularRocStatus:
-    voltage: float = 0.0
-    state: CellularConnectionState = CellularConnectionState.Unknown
-    dbm: int = 0  # These are only relevant when registered, it could be tied to the state enum
-    cell: int = 0
-    codes: Set[int] = field(default_factory=set)
-    last_update: datetime | None = None
-    last_punch: datetime | None = None
-
-    def disconnect(self):
-        self.dbm = 0
-        self.cell = 0
-        self.state = CellularConnectionState.Unknown
-
-    def punch(self, timestamp: datetime, code: int):
-        self.last_punch = timestamp
-        self.codes.add(code)
-
-    def connection_state(self, dbm: int, cell: int):
-        self.dbm = dbm
-        self.cell = cell
-        self.state = CellularConnectionState.MqttConnected
-        self.last_update = datetime.now().astimezone()
-
-    def to_dict(self) -> Dict[str, str]:
-        res = {}
-        if self.state == CellularConnectionState.MqttConnected:
-            res["dbm"] = f"{self.dbm}"
-            res["cell"] = f"{self.cell:X}"
-        if len(self.codes) > 0:
-            res["code"] = ",".join(map(str, self.codes))
-        if self.last_update is not None:
-            res["last_update"] = human_time(datetime.now().astimezone() - self.last_update)
-        if self.last_punch is not None:
-            res["last_punch"] = human_time(datetime.now().astimezone() - self.last_punch)
-        return res
 
 
 @dataclass
@@ -123,7 +84,7 @@ class StatusTracker:
             self.epd = None
 
     def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
-        return self.cellular_status.setdefault(mac_addr, CellularRocStatus())
+        return self.cellular_status.setdefault(mac_addr, CellularRocStatus.new())
 
     def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
         return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus())
@@ -131,12 +92,21 @@ class StatusTracker:
     def generate_info_table(self) -> list[list[str]]:
         table = []
         for mac_addr, status in self.cellular_status.items():
-            row = [self.dns_resolver(mac_addr)]
-            map = status.to_dict()
-            row.append(map.get("dbm", ""))
-            row.append(map.get("code", ""))
-            row.append(map.get("last_update", ""))
-            row.append(map.get("last_punch", ""))
+            row = []
+            node_info = status.serialize(self.dns_resolver(mac_addr))
+            row.append(node_info.name)
+            row.append(node_info.dbm if node_info.dbm is not None else "")
+            row.append("")
+            row.append(
+                human_time(datetime.now().astimezone() - node_info.last_update)
+                if node_info.last_update is not None
+                else ""
+            )
+            row.append(
+                human_time(datetime.now().astimezone() - node_info.last_punch)
+                if node_info.last_punch is not None
+                else ""
+            )
             table.append(row)
 
         for mac_addr, msh_status in self.meshtastic_status.items():

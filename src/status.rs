@@ -44,8 +44,15 @@ enum CellularConnectionState {
     MqttConnected(i16, u32),
 }
 
+impl Default for CellularConnectionState {
+    fn default() -> CellularConnectionState {
+        CellularConnectionState::Unknown
+    }
+}
+
+#[derive(Default)]
 #[pyclass]
-struct CellularRocStatus {
+pub struct CellularRocStatus {
     state: CellularConnectionState,
     voltage: Option<f64>,
     codes: HashSet<u16>,
@@ -53,8 +60,25 @@ struct CellularRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
+#[pyclass]
+pub struct NodeInfo {
+    #[pyo3(get)]
+    name: String,
+    #[pyo3(get)]
+    dbm: Option<i16>,
+    #[pyo3(get)]
+    last_update: Option<DateTime<FixedOffset>>,
+    #[pyo3(get)]
+    last_punch: Option<DateTime<FixedOffset>>,
+}
+
 #[pymethods]
 impl CellularRocStatus {
+    #[staticmethod]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn disconnect(&mut self) {
         self.state = CellularConnectionState::Unknown;
         self.last_update = Some(Local::now().into());
@@ -72,5 +96,18 @@ impl CellularRocStatus {
     pub fn punch(&mut self, punch: &SiPunch) {
         self.last_punch = Some(punch.time);
         self.codes.insert(punch.code);
+    }
+
+    pub fn serialize(&self, name: &str) -> NodeInfo {
+        NodeInfo {
+            name: name.to_owned(),
+            dbm: match self.state {
+                CellularConnectionState::MqttConnected(dbm, _) => Some(dbm),
+                CellularConnectionState::Registered(dbm, _) => Some(dbm),
+                _ => None,
+            },
+            last_update: self.last_update,
+            last_punch: self.last_punch,
+        }
     }
 }

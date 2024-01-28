@@ -101,7 +101,7 @@ class MqttForwader:
                 logging.error(f"Error while constructing SiPunch: {err}")
                 continue
 
-            roc_status.punch(si_punch.time, si_punch.code)
+            roc_status.punch(si_punch)
             if punches.HasField("sending_timestamp"):
                 send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
             else:

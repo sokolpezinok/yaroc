@@ -54,6 +54,7 @@ impl RaspberryModel {
 #[pymodule]
 pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
+    m.add_class::<crate::status::CellularRocStatus>()?;
     m.add_class::<crate::status::Position>()?;
     m.add_class::<RaspberryModel>()?;
     Ok(())
