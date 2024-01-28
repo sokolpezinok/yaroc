@@ -131,7 +131,7 @@ class MqttForwader:
         try:
             punch = SiPunch.from_raw(packet.decoded.payload, mac_addr)
             msh_status = self.tracker.get_meshtastic_status(mac_addr)
-            msh_status.punch(punch.time, punch.code)
+            msh_status.punch(punch)
             await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac_addr)
         except Exception as err:
             logging.error(f"Cannot parse SiPunch from {mac_addr} {packet.decoded.payload!r}: {err}")
@@ -227,11 +227,11 @@ class MqttForwader:
 
             recv_time = datetime.fromtimestamp(packet.rx_time).astimezone()
             seq_number = packet.decoded.payload.decode("ascii")
-            log_message = (
+            log_msg = (
                 f"{self._resolve(mac_addr)} {recv_time:%H:%M:%S}: range test {seq_number}, "
                 f"{packet.rx_rssi}dBm, {packet.rx_snr}SNR"
             )
-            logging.info(log_message)
+            logging.info(log_msg)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
