@@ -1,5 +1,5 @@
-import itertools
 from datetime import datetime
+from itertools import accumulate, chain
 from typing import Callable, Dict
 
 from PIL import Image, ImageDraw, ImageFont
@@ -47,21 +47,11 @@ class StatusTracker:
 
     def generate_info_table(self) -> list[list[str]]:
         table = []
-        for mac_addr, status in self.cellular_status.items():
+        for mac_addr, status in chain(self.cellular_status.items(), self.meshtastic_status.items()):
             row = []
             node_info = status.serialize(self.dns_resolver(mac_addr))
             row.append(node_info.name)
-            row.append(node_info.dbm if node_info.dbm is not None else "")
-            row.append("")
-            row.append(human_time(node_info.last_update))
-            row.append(human_time(node_info.last_punch))
-            table.append(row)
-
-        for mac_addr, msh_status in self.meshtastic_status.items():
-            row = []
-            node_info = msh_status.serialize(self.dns_resolver(mac_addr))
-            row.append(node_info.name)
-            row.append(node_info.dbm if node_info.dbm is not None else "")
+            row.append(str(node_info.dbm) if node_info.dbm is not None else "")
             row.append("")
             row.append(human_time(node_info.last_update))
             row.append(human_time(node_info.last_punch))
@@ -103,7 +93,7 @@ class StatusTracker:
         real_height = calc_row_start(row_count)
         real_width = calc_col_start(len(cols), sum(cols))
 
-        for i, partial_sum in enumerate(itertools.accumulate(cols[:-1])):
+        for i, partial_sum in enumerate(accumulate(cols[:-1])):
             x = calc_col_start(i + 1, partial_sum)
             draw.line((x, 0, x, real_height), fill=0)
 
@@ -113,7 +103,7 @@ class StatusTracker:
 
         for row_idx, row in enumerate(table):
             y = calc_row_start(row_idx)
-            for col_idx, partial_sum in enumerate(itertools.accumulate([0] + cols[:-1])):
+            for col_idx, partial_sum in enumerate(accumulate([0] + cols[:-1])):
                 x = calc_col_start(col_idx, partial_sum)
                 draw.text((x + horiz_pad, y), row[col_idx], font=font, fill=0)
 
