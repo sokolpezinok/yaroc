@@ -8,22 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 from ..rs import CellularRocStatus, MeshtasticRocStatus
 
 
-def human_time(timestamp: datetime | None) -> str:
-    if timestamp is None:
-        return ""
-    delta = datetime.now().astimezone() - timestamp
-    if delta.total_seconds() < 10:
-        return f"{delta.total_seconds():.1f}s ago"
-    if delta.total_seconds() < 60:
-        return f"{delta.total_seconds():.0f}s ago"
-    minutes = delta.total_seconds() / 60
-    if minutes < 10:
-        return f"{minutes:.1f}m ago"
-    if minutes < 60:
-        return f"{minutes:.0f}m ago"
-    return f"{minutes / 60:.1f}h ago"
-
-
 class StatusTracker:
     """Class for tracking the status of all nodes"""
 
@@ -46,7 +30,30 @@ class StatusTracker:
     def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
         return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus.new())
 
+    def distance_km(self, mac_addr1: str, mac_addr2: str) -> tuple[float, str] | None:
+        msh_status1 = self.get_meshtastic_status(mac_addr1)
+        msh_status2 = self.get_meshtastic_status(mac_addr2)
+        try:
+            return (msh_status1.distance_m(msh_status2), self.dns_resolver(mac_addr1))
+        except Exception as _:
+            return None
+
     def generate_info_table(self) -> list[list[str]]:
+        def human_time(timestamp: datetime | None) -> str:
+            if timestamp is None:
+                return ""
+            delta = datetime.now().astimezone() - timestamp
+            if delta.total_seconds() < 10:
+                return f"{delta.total_seconds():.1f}s ago"
+            if delta.total_seconds() < 60:
+                return f"{delta.total_seconds():.0f}s ago"
+            minutes = delta.total_seconds() / 60
+            if minutes < 10:
+                return f"{minutes:.1f}m ago"
+            if minutes < 60:
+                return f"{minutes:.0f}m ago"
+            return f"{minutes / 60:.1f}h ago"
+
         table = []
         for mac_addr, status in chain(self.cellular_status.items(), self.meshtastic_status.items()):
             node_info = status.serialize(self.dns_resolver(mac_addr))
@@ -60,14 +67,6 @@ class StatusTracker:
                 ]
             )
         return table
-
-    def distance_km(self, mac_addr1: str, mac_addr2: str) -> tuple[float, str] | None:
-        msh_status1 = self.get_meshtastic_status(mac_addr1)
-        msh_status2 = self.get_meshtastic_status(mac_addr2)
-        try:
-            return (msh_status1.distance_m(msh_status2), self.dns_resolver(mac_addr1))
-        except Exception as _:
-            return None
 
     @staticmethod
     def draw_table(
