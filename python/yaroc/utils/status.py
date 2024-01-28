@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from itertools import accumulate, chain
 from typing import Callable, Dict
@@ -53,7 +54,7 @@ class StatusTracker:
                 [
                     node_info.name,
                     str(node_info.dbm) if node_info.dbm is not None else "",
-                    "",
+                    ",".join(str(code) for code in node_info.codes), # TODO: sort
                     human_time(node_info.last_update),
                     human_time(node_info.last_punch),
                 ]
@@ -114,6 +115,7 @@ class StatusTracker:
     def draw_status(self):
         if self.epd is None:
             return
+        logging.info("Drawing new status table")
         image = StatusTracker.draw_table(
             [
                 ["name", "dBm", "code", "last info", "last punch"],

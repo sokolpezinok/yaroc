@@ -62,6 +62,8 @@ pub struct NodeInfo {
     #[pyo3(get)]
     dbm: Option<i16>,
     #[pyo3(get)]
+    codes: Vec<u16>,
+    #[pyo3(get)]
     last_update: Option<DateTime<FixedOffset>>,
     #[pyo3(get)]
     last_punch: Option<DateTime<FixedOffset>>,
@@ -101,6 +103,7 @@ impl CellularRocStatus {
                 CellularConnectionState::Registered(dbm, _) => Some(dbm),
                 _ => None,
             },
+            codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
         }
@@ -149,6 +152,7 @@ impl MeshtasticRocStatus {
         NodeInfo {
             name: name.to_owned(),
             dbm: self.dbm,
+            codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
         }
