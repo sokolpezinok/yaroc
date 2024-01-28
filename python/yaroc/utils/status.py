@@ -71,13 +71,10 @@ class StatusTracker:
     def distance_km(self, mac_addr1: str, mac_addr2: str) -> float | None:
         msh_status1 = self.get_meshtastic_status(mac_addr1)
         msh_status2 = self.get_meshtastic_status(mac_addr2)
-        if msh_status1 is None or msh_status2 is None:
+        try:
+            return msh_status1.distance_m(msh_status2) / 1000
+        except Exception as _:
             return None
-        pos1 = msh_status1.position
-        pos2 = msh_status2.position
-        if pos1 is None or pos2 is None:
-            return None
-        return pos1.distance_m(pos2) / 1000
 
     @staticmethod
     def draw_table(
