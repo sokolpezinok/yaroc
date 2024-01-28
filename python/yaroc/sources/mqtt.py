@@ -156,9 +156,9 @@ class MqttForwader:
                 log_message += f"{mch.cpu_temperature:5.2f}°C, {mch.signal_dbm:4}dBm, "
                 if mch.cellid > 0:
                     log_message += f"cell {mch.cellid:X}, "
-                    roc_status.connection_state(mch.signal_dbm, mch.cellid)
+                    roc_status.mqtt_connect_update(mch.signal_dbm, mch.cellid)
                 elif mch.signal_dbm != 0:
-                    roc_status.connection_state(mch.signal_dbm, 0)
+                    roc_status.mqtt_connect_update(mch.signal_dbm, 0)
                 log_message += f"{mch.volts:3.2f}V, {mch.freq * 20:4}MHz, "
             else:
                 log_message += f"{mch.codes}, "
