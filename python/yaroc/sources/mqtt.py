@@ -22,7 +22,7 @@ from meshtastic.telemetry_pb2 import Telemetry
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import SiPunch
+from ..rs import MshLogMessage, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -167,12 +167,6 @@ class MqttForwader:
             mch.mac_address = mac_addr
             await self.client_group.send_mini_call_home(mch)
 
-    def distance_format(self, receiver: str, sender: str):
-        distance = self.tracker.distance_km(receiver, sender)
-        if distance is None:
-            return ""
-        return f", {distance:.3g}km from {self._resolve(receiver)}"
-
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
@@ -198,18 +192,14 @@ class MqttForwader:
                 return
 
             orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
-            total_latency = now - orig_time
             metrics = telemetry.device_metrics
             msh_status.update_voltage(metrics.voltage)
 
-            log_message = (
-                f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: battery "
-                f"{metrics.battery_level}%, {metrics.voltage:4.3f}V, "
-                f"latency {total_latency.total_seconds():6.2f}s"
-            )
+            log_message = MshLogMessage(self._resolve(mac_addr), orig_time, now)
+            log_message.voltage_battery = (metrics.voltage, metrics.battery_level)
             if packet.rx_rssi != 0:
-                log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += self.distance_format(recv_mac_addr, mac_addr)
+                distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
+                log_message.dbm_snr = (packet.rx_rssi, packet.rx_snr, distance)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == POSITION_APP:
@@ -222,17 +212,13 @@ class MqttForwader:
                 return
 
             orig_time = datetime.fromtimestamp(position.time).astimezone()
-            total_latency = now - orig_time
             lat, lon = position.latitude_i / 10**7, position.longitude_i / 10**7
             msh_status.update_position(lat, lon, orig_time)
-
-            log_message = (
-                f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: lat {lat}, lon {lon}, "
-                f"latency {total_latency.total_seconds():6.2f}s"
-            )
+            log_message = MshLogMessage(self._resolve(mac_addr), orig_time, now)
+            log_message.set_position(lat, lon, 0, orig_time)
             if packet.rx_rssi != 0:
-                log_message += f", {packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-                log_message += self.distance_format(recv_mac_addr, mac_addr)
+                distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
+                log_message.dbm_snr = (packet.rx_rssi, packet.rx_snr, distance)
                 msh_status.update_dbm(packet.rx_rssi)
             logging.info(log_message)
         elif packet.decoded.portnum == RANGE_TEST_APP:

@@ -54,7 +54,7 @@ class StatusTracker:
                 [
                     node_info.name,
                     str(node_info.dbm) if node_info.dbm is not None else "",
-                    ",".join(str(code) for code in node_info.codes), # TODO: sort
+                    ",".join(str(code) for code in node_info.codes),  # TODO: sort
                     human_time(node_info.last_update),
                     human_time(node_info.last_punch),
                 ]
