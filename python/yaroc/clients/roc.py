@@ -6,7 +6,7 @@ from datetime import datetime
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
-from ..pb.status_pb2 import MiniCallHome
+from ..pb.status_pb2 import EventType, Status
 from ..rs import SiPunch
 from ..utils.modem_manager import NetworkType
 from ..utils.sys_info import FREQ_MULTIPLIER
@@ -66,30 +66,47 @@ class RocClient(Client):
             logging.error(f"ROC error: {e}")
             return False
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        if mch.network_type == NetworkType.Lte:
-            network_type = "101"
-        elif mch.network_type == NetworkType.Umts:
-            network_type = "41"
-        else:
-            network_type = "0"
-        params = {
-            "function": "callhome",
-            "command": "setmini",
-            "macaddr": mch.mac_address,
-            "failedcallhomes": "0",
-            "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
-            "codes": mch.codes,
-            "totaldatatx": str(mch.totaldatarx),
-            "totaldatarx": str(mch.totaldatatx),
-            "signaldBm": str(-mch.signal_dbm),
-            "temperature": str(mch.cpu_temperature),
-            "networktype": network_type,
-            "volts": str(mch.volts),
-            "freq": str(mch.freq * FREQ_MULTIPLIER),
-            "minFreq": str(mch.min_freq * FREQ_MULTIPLIER),
-            "maxFreq": str(mch.max_freq * FREQ_MULTIPLIER),
-        }
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
+        oneof = status.WhichOneof("msg")
+        if oneof == "mini_call_home":
+            mch = status.mini_call_home
+            if mch.network_type == NetworkType.Lte:
+                network_type = "101"
+            elif mch.network_type == NetworkType.Umts:
+                network_type = "41"
+            else:
+                network_type = "0"
+            params = {
+                "function": "callhome",
+                "command": "setmini",
+                "macaddr": mac_addr,
+                "failedcallhomes": "0",
+                "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
+                "codes": mch.codes,
+                "totaldatatx": str(mch.totaldatarx),
+                "totaldatarx": str(mch.totaldatatx),
+                "signaldBm": str(-mch.signal_dbm),
+                "temperature": str(mch.cpu_temperature),
+                "networktype": network_type,
+                "volts": str(mch.volts),
+                "freq": str(mch.freq * FREQ_MULTIPLIER),
+                "minFreq": str(mch.min_freq * FREQ_MULTIPLIER),
+                "maxFreq": str(mch.max_freq * FREQ_MULTIPLIER),
+            }
+        elif oneof == "dev_event":
+            dev_event = status.dev_event
+            if dev_event.type == EventType.Added:
+                codes = f"siadded-{dev_event.port}"
+            else:
+                codes = f"siremoved-{dev_event.port}"
+            params = {
+                "function": "callhome",
+                "command": "setmini",
+                "macaddr": mac_addr,
+                "failedcallhomes": "0",
+                "codes": codes,
+            }
+
         try:
             async with self.client.get(ROC_RECEIVEDATA, params=params) as response:
                 if response.status < 300:

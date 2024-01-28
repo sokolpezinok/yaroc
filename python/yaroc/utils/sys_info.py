@@ -42,10 +42,9 @@ def raspberrypi_model() -> RaspberryModel:
         return model
 
 
-def create_sys_minicallhome(mac_addr: str) -> MiniCallHome:
+def create_sys_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.GetCurrentTime()
-    mch.mac_address = mac_addr
 
     cpu_freq = psutil.cpu_freq()
     mch.freq = floor(cpu_freq.current / FREQ_MULTIPLIER)

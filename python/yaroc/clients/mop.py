@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..clients.client import Client
-from ..pb.status_pb2 import MiniCallHome
+from ..pb.status_pb2 import Status
 from ..rs import SiPunch
 
 
@@ -222,5 +222,5 @@ class MopClient(Client):
 
             return MopClient._competitors_from_meos_xml(xml)
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True

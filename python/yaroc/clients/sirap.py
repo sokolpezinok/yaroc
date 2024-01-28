@@ -3,7 +3,7 @@ import logging
 from datetime import time, timedelta
 from typing import Literal
 
-from ..pb.status_pb2 import MiniCallHome
+from ..pb.status_pb2 import Status
 from ..rs import SiPunch
 from ..utils.retries import BackoffRetries
 from .client import Client
@@ -68,7 +68,7 @@ class SirapClient(Client):
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
         return await self._backoff_sender.backoff_send(message)
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
 
     @staticmethod

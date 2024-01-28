@@ -142,6 +142,7 @@ class MqttForwader:
         except Exception as err:
             logging.error(f"Error while parsing protobuf: {err}")
             return
+        name = self._resolve(mac_addr)
         oneof = status.WhichOneof("msg")
         roc_status = self.tracker.get_cellular_status(mac_addr)
         if oneof == "disconnected":
@@ -151,7 +152,7 @@ class MqttForwader:
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
 
-            log_message = CellularLogMessage(self._resolve(mac_addr), orig_time, now, mch.volts)
+            log_message = CellularLogMessage(name, orig_time, now, mch.volts)
             log_message.temperature = mch.cpu_temperature
             if mch.cellid > 0:
                 log_message.dbm = mch.signal_dbm
@@ -160,12 +161,12 @@ class MqttForwader:
             elif mch.signal_dbm != 0:
                 log_message.dbm = mch.signal_dbm
                 roc_status.mqtt_connect_update(mch.signal_dbm, 0)
-            # TODO
-            # if mch.freq == 0.0:
-            #     log_message += f"{mch.codes}, "
             logging.info(log_message)
-            mch.mac_address = mac_addr  # TODO: drop
-            await self.client_group.send_mini_call_home(mch)
+            status.mini_call_home.CopyFrom(mch)
+            await self.client_group.send_status(status, mac_addr)
+        elif oneof == "dev_event":
+            logging.info(f"{name} {status.dev_event}")
+            await self.client_group.send_status(status, mac_addr)
 
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime

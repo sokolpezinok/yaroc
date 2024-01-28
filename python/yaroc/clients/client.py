@@ -6,18 +6,15 @@ from typing import Sequence
 import serial
 from serial_asyncio import open_serial_connection
 
-from ..pb.status_pb2 import MiniCallHome
+from ..pb.status_pb2 import Status
 from ..rs import SiPunch
 
 
 class Client(ABC):
     """A client implementation
 
-    All 'send*' functions must be non-blocking. Sending should be deferred to another thread and the
-    functions should return a future-like object that can be awaited on. The 'send*' functions must
-    not throw.
-
-    If the client fails to connect or access a device, it should not crash, but maybe try later.
+    If the client fails to connect or access a device, it should not crash, but try later in the
+    'loop' function.
     """
 
     @abstractmethod
@@ -29,7 +26,7 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
 
 
@@ -83,7 +80,7 @@ class SerialClient(Client):
             logging.error(f"Fatal serial exception: {err}")
             return False
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
 
 
@@ -105,8 +102,8 @@ class ClientGroup:
         loops = [client.loop() for client in self.clients]
         await asyncio.gather(*loops, return_exceptions=True)
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> Sequence[bool | BaseException]:
-        handles = [client.send_mini_call_home(mch) for client in self.clients]
+    async def send_status(self, status: Status, mac_address: str) -> Sequence[bool | BaseException]:
+        handles = [client.send_status(status, mac_address) for client in self.clients]
         results = await asyncio.gather(*handles, return_exceptions=True)
         ClientGroup.handle_results(results)
         return results

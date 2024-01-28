@@ -7,7 +7,7 @@ import tomllib
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import MiniCallHome
+from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
@@ -36,9 +36,11 @@ class PunchSender:
         await asyncio.sleep(5.0)
         while True:
             time_start = time.time()
-            mini_call_home = create_sys_minicallhome(self.mac_addr)
+            mini_call_home = create_sys_minicallhome()
             mini_call_home.codes = str(self.si_manager)
-            await self.client_group.send_mini_call_home(mini_call_home)
+            status = Status()
+            status.mini_call_home.CopyFrom(mini_call_home)
+            await self.client_group.send_status(status, self.mac_addr)
             await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def send_punches(self):
@@ -51,13 +53,12 @@ class PunchSender:
         async for dev_event in self.si_manager.device_events():
             mch = MiniCallHome()
             mch.time.GetCurrentTime()
-            mch.mac_address = self.mac_addr
-            device_name = dev_event.device.removeprefix("/dev/").lower()
-            if dev_event.added:
-                mch.codes = f"siadded-{device_name}"
-            else:
-                mch.codes = f"siremoved-{device_name}"
-            await self.client_group.send_mini_call_home(mch)
+            device_event = DeviceEvent()
+            device_event.port = dev_event.device
+            device_event.type = EventType.Added if dev_event.added else EventType.Removed
+            status = Status()
+            status.dev_event.CopyFrom(device_event)
+            await self.client_group.send_status(status, self.mac_addr)
 
     async def loop(self):
         def handle_exception(loop, context):

@@ -11,7 +11,7 @@ from aiomqtt.client import Will
 from aiomqtt.error import MqttCodeError
 
 from ..pb.punches_pb2 import Punch, Punches
-from ..pb.status_pb2 import Disconnected, MiniCallHome, Status
+from ..pb.status_pb2 import Disconnected, Status
 from ..pb.utils import create_punch_proto
 from ..rs import SiPunch
 from ..utils.async_serial import AsyncATCom
@@ -95,22 +95,20 @@ class MqttClient(Client):
         topics = self.get_topics(punch.mac_addr)
         return await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
         try:
-            modems = await self.mm.get_modems()
-            if len(modems) > 0:
-                (signal, network_type) = await self.mm.get_signal(modems[0])
-                mch.signal_dbm = round(signal)
-                mch.network_type = network_type
-                if abs(signal) < 1 and random.randint(0, 10) == 7:
-                    await self.mm.signal_setup(modems[0], 20)
+            if status.WhichOneof("msg") == "mini_call_home":
+                modems = await self.mm.get_modems()
+                if len(modems) > 0:
+                    (signal, network_type) = await self.mm.get_signal(modems[0])
+                    status.mini_call_home.signal_dbm = round(signal)
+                    status.mini_call_home.network_type = network_type
+                    if abs(signal) < 1 and random.randint(0, 10) == 7:
+                        await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
             logging.error(f"Error while getting signal strength: {e}")
 
-        topics = self.get_topics(mch.mac_address)
-        status = Status()
-        mch.ClearField("mac_address")
-        status.mini_call_home.CopyFrom(mch)
+        topics = self.get_topics(mac_addr)
         return await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
@@ -194,18 +192,17 @@ class SIM7020MqttClient(Client):
         res = await self._retries.send(create_punch_proto(punch))
         return res if res is not None else False
 
-    async def send_mini_call_home(self, mch: MiniCallHome) -> bool:
-        mch.ClearField("mac_address")
-        async with self._lock:
-            res = await self._sim7020.get_signal_info()
-            if res is not None:
-                (dbm, cellid) = res
-                mch.signal_dbm = dbm
-                mch.cellid = cellid
-                mch.network_type = NetworkType.NbIot
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
+        if status.WhichOneof("msg") == "mini_call_home":
+            async with self._lock:
+                res = await self._sim7020.get_signal_info()
+                if res is not None:
+                    (dbm, cellid) = res
+                    mch = status.mini_call_home
+                    mch.signal_dbm = dbm
+                    mch.cellid = cellid
+                    mch.network_type = NetworkType.NbIot
 
-        status = Status()
-        status.mini_call_home.CopyFrom(mch)
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
