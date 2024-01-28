@@ -7,6 +7,63 @@ use chrono::{DateTime, Duration};
 use crate::status::Position;
 
 #[pyclass]
+pub struct CellularLogMessage {
+    name: String,
+    voltage: f32,
+    #[pyo3(set)]
+    dbm: Option<i32>,
+    #[pyo3(set)]
+    cellid: Option<u32>,
+    #[pyo3(set)]
+    temperature: Option<f32>,
+    #[pyo3(set)]
+    cpu_frequency: Option<u32>,
+    timestamp: DateTime<FixedOffset>,
+    latency: Duration,
+}
+
+#[pymethods]
+impl CellularLogMessage {
+    #[new]
+    pub fn new(
+        name: String,
+        timestamp: DateTime<FixedOffset>,
+        now: DateTime<FixedOffset>,
+        voltage: f32,
+    ) -> Self {
+        Self {
+            name,
+            timestamp,
+            latency: now - timestamp,
+            voltage,
+            cpu_frequency: None,
+            temperature: None,
+            dbm: None,
+            cellid: None,
+        }
+    }
+
+    pub fn __repr__(slf: PyRef<'_, Self>) -> PyResult<String> {
+        let mut buf = Vec::new();
+        let timestamp = slf.timestamp.format("%H:%M:%S");
+        write!(&mut buf, "{} {timestamp}:", slf.name)?;
+        if let Some(temperature) = &slf.temperature {
+            write!(&mut buf, " {temperature:.1}°C")?;
+        }
+        if let Some(dbm) = &slf.dbm {
+            write!(&mut buf, ", {dbm}dBm")?;
+        }
+        if let Some(cellid) = &slf.cellid {
+            write!(&mut buf, ", cell {cellid:X}")?;
+        }
+        write!(&mut buf, ", {:.2}V", slf.voltage)?;
+        let millis = slf.latency.num_milliseconds() as f64 / 1000.0;
+        write!(&mut buf, ", latency {:4.2}s", millis)?;
+        String::from_utf8(buf).map_err(|e| PyRuntimeError::new_err(e))
+    }
+}
+
+#[pyclass]
 #[derive(Clone)]
 pub struct DbmSnr {
     dbm: i16,
@@ -26,7 +83,7 @@ impl DbmSnr {
 pub struct MshLogMessage {
     name: String,
     #[pyo3(set)]
-    voltage_battery: Option<(f64, u32)>,
+    voltage_battery: Option<(f32, u32)>,
     position: Option<Position>,
     #[pyo3(set)]
     dbm_snr: Option<DbmSnr>,

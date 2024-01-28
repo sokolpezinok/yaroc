@@ -22,7 +22,7 @@ from meshtastic.telemetry_pb2 import Telemetry
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import DbmSnr, MshLogMessage, SiPunch
+from ..rs import CellularLogMessage, DbmSnr, MshLogMessage, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -150,21 +150,21 @@ class MqttForwader:
         elif oneof == "mini_call_home":
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
-            total_latency = now - orig_time
-            log_message = f"{self._resolve(mac_addr)} {orig_time:%H:%M:%S}: "
-            if mch.freq > 0.0:
-                log_message += f"{mch.cpu_temperature:5.2f}°C, {mch.signal_dbm:4}dBm, "
-                if mch.cellid > 0:
-                    log_message += f"cell {mch.cellid:X}, "
-                    roc_status.mqtt_connect_update(mch.signal_dbm, mch.cellid)
-                elif mch.signal_dbm != 0:
-                    roc_status.mqtt_connect_update(mch.signal_dbm, 0)
-                log_message += f"{mch.volts:3.2f}V, {mch.freq * 20:4}MHz, "
-            else:
-                log_message += f"{mch.codes}, "
-            log_message += f"latency {total_latency.total_seconds():6.2f}s"
+
+            log_message = CellularLogMessage(self._resolve(mac_addr), orig_time, now, mch.volts)
+            log_message.temperature = mch.cpu_temperature
+            if mch.cellid > 0:
+                log_message.dbm = mch.signal_dbm
+                log_message.cellid = mch.cellid
+                roc_status.mqtt_connect_update(mch.signal_dbm, mch.cellid)
+            elif mch.signal_dbm != 0:
+                log_message.dbm = mch.signal_dbm
+                roc_status.mqtt_connect_update(mch.signal_dbm, 0)
+            # TODO
+            # if mch.freq == 0.0:
+            #     log_message += f"{mch.codes}, "
             logging.info(log_message)
-            mch.mac_address = mac_addr
+            mch.mac_address = mac_addr  # TODO: drop
             await self.client_group.send_mini_call_home(mch)
 
     async def _handle_meshtastic_status(
