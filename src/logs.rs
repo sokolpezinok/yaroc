@@ -183,7 +183,9 @@ impl MshLogMessage {
         name: &str,
         now: DateTime<FixedOffset>,
         dbm_snr: Option<DbmSnr>,
+        recv_position: Option<Position>,
     ) -> Result<Option<Self>, std::io::Error> {
+        // TODO: update dbm_snr based on recv_position
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())?;
@@ -225,6 +227,7 @@ impl MshLogMessage {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
+        recv_position: Option<Position>,
     ) -> PyResult<Option<Self>> {
         let service_envelope = ServiceEnvelope::decode(payload)
             .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
@@ -242,7 +245,7 @@ impl MshLogMessage {
                     return Ok(None);
                 }
                 let name = dns.get(&format!("{:8x}", from)).unwrap();
-                Self::parse_inner(data, name, now, DbmSnr::new(rx_rssi, rx_snr))
+                Self::parse_inner(data, name, now, DbmSnr::new(rx_rssi, rx_snr), recv_position)
                     .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
             }
             _ => Err(PyValueError::new_err(
@@ -268,12 +271,20 @@ impl MessageHandler {
         }
     }
 
+    fn get_position(&self, mac_address: &str) -> Option<Position> {
+        let status = self.meshtastic_statuses.get(mac_address)?;
+        status.position
+    }
+
     pub fn msh_status_update(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
+        recv_mac_address: &str,
     ) -> PyResult<Option<MshLogMessage>> {
-        let msh_log_message = MshLogMessage::from_msh_status(payload, now, &self.dns);
+        let recv_position = self.get_position(recv_mac_address);
+        let msh_log_message =
+            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
         if let Ok(Some(log_message)) = msh_log_message.as_ref() {
             let status = self
                 .meshtastic_statuses

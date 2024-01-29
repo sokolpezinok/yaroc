@@ -159,9 +159,9 @@ class MqttForwader:
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
-        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now)
+        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now,
+                                                     recv_mac_addr)
         logging.info(log_message)
-        # distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
