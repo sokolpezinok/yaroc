@@ -113,6 +113,7 @@ impl CellularRocStatus {
 #[pyclass]
 #[derive(Default)]
 pub struct MeshtasticRocStatus {
+    pub name: String,
     battery: Option<u32>,
     dbm: Option<i16>,
     pub position: Option<Position>,
@@ -124,8 +125,11 @@ pub struct MeshtasticRocStatus {
 #[pymethods]
 impl MeshtasticRocStatus {
     #[staticmethod]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            ..Default::default()
+        }
     }
 
     pub fn update_battery(&mut self, battery: u32) {
@@ -143,9 +147,9 @@ impl MeshtasticRocStatus {
         self.codes.insert(punch.code);
     }
 
-    pub fn serialize(&self, name: &str) -> NodeInfo {
+    pub fn serialize(&self) -> NodeInfo {
         NodeInfo {
-            name: name.to_owned(),
+            name: self.name.clone(),
             dbm: self.dbm,
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,

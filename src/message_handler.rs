@@ -70,33 +70,31 @@ impl CellularLogMessage {
     }
 }
 
-#[pyclass]
 #[derive(Clone)]
-pub struct DbmSnr {
-    dbm: i16,
+pub struct RssiSnr {
+    rssi_dbm: i16,
     snr: f32,
     distance: Option<(f32, String)>,
 }
 
-#[pymethods]
-impl DbmSnr {
-    #[new]
-    pub fn with_distance(dbm: i16, snr: f32, distance: Option<(f32, String)>) -> Self {
-        Self { dbm, snr, distance }
-    }
-}
-
-impl DbmSnr {
-    pub fn new(rx_rssi: i32, rx_snr: f32) -> Option<DbmSnr> {
-        match rx_rssi {
+impl RssiSnr {
+    pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
+        match rssi_dbm {
             0 => None,
-            rx_rssi => Some(DbmSnr::with_distance(rx_rssi as i16, rx_snr, None)),
+            rx_rssi => Some(RssiSnr::with_distance(rx_rssi as i16, snr, None)),
         }
     }
 
-    pub fn add_distance(mut self, dist_m: f32, name: String) -> Self {
+    pub fn with_distance(rssi_dbm: i16, snr: f32, distance: Option<(f32, String)>) -> Self {
+        Self {
+            rssi_dbm,
+            snr,
+            distance,
+        }
+    }
+
+    pub fn add_distance(&mut self, dist_m: f32, name: String) {
         self.distance = Some((dist_m, name));
-        self
     }
 }
 
@@ -104,11 +102,9 @@ impl DbmSnr {
 pub struct MshLogMessage {
     name: String,
     mac_addr: String,
-    #[pyo3(set)]
     voltage_battery: Option<(f32, u32)>,
     position: Option<Position>,
-    #[pyo3(set)]
-    dbm_snr: Option<DbmSnr>,
+    rssi_snr: Option<RssiSnr>,
     timestamp: DateTime<FixedOffset>,
     latency: Duration,
 }
@@ -151,12 +147,17 @@ impl MshLogMessage {
         }
         let millis = slf.latency.num_milliseconds() as f64 / 1000.0;
         write!(&mut buf, ", latency {:4.2}s", millis)?;
-        if let Some(DbmSnr { dbm, snr, distance }) = &slf.dbm_snr {
+        if let Some(RssiSnr {
+            rssi_dbm,
+            snr,
+            distance,
+        }) = &slf.rssi_snr
+        {
             match distance {
-                None => write!(&mut buf, ", {}dbm {:.2}SNR", dbm, snr)?,
+                None => write!(&mut buf, ", {}dbm {:.2}SNR", rssi_dbm, snr)?,
                 Some((meters, name)) => write!(
                     &mut buf,
-                    ", {dbm}dBm {snr:.2}SNR {:.2}km from {name}",
+                    ", {rssi_dbm}dBm {snr:.2}SNR {:.2}km from {name}",
                     meters / 1000.0,
                 )?,
             }
@@ -177,8 +178,8 @@ impl MshLogMessage {
         name: &str,
         mac_addr: &str,
         now: DateTime<FixedOffset>,
-        mut dbm_snr: Option<DbmSnr>,
-        recv_position: Option<(&Position, &str)>,
+        mut rssi_snr: Option<RssiSnr>,
+        recv_position: Option<PositionName>,
     ) -> Result<Option<Self>, std::io::Error> {
         match data.portnum {
             TELEMETRY_APP => {
@@ -192,7 +193,7 @@ impl MshLogMessage {
                         latency: now - timestamp,
                         voltage_battery: Some((metrics.voltage, metrics.battery_level)),
                         position: None,
-                        dbm_snr,
+                        rssi_snr,
                     })),
                     _ => Ok(None),
                 }
@@ -209,11 +210,13 @@ impl MshLogMessage {
                     elevation: position.altitude,
                     timestamp: Self::timestamp(position.time, &Local),
                 };
-                let distance = recv_position.map(|(other, _)| position.distance_m(&other));
+                let distance = recv_position
+                    .as_ref()
+                    .map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
-                    dbm_snr = dbm_snr.map(|dbm_snr| {
-                        dbm_snr.add_distance(distance as f32, recv_position.unwrap().1.to_owned())
-                    })
+                    rssi_snr.as_mut().map(|rssi_snr| {
+                        rssi_snr.add_distance(distance as f32, recv_position.unwrap().name)
+                    });
                 }
 
                 Ok(Some(Self {
@@ -223,7 +226,7 @@ impl MshLogMessage {
                     latency: now - timestamp,
                     voltage_battery: None,
                     position: Some(position),
-                    dbm_snr,
+                    rssi_snr,
                 }))
             }
             _ => Ok(None),
@@ -234,7 +237,7 @@ impl MshLogMessage {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
-        recv_position: Option<(&Position, &str)>,
+        recv_position: Option<PositionName>,
     ) -> PyResult<Option<Self>> {
         let service_envelope = ServiceEnvelope::decode(payload)
             .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
@@ -253,7 +256,7 @@ impl MshLogMessage {
                     name,
                     &mac_addr,
                     now,
-                    DbmSnr::new(rx_rssi, rx_snr),
+                    RssiSnr::new(rx_rssi, rx_snr),
                     recv_position,
                 )
                 .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
@@ -302,15 +305,7 @@ impl MessageHandler {
         now: DateTime<FixedOffset>,
         recv_mac_address: &str,
     ) -> PyResult<Option<MshLogMessage>> {
-        let recv_position = self.get_position(recv_mac_address).map(|pos| {
-            (
-                pos,
-                self.dns
-                    .get(recv_mac_address)
-                    .map(|s| s.as_str())
-                    .unwrap_or(recv_mac_address),
-            )
-        });
+        let recv_position = self.get_position_name(recv_mac_address);
         let msh_log_message =
             MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
         if let Ok(Some(log_message)) = msh_log_message.as_ref() {
@@ -321,8 +316,8 @@ impl MessageHandler {
             if let Some(position) = log_message.position.as_ref() {
                 status.position = Some(position.clone())
             }
-            if let Some(DbmSnr { dbm, .. }) = log_message.dbm_snr.as_ref() {
-                status.update_dbm(*dbm);
+            if let Some(RssiSnr { rssi_dbm, .. }) = log_message.rssi_snr.as_ref() {
+                status.update_dbm(*rssi_dbm);
             }
             if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
                 status.update_battery(*battery);
@@ -332,10 +327,18 @@ impl MessageHandler {
     }
 }
 
+pub struct PositionName {
+    position: Position,
+    name: String,
+}
+
 impl MessageHandler {
-    fn get_position(&self, mac_address: &str) -> Option<&Position> {
+    fn get_position_name(&self, mac_address: &str) -> Option<PositionName> {
         let status = self.meshtastic_statuses.get(mac_address)?;
-        status.position.as_ref()
+        status.position.as_ref().map(|position| PositionName {
+            position: position.clone(),
+            name: status.name.clone(),
+        })
     }
 }
 

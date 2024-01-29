@@ -66,13 +66,8 @@ class NodeInfo(object):
     last_update: datetime
     last_punch: datetime
 
-class DbmSnr(object):
-    def __init__(self, dbm: int, snr: float, distance: tuple[float, str] | None): ...
-
 class MshLogMessage(object):
-    voltage_battery: tuple[float, int]
-    dbm_snr: DbmSnr
-    def set_position(self, lat: float, lon: float, elevation: int, timestamp: datetime): ...
+    def __repr__(self) -> str: ...
 
 class CellularLogMessage(object):
     dbm: float | None
