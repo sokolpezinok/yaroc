@@ -10,7 +10,7 @@ use std::io::Write;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
-use crate::status::Position;
+use crate::status::{MeshtasticRocStatus, Position};
 
 #[pyclass]
 pub struct CellularLogMessage {
@@ -255,21 +255,41 @@ impl MshLogMessage {
 #[pyclass()]
 pub struct MessageHandler {
     dns: HashMap<String, String>,
+    meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
 }
 
 #[pymethods()]
 impl MessageHandler {
     #[staticmethod]
     pub fn new(dns: HashMap<String, String>) -> Self {
-        Self { dns }
+        Self {
+            dns,
+            meshtastic_statuses: HashMap::new(),
+        }
     }
 
-    pub fn msh_status(
-        &self,
+    pub fn msh_status_update(
+        &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
     ) -> PyResult<Option<MshLogMessage>> {
-        MshLogMessage::from_msh_status(payload, now, &self.dns)
+        let msh_log_message = MshLogMessage::from_msh_status(payload, now, &self.dns);
+        if let Ok(Some(log_message)) = msh_log_message.as_ref() {
+            let status = self
+                .meshtastic_statuses
+                .entry(log_message.name.clone())
+                .or_default();
+            if let Some(position) = log_message.position.as_ref() {
+                status.position = Some(position.clone())
+            }
+            if let Some(DbmSnr { dbm, .. }) = log_message.dbm_snr.as_ref() {
+                status.update_dbm(*dbm);
+            }
+            if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
+                status.update_battery(*battery);
+            }
+        }
+        msh_log_message
     }
 }
 

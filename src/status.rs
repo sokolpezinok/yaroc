@@ -113,9 +113,9 @@ impl CellularRocStatus {
 #[pyclass]
 #[derive(Default)]
 pub struct MeshtasticRocStatus {
-    voltage: Option<f64>,
+    battery: Option<u32>,
     dbm: Option<i16>,
-    position: Option<Position>,
+    pub position: Option<Position>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     last_punch: Option<DateTime<FixedOffset>>,
@@ -128,18 +128,13 @@ impl MeshtasticRocStatus {
         Self::default()
     }
 
-    pub fn update_voltage(&mut self, voltage: f64) {
-        self.voltage = Some(voltage);
+    pub fn update_battery(&mut self, battery: u32) {
+        self.battery = Some(battery);
         self.last_update = Some(Local::now().into());
     }
 
     pub fn update_dbm(&mut self, dbm: i16) {
         self.dbm = Some(dbm);
-        self.last_update = Some(Local::now().into());
-    }
-
-    pub fn update_position(&mut self, lat: f32, lon: f32, timestamp: DateTime<FixedOffset>) {
-        self.position = Some(Position::new(lat, lon, timestamp));
         self.last_update = Some(Local::now().into());
     }
 

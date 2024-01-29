@@ -159,68 +159,9 @@ class MqttForwader:
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
-        try:
-            service_envelope = ServiceEnvelope.FromString(MqttForwader._payload_to_bytes(payload))
-        except Exception as err:
-            logging.error(f"Error while parsing protobuf: {err}")
-            return
-        if not service_envelope.packet.HasField("decoded"):
-            logging.error("Encrypted message! Disable encryption for meshtastic MQTT")
-            return
-
-        mac_addr = MqttForwader.extract_msh_mac(service_envelope)
-        packet = service_envelope.packet
-        msh_status = self.tracker.get_meshtastic_status(mac_addr)
-        if packet.decoded.portnum == TELEMETRY_APP:
-            try:
-                telemetry = Telemetry.FromString(packet.decoded.payload)
-                if not telemetry.HasField("device_metrics"):
-                    return
-            except Exception as err:
-                logging.error(f"Error while constructing Telemetry: {err}")
-                return
-
-            orig_time = datetime.fromtimestamp(telemetry.time).astimezone()
-            metrics = telemetry.device_metrics
-            msh_status.update_voltage(metrics.voltage)
-
-            log_message = MshLogMessage(self._resolve(mac_addr), orig_time, now)
-            log_message.voltage_battery = (metrics.voltage, metrics.battery_level)
-            if packet.rx_rssi != 0:
-                distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
-                log_message.dbm_snr = DbmSnr(packet.rx_rssi, packet.rx_snr, distance)
-                msh_status.update_dbm(packet.rx_rssi)
-            logging.info(log_message)
-        elif packet.decoded.portnum == POSITION_APP:
-            if packet.to != 2**32 - 1:  # Request packets are ignored
-                return
-            try:
-                position = Position.FromString(packet.decoded.payload)
-            except Exception as err:
-                logging.error(f"Error while constructing Position: {err}")
-                return
-
-            orig_time = datetime.fromtimestamp(position.time).astimezone()
-            lat, lon = position.latitude_i / 10**7, position.longitude_i / 10**7
-            msh_status.update_position(lat, lon, orig_time)
-            log_message = MshLogMessage(self._resolve(mac_addr), orig_time, now)
-            log_message.set_position(lat, lon, 0, orig_time)
-            if packet.rx_rssi != 0:
-                distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
-                log_message.dbm_snr = DbmSnr(packet.rx_rssi, packet.rx_snr, distance)
-                msh_status.update_dbm(packet.rx_rssi)
-            logging.info(log_message)
-        elif packet.decoded.portnum == RANGE_TEST_APP:
-            if packet.rx_rssi == 0:
-                return
-
-            recv_time = datetime.fromtimestamp(packet.rx_time).astimezone()
-            seq_number = packet.decoded.payload.decode("ascii")
-            log_msg = (
-                f"{self._resolve(mac_addr)} {recv_time:%H:%M:%S}: range test {seq_number}, "
-                f"{packet.rx_rssi}dBm, {packet.rx_snr}SNR"
-            )
-            logging.info(log_msg)
+        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now)
+        logging.info(log_message)
+        # distance = self.tracker.distance_km(recv_mac_addr, mac_addr)
 
     @staticmethod
     def extract_mac(topic: str) -> str:
