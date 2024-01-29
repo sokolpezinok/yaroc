@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use pyo3::prelude::*;
 
 use chrono::prelude::*;
 use geoutils::Location;
@@ -151,19 +151,5 @@ impl MeshtasticRocStatus {
             last_update: self.last_update,
             last_punch: self.last_punch,
         }
-    }
-
-    pub fn distance_m(&self, other: &Self) -> PyResult<f64> {
-        self.distance_m_impl(other)
-            .map_err(|e| PyRuntimeError::new_err(e))
-    }
-}
-
-impl MeshtasticRocStatus {
-    fn distance_m_impl(&self, other: &Self) -> Result<f64, String> {
-        self.position
-            .as_ref()
-            .ok_or("Missing first argument")?
-            .distance_m(other.position.as_ref().ok_or("Missing second argument")?)
     }
 }
