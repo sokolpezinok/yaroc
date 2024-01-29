@@ -177,9 +177,8 @@ impl MshLogMessage {
 }
 
 impl MshLogMessage {
-    fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        Local
-            .timestamp_opt(posix_time as i64, 0)
+    fn timestamp<T: TimeZone>(posix_time: u32, tz: &T) -> DateTime<FixedOffset> {
+        tz.timestamp_opt(posix_time as i64, 0)
             .unwrap()
             .fixed_offset()
     }
@@ -195,7 +194,7 @@ impl MshLogMessage {
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())?;
-                let timestamp = Self::timestamp(telemetry.time);
+                let timestamp = Self::timestamp(telemetry.time, &Local);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
                         name: name.to_owned(),
@@ -210,12 +209,12 @@ impl MshLogMessage {
             }
             POSITION_APP => {
                 let position = PositionProto::decode(data.payload.as_slice())?;
-                let timestamp = Self::timestamp(position.time);
+                let timestamp = Self::timestamp(position.time, &Local);
                 let position = Position {
                     lat: position.latitude_i as f32 / 10_000_000.,
                     lon: position.longitude_i as f32 / 10_000_000.,
                     elevation: 0.0,
-                    timestamp: Self::timestamp(position.time),
+                    timestamp: Self::timestamp(position.time, &Local),
                 };
                 let distance = recv_position
                     .map(|other| position.distance_m(&other))
@@ -332,11 +331,14 @@ impl MessageHandler {
 
 #[cfg(test)]
 mod test_logs {
+    use chrono::FixedOffset;
+
     use super::MshLogMessage;
 
     #[test]
     fn test_timestamp() {
-        let timestamp = MshLogMessage::timestamp(1706523131)
+        let tz = FixedOffset::east_opt(3600).unwrap();
+        let timestamp = MshLogMessage::timestamp(1706523131, &tz)
             .format("%H:%M:%S")
             .to_string();
         assert_eq!("11:12:11", timestamp);
