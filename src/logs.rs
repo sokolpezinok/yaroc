@@ -92,6 +92,11 @@ impl DbmSnr {
             rx_rssi => Some(DbmSnr::with_distance(rx_rssi as i16, rx_snr, None)),
         }
     }
+
+    pub fn add_distance(mut self, dist_m: f32, name: String) -> Self {
+        self.distance = Some((dist_m, name));
+        self
+    }
 }
 
 #[pyclass]
@@ -183,7 +188,7 @@ impl MshLogMessage {
         name: &str,
         now: DateTime<FixedOffset>,
         dbm_snr: Option<DbmSnr>,
-        recv_position: Option<Position>,
+        recv_position: Option<&Position>,
     ) -> Result<Option<Self>, std::io::Error> {
         // TODO: update dbm_snr based on recv_position
         match data.portnum {
@@ -205,18 +210,25 @@ impl MshLogMessage {
             POSITION_APP => {
                 let position = PositionProto::decode(data.payload.as_slice())?;
                 let timestamp = Self::timestamp(position.time);
+                let position = Position {
+                    lat: position.latitude_i as f32 / 10_000_000.,
+                    lon: position.longitude_i as f32 / 10_000_000.,
+                    elevation: 0.0,
+                    timestamp: Self::timestamp(position.time),
+                };
+                let distance = recv_position
+                    .map(|other| position.distance_m(&other))
+                    .unwrap()
+                    .unwrap();
+
                 Ok(Some(Self {
                     name: name.to_owned(),
                     timestamp,
                     latency: now - timestamp,
                     voltage_battery: None,
-                    position: Some(Position {
-                        lat: position.latitude_i as f32 / 10_000_000.,
-                        lon: position.longitude_i as f32 / 10_000_000.,
-                        elevation: 0.0,
-                        timestamp: Self::timestamp(position.time),
-                    }),
-                    dbm_snr,
+                    position: Some(position),
+                    dbm_snr: dbm_snr
+                        .map(|dbm_snr| dbm_snr.add_distance(distance as f32, "Hahah".to_owned())),
                 }))
             }
             _ => Ok(None),
@@ -227,7 +239,7 @@ impl MshLogMessage {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
-        recv_position: Option<Position>,
+        recv_position: Option<&Position>,
     ) -> PyResult<Option<Self>> {
         let service_envelope = ServiceEnvelope::decode(payload)
             .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
@@ -271,11 +283,6 @@ impl MessageHandler {
         }
     }
 
-    fn get_position(&self, mac_address: &str) -> Option<Position> {
-        let status = self.meshtastic_statuses.get(mac_address)?;
-        status.position
-    }
-
     pub fn msh_status_update(
         &mut self,
         payload: &[u8],
@@ -301,6 +308,13 @@ impl MessageHandler {
             }
         }
         msh_log_message
+    }
+}
+
+impl MessageHandler {
+    fn get_position(&self, mac_address: &str) -> Option<&Position> {
+        let status = self.meshtastic_statuses.get(mac_address)?;
+        status.position.as_ref()
     }
 }
 
