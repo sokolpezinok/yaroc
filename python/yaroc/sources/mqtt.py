@@ -121,7 +121,7 @@ class MqttForwader:
 
         msh_status = self.tracker.get_meshtastic_status(punch.mac_addr)
         msh_status.punch(punch)
-        await self._process_punch(punch, mac_addr, now, override_mac=self.meshtastic_mac_addr)
+        await self._process_punch(punch, punch.mac_addr, now, override_mac=self.meshtastic_mac_addr)
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
