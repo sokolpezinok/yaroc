@@ -9,14 +9,14 @@ use crate::punch::SiPunch;
 
 #[derive(Clone)]
 pub struct Position {
-    pub lat: f64,
-    pub lon: f64,
+    pub lat: f32,
+    pub lon: f32,
     pub elevation: f32,
     pub timestamp: chrono::DateTime<FixedOffset>,
 }
 
 impl Position {
-    pub fn new(lat: f64, lon: f64, timestamp: DateTime<FixedOffset>) -> Self {
+    pub fn new(lat: f32, lon: f32, timestamp: DateTime<FixedOffset>) -> Self {
         Self {
             lat,
             lon,
@@ -138,7 +138,7 @@ impl MeshtasticRocStatus {
         self.last_update = Some(Local::now().into());
     }
 
-    pub fn update_position(&mut self, lat: f64, lon: f64, timestamp: DateTime<FixedOffset>) {
+    pub fn update_position(&mut self, lat: f32, lon: f32, timestamp: DateTime<FixedOffset>) {
         self.position = Some(Position::new(lat, lon, timestamp));
         self.last_update = Some(Local::now().into());
     }
