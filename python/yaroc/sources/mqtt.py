@@ -21,7 +21,7 @@ from meshtastic.telemetry_pb2 import Telemetry
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import CellularLogMessage, DbmSnr, MshLogMessage, SiPunch
+from ..rs import CellularLogMessage, DbmSnr, MessageHandler, MshLogMessage, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -42,6 +42,7 @@ class MqttForwader:
         self.meshtastic_mac_addr = meshtastic_mac_addr
         self.meshtastic_channel = meshtastic_channel
         self.tracker = StatusTracker(self._resolve, display_model)
+        self.handler = MessageHandler.new(dns)
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:

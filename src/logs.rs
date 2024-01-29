@@ -4,6 +4,7 @@ use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use std::collections::HashMap;
 use std::io::Write;
 
 use chrono::prelude::*;
@@ -137,33 +138,6 @@ impl MshLogMessage {
         });
     }
 
-    #[staticmethod]
-    pub fn from_msh_status(payload: &[u8], now: DateTime<FixedOffset>) -> PyResult<Option<Self>> {
-        let service_envelope = ServiceEnvelope::decode(payload)
-            .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
-        match service_envelope.packet {
-            Some(MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(data)),
-                from,
-                to,
-                rx_rssi,
-                rx_snr,
-                ..
-            }) => {
-                if data.portnum == POSITION_APP && to == u32::MAX {
-                    // Request packets are ignored
-                    return Ok(None);
-                }
-                let mac = format!("{:8x}", from);
-                Self::parse_inner(data, mac, now, DbmSnr::new(rx_rssi, rx_snr))
-                    .map_err(|e| PyValueError::new_err("Cannot parse inner proto"))
-            }
-            _ => Err(PyValueError::new_err(
-                "Encrypted message, disable encryption in MQTT!",
-            )),
-        }
-    }
-
     pub fn __repr__(slf: PyRef<'_, Self>) -> PyResult<String> {
         let mut buf = Vec::new();
         let timestamp = slf.timestamp.format("%H:%M:%S");
@@ -206,7 +180,7 @@ impl MshLogMessage {
 
     fn parse_inner(
         data: Data,
-        mac: String,
+        name: &str,
         now: DateTime<FixedOffset>,
         dbm_snr: Option<DbmSnr>,
     ) -> Result<Option<Self>, std::io::Error> {
@@ -216,7 +190,7 @@ impl MshLogMessage {
                 let timestamp = Self::timestamp(telemetry.time);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
-                        name: mac,
+                        name: name.to_owned(),
                         timestamp,
                         latency: now - timestamp,
                         voltage_battery: Some((metrics.voltage, metrics.battery_level)),
@@ -230,7 +204,7 @@ impl MshLogMessage {
                 let position = PositionProto::decode(data.payload.as_slice())?;
                 let timestamp = Self::timestamp(position.time);
                 Ok(Some(Self {
-                    name: mac,
+                    name: name.to_owned(),
                     timestamp,
                     latency: now - timestamp,
                     voltage_battery: None,
@@ -245,6 +219,57 @@ impl MshLogMessage {
             }
             _ => Ok(None),
         }
+    }
+
+    pub fn from_msh_status(
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        dns: &HashMap<String, String>,
+    ) -> PyResult<Option<Self>> {
+        let service_envelope = ServiceEnvelope::decode(payload)
+            .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
+        match service_envelope.packet {
+            Some(MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(data)),
+                from,
+                to,
+                rx_rssi,
+                rx_snr,
+                ..
+            }) => {
+                if data.portnum == POSITION_APP && to == u32::MAX {
+                    // Request packets are ignored
+                    return Ok(None);
+                }
+                let name = dns.get(&format!("{:8x}", from)).unwrap();
+                Self::parse_inner(data, name, now, DbmSnr::new(rx_rssi, rx_snr))
+                    .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
+            }
+            _ => Err(PyValueError::new_err(
+                "Encrypted message, disable encryption in MQTT!",
+            )),
+        }
+    }
+}
+
+#[pyclass()]
+pub struct MessageHandler {
+    dns: HashMap<String, String>,
+}
+
+#[pymethods()]
+impl MessageHandler {
+    #[staticmethod]
+    pub fn new(dns: HashMap<String, String>) -> Self {
+        Self { dns }
+    }
+
+    pub fn msh_status(
+        &self,
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+    ) -> PyResult<Option<MshLogMessage>> {
+        MshLogMessage::from_msh_status(payload, now, &self.dns)
     }
 }
 

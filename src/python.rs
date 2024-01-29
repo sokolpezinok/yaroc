@@ -59,6 +59,7 @@ pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<crate::logs::DbmSnr>()?;
     m.add_class::<crate::logs::CellularLogMessage>()?;
     m.add_class::<crate::logs::MshLogMessage>()?;
+    m.add_class::<crate::logs::MessageHandler>()?;
     m.add_class::<RaspberryModel>()?;
     Ok(())
 }
