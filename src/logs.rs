@@ -103,6 +103,7 @@ impl DbmSnr {
 #[pyclass]
 pub struct MshLogMessage {
     name: String,
+    mac_addr: String,
     #[pyo3(set)]
     voltage_battery: Option<(f32, u32)>,
     position: Option<Position>,
@@ -117,18 +118,6 @@ const POSITION_APP: i32 = PortNum::PositionApp as i32;
 
 #[pymethods]
 impl MshLogMessage {
-    #[new]
-    pub fn new(name: String, timestamp: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> Self {
-        Self {
-            name,
-            timestamp,
-            latency: now - timestamp,
-            voltage_battery: None,
-            position: None,
-            dbm_snr: None,
-        }
-    }
-
     pub fn set_position(
         &mut self,
         lat: f32,
@@ -139,7 +128,7 @@ impl MshLogMessage {
         self.position = Some(Position {
             lat,
             lon,
-            elevation: elevation as f32,
+            elevation,
             timestamp,
         });
     }
@@ -186,11 +175,11 @@ impl MshLogMessage {
     fn parse_inner(
         data: Data,
         name: &str,
+        mac_addr: &str,
         now: DateTime<FixedOffset>,
-        dbm_snr: Option<DbmSnr>,
-        recv_position: Option<&Position>,
+        mut dbm_snr: Option<DbmSnr>,
+        recv_position: Option<(&Position, &str)>,
     ) -> Result<Option<Self>, std::io::Error> {
-        // TODO: update dbm_snr based on recv_position
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())?;
@@ -198,6 +187,7 @@ impl MshLogMessage {
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
                         name: name.to_owned(),
+                        mac_addr: mac_addr.to_owned(),
                         timestamp,
                         latency: now - timestamp,
                         voltage_battery: Some((metrics.voltage, metrics.battery_level)),
@@ -209,26 +199,31 @@ impl MshLogMessage {
             }
             POSITION_APP => {
                 let position = PositionProto::decode(data.payload.as_slice())?;
+                if position.latitude_i == 0 && position.longitude_i == 0 {
+                    return Ok(None);
+                }
                 let timestamp = Self::timestamp(position.time, &Local);
                 let position = Position {
                     lat: position.latitude_i as f32 / 10_000_000.,
                     lon: position.longitude_i as f32 / 10_000_000.,
-                    elevation: 0.0,
+                    elevation: position.altitude,
                     timestamp: Self::timestamp(position.time, &Local),
                 };
-                let distance = recv_position
-                    .map(|other| position.distance_m(&other))
-                    .unwrap()
-                    .unwrap();
+                let distance = recv_position.map(|(other, _)| position.distance_m(&other));
+                if let Some(Ok(distance)) = distance {
+                    dbm_snr = dbm_snr.map(|dbm_snr| {
+                        dbm_snr.add_distance(distance as f32, recv_position.unwrap().1.to_owned())
+                    })
+                }
 
                 Ok(Some(Self {
                     name: name.to_owned(),
+                    mac_addr: mac_addr.to_owned(),
                     timestamp,
                     latency: now - timestamp,
                     voltage_battery: None,
                     position: Some(position),
-                    dbm_snr: dbm_snr
-                        .map(|dbm_snr| dbm_snr.add_distance(distance as f32, "Hahah".to_owned())),
+                    dbm_snr,
                 }))
             }
             _ => Ok(None),
@@ -239,7 +234,7 @@ impl MshLogMessage {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
-        recv_position: Option<&Position>,
+        recv_position: Option<(&Position, &str)>,
     ) -> PyResult<Option<Self>> {
         let service_envelope = ServiceEnvelope::decode(payload)
             .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
@@ -247,22 +242,29 @@ impl MshLogMessage {
             Some(MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
                 from,
-                to,
                 rx_rssi,
                 rx_snr,
                 ..
             }) => {
-                if data.portnum == POSITION_APP && to == u32::MAX {
-                    // Request packets are ignored
-                    return Ok(None);
-                }
-                let name = dns.get(&format!("{:8x}", from)).unwrap();
-                Self::parse_inner(data, name, now, DbmSnr::new(rx_rssi, rx_snr), recv_position)
-                    .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
+                let mac_addr = format!("{:8x}", from);
+                let name = dns.get(&mac_addr).unwrap();
+                Self::parse_inner(
+                    data,
+                    name,
+                    &mac_addr,
+                    now,
+                    DbmSnr::new(rx_rssi, rx_snr),
+                    recv_position,
+                )
+                .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
             }
-            _ => Err(PyValueError::new_err(
+            Some(MeshPacket {
+                payload_variant: Some(PayloadVariant::Encrypted(_)),
+                ..
+            }) => Err(PyValueError::new_err(
                 "Encrypted message, disable encryption in MQTT!",
             )),
+            _ => Ok(None),
         }
     }
 }
@@ -300,13 +302,21 @@ impl MessageHandler {
         now: DateTime<FixedOffset>,
         recv_mac_address: &str,
     ) -> PyResult<Option<MshLogMessage>> {
-        let recv_position = self.get_position(recv_mac_address);
+        let recv_position = self.get_position(recv_mac_address).map(|pos| {
+            (
+                pos,
+                self.dns
+                    .get(recv_mac_address)
+                    .map(|s| s.as_str())
+                    .unwrap_or(recv_mac_address),
+            )
+        });
         let msh_log_message =
             MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
         if let Ok(Some(log_message)) = msh_log_message.as_ref() {
             let status = self
                 .meshtastic_statuses
-                .entry(log_message.name.clone())
+                .entry(log_message.mac_addr.clone())
                 .or_default();
             if let Some(position) = log_message.position.as_ref() {
                 status.position = Some(position.clone())

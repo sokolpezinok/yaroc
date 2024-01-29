@@ -7,11 +7,11 @@ use geoutils::Location;
 
 use crate::punch::SiPunch;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Position {
     pub lat: f32,
     pub lon: f32,
-    pub elevation: f32,
+    pub elevation: i32,
     pub timestamp: chrono::DateTime<FixedOffset>,
 }
 
@@ -20,7 +20,7 @@ impl Position {
         Self {
             lat,
             lon,
-            elevation: 0.0,
+            elevation: 0,
             timestamp,
         }
     }

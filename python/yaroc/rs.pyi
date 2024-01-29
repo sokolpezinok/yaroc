@@ -72,7 +72,6 @@ class DbmSnr(object):
 class MshLogMessage(object):
     voltage_battery: tuple[float, int]
     dbm_snr: DbmSnr
-    def __init__(self, name: str, timestamp: datetime, now: datetime): ...
     def set_position(self, lat: float, lon: float, elevation: int, timestamp: datetime): ...
 
 class CellularLogMessage(object):
