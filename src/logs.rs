@@ -10,6 +10,7 @@ use std::io::Write;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
+use crate::punch::SiPunch;
 use crate::status::{MeshtasticRocStatus, Position};
 
 #[pyclass]
@@ -281,6 +282,17 @@ impl MessageHandler {
             dns,
             meshtastic_statuses: HashMap::new(),
         }
+    }
+
+    pub fn msh_serial_update(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
+        let punch = SiPunch::from_msh_serial(payload)?;
+        let status = self
+            .meshtastic_statuses
+            .entry(punch.mac_addr.clone())
+            .or_default();
+        status.punch(&punch);
+
+        Ok(punch)
     }
 
     pub fn msh_status_update(

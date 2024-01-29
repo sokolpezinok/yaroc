@@ -108,21 +108,22 @@ class MqttForwader:
                 send_time = None
             await self._process_punch(si_punch, mac_addr, now, send_time)
 
-    @staticmethod
-    def extract_msh_mac(service_envelop: ServiceEnvelope) -> str:
-        node_id = getattr(service_envelop.packet, "from")
-        return f"{node_id:08x}"
-
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
-            punch = SiPunch.from_msh_serial(MqttForwader._payload_to_bytes(payload))
+            punch = self.handler.msh_serial_update(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
-            logging.error(f"Error while constructing protobuf: {err}")
+            logging.error(f"Error while constructing SI punch: {err}")
             return
 
-        msh_status = self.tracker.get_meshtastic_status(punch.mac_addr)
-        msh_status.punch(punch)
         await self._process_punch(punch, punch.mac_addr, now, override_mac=self.meshtastic_mac_addr)
+
+    async def _handle_meshtastic_status(
+        self, recv_mac_addr: str, payload: PayloadType, now: datetime
+    ):
+        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now,
+                                                     recv_mac_addr)
+        logging.info(log_message)
+
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
@@ -155,13 +156,6 @@ class MqttForwader:
         elif oneof == "dev_event":
             logging.info(f"{name} {status.dev_event}")
             await self.client_group.send_status(status, mac_addr)
-
-    async def _handle_meshtastic_status(
-        self, recv_mac_addr: str, payload: PayloadType, now: datetime
-    ):
-        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now,
-                                                     recv_mac_addr)
-        logging.info(log_message)
 
     @staticmethod
     def extract_mac(topic: str) -> str:

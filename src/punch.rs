@@ -18,7 +18,7 @@ pub struct SiPunch {
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get, set)]
-    mac_addr: String,
+    pub mac_addr: String,
     #[pyo3(get)]
     raw: [u8; 20],
 }
