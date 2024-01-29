@@ -2,9 +2,10 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message;
-use pyo3::exceptions::PyValueError;
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
 use std::collections::HashMap;
+use std::fmt;
 use std::io::Write;
 
 use chrono::prelude::*;
@@ -114,40 +115,45 @@ const POSITION_APP: i32 = PortNum::PositionApp as i32;
 
 #[pymethods]
 impl MshLogMessage {
-    pub fn __repr__(slf: PyRef<'_, Self>) -> PyResult<String> {
-        let mut buf = Vec::new();
-        let timestamp = slf.timestamp.format("%H:%M:%S");
-        write!(&mut buf, "{} {timestamp}:", slf.name)?;
-        if let Some((voltage, battery)) = slf.voltage_battery {
-            write!(&mut buf, " batt {:.3}V {}%", voltage, battery)?;
+    pub fn format(&self) -> PyResult<String> {
+        Ok(format!("{}", self))
+    }
+}
+
+impl fmt::Display for MshLogMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let timestamp = self.timestamp.format("%H:%M:%S");
+        write!(f, "{} {timestamp}:", self.name)?;
+        if let Some((voltage, battery)) = self.voltage_battery {
+            write!(f, " batt {:.3}V {}%", voltage, battery)?;
         }
         if let Some(Position {
             lat,
             lon,
             elevation,
             ..
-        }) = slf.position
+        }) = self.position
         {
-            write!(&mut buf, " coords {:.5} {:.5} {}m", lat, lon, elevation)?;
+            write!(f, " coords {:.5} {:.5} {}m", lat, lon, elevation)?;
         }
-        let millis = slf.latency.num_milliseconds() as f64 / 1000.0;
-        write!(&mut buf, ", latency {:4.2}s", millis)?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)?;
         if let Some(RssiSnr {
             rssi_dbm,
             snr,
             distance,
-        }) = &slf.rssi_snr
+        }) = &self.rssi_snr
         {
             match distance {
-                None => write!(&mut buf, ", {}dbm {:.2}SNR", rssi_dbm, snr)?,
+                None => write!(f, ", {}dBm {:.2}SNR", rssi_dbm, snr)?,
                 Some((meters, name)) => write!(
-                    &mut buf,
+                    f,
                     ", {rssi_dbm}dBm {snr:.2}SNR, {:.2}km from {name}",
                     meters / 1000.0,
                 )?,
             }
-        }
-        String::from_utf8(buf).map_err(|e| PyRuntimeError::new_err(e))
+        };
+        Ok(())
     }
 }
 
@@ -329,7 +335,9 @@ impl MessageHandler {
 
 #[cfg(test)]
 mod test_logs {
-    use chrono::{Duration, FixedOffset};
+    use chrono::{DateTime, Duration, FixedOffset};
+
+    use crate::{message_handler::RssiSnr, status::Position};
 
     use super::MshLogMessage;
 
@@ -342,40 +350,72 @@ mod test_logs {
         assert_eq!("11:12:11", timestamp);
     }
 
-    // #[test]
-    // fn test_volt_batt() {
-    //     let tz = FixedOffset::east_opt(3600).unwrap();
-    //     let timestamp = MshLogMessage::timestamp(1706523131, &tz);
-    //     let log_message = MshLogMessage {
-    //         name: "spr01".to_owned(),
-    //         mac_addr: "abdef".to_owned(),
-    //         timestamp,
-    //         latency: Duration::milliseconds(1230),
-    //         voltage_battery: Some((4.012, 82)),
-    //         position: None,
-    //         rssi_snr: None,
-    //     };
-    //     MshLogMessage::__repr__(log_message);
-    // }
+    #[test]
+    fn test_volt_batt() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T21:34:49+01:00").unwrap();
+        let log_message = MshLogMessage {
+            name: "spr01".to_owned(),
+            mac_addr: String::new(),
+            timestamp,
+            latency: Duration::milliseconds(1230),
+            voltage_battery: Some((4.012, 82)),
+            position: None,
+            rssi_snr: None,
+        };
+        assert_eq!(
+            format!("{log_message}"),
+            "spr01 21:34:49: batt 4.012V 82%, latency 1.23s"
+        );
+    }
 
-    // def test_position(self):
-    //     timestamp = datetime.fromisoformat("2024-01-28 13:15:25.755721 +01:00")
-    //     log_message = MshLogMessage("spr01", timestamp, timestamp + timedelta(milliseconds=1230))
-    //
-    //     log_message.set_position(48.29633, 17.26675, 170, timestamp)
-    //     self.assertEqual(
-    //         "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s", f"{log_message}"
-    //     )
-    //
-    // def test_position_dbm(self):
-    //     timestamp = datetime.fromisoformat("2024-01-28 13:15:25.755721 +01:00")
-    //     log_message = MshLogMessage("spr01", timestamp, timestamp + timedelta(milliseconds=1230))
-    //
-    //     log_message.set_position(48.29633, 17.26675, 170, timestamp)
-    //     log_message.dbm_snr = DbmSnr(-80, 4.25, (813, "spr02"))
-    //     self.assertEqual(
-    //         "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR 0.81km"
-    //         " from spr02",
-    //         f"{log_message}",
-    //     )
+    #[test]
+    fn test_position() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
+        let log_message = MshLogMessage {
+            name: "spr01".to_owned(),
+            mac_addr: String::new(),
+            timestamp,
+            latency: Duration::milliseconds(1230),
+            position: Some(Position {
+                lat: 48.29633,
+                lon: 17.26675,
+                elevation: 170,
+                timestamp,
+            }),
+            voltage_battery: None,
+            rssi_snr: None,
+        };
+        assert_eq!(
+            format!("{log_message}"),
+            "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s",
+        );
+    }
+
+    #[test]
+    fn test_position_dbm() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
+        let log_message = MshLogMessage {
+            name: "spr01".to_owned(),
+            mac_addr: String::new(),
+            timestamp,
+            latency: Duration::milliseconds(1230),
+            position: Some(Position {
+                lat: 48.29633,
+                lon: 17.26675,
+                elevation: 170,
+                timestamp,
+            }),
+            voltage_battery: None,
+            rssi_snr: Some(RssiSnr {
+                rssi_dbm: -80,
+                snr: 4.25,
+                distance: Some((813., "spr02".to_string())),
+            }),
+        };
+        assert_eq!(
+            format!("{log_message}"),
+            "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR, 0.81km \
+            from spr02"
+        );
+    }
 }
