@@ -112,10 +112,13 @@ class MqttForwader:
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
-        log_message = self.handler.msh_status_update(
-            MqttForwader._payload_to_bytes(payload), now, recv_mac_addr
-        )
-        logging.info(log_message)
+        try:
+            log_message = self.handler.msh_status_update(
+                MqttForwader._payload_to_bytes(payload), now, recv_mac_addr
+            )
+            logging.info(log_message)
+        except Exception as err:
+            logging.error(f"Failed to construct proto: {err}")
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
