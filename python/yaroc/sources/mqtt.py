@@ -9,19 +9,11 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
-from meshtastic.mesh_pb2 import Position
-from meshtastic.mqtt_pb2 import ServiceEnvelope
-from meshtastic.portnums_pb2 import (
-    POSITION_APP,
-    RANGE_TEST_APP,
-    TELEMETRY_APP,
-)
-from meshtastic.telemetry_pb2 import Telemetry
 
 from ..clients.client import ClientGroup
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import CellularLogMessage, DbmSnr, MessageHandler, MshLogMessage, SiPunch
+from ..rs import CellularLogMessage, MessageHandler, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -120,10 +112,10 @@ class MqttForwader:
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
     ):
-        log_message = self.handler.msh_status_update(MqttForwader._payload_to_bytes(payload), now,
-                                                     recv_mac_addr)
+        log_message = self.handler.msh_status_update(
+            MqttForwader._payload_to_bytes(payload), now, recv_mac_addr
+        )
         logging.info(log_message)
-
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
