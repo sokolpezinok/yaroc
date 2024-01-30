@@ -303,7 +303,7 @@ impl MessageHandler {
             let status = self
                 .meshtastic_statuses
                 .entry(log_message.mac_addr.clone())
-                .or_default();
+                .or_insert(MeshtasticRocStatus::new(log_message.name.clone()));
             if let Some(position) = log_message.position.as_ref() {
                 status.position = Some(position.clone())
             }

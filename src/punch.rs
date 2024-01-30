@@ -72,14 +72,14 @@ impl SiPunch {
     pub fn from_msh_serial(payload: &[u8]) -> Result<Self, std::io::Error> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
         let packet = service_envelope.packet.expect("Packet missing");
-        let mac = format!("{:8x}", packet.from);
+        let mac_addr = format!("{:8x}", packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(Self::from_raw(payload.try_into().unwrap(), &mac)),
+            })) => Ok(Self::from_raw(payload.try_into().unwrap(), &mac_addr)),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Encrypted message or wrong portnum",
