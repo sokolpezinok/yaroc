@@ -1,11 +1,11 @@
 import logging
 from datetime import datetime
-from itertools import accumulate, chain
+from itertools import accumulate
 from typing import Callable, Dict
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import CellularRocStatus, MeshtasticRocStatus
+from ..rs import CellularRocStatus
 
 
 class StatusTracker:
@@ -13,7 +13,6 @@ class StatusTracker:
 
     def __init__(self, dns_resolver: Callable[[str], str], display_model: str | None = None):
         self.cellular_status: Dict[str, CellularRocStatus] = {}
-        self.meshtastic_status: Dict[str, MeshtasticRocStatus] = {}
         self.dns_resolver = dns_resolver
         if display_model is not None:
             import epaper
@@ -26,17 +25,6 @@ class StatusTracker:
 
     def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
         return self.cellular_status.setdefault(mac_addr, CellularRocStatus.new())
-
-    def get_meshtastic_status(self, mac_addr: str) -> MeshtasticRocStatus:
-        return self.meshtastic_status.setdefault(mac_addr, MeshtasticRocStatus.new())
-
-    def distance_km(self, mac_addr1: str, mac_addr2: str) -> tuple[float, str] | None:
-        msh_status1 = self.get_meshtastic_status(mac_addr1)
-        msh_status2 = self.get_meshtastic_status(mac_addr2)
-        try:
-            return (msh_status1.distance_m(msh_status2), self.dns_resolver(mac_addr1))
-        except Exception as _:
-            return None
 
     def generate_info_table(self) -> list[list[str]]:
         def human_time(timestamp: datetime | None) -> str:
@@ -55,7 +43,7 @@ class StatusTracker:
             return f"{minutes / 60:.1f}h ago"
 
         table = []
-        for mac_addr, status in chain(self.cellular_status.items(), self.meshtastic_status.items()):
+        for mac_addr, status in self.cellular_status.items():
             node_info = status.serialize(self.dns_resolver(mac_addr))
             table.append(
                 [
