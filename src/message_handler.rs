@@ -82,15 +82,11 @@ impl RssiSnr {
     pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
         match rssi_dbm {
             0 => None,
-            rx_rssi => Some(RssiSnr::with_distance(rx_rssi as i16, snr, None)),
-        }
-    }
-
-    pub fn with_distance(rssi_dbm: i16, snr: f32, distance: Option<(f32, String)>) -> Self {
-        Self {
-            rssi_dbm,
-            snr,
-            distance,
+            rx_rssi => Some(RssiSnr {
+                rssi_dbm: rx_rssi as i16,
+                snr,
+                distance: None,
+            }),
         }
     }
 
