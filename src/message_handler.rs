@@ -12,7 +12,7 @@ use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
 use crate::punch::SiPunch;
-use crate::status::{MeshtasticRocStatus, Position};
+use crate::status::{HostInfo, MeshtasticRocStatus, Position};
 
 #[pyclass]
 pub struct CellularLogMessage {
@@ -101,8 +101,7 @@ impl RssiSnr {
 
 #[pyclass]
 pub struct MshLogMessage {
-    name: String,
-    mac_addr: String,
+    host_info: HostInfo,
     voltage_battery: Option<(f32, u32)>,
     position: Option<Position>,
     rssi_snr: Option<RssiSnr>,
@@ -123,7 +122,7 @@ impl MshLogMessage {
 impl fmt::Display for MshLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
-        write!(f, "{} {timestamp}:", self.name)?;
+        write!(f, "{} {timestamp}:", self.host_info.name)?;
         if let Some((voltage, battery)) = self.voltage_battery {
             write!(f, " batt {:.3}V {}%", voltage, battery)?;
         }
@@ -166,8 +165,7 @@ impl MshLogMessage {
 
     fn parse_inner(
         data: Data,
-        name: &str,
-        mac_addr: &str,
+        host_info: HostInfo,
         now: DateTime<FixedOffset>,
         mut rssi_snr: Option<RssiSnr>,
         recv_position: Option<PositionName>,
@@ -178,8 +176,7 @@ impl MshLogMessage {
                 let timestamp = Self::timestamp(telemetry.time, &Local);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
-                        name: name.to_owned(),
-                        mac_addr: mac_addr.to_owned(),
+                        host_info,
                         timestamp,
                         latency: now - timestamp,
                         voltage_battery: Some((metrics.voltage, metrics.battery_level)),
@@ -211,8 +208,7 @@ impl MshLogMessage {
                 }
 
                 Ok(Some(Self {
-                    name: name.to_owned(),
-                    mac_addr: mac_addr.to_owned(),
+                    host_info,
                     timestamp,
                     latency: now - timestamp,
                     voltage_battery: None,
@@ -240,12 +236,14 @@ impl MshLogMessage {
                 rx_snr,
                 ..
             }) => {
-                let mac_addr = format!("{:8x}", from);
-                let name = dns.get(&mac_addr).unwrap();
+                let mac_address = format!("{:8x}", from);
+                let name = dns.get(&mac_address).unwrap();
                 Self::parse_inner(
                     data,
-                    name,
-                    &mac_addr,
+                    HostInfo {
+                        name: name.to_owned(),
+                        mac_address,
+                    },
                     now,
                     RssiSnr::new(rx_rssi, rx_snr),
                     recv_position,
@@ -302,8 +300,8 @@ impl MessageHandler {
         if let Ok(Some(log_message)) = msh_log_message.as_ref() {
             let status = self
                 .meshtastic_statuses
-                .entry(log_message.mac_addr.clone())
-                .or_insert(MeshtasticRocStatus::new(log_message.name.clone()));
+                .entry(log_message.host_info.mac_address.clone())
+                .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
             if let Some(position) = log_message.position.as_ref() {
                 status.position = Some(position.clone())
             }
@@ -337,7 +335,10 @@ impl MessageHandler {
 mod test_logs {
     use chrono::{DateTime, Duration, FixedOffset};
 
-    use crate::{message_handler::RssiSnr, status::Position};
+    use crate::{
+        message_handler::RssiSnr,
+        status::{HostInfo, Position},
+    };
 
     use super::MshLogMessage;
 
@@ -354,8 +355,10 @@ mod test_logs {
     fn test_volt_batt() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T21:34:49+01:00").unwrap();
         let log_message = MshLogMessage {
-            name: "spr01".to_owned(),
-            mac_addr: String::new(),
+            host_info: HostInfo {
+                name: "spr01".to_owned(),
+                mac_address: String::new(),
+            },
             timestamp,
             latency: Duration::milliseconds(1230),
             voltage_battery: Some((4.012, 82)),
@@ -372,8 +375,10 @@ mod test_logs {
     fn test_position() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
-            name: "spr01".to_owned(),
-            mac_addr: String::new(),
+            host_info: HostInfo {
+                name: "spr01".to_owned(),
+                mac_address: String::new(),
+            },
             timestamp,
             latency: Duration::milliseconds(1230),
             position: Some(Position {
@@ -395,8 +400,10 @@ mod test_logs {
     fn test_position_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
-            name: "spr01".to_owned(),
-            mac_addr: String::new(),
+            host_info: HostInfo {
+                name: "spr01".to_owned(),
+                mac_address: String::new(),
+            },
             timestamp,
             latency: Duration::milliseconds(1230),
             position: Some(Position {

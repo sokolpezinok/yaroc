@@ -8,6 +8,12 @@ use geoutils::Location;
 use crate::punch::SiPunch;
 
 #[derive(Clone, Debug)]
+pub struct HostInfo {
+    pub name: String,
+    pub mac_address: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Position {
     pub lat: f32,
     pub lon: f32,
