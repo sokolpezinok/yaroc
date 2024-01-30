@@ -137,7 +137,7 @@ class MqttForwader:
             mch = status.mini_call_home
             orig_time = MqttForwader._prototime_to_datetime(mch.time)
 
-            log_message = CellularLogMessage(name, orig_time, now, mch.volts)
+            log_message = CellularLogMessage(name, mac_addr, orig_time, now, mch.volts)
             log_message.temperature = mch.cpu_temperature
             if mch.cellid > 0:
                 log_message.dbm = mch.signal_dbm

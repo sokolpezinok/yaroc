@@ -15,7 +15,7 @@ use crate::status::{HostInfo, MeshtasticRocStatus, Position};
 
 #[pyclass]
 pub struct CellularLogMessage {
-    name: String,
+    host_info: HostInfo,
     voltage: f32,
     #[pyo3(set)]
     dbm: Option<i32>,
@@ -34,12 +34,13 @@ impl CellularLogMessage {
     #[new]
     pub fn new(
         name: String,
+        mac_address: String,
         timestamp: DateTime<FixedOffset>,
         now: DateTime<FixedOffset>,
         voltage: f32,
     ) -> Self {
         Self {
-            name,
+            host_info: HostInfo { name, mac_address },
             timestamp,
             latency: now - timestamp,
             voltage,
@@ -58,7 +59,7 @@ impl CellularLogMessage {
 impl fmt::Display for CellularLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
-        write!(f, "{} {timestamp}:", self.name)?;
+        write!(f, "{} {timestamp}:", self.host_info.name)?;
         if let Some(temperature) = &self.temperature {
             write!(f, " {temperature:.1}°C")?;
         }
@@ -339,7 +340,7 @@ mod test_logs {
         status::{HostInfo, Position},
     };
 
-    use super::MshLogMessage;
+    use super::{CellularLogMessage, MshLogMessage};
 
     #[test]
     fn test_timestamp() {
@@ -422,6 +423,28 @@ mod test_logs {
             format!("{log_message}"),
             "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR, 0.81km \
             from spr02"
+        );
+    }
+
+    #[test]
+    fn test_cellular_dbm() {
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
+        let log_message = CellularLogMessage {
+            host_info: HostInfo {
+                name: "spe01".to_owned(),
+                mac_address: String::new(),
+            },
+            timestamp,
+            latency: Duration::milliseconds(1390),
+            voltage: 1.26,
+            dbm: Some(-87),
+            cellid: Some(2580590),
+            cpu_frequency: None,
+            temperature: Some(51.54),
+        };
+        assert_eq!(
+            format!("{log_message}"),
+            "spe01 17:40:43: 51.5°C, -87dBm, cell 27606E, 1.26V, latency 1.39s"
         );
     }
 }
