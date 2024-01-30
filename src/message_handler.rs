@@ -2,11 +2,10 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Write;
 
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
@@ -51,23 +50,27 @@ impl CellularLogMessage {
         }
     }
 
-    pub fn __repr__(slf: PyRef<'_, Self>) -> PyResult<String> {
-        let mut buf = Vec::new();
-        let timestamp = slf.timestamp.format("%H:%M:%S");
-        write!(&mut buf, "{} {timestamp}:", slf.name)?;
-        if let Some(temperature) = &slf.temperature {
-            write!(&mut buf, " {temperature:.1}°C")?;
+    pub fn __repr__(&self) -> String {
+        format!("{self}")
+    }
+}
+
+impl fmt::Display for CellularLogMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let timestamp = self.timestamp.format("%H:%M:%S");
+        write!(f, "{} {timestamp}:", self.name)?;
+        if let Some(temperature) = &self.temperature {
+            write!(f, " {temperature:.1}°C")?;
         }
-        if let Some(dbm) = &slf.dbm {
-            write!(&mut buf, ", {dbm}dBm")?;
+        if let Some(dbm) = &self.dbm {
+            write!(f, ", {dbm}dBm")?;
         }
-        if let Some(cellid) = &slf.cellid {
-            write!(&mut buf, ", cell {cellid:X}")?;
+        if let Some(cellid) = &self.cellid {
+            write!(f, ", cell {cellid:X}")?;
         }
-        write!(&mut buf, ", {:.2}V", slf.voltage)?;
-        let millis = slf.latency.num_milliseconds() as f64 / 1000.0;
-        write!(&mut buf, ", latency {:4.2}s", millis)?;
-        String::from_utf8(buf).map_err(|e| PyRuntimeError::new_err(e))
+        write!(f, ", {:.2}V", self.voltage)?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)
     }
 }
 
