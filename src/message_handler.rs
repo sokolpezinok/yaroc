@@ -110,8 +110,8 @@ const POSITION_APP: i32 = PortNum::PositionApp as i32;
 
 #[pymethods]
 impl MshLogMessage {
-    pub fn format(&self) -> PyResult<String> {
-        Ok(format!("{}", self))
+    pub fn __repr__(&self) -> String {
+        format!("{}", self)
     }
 }
 

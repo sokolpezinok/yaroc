@@ -117,7 +117,7 @@ class MqttForwader:
                 MqttForwader._payload_to_bytes(payload), now, recv_mac_addr
             )
             if log_message is not None:
-                logging.info(log_message.format())
+                logging.info(log_message)
         except Exception as err:
             logging.error(f"Failed to construct proto: {err}")
 
