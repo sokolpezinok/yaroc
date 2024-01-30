@@ -282,7 +282,9 @@ impl MessageHandler {
         let status = self
             .meshtastic_statuses
             .entry(punch.mac_addr.clone())
-            .or_default();
+            .or_insert(MeshtasticRocStatus::new(
+                self.dns.get(&punch.mac_addr).unwrap().to_owned(),
+            ));
         status.punch(&punch);
 
         Ok(punch)
