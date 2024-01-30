@@ -23,7 +23,6 @@ dependencies = [
   'dbus-next==0.2.*; platform_system == "Linux"',
   'dependency-injector==4.41.*',
   'gpiozero==1.6.*',
-  'meshtastic==2.2.*',
   'pillow==9.4.*',
   'protobuf==4.22.*',
   'psutil==5.9.*',
