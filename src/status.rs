@@ -38,6 +38,7 @@ impl Position {
     }
 }
 
+#[derive(Clone)]
 enum CellularConnectionState {
     Unknown,
     Unregistered,
@@ -51,9 +52,10 @@ impl Default for CellularConnectionState {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[pyclass]
 pub struct CellularRocStatus {
+    pub name: String,
     state: CellularConnectionState,
     voltage: Option<f64>,
     codes: HashSet<u16>,
@@ -78,8 +80,11 @@ pub struct NodeInfo {
 #[pymethods]
 impl CellularRocStatus {
     #[staticmethod]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            ..Self::default()
+        }
     }
 
     pub fn disconnect(&mut self) {
@@ -101,9 +106,9 @@ impl CellularRocStatus {
         self.codes.insert(punch.code);
     }
 
-    pub fn serialize(&self, name: &str) -> NodeInfo {
+    pub fn serialize(&self) -> NodeInfo {
         NodeInfo {
-            name: name.to_owned(),
+            name: self.name.clone(),
             dbm: match self.state {
                 CellularConnectionState::MqttConnected(dbm, _) => Some(dbm),
                 CellularConnectionState::Registered(dbm, _) => Some(dbm),
@@ -117,7 +122,7 @@ impl CellularRocStatus {
 }
 
 #[pyclass]
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct MeshtasticRocStatus {
     pub name: String,
     battery: Option<u32>,

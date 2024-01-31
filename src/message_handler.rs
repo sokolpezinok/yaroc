@@ -11,7 +11,7 @@ use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
 use crate::punch::SiPunch;
-use crate::status::{HostInfo, MeshtasticRocStatus, Position};
+use crate::status::{CellularRocStatus, HostInfo, MeshtasticRocStatus, Position};
 
 #[pyclass]
 pub struct CellularLogMessage {
@@ -264,6 +264,7 @@ impl MshLogMessage {
 #[pyclass()]
 pub struct MessageHandler {
     dns: HashMap<String, String>,
+    cellular_statuses: HashMap<String, CellularRocStatus>,
     meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
 }
 
@@ -274,6 +275,7 @@ impl MessageHandler {
         Self {
             dns,
             meshtastic_statuses: HashMap::new(),
+            cellular_statuses: HashMap::new(),
         }
     }
 
@@ -315,6 +317,30 @@ impl MessageHandler {
             }
         }
         msh_log_message
+    }
+
+    pub fn meshtastic_statuses(&self) -> Vec<MeshtasticRocStatus> {
+        self.meshtastic_statuses
+            .values()
+            .map(|status| status.clone())
+            .collect()
+    }
+
+    pub fn cellular_statuses(&self) -> Vec<CellularRocStatus> {
+        self.cellular_statuses
+            .values()
+            .map(|status| status.clone())
+            .collect()
+    }
+
+    // TODO: this is wrong as it clones the status. It should be refactored
+    pub fn get_cellular_status(&mut self, mac_addr: String) -> CellularRocStatus {
+        self.cellular_statuses
+            .entry(mac_addr.clone())
+            .or_insert(CellularRocStatus::new(
+                self.dns.get(&mac_addr).unwrap().to_owned(),
+            ))
+            .clone()
     }
 }
 

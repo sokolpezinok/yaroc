@@ -73,7 +73,9 @@ class CellularLogMessage(object):
     dbm: float | None
     cellid: int | None
     temperature: float | None
-    def __init__(self, name: str, mac_addr: str, timestamp: datetime, now: datetime, voltage: float): ...
+    def __init__(
+        self, name: str, mac_addr: str, timestamp: datetime, now: datetime, voltage: float
+    ): ...
     def __repr__(self) -> str: ...
 
 class MessageHandler(object):

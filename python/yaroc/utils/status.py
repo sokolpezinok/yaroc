@@ -1,19 +1,21 @@
 import logging
 from datetime import datetime
-from itertools import accumulate
-from typing import Callable, Dict
+from itertools import accumulate, chain
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import CellularRocStatus
+from ..rs import CellularRocStatus, MessageHandler
 
 
 class StatusTracker:
     """Class for tracking the status of all nodes"""
 
-    def __init__(self, dns_resolver: Callable[[str], str], display_model: str | None = None):
-        self.cellular_status: Dict[str, CellularRocStatus] = {}
-        self.dns_resolver = dns_resolver
+    def __init__(
+        self,
+        message_handler: MessageHandler,
+        display_model: str | None = None,
+    ):
+        self.message_handler = message_handler
         if display_model is not None:
             import epaper
 
@@ -24,7 +26,7 @@ class StatusTracker:
             self.epd = None
 
     def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
-        return self.cellular_status.setdefault(mac_addr, CellularRocStatus.new())
+        return self.message_handler.get_cellular_status(mac_addr)
 
     def generate_info_table(self) -> list[list[str]]:
         def human_time(timestamp: datetime | None) -> str:
@@ -43,8 +45,10 @@ class StatusTracker:
             return f"{minutes / 60:.1f}h ago"
 
         table = []
-        for mac_addr, status in self.cellular_status.items():
-            node_info = status.serialize(self.dns_resolver(mac_addr))
+        for status in chain(
+            self.message_handler.cellular_statuses(), self.message_handler.meshtastic_statuses()
+        ):
+            node_info = status.serialize()
             table.append(
                 [
                     node_info.name,
