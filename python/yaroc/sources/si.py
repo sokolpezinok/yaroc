@@ -16,7 +16,7 @@ from serial_asyncio import open_serial_connection
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
 
-from ..rs import SiPunch
+from ..rs import HostInfo, SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -249,7 +249,9 @@ class FakeSiWorker(SiWorker):
         del _status_queue
         for i in range(31, 1000):
             time_start = time.time()
-            punch = SiPunch.new(46283, i, datetime.now().astimezone(), 18, self.mac_addr)
+            punch = SiPunch.new(
+                46283, i, datetime.now().astimezone(), 18, HostInfo.new("fake", self.mac_addr)
+            )
             await self.process_punch(punch, queue)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 

@@ -92,7 +92,7 @@ class MqttClient(Client):
         except Exception as err:
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.GetCurrentTime()
-        topics = self.get_topics(punch.mac_addr)
+        topics = self.get_topics(punch.host_info.mac_address)
         return await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:

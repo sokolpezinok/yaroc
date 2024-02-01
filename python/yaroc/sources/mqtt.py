@@ -56,26 +56,13 @@ class MqttForwader:
     async def _process_punch(
         self,
         punch: SiPunch,
-        mac_addr: str,
         now: datetime,
         send_time: datetime | None = None,
         override_mac: str | None = None,
     ):
-        log_message = (
-            f"{self.dns[mac_addr]} {punch.card:7} punched {punch.code:03} "
-            f"at {punch.time:%H:%M:%S.%f}, "
-        )
-        if send_time is None:
-            log_message += f"latency {(now - punch.time).total_seconds():6.2f}s"
-        else:
-            log_message += (
-                f"sent {send_time:%H:%M:%S.%f}, network latency "
-                f"{(now - send_time).total_seconds():6.2f}s"
-            )
-
-        logging.info(log_message)
-        if override_mac is not None:
-            punch.mac_addr = override_mac
+        logging.info(punch)
+        if override_mac is not None:  # TODO: Move to Rustne:
+            punch.host_info.mac_addr = override_mac
         await self.client_group.send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
@@ -86,7 +73,7 @@ class MqttForwader:
             return
 
         for si_punch in punches:
-            await self._process_punch(si_punch, mac_addr, now, None)
+            await self._process_punch(si_punch, now, None)
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
@@ -95,7 +82,7 @@ class MqttForwader:
             logging.error(f"Error while constructing SI punch: {err}")
             return
 
-        await self._process_punch(punch, punch.mac_addr, now, override_mac=self.meshtastic_mac_addr)
+        await self._process_punch(punch, now, override_mac=self.meshtastic_mac_addr)
 
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime

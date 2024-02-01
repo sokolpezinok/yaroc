@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from itertools import accumulate, chain
+from itertools import accumulate
 
 from PIL import Image, ImageDraw, ImageFont
 

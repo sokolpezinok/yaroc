@@ -7,6 +7,7 @@ use chrono::prelude::*;
 use chrono::DateTime;
 
 use crate::logs::CellularLogMessage;
+use crate::logs::HostInfo;
 use crate::logs::MiniCallHome;
 use crate::logs::MshLogMessage;
 use crate::logs::PositionName;
@@ -36,11 +37,12 @@ impl MessageHandler {
 
     pub fn msh_serial_update(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
         let punch = SiPunch::from_msh_serial(payload)?;
+        let mac_addr = &punch.host_info.mac_address;
         let status = self
             .meshtastic_statuses
-            .entry(punch.mac_addr.clone())
+            .entry(mac_addr.to_owned())
             .or_insert(MeshtasticRocStatus::new(
-                self.dns.get(&punch.mac_addr).unwrap().to_owned(),
+                self.dns.get(mac_addr).unwrap().to_owned(),
             ));
         status.punch(&punch);
 
@@ -89,10 +91,14 @@ impl MessageHandler {
     pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
         let punches =
             Punches::decode(payload).map_err(|_| PyValueError::new_err("Failed to parse proto"))?;
+        let host_info: HostInfo = HostInfo {
+            name: self.dns.get(mac_addr).unwrap().clone(),
+            mac_address: mac_addr.to_owned(),
+        };
         let status = self.get_cellular_status(mac_addr);
         let mut result = Vec::new();
         for punch in punches.punches {
-            let si_punch = SiPunch::from_proto(punch, mac_addr);
+            let si_punch = SiPunch::from_proto(punch, &host_info);
             if let Ok(si_punch) = si_punch {
                 status.punch(&si_punch);
                 result.push(si_punch);

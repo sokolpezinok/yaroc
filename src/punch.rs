@@ -1,3 +1,6 @@
+use std::fmt;
+
+use crate::logs::HostInfo;
 use crate::protobufs::Punch;
 use chrono::{prelude::*, Days};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
@@ -17,8 +20,8 @@ pub struct SiPunch {
     pub time: DateTime<FixedOffset>,
     #[pyo3(get)]
     mode: u8,
-    #[pyo3(get, set)]
-    pub mac_addr: String,
+    #[pyo3(get)]
+    pub host_info: HostInfo,
     #[pyo3(get)]
     raw: [u8; 20],
 }
@@ -34,20 +37,20 @@ impl SiPunch {
         code: u16,
         time: DateTime<FixedOffset>,
         mode: u8,
-        mac_addr: &str,
-    ) -> PyResult<Self> {
-        Ok(Self {
+        host_info: HostInfo,
+    ) -> Self {
+        Self {
             card,
             code,
             time,
             mode,
-            mac_addr: mac_addr.to_owned(),
+            host_info,
             raw: Self::punch_to_bytes(code, time, card, mode),
-        })
+        }
     }
 
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], mac_addr: &str) -> Self {
+    pub fn from_raw(payload: [u8; 20], host_info: HostInfo) -> Self {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -63,9 +66,13 @@ impl SiPunch {
             code,
             time: datetime,
             mode: data[4] & 0b1111,
-            mac_addr: mac_addr.to_owned(),
+            host_info: host_info.clone(),
             raw: payload,
         }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{}", self)
     }
 }
 
@@ -80,7 +87,13 @@ impl SiPunch {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(Self::from_raw(payload.try_into().unwrap(), &mac_addr)),
+            })) => Ok(Self::from_raw(
+                payload.try_into().unwrap(),
+                HostInfo {
+                    name: String::new(),
+                    mac_address: mac_addr.clone(),
+                },
+            )),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Encrypted message or wrong portnum",
@@ -88,8 +101,8 @@ impl SiPunch {
         }
     }
 
-    pub fn from_proto(punch: Punch, mac_addr: &str) -> Result<Self, Vec<u8>> {
-        Ok(Self::from_raw(punch.raw.try_into()?, mac_addr))
+    pub fn from_proto(punch: Punch, host_info: &HostInfo) -> Result<Self, Vec<u8>> {
+        Ok(Self::from_raw(punch.raw.try_into()?, host_info.clone()))
     }
 
     fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
@@ -181,6 +194,25 @@ impl SiPunch {
     }
 }
 
+impl fmt::Display for SiPunch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} punched {} ",
+            self.host_info.name, self.card, self.code
+        )?;
+        write!(f, "at {}", self.time.format("%H:%M:%S.%3f"))
+        // TODO:
+        // if send_time is None:
+        //     log_message += f"latency {(now - punch.time).total_seconds():6.2f}s"
+        // else:
+        //     log_message += (
+        //         f"sent {send_time:%H:%M:%S.%f}, network latency "
+        //         f"{(now - send_time).total_seconds():6.2f}s"
+        //     )
+    }
+}
+
 #[cfg(test)]
 mod test_checksum {
     use super::SiPunch;
@@ -202,7 +234,7 @@ mod test_checksum {
 mod test_punch {
     use chrono::prelude::*;
 
-    use crate::punch::SiPunch;
+    use crate::{logs::HostInfo, punch::SiPunch};
 
     #[test]
     fn test_card_series() {
@@ -250,5 +282,23 @@ mod test_punch {
             &punch,
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
         );
+    }
+
+    #[test]
+    fn test_display() {
+        let tz = FixedOffset::east_opt(7200).unwrap();
+        let time = NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
+            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
+        )
+        .and_local_timezone(tz)
+        .unwrap();
+        let host_info = HostInfo {
+            name: "ROC1".to_owned(),
+            mac_address: "abcdef123456".to_owned(),
+        };
+        let punch = SiPunch::new(46283, 47, time, 1, host_info);
+
+        assert_eq!(format!("{punch}"), "ROC1 46283 punched 47 at 10:00:03.793");
     }
 }

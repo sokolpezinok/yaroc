@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::protobufs::{status::Msg, Disconnected, Status};
-use crate::status::{HostInfo, Position};
+use crate::status::Position;
 
 fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
     tz.timestamp_opt(posix_time, nanos).unwrap().fixed_offset()
@@ -49,6 +49,25 @@ impl CellularLogMessage {
             }
             Some(Msg::DevEvent(_)) => None,
             None => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+#[pyclass]
+pub struct HostInfo {
+    pub name: String,
+    #[pyo3(get)]
+    pub mac_address: String,
+}
+
+#[pymethods]
+impl HostInfo {
+    #[staticmethod]
+    fn new(name: String, mac_addr: String) -> Self {
+        Self {
+            name,
+            mac_address: mac_addr,
         }
     }
 }
@@ -318,8 +337,8 @@ mod test_logs {
     use chrono::{DateTime, Duration, FixedOffset};
 
     use crate::{
-        logs::{timestamp, RssiSnr},
-        status::{HostInfo, Position},
+        logs::{timestamp, HostInfo, RssiSnr},
+        status::Position,
     };
 
     use super::{MiniCallHome, MshLogMessage};

@@ -54,6 +54,7 @@ impl RaspberryModel {
 #[pymodule]
 pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
+    m.add_class::<crate::logs::HostInfo>()?;
     m.add_class::<crate::logs::MiniCallHome>()?;
     m.add_class::<crate::logs::MshLogMessage>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
