@@ -1,7 +1,8 @@
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
-use meshtastic::Message;
+use meshtastic::Message as MeshtaticMessage;
+use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -10,6 +11,7 @@ use std::fmt;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
+use crate::protobufs::Punches;
 use crate::punch::SiPunch;
 use crate::status::{CellularRocStatus, HostInfo, MeshtasticRocStatus, Position};
 
@@ -268,7 +270,7 @@ pub struct MessageHandler {
     meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
 }
 
-#[pymethods()]
+#[pymethods]
 impl MessageHandler {
     #[staticmethod]
     pub fn new(dns: HashMap<String, String>) -> Self {
@@ -334,13 +336,28 @@ impl MessageHandler {
     }
 
     // TODO: this is wrong as it clones the status. It should be refactored
-    pub fn get_cellular_status(&mut self, mac_addr: String) -> CellularRocStatus {
+    pub fn get_cellular_status(&mut self, mac_addr: &str) -> CellularRocStatus {
         self.cellular_statuses
-            .entry(mac_addr.clone())
+            .entry(mac_addr.to_owned())
             .or_insert(CellularRocStatus::new(
-                self.dns.get(&mac_addr).unwrap().to_owned(),
+                self.dns.get(mac_addr).unwrap().to_owned(),
             ))
             .clone()
+    }
+
+    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
+        let punches =
+            Punches::decode(payload).map_err(|_| PyValueError::new_err("Failed to parse proto"))?;
+        let mut status = self.get_cellular_status(mac_addr);
+        let mut result = Vec::new();
+        for punch in punches.punches {
+            let si_punch = SiPunch::from_proto(punch, mac_addr);
+            if let Ok(si_punch) = si_punch {
+                status.punch(&si_punch);
+                result.push(si_punch);
+            }
+        }
+        Ok(result)
     }
 }
 

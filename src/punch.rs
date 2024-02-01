@@ -1,8 +1,9 @@
+use crate::protobufs::Punch;
 use chrono::{prelude::*, Days};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::PortNum;
 use meshtastic::protobufs::{Data, ServiceEnvelope};
-use meshtastic::Message;
+use meshtastic::Message as MeshtasticMessage;
 use pyo3::prelude::*;
 
 #[derive(Debug)]
@@ -85,6 +86,10 @@ impl SiPunch {
                 "Encrypted message or wrong portnum",
             )),
         }
+    }
+
+    pub fn from_proto(punch: Punch, mac_addr: &str) -> Result<Self, Vec<u8>> {
+        Ok(Self::from_raw(punch.raw.try_into()?, mac_addr))
     }
 
     fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {

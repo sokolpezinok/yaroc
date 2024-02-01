@@ -11,7 +11,6 @@ from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import ClientGroup
-from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import Status as StatusProto
 from ..rs import CellularLogMessage, MessageHandler, SiPunch
 from ..utils.status import StatusTracker
@@ -81,24 +80,13 @@ class MqttForwader:
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
-            punches = Punches.FromString(MqttForwader._payload_to_bytes(payload))
+            punches = self.handler.punches(MqttForwader._payload_to_bytes(payload), mac_addr)
         except Exception as err:
-            logging.error(f"Error while parsing protobuf: {err}")
+            logging.error(f"Error while constructing SI punches: {err}")
             return
-        roc_status = self.tracker.get_cellular_status(mac_addr)
-        for punch in punches.punches:
-            try:
-                si_punch = SiPunch.from_raw(punch.raw, mac_addr)
-            except Exception as err:
-                logging.error(f"Error while constructing SiPunch: {err}")
-                continue
 
-            roc_status.punch(si_punch)
-            if punches.HasField("sending_timestamp"):
-                send_time = MqttForwader._prototime_to_datetime(punches.sending_timestamp)
-            else:
-                send_time = None
-            await self._process_punch(si_punch, mac_addr, now, send_time)
+        for si_punch in punches:
+            await self._process_punch(si_punch, mac_addr, now, None)
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
