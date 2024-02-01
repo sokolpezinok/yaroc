@@ -4,7 +4,7 @@ from itertools import accumulate, chain
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import CellularRocStatus, MessageHandler
+from ..rs import MessageHandler
 
 
 class StatusTracker:
@@ -25,9 +25,6 @@ class StatusTracker:
         else:
             self.epd = None
 
-    def get_cellular_status(self, mac_addr: str) -> CellularRocStatus:
-        return self.message_handler.get_cellular_status(mac_addr)
-
     def generate_info_table(self) -> list[list[str]]:
         def human_time(timestamp: datetime | None) -> str:
             if timestamp is None:
@@ -45,6 +42,7 @@ class StatusTracker:
             return f"{minutes / 60:.1f}h ago"
 
         table = []
+        # TODO: do the chain + serialize inside the Rust code
         for status in chain(
             self.message_handler.cellular_statuses(), self.message_handler.meshtastic_statuses()
         ):

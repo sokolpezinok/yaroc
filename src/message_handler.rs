@@ -3,6 +3,7 @@ use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
 use prost::Message;
+use prost_wkt_types::Timestamp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -11,12 +12,52 @@ use std::fmt;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 
-use crate::protobufs::Punches;
+use crate::protobufs::{status::Msg, Disconnected, Punches, Status};
 use crate::punch::SiPunch;
 use crate::status::{CellularRocStatus, HostInfo, MeshtasticRocStatus, Position};
 
+fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
+    tz.timestamp_opt(posix_time, nanos).unwrap().fixed_offset()
+}
+
+pub enum CellularLogMessage {
+    Disconnected(String),
+    MCH(MiniCallHome),
+}
+
+impl CellularLogMessage {
+    fn timestamp(time: Timestamp) -> DateTime<FixedOffset> {
+        timestamp(time.seconds, time.nanos as u32, &Local)
+    }
+
+    pub fn from_proto(status: Status, mac_addr: &str, name: &str) -> Option<Self> {
+        match status.msg {
+            Some(Msg::Disconnected(Disconnected { client_name })) => {
+                Some(CellularLogMessage::Disconnected(client_name))
+            }
+            Some(Msg::MiniCallHome(mch)) => {
+                let mut log_message = MiniCallHome::new(
+                    name,
+                    mac_addr,
+                    Self::timestamp(mch.time.unwrap()),
+                    Local::now().into(),
+                    mch.volts,
+                );
+                if mch.cellid > 0 {
+                    log_message.cellid = Some(mch.cellid);
+                }
+                log_message.dbm = Some(mch.signal_dbm);
+                log_message.temperature = Some(mch.cpu_temperature);
+                Some(CellularLogMessage::MCH(log_message))
+            }
+            Some(Msg::DevEvent(_)) => None,
+            None => None,
+        }
+    }
+}
+
 #[pyclass]
-pub struct CellularLogMessage {
+pub struct MiniCallHome {
     host_info: HostInfo,
     voltage: f32,
     #[pyo3(set)]
@@ -32,17 +73,20 @@ pub struct CellularLogMessage {
 }
 
 #[pymethods]
-impl CellularLogMessage {
+impl MiniCallHome {
     #[new]
     pub fn new(
-        name: String,
-        mac_address: String,
+        name: &str,
+        mac_address: &str,
         timestamp: DateTime<FixedOffset>,
         now: DateTime<FixedOffset>,
         voltage: f32,
     ) -> Self {
         Self {
-            host_info: HostInfo { name, mac_address },
+            host_info: HostInfo {
+                name: name.to_owned(),
+                mac_address: mac_address.to_owned(),
+            },
             timestamp,
             latency: now - timestamp,
             voltage,
@@ -58,7 +102,9 @@ impl CellularLogMessage {
     }
 }
 
-impl fmt::Display for CellularLogMessage {
+impl MiniCallHome {}
+
+impl fmt::Display for MiniCallHome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
@@ -159,10 +205,8 @@ impl fmt::Display for MshLogMessage {
 }
 
 impl MshLogMessage {
-    fn timestamp<T: TimeZone>(posix_time: u32, tz: &T) -> DateTime<FixedOffset> {
-        tz.timestamp_opt(posix_time as i64, 0)
-            .unwrap()
-            .fixed_offset()
+    pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
+        timestamp(i64::from(posix_time), 0, &Local)
     }
 
     fn parse_inner(
@@ -175,7 +219,7 @@ impl MshLogMessage {
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())?;
-                let timestamp = Self::timestamp(telemetry.time, &Local);
+                let timestamp = Self::timestamp(telemetry.time);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
                         host_info,
@@ -193,12 +237,12 @@ impl MshLogMessage {
                 if position.latitude_i == 0 && position.longitude_i == 0 {
                     return Ok(None);
                 }
-                let timestamp = Self::timestamp(position.time, &Local);
+                let timestamp = Self::timestamp(position.time);
                 let position = Position {
                     lat: position.latitude_i as f32 / 10_000_000.,
                     lon: position.longitude_i as f32 / 10_000_000.,
                     elevation: position.altitude,
-                    timestamp: Self::timestamp(position.time, &Local),
+                    timestamp: Self::timestamp(position.time),
                 };
                 let distance = recv_position
                     .as_ref()
@@ -335,20 +379,10 @@ impl MessageHandler {
             .collect()
     }
 
-    // TODO: this is wrong as it clones the status. It should be refactored
-    pub fn get_cellular_status(&mut self, mac_addr: &str) -> CellularRocStatus {
-        self.cellular_statuses
-            .entry(mac_addr.to_owned())
-            .or_insert(CellularRocStatus::new(
-                self.dns.get(mac_addr).unwrap().to_owned(),
-            ))
-            .clone()
-    }
-
     pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
         let punches =
             Punches::decode(payload).map_err(|_| PyValueError::new_err("Failed to parse proto"))?;
-        let mut status = self.get_cellular_status(mac_addr);
+        let status = self.get_cellular_status(mac_addr);
         let mut result = Vec::new();
         for punch in punches.punches {
             let si_punch = SiPunch::from_proto(punch, mac_addr);
@@ -359,11 +393,33 @@ impl MessageHandler {
         }
         Ok(result)
     }
-}
 
-pub struct PositionName {
-    position: Position,
-    name: String,
+    pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<MiniCallHome> {
+        let status_proto =
+            Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
+        let log_message =
+            CellularLogMessage::from_proto(status_proto, mac_addr, self.dns.get(mac_addr).unwrap())
+                .ok_or(PyValueError::new_err(
+                    "Variants other than MiniCallHome are unimplemented",
+                ))?; // TODO
+
+        let status = self.get_cellular_status(mac_addr);
+        match log_message {
+            CellularLogMessage::MCH(mch) => {
+                status.mqtt_connect_update(
+                    mch.dbm.unwrap_or_default() as i16,
+                    mch.cellid.unwrap_or_default(),
+                );
+                Ok(mch)
+            }
+            CellularLogMessage::Disconnected(_) => {
+                status.disconnect();
+                Err(PyValueError::new_err(
+                    "Variants other than MiniCallHome are unimplemented",
+                ))
+            }
+        }
+    }
 }
 
 impl MessageHandler {
@@ -374,6 +430,19 @@ impl MessageHandler {
             name: status.name.clone(),
         })
     }
+
+    fn get_cellular_status(&mut self, mac_addr: &str) -> &mut CellularRocStatus {
+        self.cellular_statuses
+            .entry(mac_addr.to_owned())
+            .or_insert(CellularRocStatus::new(
+                self.dns.get(mac_addr).unwrap().to_owned(),
+            ))
+    }
+}
+
+pub struct PositionName {
+    position: Position,
+    name: String,
 }
 
 #[cfg(test)]
@@ -381,18 +450,16 @@ mod test_logs {
     use chrono::{DateTime, Duration, FixedOffset};
 
     use crate::{
-        message_handler::RssiSnr,
+        message_handler::{RssiSnr, timestamp},
         status::{HostInfo, Position},
     };
 
-    use super::{CellularLogMessage, MshLogMessage};
+    use super::{MiniCallHome, MshLogMessage};
 
     #[test]
     fn test_timestamp() {
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let timestamp = MshLogMessage::timestamp(1706523131, &tz)
-            .format("%H:%M:%S")
-            .to_string();
+        let timestamp = timestamp(1706523131, 0, &tz).format("%H:%M:%S").to_string();
         assert_eq!("11:12:11", timestamp);
     }
 
@@ -474,7 +541,7 @@ mod test_logs {
     #[test]
     fn test_cellular_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
-        let log_message = CellularLogMessage {
+        let log_message = MiniCallHome {
             host_info: HostInfo {
                 name: "spe01".to_owned(),
                 mac_address: String::new(),

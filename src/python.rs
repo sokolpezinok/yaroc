@@ -56,7 +56,7 @@ pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
     m.add_class::<crate::status::CellularRocStatus>()?;
     m.add_class::<crate::status::MeshtasticRocStatus>()?;
-    m.add_class::<crate::message_handler::CellularLogMessage>()?;
+    m.add_class::<crate::message_handler::MiniCallHome>()?;
     m.add_class::<crate::message_handler::MshLogMessage>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<RaspberryModel>()?;

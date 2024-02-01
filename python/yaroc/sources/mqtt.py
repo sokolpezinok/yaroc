@@ -12,7 +12,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import CellularLogMessage, MessageHandler, SiPunch
+from ..rs import MessageHandler, SiPunch
 from ..utils.status import StatusTracker
 
 BROKER_URL = "broker.hivemq.com"
@@ -111,31 +111,20 @@ class MqttForwader:
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
+            log_message = self.handler.status_update(
+                MqttForwader._payload_to_bytes(payload), mac_addr
+            )
             status = StatusProto.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
-            logging.error(f"Error while parsing protobuf: {err}")
+            logging.error(f"Error while constructing status proto: {err}")
             return
+
         name = self._resolve(mac_addr)
         oneof = status.WhichOneof("msg")
-        roc_status = self.tracker.get_cellular_status(mac_addr)
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
-            roc_status.disconnect()
         elif oneof == "mini_call_home":
-            mch = status.mini_call_home
-            orig_time = MqttForwader._prototime_to_datetime(mch.time)
-
-            log_message = CellularLogMessage(name, mac_addr, orig_time, now, mch.volts)
-            log_message.temperature = mch.cpu_temperature
-            if mch.cellid > 0:
-                log_message.dbm = mch.signal_dbm
-                log_message.cellid = mch.cellid
-                roc_status.mqtt_connect_update(mch.signal_dbm, mch.cellid)
-            elif mch.signal_dbm != 0:
-                log_message.dbm = mch.signal_dbm
-                roc_status.mqtt_connect_update(mch.signal_dbm, 0)
             logging.info(log_message)
-            status.mini_call_home.CopyFrom(mch)
             await self.client_group.send_status(status, mac_addr)
         elif oneof == "dev_event":
             logging.info(f"{name} {status.dev_event}")
