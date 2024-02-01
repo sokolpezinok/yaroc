@@ -6,14 +6,10 @@ use std::collections::HashMap;
 use chrono::prelude::*;
 use chrono::DateTime;
 
-use crate::logs::CellularLogMessage;
-use crate::logs::HostInfo;
-use crate::logs::MiniCallHome;
-use crate::logs::MshLogMessage;
-use crate::logs::PositionName;
-use crate::logs::RssiSnr;
-use crate::protobufs::Punches;
-use crate::protobufs::Status;
+use crate::logs::{
+    CellularLogMessage, HostInfo, MiniCallHome, MshLogMessage, PositionName, RssiSnr,
+};
+use crate::protobufs::{Punches, Status};
 use crate::punch::SiPunch;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 
@@ -131,6 +127,9 @@ impl MessageHandler {
                     "Variants other than MiniCallHome are unimplemented",
                 ))
             }
+            _ => Err(PyValueError::new_err(
+                "Variants other than MiniCallHome are unimplemented",
+            )),
         }
     }
 }

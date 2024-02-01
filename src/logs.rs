@@ -10,7 +10,8 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::protobufs::{status::Msg, Disconnected, Status};
+use crate::protobufs::EventType;
+use crate::protobufs::{status::Msg, DeviceEvent, Disconnected, Status};
 use crate::status::Position;
 
 fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
@@ -20,6 +21,7 @@ fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<Fixed
 pub enum CellularLogMessage {
     Disconnected(String),
     MCH(MiniCallHome),
+    DeviceEvent(String, bool),
 }
 
 impl CellularLogMessage {
@@ -47,7 +49,9 @@ impl CellularLogMessage {
                 log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
             }
-            Some(Msg::DevEvent(_)) => None,
+            Some(Msg::DevEvent(DeviceEvent { port, r#type })) => Some(
+                CellularLogMessage::DeviceEvent(port, r#type == EventType::Added as i32),
+            ),
             None => None,
         }
     }
