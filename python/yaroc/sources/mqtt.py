@@ -13,7 +13,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import Status as StatusProto
 from ..rs import MessageHandler, SiPunch
-from ..utils.status import StatusTracker
+from ..utils.status import StatusDrawer
 
 BROKER_URL = "broker.hivemq.com"
 BROKER_PORT = 1883
@@ -33,7 +33,7 @@ class MqttForwader:
         self.meshtastic_mac_addr = meshtastic_mac_addr
         self.meshtastic_channel = meshtastic_channel
         self.handler = MessageHandler.new(dns)
-        self.tracker = StatusTracker(self.handler, display_model)
+        self.drawer = StatusDrawer(self.handler, display_model)
 
     @staticmethod
     def _prototime_to_datetime(prototime: Timestamp) -> datetime:
@@ -163,7 +163,7 @@ class MqttForwader:
         await asyncio.sleep(20.0)
         while True:
             time_start = time.time()
-            self.tracker.draw_status()  # Move to another thread
+            self.drawer.draw_status()  # Move to another thread
             await asyncio.sleep(60 - (time.time() - time_start))
 
     async def loop(self):

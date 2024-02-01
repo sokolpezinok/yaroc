@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..rs import MessageHandler
 
 
-class StatusTracker:
+class StatusDrawer:
     """Class for tracking the status of all nodes"""
 
     def __init__(
@@ -42,11 +42,7 @@ class StatusTracker:
             return f"{minutes / 60:.1f}h ago"
 
         table = []
-        # TODO: do the chain + serialize inside the Rust code
-        for status in chain(
-            self.message_handler.cellular_statuses(), self.message_handler.meshtastic_statuses()
-        ):
-            node_info = status.serialize()
+        for node_info in self.message_handler.node_infos():
             table.append(
                 [
                     node_info.name,
@@ -105,7 +101,7 @@ class StatusTracker:
         if self.epd is None:
             return
         logging.info("Drawing new status table")
-        image = StatusTracker.draw_table(
+        image = StatusDrawer.draw_table(
             [
                 ["name", "dBm", "code", "last info", "last punch"],
             ]

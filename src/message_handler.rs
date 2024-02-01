@@ -14,7 +14,7 @@ use chrono::{DateTime, Duration};
 
 use crate::protobufs::{status::Msg, Disconnected, Punches, Status};
 use crate::punch::SiPunch;
-use crate::status::{CellularRocStatus, HostInfo, MeshtasticRocStatus, Position};
+use crate::status::{CellularRocStatus, HostInfo, MeshtasticRocStatus, NodeInfo, Position};
 
 fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
     tz.timestamp_opt(posix_time, nanos).unwrap().fixed_offset()
@@ -101,8 +101,6 @@ impl MiniCallHome {
         format!("{self}")
     }
 }
-
-impl MiniCallHome {}
 
 impl fmt::Display for MiniCallHome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -365,17 +363,15 @@ impl MessageHandler {
         msh_log_message
     }
 
-    pub fn meshtastic_statuses(&self) -> Vec<MeshtasticRocStatus> {
+    pub fn node_infos(&self) -> Vec<NodeInfo> {
         self.meshtastic_statuses
             .values()
-            .map(|status| status.clone())
-            .collect()
-    }
-
-    pub fn cellular_statuses(&self) -> Vec<CellularRocStatus> {
-        self.cellular_statuses
-            .values()
-            .map(|status| status.clone())
+            .map(|status| status.serialize())
+            .chain(
+                self.cellular_statuses
+                    .values()
+                    .map(|status| status.serialize()),
+            )
             .collect()
     }
 
@@ -406,10 +402,10 @@ impl MessageHandler {
         let status = self.get_cellular_status(mac_addr);
         match log_message {
             CellularLogMessage::MCH(mch) => {
-                status.mqtt_connect_update(
-                    mch.dbm.unwrap_or_default() as i16,
-                    mch.cellid.unwrap_or_default(),
-                );
+                if let Some(dbm) = mch.dbm {
+                    status.mqtt_connect_update(dbm as i16, mch.cellid.unwrap_or_default());
+                }
+                status.update_voltage(f64::from(mch.voltage));
                 Ok(mch)
             }
             CellularLogMessage::Disconnected(_) => {
@@ -450,7 +446,7 @@ mod test_logs {
     use chrono::{DateTime, Duration, FixedOffset};
 
     use crate::{
-        message_handler::{RssiSnr, timestamp},
+        message_handler::{timestamp, RssiSnr},
         status::{HostInfo, Position},
     };
 

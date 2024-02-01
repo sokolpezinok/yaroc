@@ -41,8 +41,6 @@ impl Position {
 #[derive(Clone)]
 enum CellularConnectionState {
     Unknown,
-    Unregistered,
-    Registered(i16, u32),
     MqttConnected(i16, u32),
 }
 
@@ -50,17 +48,6 @@ impl Default for CellularConnectionState {
     fn default() -> CellularConnectionState {
         CellularConnectionState::Unknown
     }
-}
-
-#[derive(Default, Clone)]
-#[pyclass]
-pub struct CellularRocStatus {
-    pub name: String,
-    state: CellularConnectionState,
-    voltage: Option<f64>,
-    codes: HashSet<u16>,
-    last_update: Option<DateTime<FixedOffset>>,
-    last_punch: Option<DateTime<FixedOffset>>,
 }
 
 #[pyclass]
@@ -77,9 +64,17 @@ pub struct NodeInfo {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-#[pymethods]
+#[derive(Default, Clone)]
+pub struct CellularRocStatus {
+    pub name: String,
+    state: CellularConnectionState,
+    voltage: Option<f64>,
+    codes: HashSet<u16>,
+    last_update: Option<DateTime<FixedOffset>>,
+    last_punch: Option<DateTime<FixedOffset>>,
+}
+
 impl CellularRocStatus {
-    #[staticmethod]
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -111,7 +106,6 @@ impl CellularRocStatus {
             name: self.name.clone(),
             dbm: match self.state {
                 CellularConnectionState::MqttConnected(dbm, _) => Some(dbm),
-                CellularConnectionState::Registered(dbm, _) => Some(dbm),
                 _ => None,
             },
             codes: self.codes.iter().map(|x| *x).collect(),
@@ -121,7 +115,6 @@ impl CellularRocStatus {
     }
 }
 
-#[pyclass]
 #[derive(Default, Clone)]
 pub struct MeshtasticRocStatus {
     pub name: String,
@@ -133,9 +126,7 @@ pub struct MeshtasticRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-#[pymethods]
 impl MeshtasticRocStatus {
-    #[staticmethod]
     pub fn new(name: String) -> Self {
         Self {
             name,
