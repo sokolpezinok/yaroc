@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.64" # Because of dependencies
 
+[build-dependencies]
+prost-build = "0.12.3"
+protoc-bin-vendored = "3.0.0"
+walkdir = "2.3.2"
+
 [dependencies]
 chrono = "0.4.31"
 geoutils = "0.5.1"
