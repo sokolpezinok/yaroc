@@ -249,9 +249,8 @@ class FakeSiWorker(SiWorker):
         del _status_queue
         for i in range(31, 1000):
             time_start = time.time()
-            punch = SiPunch.new(
-                46283, i, datetime.now().astimezone(), 18, HostInfo.new("fake", self.mac_addr)
-            )
+            now = datetime.now().astimezone()
+            punch = SiPunch.new(46283, i, now, 18, HostInfo.new("fake", self.mac_addr), now)
             await self.process_punch(punch, queue)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 

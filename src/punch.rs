@@ -39,12 +39,13 @@ impl SiPunch {
         time: DateTime<FixedOffset>,
         mode: u8,
         host_info: HostInfo,
+        now: DateTime<FixedOffset>,
     ) -> Self {
         Self {
             card,
             code,
             time,
-            latency: Local::now().fixed_offset() - time,
+            latency: now - time,
             mode,
             host_info,
             raw: Self::punch_to_bytes(code, time, card, mode),
@@ -229,7 +230,7 @@ mod test_checksum {
 
 #[cfg(test)]
 mod test_punch {
-    use chrono::prelude::*;
+    use chrono::{prelude::*, Duration};
 
     use crate::{logs::HostInfo, punch::SiPunch};
 
@@ -294,8 +295,18 @@ mod test_punch {
             name: "ROC1".to_owned(),
             mac_address: "abcdef123456".to_owned(),
         };
-        let punch = SiPunch::new(46283, 47, time, 1, host_info);
+        let punch = SiPunch::new(
+            46283,
+            47,
+            time,
+            1,
+            host_info,
+            time + Duration::milliseconds(2831),
+        );
 
-        assert_eq!(format!("{punch}"), "ROC1 46283 punched 47 at 10:00:03.793");
+        assert_eq!(
+            format!("{punch}"),
+            "ROC1 46283 punched 47 at 10:00:03.793, latency 2.83s"
+        );
     }
 }

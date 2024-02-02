@@ -8,7 +8,7 @@ from yaroc.sources.si import UdevSiFactory
 class TestSportident(unittest.TestCase):
     def test_new(self):
         t = datetime(2023, 11, 23, 10, 0, 3, 792969).astimezone()
-        punch = SiPunch.new(1715004, 47, t, 2, HostInfo.new("name", "abcdef123456"))
+        punch = SiPunch.new(1715004, 47, t, 2, HostInfo.new("name", "abcdef123456"), t)
         self.assertEqual(
             bytes(punch.raw),
             b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01P\xe3\x03",
