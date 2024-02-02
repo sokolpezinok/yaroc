@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::logs::HostInfo;
 use crate::protobufs::Punch;
-use chrono::{prelude::*, Days};
+use chrono::{prelude::*, Days, Duration};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::PortNum;
 use meshtastic::protobufs::{Data, ServiceEnvelope};
@@ -22,6 +22,7 @@ pub struct SiPunch {
     mode: u8,
     #[pyo3(get)]
     pub host_info: HostInfo,
+    latency: Duration,
     #[pyo3(get)]
     raw: [u8; 20],
 }
@@ -43,6 +44,7 @@ impl SiPunch {
             card,
             code,
             time,
+            latency: Local::now().fixed_offset() - time,
             mode,
             host_info,
             raw: Self::punch_to_bytes(code, time, card, mode),
@@ -65,6 +67,7 @@ impl SiPunch {
             card,
             code,
             time: datetime,
+            latency: Local::now().fixed_offset() - datetime,
             mode: data[4] & 0b1111,
             host_info: host_info.clone(),
             raw: payload,
@@ -201,15 +204,9 @@ impl fmt::Display for SiPunch {
             "{} {} punched {} ",
             self.host_info.name, self.card, self.code
         )?;
-        write!(f, "at {}", self.time.format("%H:%M:%S.%3f"))
-        // TODO:
-        // if send_time is None:
-        //     log_message += f"latency {(now - punch.time).total_seconds():6.2f}s"
-        // else:
-        //     log_message += (
-        //         f"sent {send_time:%H:%M:%S.%f}, network latency "
-        //         f"{(now - send_time).total_seconds():6.2f}s"
-        //     )
+        write!(f, "at {}", self.time.format("%H:%M:%S.%3f"))?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)
     }
 }
 
