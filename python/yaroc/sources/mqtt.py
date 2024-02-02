@@ -11,7 +11,8 @@ from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import Status as StatusProto, EventType
+from ..pb.status_pb2 import EventType
+from ..pb.status_pb2 import Status as StatusProto
 from ..rs import MessageHandler, SiPunch
 from ..utils.status import StatusDrawer
 
@@ -103,7 +104,7 @@ class MqttForwader:
                 log_message = self.handler.status_update(
                     MqttForwader._payload_to_bytes(payload), mac_addr
                 )
-            except Exception as err:
+            except Exception:
                 pass
             logging.info(log_message)
             await self.client_group.send_status(status, mac_addr)
