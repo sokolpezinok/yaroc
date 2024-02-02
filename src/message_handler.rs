@@ -29,19 +29,25 @@ impl MessageHandler {
             dns,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
-            meshtastic_override_mac
+            meshtastic_override_mac,
         }
+    }
+
+    fn resolve(&self, mac_addr: &str) -> &str {
+        self.dns
+            .get(mac_addr)
+            .map(|x| x.as_str())
+            .unwrap_or("Unknown")
     }
 
     pub fn msh_serial_msg(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
         let mut punch = SiPunch::from_msh_serial(payload)?;
         let mac_addr = &punch.host_info.mac_address;
+        let name = self.resolve(mac_addr).to_owned();
         let status = self
             .meshtastic_statuses
             .entry(mac_addr.to_owned())
-            .or_insert(MeshtasticRocStatus::new(
-                self.dns.get(mac_addr).unwrap().to_owned(),
-            ));
+            .or_insert(MeshtasticRocStatus::new(name));
         status.punch(&punch);
         punch.host_info.mac_address = self.meshtastic_override_mac.clone();
 
@@ -91,7 +97,7 @@ impl MessageHandler {
         let punches =
             Punches::decode(payload).map_err(|_| PyValueError::new_err("Failed to parse proto"))?;
         let host_info: HostInfo = HostInfo {
-            name: self.dns.get(mac_addr).unwrap().clone(),
+            name: self.resolve(mac_addr).to_owned(),
             mac_address: mac_addr.to_owned(),
         };
         let status = self.get_cellular_status(mac_addr);
@@ -110,10 +116,10 @@ impl MessageHandler {
         let status_proto =
             Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
         let log_message =
-            CellularLogMessage::from_proto(status_proto, mac_addr, self.dns.get(mac_addr).unwrap())
+            CellularLogMessage::from_proto(status_proto, mac_addr, &self.resolve(&mac_addr))
                 .ok_or(PyValueError::new_err(
                     "Variants other than MiniCallHome are unimplemented",
-                ))?; // TODO
+                ))?;
 
         let status = self.get_cellular_status(mac_addr);
         match log_message {
@@ -147,10 +153,9 @@ impl MessageHandler {
     }
 
     fn get_cellular_status(&mut self, mac_addr: &str) -> &mut CellularRocStatus {
+        let name = self.resolve(mac_addr).to_owned();
         self.cellular_statuses
             .entry(mac_addr.to_owned())
-            .or_insert(CellularRocStatus::new(
-                self.dns.get(mac_addr).unwrap().to_owned(),
-            ))
+            .or_insert(CellularRocStatus::new(name))
     }
 }
