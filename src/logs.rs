@@ -38,7 +38,7 @@ impl CellularLogMessage {
                 let mut log_message = MiniCallHome::new(
                     name,
                     mac_addr,
-                    Self::timestamp(mch.time.unwrap()),
+                    Self::timestamp(mch.time?),
                     Local::now().into(),
                     mch.volts,
                 );
@@ -278,7 +278,10 @@ impl MshLogMessage {
                     .map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
                     rssi_snr.as_mut().map(|rssi_snr| {
-                        rssi_snr.add_distance(distance as f32, recv_position.unwrap().name)
+                        rssi_snr.add_distance(
+                            distance as f32,
+                            recv_position.map(|x| x.name).unwrap_or_default(),
+                        )
                     });
                 }
 
@@ -312,7 +315,10 @@ impl MshLogMessage {
                 ..
             }) => {
                 let mac_address = format!("{:8x}", from);
-                let name = dns.get(&mac_address).unwrap();
+                let name = dns
+                    .get(&mac_address)
+                    .map(|x| x.as_str())
+                    .unwrap_or("Unknown");
                 Self::parse_inner(
                     data,
                     HostInfo {

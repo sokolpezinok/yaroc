@@ -92,7 +92,9 @@ impl SiPunch {
                 payload,
                 ..
             })) => Ok(Self::from_raw(
-                payload.try_into().unwrap(),
+                payload.try_into().map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "Wrong length of payload")
+                })?,
                 HostInfo {
                     name: String::new(),
                     mac_address: mac_addr.clone(),
