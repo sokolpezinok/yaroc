@@ -247,36 +247,20 @@ mod test_punch {
 
     #[test]
     fn test_time_to_bytes() {
-        let time = NaiveDateTime::new(
-            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
-            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
-        )
-        .and_local_timezone(Local)
-        .unwrap()
-        .fixed_offset();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
 
-        let time = NaiveDateTime::new(
-            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
-            NaiveTime::from_hms_milli_opt(10, 0, 3, 999).unwrap(),
-        )
-        .and_local_timezone(Local)
-        .unwrap()
-        .fixed_offset();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.999+01:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xff]);
     }
 
     #[test]
     fn test_punch() {
-        let tz = FixedOffset::east_opt(7200).unwrap();
-        let time = NaiveDateTime::new(
-            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
-            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
-        )
-        .and_local_timezone(tz)
-        .unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let bytes = SiPunch::time_to_bytes(time);
+        assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
         let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
         assert_eq!(
             &punch,
@@ -286,13 +270,7 @@ mod test_punch {
 
     #[test]
     fn test_display() {
-        let tz = FixedOffset::east_opt(7200).unwrap();
-        let time = NaiveDateTime::new(
-            NaiveDate::from_ymd_opt(2023, 11, 23).unwrap(),
-            NaiveTime::from_hms_milli_opt(10, 0, 3, 793).unwrap(),
-        )
-        .and_local_timezone(tz)
-        .unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let host_info = HostInfo {
             name: "ROC1".to_owned(),
             mac_address: "abcdef123456".to_owned(),
