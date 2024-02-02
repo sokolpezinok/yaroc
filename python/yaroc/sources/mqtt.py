@@ -11,7 +11,7 @@ from aiomqtt.types import PayloadType
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import Status as StatusProto
+from ..pb.status_pb2 import Status as StatusProto, EventType
 from ..rs import MessageHandler, SiPunch
 from ..utils.status import StatusDrawer
 
@@ -89,12 +89,9 @@ class MqttForwader:
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
-            log_message = self.handler.status_update(
-                MqttForwader._payload_to_bytes(payload), mac_addr
-            )
             status = StatusProto.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
-            logging.error(f"Error while constructing status proto: {err}")
+            logging.error(err)
             return
 
         name = self._resolve(mac_addr)
@@ -102,10 +99,16 @@ class MqttForwader:
         if oneof == "disconnected":
             logging.info(f"Disconnected {status.disconnected.client_name}")
         elif oneof == "mini_call_home":
+            try:
+                log_message = self.handler.status_update(
+                    MqttForwader._payload_to_bytes(payload), mac_addr
+                )
+            except Exception as err:
+                pass
             logging.info(log_message)
             await self.client_group.send_status(status, mac_addr)
         elif oneof == "dev_event":
-            logging.info(f"{name} {status.dev_event}")
+            logging.info(f"{name} {status.dev_event.port} {EventType.Name(status.dev_event.type)}")
             await self.client_group.send_status(status, mac_addr)
 
     @staticmethod
