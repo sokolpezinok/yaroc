@@ -3,6 +3,9 @@ from enum import IntEnum
 from typing import ClassVar as _ClassVar
 from typing import Dict
 
+class HostInfo(object):
+    mac_address: str
+
 class SiPunch(object):
     CARD_FIELD_NUMBER: _ClassVar[int]
     CODE_FIELD_NUMBER: _ClassVar[int]
@@ -12,7 +15,7 @@ class SiPunch(object):
     code: int
     time: datetime
     mode: int
-    mac_addr: str
+    host_info: HostInfo
     raw: bytes
 
     @staticmethod
@@ -58,10 +61,11 @@ class MiniCallHome(object):
     def __repr__(self) -> str: ...
 
 class MessageHandler(object):
-    def __init__(self, dns: Dict[str, str]): ...
-    def msh_serial_update(self, payload: bytes) -> SiPunch: ...
+    def new(dns: Dict[str, str], meshtastic_override_mac: str): ...
+    def msh_serial_msg(self, payload: bytes) -> SiPunch: ...
     def msh_status_update(
         self, payload: bytes, now: datetime, recv_mac_address: str
     ) -> MshLogMessage | None: ...
     def punches(self, payload: bytes, mac_address: str) -> list[SiPunch]: ...
     def status_update(self, payload: bytes, mac_address: str) -> MiniCallHome | None: ...
+    def node_infos(self) -> list[NodeInfo]: ...

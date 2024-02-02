@@ -18,21 +18,23 @@ pub struct MessageHandler {
     dns: HashMap<String, String>,
     cellular_statuses: HashMap<String, CellularRocStatus>,
     meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
+    meshtastic_override_mac: String,
 }
 
 #[pymethods]
 impl MessageHandler {
     #[staticmethod]
-    pub fn new(dns: HashMap<String, String>) -> Self {
+    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: String) -> Self {
         Self {
             dns,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
+            meshtastic_override_mac
         }
     }
 
-    pub fn msh_serial_update(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
-        let punch = SiPunch::from_msh_serial(payload)?;
+    pub fn msh_serial_msg(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
+        let mut punch = SiPunch::from_msh_serial(payload)?;
         let mac_addr = &punch.host_info.mac_address;
         let status = self
             .meshtastic_statuses
@@ -41,6 +43,7 @@ impl MessageHandler {
                 self.dns.get(mac_addr).unwrap().to_owned(),
             ));
         status.punch(&punch);
+        punch.host_info.mac_address = self.meshtastic_override_mac.clone();
 
         Ok(punch)
     }

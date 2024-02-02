@@ -30,9 +30,8 @@ class MqttForwader:
     ):
         self.client_group = client_group
         self.dns = dns
-        self.meshtastic_mac_addr = meshtastic_mac_addr
         self.meshtastic_channel = meshtastic_channel
-        self.handler = MessageHandler.new(dns)
+        self.handler = MessageHandler.new(dns, meshtastic_mac_addr)
         self.drawer = StatusDrawer(self.handler, display_model)
 
     @staticmethod
@@ -53,16 +52,8 @@ class MqttForwader:
             return self.dns[mac_addr]
         return f"MAC {mac_addr}"
 
-    async def _process_punch(
-        self,
-        punch: SiPunch,
-        now: datetime,
-        send_time: datetime | None = None,
-        override_mac: str | None = None,
-    ):
+    async def _process_punch(self, punch: SiPunch):
         logging.info(punch)
-        if override_mac is not None:  # TODO: Move to Rustne:
-            punch.host_info.mac_addr = override_mac
         await self.client_group.send_punch(punch)
 
     async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
@@ -73,7 +64,7 @@ class MqttForwader:
             return
 
         for si_punch in punches:
-            await self._process_punch(si_punch, now, None)
+            await self._process_punch(si_punch)
 
     async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
         try:
@@ -82,7 +73,7 @@ class MqttForwader:
             logging.error(f"Error while constructing SI punch: {err}")
             return
 
-        await self._process_punch(punch, now, override_mac=self.meshtastic_mac_addr)
+        await self._process_punch(punch)
 
     async def _handle_meshtastic_status(
         self, recv_mac_addr: str, payload: PayloadType, now: datetime
