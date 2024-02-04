@@ -200,6 +200,7 @@ class SIM7020MqttClient(Client):
                     (dbm, cellid, snr) = res
                     mch = status.mini_call_home
                     mch.signal_dbm = dbm
+                    mch.signal_snr = snr
                     mch.cellid = cellid
                     mch.network_type = NetworkType.NbIot
 
