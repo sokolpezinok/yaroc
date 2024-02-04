@@ -212,8 +212,8 @@ class SIM7020Interface:
             return True
         return "MQTT send unsuccessful"
 
-    async def get_signal_info(self) -> tuple[int, int] | None:
-        response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3])
+    async def get_signal_info(self) -> tuple[int, int, int] | None:
+        response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3, 7])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             await self.power_on()
         try:
@@ -224,7 +224,7 @@ class SIM7020Interface:
                     logging.error(f"Failed to parse cell ID {response.query[1]}")
                     return None
 
-                return (int(response.query[0]), cellid)
+                return (int(response.query[0]), cellid, int(response.query[2]))
             return None
         except Exception as err:
             logging.error(f"Error getting signal dBm {err}")
