@@ -1599,7 +1599,6 @@ dependencies = [
  "prost-wkt",
  "prost-wkt-build",
  "prost-wkt-types",
- "protoc-bin-vendored",
  "pyo3",
  "regex",
  "serde",
