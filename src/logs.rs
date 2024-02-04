@@ -453,13 +453,14 @@ mod test_logs {
             latency: Duration::milliseconds(1390),
             voltage: 1.26,
             dbm: Some(-87),
+            snr: Some(7),
             cellid: Some(2580590),
             cpu_frequency: None,
             temperature: Some(51.54),
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, -87dBm, cell 27606E, 1.26V, latency 1.39s"
+            "spe01 17:40:43: 51.5°C, -87dBm 7 SNR, cell 27606E, 1.26V, latency 1.39s"
         );
     }
 }
