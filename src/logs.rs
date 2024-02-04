@@ -45,7 +45,8 @@ impl CellularLogMessage {
                 if mch.cellid > 0 {
                     log_message.cellid = Some(mch.cellid);
                 }
-                log_message.dbm = Some(mch.signal_dbm);
+                log_message.dbm = Some(i16::try_from(mch.signal_dbm).ok()?);
+                log_message.snr = Some(i16::try_from(mch.signal_snr).ok()?);
                 log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
             }
@@ -80,7 +81,8 @@ impl HostInfo {
 pub struct MiniCallHome {
     host_info: HostInfo,
     pub voltage: f32,
-    pub dbm: Option<i32>,
+    pub dbm: Option<i16>,
+    pub snr: Option<i16>,
     pub cellid: Option<u32>,
     temperature: Option<f32>,
     #[allow(dead_code)]
@@ -110,6 +112,7 @@ impl MiniCallHome {
             cpu_frequency: None,
             temperature: None,
             dbm: None,
+            snr: None,
             cellid: None,
         }
     }
@@ -128,6 +131,9 @@ impl fmt::Display for MiniCallHome {
         }
         if let Some(dbm) = &self.dbm {
             write!(f, ", {dbm}dBm")?;
+            if let Some(snr) = &self.snr {
+                write!(f, " {snr} SNR")?;
+            }
         }
         if let Some(cellid) = &self.cellid {
             write!(f, ", cell {cellid:X}")?;
