@@ -47,7 +47,7 @@ impl Default for CellularConnectionState {
 #[pyclass]
 pub struct NodeInfo {
     #[pyo3(get)]
-    name: String,
+    pub name: String,
     #[pyo3(get)]
     dbm: Option<i16>,
     #[pyo3(get)]

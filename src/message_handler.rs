@@ -80,7 +80,8 @@ impl MessageHandler {
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {
-        self.meshtastic_statuses
+        let mut res: Vec<_> = self
+            .meshtastic_statuses
             .values()
             .map(|status| status.serialize())
             .chain(
@@ -88,7 +89,9 @@ impl MessageHandler {
                     .values()
                     .map(|status| status.serialize()),
             )
-            .collect()
+            .collect();
+        res.sort_by(|a, b| a.name.cmp(&b.name));
+        res
     }
 
     pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
