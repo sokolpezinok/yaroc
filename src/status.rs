@@ -35,7 +35,7 @@ impl Position {
 #[derive(Clone)]
 enum CellularConnectionState {
     Unknown,
-    MqttConnected(i16, u32),
+    MqttConnected(i16, u32, Option<i16>),
 }
 
 impl Default for CellularConnectionState {
@@ -85,8 +85,8 @@ impl CellularRocStatus {
         self.voltage = Some(voltage);
     }
 
-    pub fn mqtt_connect_update(&mut self, dbm: i16, cellid: u32) {
-        self.state = CellularConnectionState::MqttConnected(dbm, cellid);
+    pub fn mqtt_connect_update(&mut self, dbm: i16, cellid: u32, snr: Option<i16>) {
+        self.state = CellularConnectionState::MqttConnected(dbm, cellid, snr);
         self.last_update = Some(Local::now().into());
     }
 
@@ -99,7 +99,7 @@ impl CellularRocStatus {
         NodeInfo {
             name: self.name.clone(),
             dbm: match self.state {
-                CellularConnectionState::MqttConnected(dbm, _) => Some(dbm),
+                CellularConnectionState::MqttConnected(dbm, _, _) => Some(dbm),
                 _ => None,
             },
             codes: self.codes.iter().map(|x| *x).collect(),

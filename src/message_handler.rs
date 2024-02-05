@@ -125,7 +125,7 @@ impl MessageHandler {
         match log_message {
             CellularLogMessage::MCH(mch) => {
                 if let Some(dbm) = mch.dbm {
-                    status.mqtt_connect_update(dbm as i16, mch.cellid.unwrap_or_default());
+                    status.mqtt_connect_update(dbm as i16, mch.cellid.unwrap_or_default(), mch.snr);
                 }
                 status.update_voltage(f64::from(mch.voltage));
                 Ok(mch)
