@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use chrono::prelude::*;
 use geoutils::Location;
 
-use crate::punch::SiPunch;
+use crate::{logs::RssiSnr, punch::SiPunch};
 
 #[derive(Clone, Debug)]
 pub struct Position {
@@ -50,6 +50,8 @@ pub struct NodeInfo {
     name: String,
     #[pyo3(get)]
     dbm: Option<i16>,
+    #[pyo3(get)]
+    snr: Option<f32>,
     #[pyo3(get)]
     codes: Vec<u16>,
     #[pyo3(get)]
@@ -102,6 +104,10 @@ impl CellularRocStatus {
                 CellularConnectionState::MqttConnected(dbm, _, _) => Some(dbm),
                 _ => None,
             },
+            snr: match self.state {
+                CellularConnectionState::MqttConnected(_, _, snr) => snr.map(|x| f32::from(x)),
+                _ => None,
+            },
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
@@ -113,7 +119,7 @@ impl CellularRocStatus {
 pub struct MeshtasticRocStatus {
     pub name: String,
     battery: Option<u32>,
-    dbm: Option<i16>,
+    rssi_snr: Option<RssiSnr>,
     pub position: Option<Position>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
@@ -133,8 +139,8 @@ impl MeshtasticRocStatus {
         self.last_update = Some(Local::now().into());
     }
 
-    pub fn update_dbm(&mut self, dbm: i16) {
-        self.dbm = Some(dbm);
+    pub fn update_dbm(&mut self, rssi_snr: RssiSnr) {
+        self.rssi_snr = Some(rssi_snr);
         self.last_update = Some(Local::now().into());
     }
 
@@ -146,7 +152,8 @@ impl MeshtasticRocStatus {
     pub fn serialize(&self) -> NodeInfo {
         NodeInfo {
             name: self.name.clone(),
-            dbm: self.dbm,
+            dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
+            snr: self.rssi_snr.as_ref().map(|x| x.snr),
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,

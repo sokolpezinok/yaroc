@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use chrono::prelude::*;
 use chrono::DateTime;
 
-use crate::logs::{
-    CellularLogMessage, HostInfo, MiniCallHome, MshLogMessage, PositionName, RssiSnr,
-};
+use crate::logs::{CellularLogMessage, HostInfo, MiniCallHome, MshLogMessage, PositionName};
 use crate::protobufs::{Punches, Status};
 use crate::punch::SiPunch;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
@@ -71,8 +69,8 @@ impl MessageHandler {
             if let Some(position) = log_message.position.as_ref() {
                 status.position = Some(position.clone())
             }
-            if let Some(RssiSnr { rssi_dbm, .. }) = log_message.rssi_snr.as_ref() {
-                status.update_dbm(*rssi_dbm);
+            if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
+                status.update_dbm(rssi_snr.clone());
             }
             if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
                 status.update_battery(*battery);
