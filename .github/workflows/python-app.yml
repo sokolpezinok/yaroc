@@ -27,7 +27,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m venv .venv
-        sudo apt update && sudo apt install -y cargo libudev-dev protobuf-compiler
+        sudo apt update && sudo apt install -y cargo libudev-dev protobuf-compiler libdbus-1-dev pkg-config
     - name: Rust
       run: |
         source .venv/bin/activate
