@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -28,6 +29,13 @@ class NetworkType:
     Umts = 3
     Lte = 4
     Nr5g = 5
+
+
+@dataclass
+class NetworkState:
+    type: NetworkType = NetworkType.Unknown
+    rssi: float | None = None
+    snr: float | None = None
 
 
 class ModemManager:
@@ -94,19 +102,22 @@ class ModemManager:
         )
         await interface.call_setup(rate_secs)
 
-    async def get_signal(self, modem_path: str) -> tuple[float, int]:
+    async def get_signal(self, modem_path: str) -> NetworkState:
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
         lte = await interface.get_lte()
         if "rssi" in lte:
-            return (lte["rssi"].value, NetworkType.Lte)
+            return NetworkState(NetworkType.Lte, lte["rssi"].value, lte["snr"].value)
         umts = await interface.get_umts()
         if "rssi" in umts:
-            return (umts["rssi"].value, NetworkType.Umts)
+            return NetworkState(NetworkType.Umts, umts["rssi"].value, None)
         gsm = await interface.get_gsm()
         if "rssi" in gsm:
-            return (umts["gsm"].value, NetworkType.Gsm)
+            return NetworkState(NetworkType.Gsm, gsm["rssi"].value, None)
+        nr5g = await interface.get_nr5g()
+        if "rssi" in nr5g:
+            return NetworkState(NetworkType.Lte, nr5g["rssi"].value, nr5g["snr"].value)
 
         logging.error("Error getting signal")
-        return (0.0, NetworkType.Unknown)
+        return NetworkState(NetworkType.Unknown, None, None)
