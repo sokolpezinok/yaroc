@@ -100,10 +100,13 @@ class MqttClient(Client):
             if status.WhichOneof("msg") == "mini_call_home":
                 modems = await self.mm.get_modems()
                 if len(modems) > 0:
-                    (signal, network_type) = await self.mm.get_signal(modems[0])
-                    status.mini_call_home.signal_dbm = round(signal)
-                    status.mini_call_home.network_type = network_type
-                    if abs(signal) < 1 and random.randint(0, 10) == 7:
+                    network_state = await self.mm.get_signal(modems[0])
+                    if network_state.rssi is not None:
+                        status.mini_call_home.signal_dbm = round(network_state.rssi)
+                    if network_state.snr is not None:
+                        status.mini_call_home.signal_snr = round(network_state.snr)
+                    status.mini_call_home.network_type = network_state.type
+                    if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
                         await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
             logging.error(f"Error while getting signal strength: {e}")
