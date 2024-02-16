@@ -145,6 +145,7 @@ class SIM7020MqttClient(Client):
 
     def __init__(
         self,
+        hostname: str,
         mac_address: str,
         async_at: AsyncATCom,
         name_prefix: str = "SIM7020",
@@ -153,7 +154,7 @@ class SIM7020MqttClient(Client):
         broker_port: int = 1883,
     ):
         self.topics = Topics.from_mac(mac_address)
-        name = f"{name_prefix}-{mac_address}"
+        name = f"{name_prefix}-{hostname}"
         self._sim7020 = SIM7020Interface(
             async_at,
             self.topics.status,

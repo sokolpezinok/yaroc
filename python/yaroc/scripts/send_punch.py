@@ -97,7 +97,7 @@ async def main():
     container.config.from_dict(config)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container", __name__])
-    logging.info(f"Starting SendPunch for MAC {config['hostname']}/{config['mac_addr']}")
+    logging.info(f"Starting SendPunch for {config['hostname']}/{config['mac_addr']}")
 
     client_group = await create_clients(container.client_factories)
     ps = PunchSender(client_group, config["mac_addr"], config.get("call_home_interval", None))

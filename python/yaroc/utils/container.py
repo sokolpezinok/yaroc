@@ -70,8 +70,10 @@ class Container(containers.DeclarativeContainer):
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient, config.hostname, config.mac_addr),
+        sim7020=providers.Factory(
+            SIM7020MqttClient, config.hostname, config.mac_addr, async_at=async_at
+        ),
         roc=providers.Factory(RocClient),
-        sim7020=providers.Factory(SIM7020MqttClient, config.mac_addr, async_at=async_at),
     )
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
         udev=providers.Factory(UdevSiFactory, config.mac_addr),
