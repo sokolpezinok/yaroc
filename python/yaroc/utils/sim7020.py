@@ -93,7 +93,7 @@ class SIM7020Interface:
                 GPIO.output(POWER_KEY, GPIO.HIGH)
                 time.sleep(1)
                 GPIO.output(POWER_KEY, GPIO.LOW)
-                time.sleep(3)
+                time.sleep(5)
 
     async def mqtt_disconnect(self, mqtt_id: int | None):
         if mqtt_id is not None:
@@ -131,7 +131,7 @@ class SIM7020Interface:
             subprocess.call(shlex.split(f"sudo -n date -s '{tim.isoformat()}'"))
 
     async def ping(self):
-        await self.async_at.call("AT+CIPPING=8.8.8.8,2,32,50", "OK", timeout=15)
+        await self.async_at.call("AT+CIPPING=8.8.8.8,1,32,130", "OK", timeout=15)
 
     async def _mqtt_connect_internal(self) -> int | str:
         await self.async_at.call("ATE0")
@@ -161,7 +161,7 @@ class SIM7020Interface:
         response = await self.async_at.call(
             f'AT+CMQNEW="{self._broker_url}","{self._broker_port}",{self._connect_timeout}000,400',
             "CMQNEW: ([0-9])",
-            timeout=150,  # Timeout is very long for this command
+            timeout=153,  # Timeout is very long for this command
         )
         if response.query is None:
             await self.ping()
