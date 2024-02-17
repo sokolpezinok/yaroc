@@ -42,7 +42,7 @@ class SIM7020Interface:
         self._connect_timeout = connect_timeout
         self._keepalive = 2 * connect_timeout
         self._mqtt_id: int | str = "Not connected yet"
-        self._mqtt_id_timestamp = datetime.now() - timedelta(hours=1)
+        self._mqtt_id_update = datetime.now() - timedelta(hours=1)
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
@@ -121,12 +121,12 @@ class SIM7020Interface:
 
     async def mqtt_connect(self):
         if time_since(
-            self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)
+            self._mqtt_id_update, timedelta(seconds=self._connect_timeout)
         ) and isinstance(await self._detect_mqtt_id(), ErrStr):
             await self._mqtt_connect_internal()
             if isinstance(self._mqtt_id, ErrStr):
                 logging.error(f"MQTT connection failed: {self._mqtt_id}")
-            self._mqtt_id_timestamp = datetime.now()
+            self._mqtt_id_update = datetime.now()
 
     async def set_clock(self, modem_clock: str):
         tim = is_time_off(modem_clock, datetime.now(timezone.utc))
@@ -210,7 +210,7 @@ class SIM7020Interface:
             timeout=self._connect_timeout + 3,
         )
         if response.success:
-            self._mqtt_id_timestamp = datetime.now()
+            self._mqtt_id_update = datetime.now()
             self._last_success = datetime.now()
             return True
         return "MQTT send unsuccessful"
