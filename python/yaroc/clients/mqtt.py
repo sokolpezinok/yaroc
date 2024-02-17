@@ -207,7 +207,7 @@ class SIM7020MqttClient(Client):
                     mch.signal_dbm = dbm
                     mch.signal_snr = snr
                     mch.cellid = cellid
-                    mch.network_type = NetworkType.NbIot
+                    mch.network_type = NetworkType.NbIot.value
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 

@@ -54,6 +54,7 @@ class RaspberryModel(IntEnum):
 class NodeInfo(object):
     name: str
     dbm: int | None
+    snr: float | None
     codes: list[int]
     last_update: datetime
     last_punch: datetime
@@ -65,6 +66,7 @@ class MiniCallHome(object):
     def __repr__(self) -> str: ...
 
 class MessageHandler(object):
+    @staticmethod
     def new(dns: Dict[str, str], meshtastic_override_mac: str): ...
     def msh_serial_msg(self, payload: bytes) -> SiPunch: ...
     def msh_status_update(
