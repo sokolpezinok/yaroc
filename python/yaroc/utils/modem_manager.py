@@ -22,7 +22,7 @@ class SmsState(Enum):
         return str(self.name.lower())
 
 
-class NetworkType:
+class NetworkType(Enum):
     Unknown = 0
     NbIot = 1
     Gsm = 2
@@ -30,12 +30,18 @@ class NetworkType:
     Lte = 4
     Nr5g = 5
 
+    def __str__(self):
+        return self.name.removeprefix('NetworkType.').upper()
+
 
 @dataclass
 class NetworkState:
     type: NetworkType = NetworkType.Unknown
     rssi: float | None = None
     snr: float | None = None
+
+    def __repr__(self):
+        return f"{self.type} RSSI {self.rssi}dBm, SNR {self.snr}dB"
 
 
 class ModemManager:

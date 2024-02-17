@@ -101,11 +101,12 @@ class MqttClient(Client):
                 modems = await self.mm.get_modems()
                 if len(modems) > 0:
                     network_state = await self.mm.get_signal(modems[0])
+                    logging.debug(f"Network state: {network_state}")
                     if network_state.rssi is not None:
                         status.mini_call_home.signal_dbm = round(network_state.rssi)
                     if network_state.snr is not None:
                         status.mini_call_home.signal_snr = round(network_state.snr)
-                    status.mini_call_home.network_type = network_state.type
+                    status.mini_call_home.network_type = network_state.type.value
                     if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
                         await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
