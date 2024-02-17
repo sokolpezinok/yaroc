@@ -22,7 +22,7 @@ class SiPunch(object):
 
     @staticmethod
     def new(
-        card: int, code: int, time: datetime, mode: int, mac_addr: str, now: datetime
+        card: int, code: int, time: datetime, mode: int, host_info: HostInfo, now: datetime
     ) -> "SiPunch": ...
     @staticmethod
     def from_raw(payload: bytes, mac_addr: str) -> "SiPunch": ...

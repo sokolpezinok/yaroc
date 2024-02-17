@@ -31,7 +31,7 @@ class NetworkType(Enum):
     Nr5g = 5
 
     def __str__(self):
-        return self.name.removeprefix('NetworkType.').upper()
+        return self.name.removeprefix("NetworkType.").upper()
 
 
 @dataclass
