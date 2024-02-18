@@ -10,7 +10,6 @@ from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import EventType
 from ..pb.status_pb2 import Status as StatusProto
 from ..rs import MessageHandler, SiPunch
 from ..utils.status import StatusDrawer
@@ -47,7 +46,7 @@ class MqttForwader:
         logging.info(punch)
         await self.client_group.send_punch(punch)
 
-    async def _handle_punches(self, mac_addr: str, payload: PayloadType, now: datetime):
+    async def _handle_punches(self, mac_addr: str, payload: PayloadType):
         try:
             punches = self.handler.punches(MqttForwader._payload_to_bytes(payload), mac_addr)
         except Exception as err:
@@ -57,7 +56,7 @@ class MqttForwader:
         for si_punch in punches:
             await self._process_punch(si_punch)
 
-    async def _handle_meshtastic_serial(self, payload: PayloadType, now: datetime):
+    async def _handle_meshtastic_serial(self, payload: PayloadType):
         try:
             punch = self.handler.msh_serial_msg(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
@@ -80,6 +79,8 @@ class MqttForwader:
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
+            # We cannot return union types from Rust, so we have to parse the proto to detect the
+            # type
             status = StatusProto.FromString(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(err)
@@ -110,7 +111,7 @@ class MqttForwader:
         try:
             if topic.endswith("/p"):
                 mac_addr = MqttForwader.extract_mac(topic)
-                await self._handle_punches(mac_addr, msg.payload, now)
+                await self._handle_punches(mac_addr, msg.payload)
             elif topic.endswith("/status"):
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
@@ -118,7 +119,7 @@ class MqttForwader:
                 mac_addr = topic[10 + len(self.meshtastic_channel) :]
                 await self._handle_meshtastic_status(mac_addr, msg.payload, now)
             elif topic.startswith("yar/2/c/serial/"):
-                await self._handle_meshtastic_serial(msg.payload, now)
+                await self._handle_meshtastic_serial(msg.payload)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
 
