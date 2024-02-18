@@ -19,9 +19,24 @@ fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<Fixed
 }
 
 pub enum CellularLogMessage {
-    Disconnected(String),
+    Disconnected(String, String),
     MCH(MiniCallHome),
-    DeviceEvent(String, bool),
+    DeviceEvent(String, String, bool),
+}
+
+impl fmt::Display for CellularLogMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CellularLogMessage::MCH(mch) => write!(f, "{}", mch),
+            CellularLogMessage::Disconnected(hostname, client_name) => {
+                write!(f, "{hostname} disconnected client: {client_name}")
+            }
+            CellularLogMessage::DeviceEvent(hostname, port, added) => {
+                let event_type = if *added { "added" } else { "removed" };
+                write!(f, "{hostname} {port} {event_type}")
+            }
+        }
+    }
 }
 
 impl CellularLogMessage {
@@ -29,14 +44,14 @@ impl CellularLogMessage {
         timestamp(time.seconds, time.nanos as u32, &Local)
     }
 
-    pub fn from_proto(status: Status, mac_addr: &str, name: &str) -> Option<Self> {
+    pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
         match status.msg {
-            Some(Msg::Disconnected(Disconnected { client_name })) => {
-                Some(CellularLogMessage::Disconnected(client_name))
-            }
+            Some(Msg::Disconnected(Disconnected { client_name })) => Some(
+                CellularLogMessage::Disconnected(hostname.to_owned(), client_name),
+            ),
             Some(Msg::MiniCallHome(mch)) => {
                 let mut log_message = MiniCallHome::new(
-                    name,
+                    hostname,
                     mac_addr,
                     Self::timestamp(mch.time?),
                     Local::now().into(),
@@ -50,9 +65,13 @@ impl CellularLogMessage {
                 log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
             }
-            Some(Msg::DevEvent(DeviceEvent { port, r#type })) => Some(
-                CellularLogMessage::DeviceEvent(port, r#type == EventType::Added as i32),
-            ),
+            Some(Msg::DevEvent(DeviceEvent { port, r#type })) => {
+                Some(CellularLogMessage::DeviceEvent(
+                    hostname.to_owned(),
+                    port,
+                    r#type == EventType::Added as i32,
+                ))
+            }
             None => None,
         }
     }

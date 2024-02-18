@@ -43,11 +43,6 @@ class MqttForwader:
         else:
             raise TypeError("Unexpected type of a message payload")
 
-    def _resolve(self, mac_addr: str) -> str:
-        if mac_addr in self.dns:
-            return self.dns[mac_addr]
-        return f"MAC {mac_addr}"
-
     async def _process_punch(self, punch: SiPunch):
         logging.info(punch)
         await self.client_group.send_punch(punch)
@@ -90,22 +85,13 @@ class MqttForwader:
             logging.error(err)
             return
 
-        name = self._resolve(mac_addr)
         oneof = status.WhichOneof("msg")
-        if oneof == "disconnected":
-            logging.info(f"Disconnected {status.disconnected.client_name}")
-        elif oneof == "mini_call_home":
-            try:
-                log_message = self.handler.status_update(
-                    MqttForwader._payload_to_bytes(payload), mac_addr
-                )
-            except Exception:
-                pass
-            logging.info(log_message)
-            await self.client_group.send_status(status, mac_addr)
-        elif oneof == "dev_event":
-            logging.info(f"{name} {status.dev_event.port} {EventType.Name(status.dev_event.type)}")
-            await self.client_group.send_status(status, mac_addr)
+        try:
+            self.handler.status_update(MqttForwader._payload_to_bytes(payload), mac_addr)
+            if oneof != "disconnected":
+                await self.client_group.send_status(status, mac_addr)
+        except Exception as err:
+            logging.error(f"Failed to construct proto: {err}")
 
     @staticmethod
     def extract_mac(topic: str) -> str:

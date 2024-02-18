@@ -1,3 +1,4 @@
+use log::info;
 use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -6,7 +7,7 @@ use std::collections::HashMap;
 use chrono::prelude::*;
 use chrono::DateTime;
 
-use crate::logs::{CellularLogMessage, HostInfo, MiniCallHome, MshLogMessage, PositionName};
+use crate::logs::{CellularLogMessage, HostInfo, MshLogMessage, PositionName};
 use crate::protobufs::{Punches, Status};
 use crate::punch::SiPunch;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
@@ -113,7 +114,7 @@ impl MessageHandler {
         Ok(result)
     }
 
-    pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<MiniCallHome> {
+    pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
         let status_proto =
             Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
         let log_message =
@@ -121,6 +122,7 @@ impl MessageHandler {
                 .ok_or(PyValueError::new_err(
                     "Variants other than MiniCallHome are unimplemented",
                 ))?;
+        info!("{}", log_message);
 
         let status = self.get_cellular_status(mac_addr);
         match log_message {
@@ -129,18 +131,13 @@ impl MessageHandler {
                     status.mqtt_connect_update(dbm as i16, mch.cellid.unwrap_or_default(), mch.snr);
                 }
                 status.update_voltage(f64::from(mch.voltage));
-                Ok(mch)
             }
-            CellularLogMessage::Disconnected(_) => {
+            CellularLogMessage::Disconnected(..) => {
                 status.disconnect();
-                Err(PyValueError::new_err(
-                    "Variants other than MiniCallHome are unimplemented",
-                ))
             }
-            _ => Err(PyValueError::new_err(
-                "Variants other than MiniCallHome are unimplemented",
-            )),
+            _ => {}
         }
+        Ok(())
     }
 }
 
