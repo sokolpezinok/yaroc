@@ -6,9 +6,6 @@ import tomllib
 from ..sources.mqtt import MqttForwader
 from ..utils.container import Container, create_clients
 
-BROKER_URL = "broker.hivemq.com"
-BROKER_PORT = 1883
-
 
 async def main():
     with open("mqtt-forwarder.toml", "rb") as f:

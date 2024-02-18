@@ -10,12 +10,10 @@ from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
 
 from ..clients.client import ClientGroup
+from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status as StatusProto
 from ..rs import MessageHandler, SiPunch
 from ..utils.status import StatusDrawer
-
-BROKER_URL = "broker.hivemq.com"
-BROKER_PORT = 1883
 
 
 class MqttForwader:

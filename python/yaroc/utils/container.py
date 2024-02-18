@@ -69,7 +69,9 @@ class Container(containers.DeclarativeContainer):
         serial=providers.Factory(SerialClient, config.client.serial.port),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
-        mqtt=providers.Factory(MqttClient, config.hostname, config.mac_addr),
+        mqtt=providers.Factory(
+            MqttClient, config.hostname, config.mac_addr, config.broker_url, config.broker_port
+        ),
         sim7020=providers.Factory(
             SIM7020MqttClient, config.hostname, config.mac_addr, async_at=async_at
         ),

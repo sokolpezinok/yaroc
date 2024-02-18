@@ -48,15 +48,15 @@ class MqttClient(Client):
         self,
         hostname: str,
         mac_addr: str,
+        broker_url: str | None,
+        broker_port: int | None,
         name_prefix: str = "aiomqtt",
-        broker_url: str = BROKER_URL,
-        broker_port: int = BROKER_PORT,
     ):
         self.topics: Dict[str, Topics] = {}
         self.name = f"{name_prefix}-{hostname}"
         self.mac_addr = mac_addr
-        self.broker_url = broker_url
-        self.broker_port = broker_port
+        self.broker_url = BROKER_URL if broker_url is None else broker_url
+        self.broker_port = BROKER_PORT if broker_port is None else broker_port
 
         disconnected = Disconnected()
         disconnected.client_name = self.name
