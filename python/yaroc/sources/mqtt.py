@@ -22,7 +22,7 @@ class MqttForwader:
         client_group: ClientGroup,
         dns: Dict[str, str],
         meshtastic_channel: str | None,
-        meshtastic_mac_addr: str = "",
+        meshtastic_mac_addr: str | None = None,
         display_model: str | None = None,
     ):
         self.client_group = client_group

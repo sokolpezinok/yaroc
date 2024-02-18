@@ -23,11 +23,12 @@ async def main():
         logging.info("Listening without forwarding")
 
     dns = {mac_address: name for name, mac_address in config["mac-addresses"].items()}
+    meshtastic_conf = config.get("meshtastic", {})
     forwarder = MqttForwader(
         client_group,
         dns,
-        config.get("meshtastic", {}).get("main_channel", None),
-        config["meshtastic"]["mac_override"],
+        meshtastic_conf.get("main_channel", None),
+        meshtastic_conf.get("mac_override", None),
         config.get("display", None),
     )
     await forwarder.loop()

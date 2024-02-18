@@ -17,13 +17,13 @@ pub struct MessageHandler {
     dns: HashMap<String, String>,
     cellular_statuses: HashMap<String, CellularRocStatus>,
     meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
-    meshtastic_override_mac: String,
+    meshtastic_override_mac: Option<String>,
 }
 
 #[pymethods]
 impl MessageHandler {
     #[staticmethod]
-    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: String) -> Self {
+    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: Option<String>) -> Self {
         Self {
             dns,
             meshtastic_statuses: HashMap::new(),
@@ -48,7 +48,9 @@ impl MessageHandler {
             .entry(mac_addr.to_owned())
             .or_insert(MeshtasticRocStatus::new(name));
         status.punch(&punch);
-        punch.host_info.mac_address = self.meshtastic_override_mac.clone();
+        if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
+            punch.host_info.mac_address = mac_addr.clone();
+        }
 
         Ok(punch)
     }
