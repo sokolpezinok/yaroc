@@ -73,7 +73,12 @@ class Container(containers.DeclarativeContainer):
             MqttClient, config.hostname, config.mac_addr, config.broker_url, config.broker_port
         ),
         sim7020=providers.Factory(
-            SIM7020MqttClient, config.hostname, config.mac_addr, async_at=async_at
+            SIM7020MqttClient,
+            config.hostname,
+            config.mac_addr,
+            async_at,
+            config.broker_url,
+            config.broker_port,
         ),
         roc=providers.Factory(RocClient),
     )

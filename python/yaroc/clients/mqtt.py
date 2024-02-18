@@ -50,10 +50,9 @@ class MqttClient(Client):
         mac_addr: str,
         broker_url: str | None,
         broker_port: int | None,
-        name_prefix: str = "aiomqtt",
     ):
         self.topics: Dict[str, Topics] = {}
-        self.name = f"{name_prefix}-{hostname}"
+        self.name = f"aiomqtt-{hostname}"
         self.mac_addr = mac_addr
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
@@ -150,13 +149,12 @@ class SIM7020MqttClient(Client):
         hostname: str,
         mac_address: str,
         async_at: AsyncATCom,
-        name_prefix: str = "SIM7020",
-        connect_timeout: float = CONNECT_TIMEOUT,
         broker_url: str = BROKER_URL,
         broker_port: int = 1883,
+        connect_timeout: float = CONNECT_TIMEOUT,
     ):
         self.topics = Topics.from_mac(mac_address)
-        name = f"{name_prefix}-{hostname}"
+        name = f"SIM7020-{hostname}"
         self._sim7020 = SIM7020Interface(
             async_at,
             self.topics.status,
