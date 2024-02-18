@@ -372,7 +372,7 @@ mod test_logs {
     use chrono::{DateTime, Duration, FixedOffset};
 
     use crate::{
-        logs::{timestamp, HostInfo, RssiSnr},
+        logs::{timestamp, CellularLogMessage, HostInfo, RssiSnr},
         status::Position,
     };
 
@@ -481,5 +481,19 @@ mod test_logs {
             format!("{log_message}"),
             "spe01 17:40:43: 51.5°C, -87dBm 7 SNR, cell 27606E, 1.26V, latency 1.39s"
         );
+    }
+
+    #[test]
+    fn test_cellular_logmessage() {
+        let log_message_disconnected =
+            CellularLogMessage::Disconnected("spe01".to_owned(), "SIM7020-spe01".to_owned());
+        assert_eq!(
+            format!("{log_message_disconnected}"),
+            "spe01 disconnected client: SIM7020-spe01"
+        );
+
+        let log_message_event =
+            CellularLogMessage::DeviceEvent("spe01".to_owned(), "/dev/ttyUSB0".to_owned(), true);
+        assert_eq!(format!("{log_message_event}"), "spe01 /dev/ttyUSB0 added");
     }
 }
