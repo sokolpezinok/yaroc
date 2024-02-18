@@ -57,9 +57,10 @@ impl MessageHandler {
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
-        recv_mac_address: &str,
+        recv_mac_address: Option<String>,
     ) -> PyResult<Option<MshLogMessage>> {
-        let recv_position = self.get_position_name(recv_mac_address);
+        let recv_position =
+            recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
         let msh_log_message =
             MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
         if let Ok(Some(log_message)) = msh_log_message.as_ref() {
