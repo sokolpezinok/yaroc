@@ -60,12 +60,13 @@ impl MessageHandler {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<String>,
-    ) -> PyResult<Option<MshLogMessage>> {
+    ) -> PyResult<()> {
         let recv_position =
             recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
         let msh_log_message =
-            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
-        if let Ok(Some(log_message)) = msh_log_message.as_ref() {
+            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position)?;
+        if let Some(log_message) = msh_log_message {
+            info!("{}", log_message);
             let status = self
                 .meshtastic_statuses
                 .entry(log_message.host_info.mac_address.clone())
@@ -80,7 +81,7 @@ impl MessageHandler {
                 status.update_battery(*battery);
             }
         }
-        msh_log_message
+        Ok(())
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {

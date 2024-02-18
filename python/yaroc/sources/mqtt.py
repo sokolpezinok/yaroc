@@ -63,18 +63,6 @@ class MqttForwader:
 
         await self._process_punch(punch)
 
-    async def _handle_meshtastic_status(
-        self, recv_mac_addr: str, payload: PayloadType, now: datetime
-    ):
-        try:
-            log_message = self.handler.msh_status_update(
-                MqttForwader._payload_to_bytes(payload), now, recv_mac_addr
-            )
-            if log_message is not None:
-                logging.info(log_message)
-        except Exception as err:
-            logging.error(f"Failed to construct proto: {err}")
-
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:
             # We cannot return union types from Rust, so we have to parse the proto to detect the
@@ -114,8 +102,14 @@ class MqttForwader:
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
             elif topic.startswith(f"yar/2/c/{self.meshtastic_channel}/"):
-                mac_addr = topic[10 + len(self.meshtastic_channel) :]
-                await self._handle_meshtastic_status(mac_addr, msg.payload, now)
+                recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
+                try:
+                    self.handler.msh_status_update(
+                        MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
+                    )
+                except Exception as err:
+                    logging.error(f"Failed to construct proto: {err}")
+
             elif topic.startswith("yar/2/c/serial/"):
                 await self._handle_meshtastic_serial(msg.payload)
         except Exception as err:
