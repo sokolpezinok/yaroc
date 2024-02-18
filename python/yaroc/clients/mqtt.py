@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 from asyncio import Lock, sleep
 from dataclasses import dataclass
@@ -166,7 +167,7 @@ class SIM7020MqttClient(Client):
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
-            self._send_punches, False, 3.0, 2.0, timedelta(hours=3), batch_count=4
+            self._send_punches, False, 2.0, math.sqrt(2.0), timedelta(hours=3), batch_count=4
         )
         self._lock = Lock()
 

@@ -129,7 +129,7 @@ class BackoffBatchedRetries(Generic[A, T]):
         if len(not_published) > 0:
             logging.error("Messages not sent: " + ",".join(map(str, not_published)))
 
-    async def _backoff_send(self, argument: A) -> Optional[T]:
+    async def send(self, argument: A) -> Optional[T]:
         async with self._current_mid_lock:
             self._current_mid += 1
             retried_message: RetriedMessage[A, T] = RetriedMessage(argument, self._current_mid)
@@ -155,6 +155,3 @@ class BackoffBatchedRetries(Generic[A, T]):
 
         logging.error(f"Message mid={retried_message.mid} expired, args = {argument}")
         return None
-
-    async def send(self, argument: A) -> Optional[T]:
-        return await self._backoff_send(argument)
