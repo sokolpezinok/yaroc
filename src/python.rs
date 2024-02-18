@@ -59,5 +59,7 @@ pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<crate::logs::MshLogMessage>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<RaspberryModel>()?;
+
+    pyo3_log::init();
     Ok(())
 }

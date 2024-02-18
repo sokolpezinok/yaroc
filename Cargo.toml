@@ -12,12 +12,14 @@ walkdir = "2.3.2"
 [dependencies]
 chrono = "0.4.31"
 geoutils = "0.5.1"
+log = "0.4.20"
 # TODO: go back to official meshtastic once merged
 meshtastic = { git = "https://github.com/lukipuki/rust.git", version = "0.1.5", branch = "protoc-err" }
 prost = "0.12.3"
 prost-wkt = "0.5"
 prost-wkt-types = "0.5"
 pyo3 = { version = "0.20.0", features = ["extension-module", "chrono"] }
+pyo3-log = "0.9.0"
 regex = "1.9.6"
 serde = { version = "1.0.196", features = ["derive"] }
 serialport = "4.3.0"
