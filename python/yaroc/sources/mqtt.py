@@ -2,13 +2,12 @@ import asyncio
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict
 
 from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
 from aiomqtt.types import PayloadType
-from google.protobuf.timestamp_pb2 import Timestamp
 
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import EventType
@@ -34,10 +33,6 @@ class MqttForwader:
         self.meshtastic_channel = meshtastic_channel
         self.handler = MessageHandler.new(dns, meshtastic_mac_addr)
         self.drawer = StatusDrawer(self.handler, display_model)
-
-    @staticmethod
-    def _prototime_to_datetime(prototime: Timestamp) -> datetime:
-        return prototime.ToDatetime().replace(tzinfo=timezone.utc).astimezone()
 
     @staticmethod
     def _payload_to_bytes(payload: PayloadType) -> bytes:
