@@ -21,7 +21,7 @@ from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
-BROKER_URL = "broker.hivemq.com"
+BROKER_URL = "broker.emqx.io"
 BROKER_PORT = 1883
 CONNECT_TIMEOUT = 45
 
