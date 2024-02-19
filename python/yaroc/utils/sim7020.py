@@ -153,10 +153,7 @@ class SIM7020Interface:
         if response.query is not None:
             await self.set_clock(response.query[0])
 
-        response = await self.async_at.call(
-            "AT+CMQNEW?",
-            f"\\+CMQNEW: ([0-9]),1,{self._broker_url}",
-        )
+        response = await self.async_at.call("AT+CMQNEW?", f"\\+CMQNEW: ([0-9]),1")
         if response.query is not None:
             # CMQNEW is fine but CMQCON is not, the only solution is a disconnect
             await self.mqtt_disconnect(int(response.query[0]))
