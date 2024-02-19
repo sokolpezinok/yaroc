@@ -1,3 +1,4 @@
+use log::error;
 use log::info;
 use prost::Message;
 use pyo3::exceptions::PyValueError;
@@ -60,28 +61,33 @@ impl MessageHandler {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<String>,
-    ) -> PyResult<()> {
+    ) {
         let recv_position =
             recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
         let msh_log_message =
-            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position)?;
-        if let Some(log_message) = msh_log_message {
-            info!("{}", log_message);
-            let status = self
-                .meshtastic_statuses
-                .entry(log_message.host_info.mac_address.clone())
-                .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
-            if let Some(position) = log_message.position.as_ref() {
-                status.position = Some(position.clone())
+            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
+        match msh_log_message {
+            Err(err) => {
+                error!("Failed to parse msh status proto: {}", err);
             }
-            if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
-                status.update_dbm(rssi_snr.clone());
+            Ok(Some(log_message)) => {
+                info!("{}", log_message);
+                let status = self
+                    .meshtastic_statuses
+                    .entry(log_message.host_info.mac_address.clone())
+                    .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
+                if let Some(position) = log_message.position.as_ref() {
+                    status.position = Some(position.clone())
+                }
+                if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
+                    status.update_dbm(rssi_snr.clone());
+                }
+                if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
+                    status.update_battery(*battery);
+                }
             }
-            if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
-                status.update_battery(*battery);
-            }
+            _ => {}
         }
-        Ok(())
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {

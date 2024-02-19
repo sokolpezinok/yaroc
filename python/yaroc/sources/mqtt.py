@@ -103,12 +103,9 @@ class MqttForwader:
                 await self._handle_status(mac_addr, msg.payload, now)
             elif topic.startswith(f"yar/2/c/{self.meshtastic_channel}/"):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
-                try:
-                    self.handler.msh_status_update(
-                        MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
-                    )
-                except Exception as err:
-                    logging.error(f"Failed to construct proto: {err}")
+                self.handler.msh_status_update(
+                    MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
+                )
 
             elif topic.startswith("yar/2/c/serial/"):
                 await self._handle_meshtastic_serial(msg.payload)
