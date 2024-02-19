@@ -149,8 +149,8 @@ class SIM7020MqttClient(Client):
         hostname: str,
         mac_address: str,
         async_at: AsyncATCom,
-        broker_url: str = BROKER_URL,
-        broker_port: int = 1883,
+        broker_url: str | None,
+        broker_port: int | None,
         connect_timeout: float = CONNECT_TIMEOUT,
     ):
         self.topics = Topics.from_mac(mac_address)
@@ -160,8 +160,8 @@ class SIM7020MqttClient(Client):
             self.topics.status,
             name,
             connect_timeout,
-            broker_url,
-            broker_port,
+            BROKER_URL if broker_url is None else broker_url,
+            BROKER_PORT if broker_port is None else broker_port
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
