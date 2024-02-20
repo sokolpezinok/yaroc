@@ -117,12 +117,12 @@ class SIM7020Interface:
             return self._mqtt_id
 
     async def mqtt_connect_callback(self, s: str):
-        await self.mqtt_connect(False)
+        await self.mqtt_connect()
 
-    async def mqtt_connect(self, check_time: bool = True):
-        if not check_time or (time_since(
+    async def mqtt_connect(self):
+        if time_since(
             self._mqtt_id_update, timedelta(seconds=self._connect_timeout)
-        ) and isinstance(await self._detect_mqtt_id(), ErrStr)):
+        ) and isinstance(await self._detect_mqtt_id(), ErrStr):
             await self._mqtt_connect_internal()
             if isinstance(self._mqtt_id, ErrStr):
                 logging.error(f"MQTT connection failed: {self._mqtt_id}")
