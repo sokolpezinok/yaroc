@@ -149,17 +149,17 @@ impl fmt::Display for MiniCallHome {
             write!(f, " {temperature:.1}°C")?;
         }
         if let Some(dbm) = &self.dbm {
-            write!(f, ", {dbm}dBm")?;
+            write!(f, ", RSSI{dbm:5}")?;
             if let Some(snr) = &self.snr {
-                write!(f, " {snr} SNR")?;
+                write!(f, " SNR{snr:3}")?;
             }
         }
         if let Some(cellid) = &self.cellid {
             write!(f, ", cell {cellid:X}")?;
         }
         write!(f, ", {:.2}V", self.voltage)?;
-        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
-        write!(f, ", latency {:4.2}s", millis)
+        let secs = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", lat. {:4.2}s", secs)
     }
 }
 
@@ -479,7 +479,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, -87dBm 7 SNR, cell 27606E, 1.26V, latency 1.39s"
+            "spe01 17:40:43: 51.5°C, RSSI  -87 SNR  7, cell 27606E, 1.26V, lat. 1.39s"
         );
     }
 
