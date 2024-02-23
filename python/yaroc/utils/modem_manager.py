@@ -131,3 +131,14 @@ class ModemManager:
 
         logging.error("Error getting signal")
         return NetworkState(NetworkType.Unknown, None, None)
+
+    async def get_cellid(self, modem_path: str) -> int | None:
+        interface = await self.get_modem_interface(
+            modem_path, "org.freedesktop.ModemManager1.Modem.Location"
+        )
+        location = await interface.call_get_location()
+        try:
+            cellid = location[1].value.split(",")[3]
+            return int(cellid, 16)
+        except Exception:
+            return None

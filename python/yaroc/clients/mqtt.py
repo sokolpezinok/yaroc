@@ -107,6 +107,9 @@ class MqttClient(Client):
                     if network_state.snr is not None:
                         status.mini_call_home.signal_snr = round(network_state.snr)
                     status.mini_call_home.network_type = network_state.type.value
+                    cellid = await self.mm.get_cellid(modems[0])
+                    if cellid is not None:
+                        status.mini_call_home.cellid = cellid
                     if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
                         await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
@@ -161,7 +164,7 @@ class SIM7020MqttClient(Client):
             name,
             connect_timeout,
             BROKER_URL if broker_url is None else broker_url,
-            BROKER_PORT if broker_port is None else broker_port
+            BROKER_PORT if broker_port is None else broker_port,
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
