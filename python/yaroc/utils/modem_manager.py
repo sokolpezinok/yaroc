@@ -41,7 +41,11 @@ class NetworkState:
     snr: float | None = None
 
     def __repr__(self):
-        return f"{self.type} RSSI {self.rssi}dBm, SNR {self.snr}dB"
+        if self.type == NetworkType.Unknown:
+            return "Unknown"
+        if self.type == NetworkType.Lte:
+            return f"{self.type} RSSI {self.rssi:.0f}dBm, SNR {self.snr:.0f}dB"
+        return f"{self.type} RSSI {self.rssi:.0f}dBm"
 
 
 class ModemManager:
