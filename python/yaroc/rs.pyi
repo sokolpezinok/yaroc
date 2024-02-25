@@ -53,7 +53,7 @@ class RaspberryModel(IntEnum):
 
 class NodeInfo(object):
     name: str
-    dbm: int | None
+    rssi_dbm: int | None
     snr: float | None
     codes: list[int]
     last_update: datetime

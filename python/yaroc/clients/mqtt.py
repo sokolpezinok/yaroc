@@ -204,9 +204,9 @@ class SIM7020MqttClient(Client):
             async with self._lock:
                 res = await self._sim7020.get_signal_info()
                 if res is not None:
-                    (dbm, cellid, snr) = res
+                    (rssi_dbm, cellid, snr) = res
                     mch = status.mini_call_home
-                    mch.signal_dbm = dbm
+                    mch.signal_dbm = rssi_dbm
                     mch.signal_snr = snr
                     mch.cellid = cellid
                     mch.network_type = NetworkType.NbIot.value

@@ -137,8 +137,12 @@ impl MessageHandler {
         let status = self.get_cellular_status(mac_addr);
         match log_message {
             CellularLogMessage::MCH(mch) => {
-                if let Some(dbm) = mch.dbm {
-                    status.mqtt_connect_update(dbm as i16, mch.cellid.unwrap_or_default(), mch.snr);
+                if let Some(rssi_dbm) = mch.rssi_dbm {
+                    status.mqtt_connect_update(
+                        rssi_dbm as i16,
+                        mch.cellid.unwrap_or_default(),
+                        mch.snr,
+                    );
                 }
                 status.update_voltage(f64::from(mch.voltage));
             }

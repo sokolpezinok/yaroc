@@ -49,7 +49,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
-    dbm: Option<i16>,
+    rssi_dbm: Option<i16>,
     #[pyo3(get)]
     snr: Option<f32>,
     #[pyo3(get)]
@@ -87,8 +87,8 @@ impl CellularRocStatus {
         self.voltage = Some(voltage);
     }
 
-    pub fn mqtt_connect_update(&mut self, dbm: i16, cellid: u32, snr: Option<i16>) {
-        self.state = CellularConnectionState::MqttConnected(dbm, cellid, snr);
+    pub fn mqtt_connect_update(&mut self, rssi_dbm: i16, cellid: u32, snr: Option<i16>) {
+        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr);
         self.last_update = Some(Local::now().into());
     }
 
@@ -100,8 +100,8 @@ impl CellularRocStatus {
     pub fn serialize(&self) -> NodeInfo {
         NodeInfo {
             name: self.name.clone(),
-            dbm: match self.state {
-                CellularConnectionState::MqttConnected(dbm, _, _) => Some(dbm),
+            rssi_dbm: match self.state {
+                CellularConnectionState::MqttConnected(rssi_dbm, _, _) => Some(rssi_dbm),
                 _ => None,
             },
             snr: match self.state {
@@ -152,7 +152,7 @@ impl MeshtasticRocStatus {
     pub fn serialize(&self) -> NodeInfo {
         NodeInfo {
             name: self.name.clone(),
-            dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
+            rssi_dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
             snr: self.rssi_snr.as_ref().map(|x| x.snr),
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,

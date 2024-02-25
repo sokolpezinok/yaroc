@@ -60,7 +60,7 @@ impl CellularLogMessage {
                 if mch.cellid > 0 {
                     log_message.cellid = Some(mch.cellid);
                 }
-                log_message.dbm = Some(i16::try_from(mch.signal_dbm).ok()?);
+                log_message.rssi_dbm = Some(i16::try_from(mch.signal_dbm).ok()?);
                 log_message.snr = Some(i16::try_from(mch.signal_snr).ok()?);
                 log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
@@ -100,7 +100,7 @@ impl HostInfo {
 pub struct MiniCallHome {
     host_info: HostInfo,
     pub voltage: f32,
-    pub dbm: Option<i16>,
+    pub rssi_dbm: Option<i16>,
     pub snr: Option<i16>,
     pub cellid: Option<u32>,
     temperature: Option<f32>,
@@ -130,7 +130,7 @@ impl MiniCallHome {
             voltage,
             cpu_frequency: None,
             temperature: None,
-            dbm: None,
+            rssi_dbm: None,
             snr: None,
             cellid: None,
         }
@@ -148,8 +148,8 @@ impl fmt::Display for MiniCallHome {
         if let Some(temperature) = &self.temperature {
             write!(f, " {temperature:.1}°C")?;
         }
-        if let Some(dbm) = &self.dbm {
-            write!(f, ", RSSI{dbm:5}")?;
+        if let Some(rssi_dbm) = &self.rssi_dbm {
+            write!(f, ", RSSI{rssi_dbm:5}")?;
             if let Some(snr) = &self.snr {
                 write!(f, " SNR{snr:3}")?;
             }
@@ -471,7 +471,7 @@ mod test_logs {
             timestamp,
             latency: Duration::milliseconds(1390),
             voltage: 1.26,
-            dbm: Some(-87),
+            rssi_dbm: Some(-87),
             snr: Some(7),
             cellid: Some(2580590),
             cpu_frequency: None,
