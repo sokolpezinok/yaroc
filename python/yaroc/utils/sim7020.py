@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shlex
 import subprocess
@@ -46,6 +47,7 @@ class SIM7020Interface:
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
+        self._state_lock = asyncio.Lock()
 
         self.async_at = async_at
         self.async_at.add_callback("+CLTS:", self.mqtt_connect_callback)
@@ -120,13 +122,14 @@ class SIM7020Interface:
         await self.mqtt_connect()
 
     async def mqtt_connect(self):
-        if time_since(
-            self._mqtt_id_update, timedelta(seconds=self._connect_timeout)
-        ) and isinstance(await self._detect_mqtt_id(), ErrStr):
-            await self._mqtt_connect_internal()
-            if isinstance(self._mqtt_id, ErrStr):
-                logging.error(f"MQTT connection failed: {self._mqtt_id}")
-            self._mqtt_id_update = datetime.now()
+        async with self._state_lock:
+            if time_since(
+                self._mqtt_id_update, timedelta(seconds=self._connect_timeout)
+            ) and isinstance(await self._detect_mqtt_id(), ErrStr):
+                await self._mqtt_connect_internal()
+                if isinstance(self._mqtt_id, ErrStr):
+                    logging.error(f"MQTT connection failed: {self._mqtt_id}")
+                self._mqtt_id_update = datetime.now()
 
     async def set_clock(self, modem_clock: str):
         tim = is_time_off(modem_clock, datetime.now(timezone.utc))
