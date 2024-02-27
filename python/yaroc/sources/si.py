@@ -51,11 +51,11 @@ class SiWorker:
 class SerialSiWorker(SiWorker):
     """Serial port worker"""
 
-    def __init__(self, port: str, mac_addr: str):
+    def __init__(self, port: str, host_info: HostInfo):
         super().__init__()
         self.port = port
         self.name = "srr"
-        self.mac_addr = mac_addr
+        self.host_info = host_info
         self._finished = Event()
 
     async def loop(self, queue: Queue[SiPunch]):
@@ -81,7 +81,7 @@ class SerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data, self.mac_addr)
+                punch = SiPunch.from_raw(data, self.host_info)
                 await self.process_punch(punch, queue)
 
             except serial.serialutil.SerialException as err:
@@ -99,10 +99,10 @@ class SerialSiWorker(SiWorker):
 class BtSerialSiWorker(SiWorker):
     """Bluetooth serial worker"""
 
-    def __init__(self, mac_addr: str):
+    def __init__(self, hostname: str, mac_addr: str):
         super().__init__()
         self.name = "lora"
-        self.mac_addr = mac_addr
+        self.host_info = HostInfo.new(hostname, mac_addr)
         logging.info(f"Starting a bluetooth serial worker, connecting to {mac_addr}")
 
     def __hash__(self):
@@ -113,10 +113,10 @@ class BtSerialSiWorker(SiWorker):
         sock.setblocking(False)
         loop = asyncio.get_event_loop()
         try:
-            await loop.sock_connect(sock, (self.mac_addr, 1))
+            await loop.sock_connect(sock, (self.host_info.mac_address, 1))
         except Exception as err:
-            logging.error(f"Error connecting to {self.mac_addr}: {err}")
-        logging.info(f"Connected to {self.mac_addr}")
+            logging.error(f"Error connecting to {self.host_info.mac_address}: {err}")
+        logging.info(f"Connected to {self.host_info.mac_address}")
 
         while True:
             try:
@@ -124,7 +124,7 @@ class BtSerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data, self.mac_addr)
+                punch = SiPunch.from_raw(data, self.host_info)
                 await self.process_punch(punch, queue)
 
             except Exception as err:
@@ -133,10 +133,10 @@ class BtSerialSiWorker(SiWorker):
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self, mac_addr: str):
+    def __init__(self, name: str, mac_addr: str):
         self._udev_workers: Dict[str, tuple[SerialSiWorker, Task, str]] = {}
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
-        self.mac_addr = mac_addr
+        self.host_info = HostInfo.new(name, mac_addr)
 
     @staticmethod
     def extract_com(device_name: str) -> str:
@@ -181,7 +181,7 @@ class UdevSiFactory(SiWorker):
                 logging.info(f"Inserted SportIdent device {device_node}")
 
                 try:
-                    worker = SerialSiWorker(device_node, self.mac_addr)
+                    worker = SerialSiWorker(device_node, self.host_info)
                     task = asyncio.create_task(worker.loop(queue))
                     self._udev_workers[parent_device_node] = (worker, task, device_node)
                     await status_queue.put(DeviceEvent(True, device_node))

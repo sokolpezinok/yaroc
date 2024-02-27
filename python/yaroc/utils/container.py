@@ -83,9 +83,9 @@ class Container(containers.DeclarativeContainer):
         roc=providers.Factory(RocClient),
     )
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
-        udev=providers.Factory(UdevSiFactory, config.mac_addr),
+        udev=providers.Factory(UdevSiFactory, config.hostname, config.mac_addr),
         fake=providers.Factory(FakeSiWorker, config.mac_addr, config.punch_source.fake.interval),
-        bt=providers.Factory(BtSerialSiWorker),
+        bt=providers.Factory(BtSerialSiWorker, config.hostname),
     )
     workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
     si_manager = providers.Factory(SiPunchManager, workers)
