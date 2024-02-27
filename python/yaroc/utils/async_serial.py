@@ -5,7 +5,7 @@ import re
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Awaitable, Callable, Dict, List
+from typing import Any, Callable, Coroutine, Dict, List
 
 from serial_asyncio import open_serial_connection
 
@@ -17,8 +17,8 @@ class ATResponse:
     success: bool = False
 
 
-Callback = Callable[[str], Awaitable[None]]
-Coroutines = list[Awaitable[None]]
+Callback = Callable[[str], Coroutine[Any, Any, None]]
+Coroutines = list[Coroutine[Any, Any, None]]
 
 
 class AsyncATCom:

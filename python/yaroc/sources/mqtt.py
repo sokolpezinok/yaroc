@@ -101,7 +101,9 @@ class MqttForwader:
             elif topic.endswith("/status"):
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
-            elif topic.startswith(f"yar/2/c/{self.meshtastic_channel}/"):
+            elif self.meshtastic_channel is not None and topic.startswith(
+                f"yar/2/c/{self.meshtastic_channel}/"
+            ):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
                 self.handler.msh_status_update(
                     MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
