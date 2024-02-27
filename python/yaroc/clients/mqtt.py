@@ -23,7 +23,7 @@ from .client import Client
 
 BROKER_URL = "broker.emqx.io"
 BROKER_PORT = 1883
-CONNECT_TIMEOUT = 45
+CONNECT_TIMEOUT = 35
 
 
 @dataclass
