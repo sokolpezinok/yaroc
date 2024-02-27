@@ -42,7 +42,7 @@ class SIM7020Interface:
         self._client_name = client_name
         self._connect_timeout = connect_timeout
         self._keepalive = 2 * connect_timeout
-        self._mqtt_id: int | str = "Not connected yet"
+        self._mqtt_id: int | ErrStr = "Not connected yet"
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
@@ -104,16 +104,17 @@ class SIM7020Interface:
             await self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
 
     async def _detect_mqtt_id(self) -> int | ErrStr:
-        self._mqtt_id = ErrStr("Expired MQTT connection")
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
             logging.warn("Too long since a successful send, force a reconnect")
+            self._mqtt_id = ErrStr("Expired MQTT connection")
             return self._mqtt_id
         try:
-            response = await self.async_at.call(
-                "AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"'
-            )
-            if response.query is not None:
-                self._mqtt_id = int(response.query[0])
+            if isinstance(self._mqtt_id, ErrStr):
+                response = await self.async_at.call(
+                    "AT+CMQCON?", f'CMQCON: ([0-9]),1,"{self._broker_url}"'
+                )
+                if response.query is not None:
+                    self._mqtt_id = int(response.query[0])
         finally:
             return self._mqtt_id
 
