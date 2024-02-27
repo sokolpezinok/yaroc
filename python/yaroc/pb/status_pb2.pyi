@@ -78,4 +78,4 @@ class Status(_message.Message):
     def __init__(self, disconnected: _Optional[_Union[Disconnected, _Mapping]] = ..., mini_call_home: _Optional[_Union[MiniCallHome, _Mapping]] = ..., dev_event: _Optional[_Union[DeviceEvent, _Mapping]] = ...) -> None: ...
 
 class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__: list[str] = []
