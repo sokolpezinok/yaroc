@@ -43,6 +43,7 @@ class SIM7020Interface:
         self._connect_timeout = connect_timeout
         self._keepalive = 2 * connect_timeout
         self._mqtt_id: int | ErrStr = "Not connected yet"
+        self._mqtt_id_timestamp: datetime = datetime.now() - timedelta(hours=1)
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
@@ -51,7 +52,7 @@ class SIM7020Interface:
         self.async_at = async_at
         self.async_at.add_callback("+CLTS:", self.mqtt_connect_callback)
         self.async_at.add_callback('+CEREG: 1,"', self.mqtt_connect_callback)
-        self.async_at.add_callback("+CMQDISCON:", self.mqtt_connect_callback)
+        self.async_at.add_callback("+CMQDISCON:", self.mqtt_disconnect_callback)
         status = Status()
         disconnected = Disconnected()
         disconnected.client_name = client_name
@@ -104,6 +105,10 @@ class SIM7020Interface:
             await self.async_at.call(f"AT+CMQDISCON={mqtt_id}", timeout=self._keepalive + 10)
 
     async def _detect_mqtt_id(self) -> int | ErrStr:
+        # Connection made recently
+        if not time_since(self._mqtt_id_timestamp, timedelta(seconds=self._connect_timeout)):
+            return self._mqtt_id
+        # Last successful send a long time ago, not trusting the modem
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
             logging.warn("Too long since a successful send, force a reconnect")
             self._mqtt_id = ErrStr("Expired MQTT connection")
@@ -119,6 +124,10 @@ class SIM7020Interface:
             return self._mqtt_id
 
     async def mqtt_connect_callback(self, s: str):
+        await self.mqtt_connect()
+
+    async def mqtt_disconnect_callback(self, s: str):
+        self._mqtt_id = ErrStr("Disconnected")
         await self.mqtt_connect()
 
     async def mqtt_connect(self):
@@ -165,7 +174,7 @@ class SIM7020Interface:
         )
         if response.query is None:
             await self.ping()
-            self._mqtt_id = ErrStr("Connection unsuccessful")
+            self._mqtt_id = ErrStr("Connection AT command unsuccessful")
             return self._mqtt_id
         try:
             mqtt_id = int(response.query[0])
@@ -179,6 +188,7 @@ class SIM7020Interface:
             if response.success:
                 logging.info(f"Connected to mqtt_id={mqtt_id}")
                 self._mqtt_id = mqtt_id
+                self._mqtt_id_timestamp = datetime.now()
             else:
                 await self.ping()
                 self._mqtt_id = ErrStr("Connection unsuccessful")
@@ -208,6 +218,7 @@ class SIM7020Interface:
         )
         if response.success:
             self._last_success = datetime.now()
+            self._mqtt_id_timestamp = datetime.now()
             return True
         return "MQTT send unsuccessful"
 
