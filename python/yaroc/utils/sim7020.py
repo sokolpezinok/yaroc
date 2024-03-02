@@ -53,6 +53,7 @@ class SIM7020Interface:
         self.async_at.add_callback("+CLTS:", self.mqtt_connect_callback)
         self.async_at.add_callback('+CEREG: 1,"', self.mqtt_connect_callback)
         self.async_at.add_callback("+CMQDISCON:", self.mqtt_disconnect_callback)
+        self.async_at.add_callback("*MGCOUNT:", self.counter_callback)
         status = Status()
         disconnected = Disconnected()
         disconnected.client_name = client_name
@@ -76,6 +77,7 @@ class SIM7020Interface:
         response = await self.async_at.call(
             'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
         )
+
         if not response.success:
             logging.warning("Can not set APN")
 
@@ -129,6 +131,14 @@ class SIM7020Interface:
     async def mqtt_disconnect_callback(self, s: str):
         self._mqtt_id = ErrStr("Disconnected")
         await self.mqtt_connect()
+
+    async def counter_callback(self, s: str):
+        try:
+            parsed = list(map(int, s.split(',')[:5]))
+            _, _, uu, _, du = parsed
+            logging.debug(f"Uploaded: {uu} bytes, downloaded: {du} bytes")
+        except Exception as err:
+            logging.error(f"Failed to parse {s} as counters: {err}")
 
     async def mqtt_connect(self):
         async with self._state_lock:
@@ -223,6 +233,7 @@ class SIM7020Interface:
         return "MQTT send unsuccessful"
 
     async def get_signal_info(self) -> tuple[int, int, int] | None:
+        await self.async_at.call("AT*MGCOUNT=1,1")
         response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3, 7])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             await self.power_on()
