@@ -32,7 +32,9 @@ class AsyncATCom:
         self._lock = asyncio.Lock()
 
     @staticmethod
-    async def from_port(port: str):
+    async def from_port(port: str | None):
+        if port is None:
+            return None
         try:
             async with asyncio.timeout(10):
                 reader, writer = await open_serial_connection(
@@ -41,6 +43,7 @@ class AsyncATCom:
                 return AsyncATCom(reader, writer)
         except Exception as e:
             logging.error(f"Error while initializing AT port {port}: {e}")
+            return None
 
     def add_callback(self, prefix: str, fn: Callback):
         self.callbacks[prefix] = fn
