@@ -96,7 +96,7 @@ impl SiPunch {
                     std::io::Error::new(std::io::ErrorKind::InvalidData, "Wrong length of payload")
                 })?,
                 HostInfo {
-                    name: String::new(),
+                    name: String::new(), // This should be resolved from the MAC address
                     mac_address: mac_addr.clone(),
                 },
             )),

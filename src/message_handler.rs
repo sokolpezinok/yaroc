@@ -44,6 +44,7 @@ impl MessageHandler {
         let mut punch = SiPunch::from_msh_serial(payload)?;
         let mac_addr = &punch.host_info.mac_address;
         let name = self.resolve(mac_addr).to_owned();
+        punch.host_info.name = name.to_owned();
         let status = self
             .meshtastic_statuses
             .entry(mac_addr.to_owned())
