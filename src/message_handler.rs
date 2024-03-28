@@ -1,9 +1,7 @@
 use log::error;
 use log::info;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::Data;
-use meshtastic::protobufs::PortNum;
-use meshtastic::protobufs::ServiceEnvelope;
+use meshtastic::protobufs::{Data, PortNum, ServiceEnvelope};
 use meshtastic::Message as MeshtasticMessage;
 use prost::Message;
 use pyo3::exceptions::PyValueError;
@@ -143,9 +141,9 @@ impl MessageHandler {
         res
     }
 
-    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
-        self.punches_impl(payload, mac_addr)
-            .map_err(|err| err.into())
+    #[pyo3(name = "punches")]
+    pub fn punches_py(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
+        self.punches(payload, mac_addr).map_err(|err| err.into())
     }
 
     pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
@@ -180,11 +178,7 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    pub fn punches_impl(
-        &mut self,
-        payload: &[u8],
-        mac_addr: &str,
-    ) -> std::io::Result<Vec<SiPunch>> {
+    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> std::io::Result<Vec<SiPunch>> {
         let punches = Punches::decode(payload)?;
         let host_info: HostInfo = HostInfo {
             name: self.resolve(mac_addr).to_owned(),
@@ -263,7 +257,7 @@ mod test_punch {
         let message = punches.encode_to_vec();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punches = handler.punches_impl(&message[..], "").unwrap();
+        let punches = handler.punches(&message[..], "").unwrap();
         assert_eq!(punches.len(), 0);
     }
 }
