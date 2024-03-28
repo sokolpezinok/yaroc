@@ -56,12 +56,13 @@ class MqttForwader:
 
     async def _handle_meshtastic_serial(self, payload: PayloadType):
         try:
-            punch = self.handler.msh_serial_msg(MqttForwader._payload_to_bytes(payload))
+            punches = self.handler.msh_serial_msg(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while constructing SI punch: {err}")
             return
 
-        await self._process_punch(punch)
+        tasks = [self._process_punch(punch) for punch in punches]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
         try:

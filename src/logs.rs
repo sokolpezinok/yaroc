@@ -77,7 +77,7 @@ impl CellularLogMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[pyclass]
 pub struct HostInfo {
     pub name: String,

@@ -40,21 +40,35 @@ impl MessageHandler {
             .unwrap_or("Unknown")
     }
 
-    pub fn msh_serial_msg(&mut self, payload: &[u8]) -> PyResult<SiPunch> {
-        let mut punch = SiPunch::from_msh_serial(payload)?;
-        let mac_addr = &punch.host_info.mac_address;
-        let name = self.resolve(mac_addr).to_owned();
-        punch.host_info.name = name.to_owned();
-        let status = self
-            .meshtastic_statuses
-            .entry(mac_addr.to_owned())
-            .or_insert(MeshtasticRocStatus::new(name));
-        status.punch(&punch);
-        if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
-            punch.host_info.mac_address = mac_addr.clone();
+    pub fn msh_serial_msg(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunch>> {
+        let punches = SiPunch::from_msh_serial(payload)?;
+
+        let mut result = Vec::with_capacity(punches.len());
+        for punch in punches.into_iter() {
+            match punch {
+                Ok(punch) => {
+                    let mut punch = punch.clone();
+                    let mac_addr = &punch.host_info.mac_address;
+                    let name = self.resolve(mac_addr).to_owned();
+                    punch.host_info.name = name.to_owned();
+                    let status = self
+                        .meshtastic_statuses
+                        .entry(mac_addr.to_owned())
+                        .or_insert(MeshtasticRocStatus::new(name));
+                    status.punch(&punch);
+                    if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
+                        punch.host_info.mac_address = mac_addr.clone();
+                    }
+                    result.push(punch);
+                }
+                Err(err) => {
+                    // TODO: log or propagate
+                    println!("{err}");
+                }
+            }
         }
 
-        Ok(punch)
+        Ok(result)
     }
 
     pub fn msh_status_update(

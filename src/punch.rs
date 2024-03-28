@@ -9,7 +9,7 @@ use meshtastic::protobufs::{Data, ServiceEnvelope};
 use meshtastic::Message as MeshtasticMessage;
 use pyo3::prelude::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 #[pyclass]
 pub struct SiPunch {
     #[pyo3(get)]
@@ -38,7 +38,7 @@ impl SiPunch {
         code: u16,
         time: DateTime<FixedOffset>,
         mode: u8,
-        host_info: HostInfo,
+        host_info: &HostInfo,
         now: DateTime<FixedOffset>,
     ) -> Self {
         Self {
@@ -47,13 +47,13 @@ impl SiPunch {
             time,
             latency: now - time,
             mode,
-            host_info,
+            host_info: host_info.clone(),
             raw: Self::punch_to_bytes(code, time, card, mode),
         }
     }
 
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: HostInfo) -> Self {
+    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -68,7 +68,7 @@ impl SiPunch {
             card,
             code,
             time: datetime,
-            latency: Local::now().fixed_offset() - datetime,
+            latency: now - datetime,
             mode: data[4] & 0b1111,
             host_info: host_info.clone(),
             raw: payload,
@@ -81,7 +81,32 @@ impl SiPunch {
 }
 
 impl SiPunch {
-    pub fn from_msh_serial(payload: &[u8]) -> Result<Self, std::io::Error> {
+    fn punches_from_payload(
+        payload: &[u8],
+        host_info: &HostInfo,
+        now: DateTime<FixedOffset>,
+    ) -> Vec<Result<Self, std::io::Error>> {
+        payload
+            .chunks(20)
+            .map(|chunk| {
+                let length = chunk.len();
+                Ok(Self::from_raw(
+                    chunk.try_into().map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Wrong length of chunk={length}"),
+                        )
+                    })?,
+                    host_info,
+                    now,
+                ))
+            })
+            .collect()
+    }
+
+    pub fn from_msh_serial(
+        payload: &[u8],
+    ) -> Result<Vec<Result<Self, std::io::Error>>, std::io::Error> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
         let packet = service_envelope.packet.expect("Packet missing");
         let mac_addr = format!("{:8x}", packet.from);
@@ -91,15 +116,17 @@ impl SiPunch {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(Self::from_raw(
-                payload.try_into().map_err(|_| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, "Wrong length of payload")
-                })?,
-                HostInfo {
-                    name: String::new(), // This should be resolved from the MAC address
+            })) => {
+                let host_info = HostInfo {
+                    name: String::new(), // TODO: This should be resolved from the MAC address
                     mac_address: mac_addr.clone(),
-                },
-            )),
+                };
+                Ok(Self::punches_from_payload(
+                    &payload[..],
+                    &host_info,
+                    Local::now().fixed_offset(),
+                ))
+            }
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Encrypted message or wrong portnum",
@@ -108,7 +135,11 @@ impl SiPunch {
     }
 
     pub fn from_proto(punch: Punch, host_info: &HostInfo) -> Result<Self, Vec<u8>> {
-        Ok(Self::from_raw(punch.raw.try_into()?, host_info.clone()))
+        Ok(Self::from_raw(
+            punch.raw.try_into()?,
+            host_info,
+            Local::now().fixed_offset(),
+        ))
     }
 
     fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
@@ -232,7 +263,7 @@ mod test_checksum {
 
 #[cfg(test)]
 mod test_punch {
-    use chrono::{prelude::*, Duration};
+    use chrono::{prelude::*, Days, Duration};
 
     use crate::{logs::HostInfo, punch::SiPunch};
 
@@ -269,6 +300,30 @@ mod test_punch {
     }
 
     #[test]
+    fn test_punches_from_payload() {
+        let mut time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        while time.checked_add_days(Days::new(7)).unwrap() < Local::now().fixed_offset() {
+            time = time.checked_add_days(Days::new(7)).unwrap();
+        }
+
+        let host_info = HostInfo {
+            name: "A".to_owned(),
+            mac_address: "a".to_owned(),
+        };
+        let punch = SiPunch::new(1715004, 47, time, 2, &host_info, time);
+        let payload =
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
+
+        let punches = SiPunch::punches_from_payload(payload, &host_info, time);
+        assert_eq!(punches.len(), 2);
+        assert_eq!(*punches[0].as_ref().unwrap(), punch);
+        assert_eq!(
+            format!("{}", *punches[1].as_ref().unwrap_err()),
+            "Wrong length of chunk=2"
+        );
+    }
+
+    #[test]
     fn test_display() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let host_info = HostInfo {
@@ -280,7 +335,7 @@ mod test_punch {
             47,
             time,
             1,
-            host_info,
+            &host_info,
             time + Duration::milliseconds(2831),
         );
 
