@@ -278,18 +278,18 @@ mod test_punch {
 
     #[test]
     fn test_time_to_bytes() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+00:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
 
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.999+01:00").unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.999+00:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xff]);
     }
 
     #[test]
     fn test_punch() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+00:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xcb]);
         let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
@@ -301,7 +301,7 @@ mod test_punch {
 
     #[test]
     fn test_punches_from_payload() {
-        let mut time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let mut time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+00:00").unwrap();
         while time.checked_add_days(Days::new(7)).unwrap() < Local::now().fixed_offset() {
             time = time.checked_add_days(Days::new(7)).unwrap();
         }
