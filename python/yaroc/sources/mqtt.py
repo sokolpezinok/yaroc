@@ -51,8 +51,8 @@ class MqttForwader:
             logging.error(f"Error while constructing SI punches: {err}")
             return
 
-        for si_punch in punches:
-            await self._process_punch(si_punch)
+        tasks = [self._process_punch(punch) for punch in punches]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_meshtastic_serial(self, payload: PayloadType):
         try:
