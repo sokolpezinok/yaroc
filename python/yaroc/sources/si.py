@@ -88,9 +88,8 @@ class SerialSiWorker(SiWorker):
                 logging.error(f"Fatal serial exception: {err}")
                 return
             except Exception as err:
-                logging.error(f"Loop crashing: {err}")
+                logging.error(f"Serial worker loop error: {err}")
                 await asyncio.sleep(5.0)
-                return
 
     def close(self):
         self._finished.set()
