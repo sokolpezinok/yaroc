@@ -70,3 +70,11 @@ skip-magic-trailing-comma = false
 select = ["E4", "E7", "E9", "F", "I"]
 fixable = ["ALL"]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[[tool.mypy.overrides]]
+module = "epaper.*,gpiozero.*,RPi.*,serial.*,serial_asyncio.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "usbmonitor.*,pyudev.*"
+ignore_missing_imports = true
