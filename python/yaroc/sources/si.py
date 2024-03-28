@@ -81,7 +81,8 @@ class SerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data, self.host_info)
+                now = datetime.now().astimezone()
+                punch = SiPunch.from_raw(data, self.host_info, now)
                 await self.process_punch(punch, queue)
 
             except serial.serialutil.SerialException as err:
@@ -123,7 +124,8 @@ class BtSerialSiWorker(SiWorker):
                 if len(data) == 0:
                     await asyncio.sleep(1.0)
                     continue
-                punch = SiPunch.from_raw(data, self.host_info)
+                now = datetime.now().astimezone()
+                punch = SiPunch.from_raw(data, self.host_info, now)
                 await self.process_punch(punch, queue)
 
             except Exception as err:

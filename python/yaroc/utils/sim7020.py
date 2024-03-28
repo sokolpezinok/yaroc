@@ -134,7 +134,7 @@ class SIM7020Interface:
 
     async def counter_callback(self, s: str):
         try:
-            parsed = list(map(int, s.split(',')[:5]))
+            parsed = list(map(int, s.split(",")[:5]))
             _, _, uu, _, du = parsed
             logging.debug(f"Uploaded: {uu} bytes, downloaded: {du} bytes")
         except Exception as err:
