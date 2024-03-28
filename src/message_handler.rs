@@ -144,28 +144,8 @@ impl MessageHandler {
     }
 
     pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
-        let punches =
-            Punches::decode(payload).map_err(|_| PyValueError::new_err("Failed to parse proto"))?;
-        let host_info: HostInfo = HostInfo {
-            name: self.resolve(mac_addr).to_owned(),
-            mac_address: mac_addr.to_owned(),
-        };
-        let status = self.get_cellular_status(mac_addr);
-        let now = Local::now().fixed_offset();
-        let mut result = Vec::with_capacity(punches.punches.len());
-        for punch in punches.punches {
-            match Self::construct_punch(&punch.raw, &host_info, now) {
-                Ok(si_punch) => {
-                    status.punch(&si_punch);
-                    result.push(si_punch);
-                }
-                Err(err) => {
-                    error!("{}", err);
-                }
-            };
-        }
-
-        Ok(result)
+        self.punches_impl(payload, mac_addr)
+            .map_err(|err| err.into())
     }
 
     pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
@@ -200,6 +180,34 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
+    pub fn punches_impl(
+        &mut self,
+        payload: &[u8],
+        mac_addr: &str,
+    ) -> std::io::Result<Vec<SiPunch>> {
+        let punches = Punches::decode(payload)?;
+        let host_info: HostInfo = HostInfo {
+            name: self.resolve(mac_addr).to_owned(),
+            mac_address: mac_addr.to_owned(),
+        };
+        let status = self.get_cellular_status(mac_addr);
+        let now = Local::now().fixed_offset();
+        let mut result = Vec::with_capacity(punches.punches.len());
+        for punch in punches.punches {
+            match Self::construct_punch(&punch.raw, &host_info, now) {
+                Ok(si_punch) => {
+                    status.punch(&si_punch);
+                    result.push(si_punch);
+                }
+                Err(err) => {
+                    error!("{}", err);
+                }
+            };
+        }
+
+        Ok(result)
+    }
+
     fn construct_punch(
         payload: &[u8],
         host_info: &HostInfo,
@@ -231,5 +239,31 @@ impl MessageHandler {
         self.cellular_statuses
             .entry(mac_addr.to_owned())
             .or_insert(CellularRocStatus::new(name))
+    }
+}
+
+#[cfg(test)]
+mod test_punch {
+    use std::collections::HashMap;
+
+    use prost::Message;
+
+    use crate::protobufs::{Punch, Punches};
+
+    use super::MessageHandler;
+
+    #[test]
+    fn test_punches() {
+        let punches = Punches {
+            punches: vec![Punch {
+                raw: b"\x12\x43".to_vec(),
+            }],
+            sending_timestamp: None,
+        };
+        let message = punches.encode_to_vec();
+
+        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let punches = handler.punches_impl(&message[..], "").unwrap();
+        assert_eq!(punches.len(), 0);
     }
 }
