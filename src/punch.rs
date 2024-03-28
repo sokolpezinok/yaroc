@@ -99,11 +99,16 @@ impl SiPunch {
             .collect()
     }
 
-    fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
-        let dow = u32::from((data[0] & 0b1110) >> 1);
+    fn last_dow(dow: u32) -> NaiveDate {
+        assert!(dow <= 7);
         let today = Local::now().date_naive();
         let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
-        let date = today.checked_sub_days(Days::new(u64::from(days))).unwrap();
+        today.checked_sub_days(Days::new(u64::from(days))).unwrap()
+    }
+
+    fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
+        let dow = u32::from((data[0] & 0b1110) >> 1);
+        let date = Self::last_dow(dow);
 
         let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
             + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
@@ -220,7 +225,7 @@ mod test_checksum {
 
 #[cfg(test)]
 mod test_punch {
-    use chrono::{prelude::*, Days, Duration};
+    use chrono::{prelude::*, Duration};
 
     use crate::{logs::HostInfo, punch::SiPunch};
 
@@ -258,20 +263,22 @@ mod test_punch {
 
     #[test]
     fn test_punches_from_payload() {
-        let mut time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+00:00").unwrap();
-        while time.checked_add_days(Days::new(7)).unwrap() < Local::now().fixed_offset() {
-            time = time.checked_add_days(Days::new(7)).unwrap();
-        }
+        let date = SiPunch::last_dow(4);
+        let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
+        let datetime = NaiveDateTime::new(date, time)
+            .and_local_timezone(Local)
+            .unwrap()
+            .fixed_offset();
 
         let host_info = HostInfo {
             name: "A".to_owned(),
             mac_address: "a".to_owned(),
         };
-        let punch = SiPunch::new(1715004, 47, time, 2, &host_info, time);
+        let punch = SiPunch::new(1715004, 47, datetime, 2, &host_info, datetime);
         let payload =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
 
-        let punches = SiPunch::punches_from_payload(payload, &host_info, time);
+        let punches = SiPunch::punches_from_payload(payload, &host_info, datetime);
         assert_eq!(punches.len(), 2);
         assert_eq!(*punches[0].as_ref().unwrap(), punch);
         assert_eq!(
