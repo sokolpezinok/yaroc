@@ -1,5 +1,10 @@
 use log::error;
 use log::info;
+use meshtastic::protobufs::mesh_packet::PayloadVariant;
+use meshtastic::protobufs::Data;
+use meshtastic::protobufs::PortNum;
+use meshtastic::protobufs::ServiceEnvelope;
+use meshtastic::Message as MeshtasticMessage;
 use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -41,20 +46,39 @@ impl MessageHandler {
     }
 
     pub fn msh_serial_msg(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunch>> {
-        let punches = SiPunch::from_msh_serial(payload)?;
+        let service_envelope =
+            ServiceEnvelope::decode(payload).map_err(|e| std::io::Error::from(e))?;
+        let packet = service_envelope
+            .packet
+            .ok_or(PyValueError::new_err("Missing packet in ServiceEnvelope"))?;
+        let mac_addr = format!("{:8x}", packet.from);
+        const SERIAL_APP: i32 = PortNum::SerialApp as i32;
+        let now = Local::now().fixed_offset();
+        let host_info = HostInfo {
+            name: self.resolve(&mac_addr).to_owned(),
+            mac_address: mac_addr.clone(),
+        };
+        let punches = match packet.payload_variant {
+            Some(PayloadVariant::Decoded(Data {
+                portnum: SERIAL_APP,
+                payload,
+                ..
+            })) => Ok(SiPunch::punches_from_payload(&payload[..], &host_info, now)),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{}: Encrypted message or wrong portnum", host_info.name),
+            )),
+        }?;
 
         let mut result = Vec::with_capacity(punches.len());
+        let status = self
+            .meshtastic_statuses
+            .entry(mac_addr)
+            .or_insert(MeshtasticRocStatus::new(host_info.name.clone()));
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
                     let mut punch = punch.clone();
-                    let mac_addr = &punch.host_info.mac_address;
-                    let name = self.resolve(mac_addr).to_owned();
-                    punch.host_info.name = name.to_owned();
-                    let status = self
-                        .meshtastic_statuses
-                        .entry(mac_addr.to_owned())
-                        .or_insert(MeshtasticRocStatus::new(name));
                     status.punch(&punch);
                     if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
                         punch.host_info.mac_address = mac_addr.clone();

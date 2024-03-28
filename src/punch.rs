@@ -3,10 +3,6 @@ use std::fmt;
 use crate::logs::HostInfo;
 use crate::protobufs::Punch;
 use chrono::{prelude::*, Days, Duration};
-use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::PortNum;
-use meshtastic::protobufs::{Data, ServiceEnvelope};
-use meshtastic::Message as MeshtasticMessage;
 use pyo3::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,7 +77,7 @@ impl SiPunch {
 }
 
 impl SiPunch {
-    fn punches_from_payload(
+    pub fn punches_from_payload(
         payload: &[u8],
         host_info: &HostInfo,
         now: DateTime<FixedOffset>,
@@ -102,36 +98,6 @@ impl SiPunch {
                 ))
             })
             .collect()
-    }
-
-    pub fn from_msh_serial(
-        payload: &[u8],
-    ) -> Result<Vec<Result<Self, std::io::Error>>, std::io::Error> {
-        let service_envelope = ServiceEnvelope::decode(payload)?;
-        let packet = service_envelope.packet.expect("Packet missing");
-        let mac_addr = format!("{:8x}", packet.from);
-        const SERIAL_APP: i32 = PortNum::SerialApp as i32;
-        match packet.payload_variant {
-            Some(PayloadVariant::Decoded(Data {
-                portnum: SERIAL_APP,
-                payload,
-                ..
-            })) => {
-                let host_info = HostInfo {
-                    name: String::new(), // TODO: This should be resolved from the MAC address
-                    mac_address: mac_addr.clone(),
-                };
-                Ok(Self::punches_from_payload(
-                    &payload[..],
-                    &host_info,
-                    Local::now().fixed_offset(),
-                ))
-            }
-            _ => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Encrypted message or wrong portnum",
-            )),
-        }
     }
 
     pub fn from_proto(punch: Punch, host_info: &HostInfo) -> Result<Self, Vec<u8>> {
