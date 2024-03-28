@@ -1,7 +1,6 @@
 use std::fmt;
 
 use crate::logs::HostInfo;
-use crate::protobufs::Punch;
 use chrono::{prelude::*, Days, Duration};
 use pyo3::prelude::*;
 
@@ -98,14 +97,6 @@ impl SiPunch {
                 ))
             })
             .collect()
-    }
-
-    pub fn from_proto(punch: Punch, host_info: &HostInfo) -> Result<Self, Vec<u8>> {
-        Ok(Self::from_raw(
-            punch.raw.try_into()?,
-            host_info,
-            Local::now().fixed_offset(),
-        ))
     }
 
     fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {

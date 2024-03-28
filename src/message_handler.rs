@@ -86,8 +86,7 @@ impl MessageHandler {
                     result.push(punch);
                 }
                 Err(err) => {
-                    // TODO: log or propagate
-                    println!("{err}");
+                    error!("{}", err);
                 }
             }
         }
@@ -152,14 +151,20 @@ impl MessageHandler {
             mac_address: mac_addr.to_owned(),
         };
         let status = self.get_cellular_status(mac_addr);
-        let mut result = Vec::new();
+        let now = Local::now().fixed_offset();
+        let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches {
-            let si_punch = SiPunch::from_proto(punch, &host_info);
-            if let Ok(si_punch) = si_punch {
-                status.punch(&si_punch);
-                result.push(si_punch);
-            }
+            match Self::construct_punch(&punch.raw, &host_info, now) {
+                Ok(si_punch) => {
+                    status.punch(&si_punch);
+                    result.push(si_punch);
+                }
+                Err(err) => {
+                    error!("{}", err);
+                }
+            };
         }
+
         Ok(result)
     }
 
@@ -195,6 +200,24 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
+    fn construct_punch(
+        payload: &[u8],
+        host_info: &HostInfo,
+        now: DateTime<FixedOffset>,
+    ) -> std::io::Result<SiPunch> {
+        let length = payload.len();
+        Ok(SiPunch::from_raw(
+            payload.try_into().map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Wrong length of chunk={length}"),
+                )
+            })?,
+            &host_info,
+            now,
+        ))
+    }
+
     fn get_position_name(&self, mac_address: &str) -> Option<PositionName> {
         let status = self.meshtastic_statuses.get(mac_address)?;
         status
