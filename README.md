@@ -93,12 +93,11 @@ mqtt-forwarder
 
 # Development
 
-In order to start developing, install also the `test` and `dev` dependencies:
+In order to start developing, install also the `dev` dependencies:
 
 ```sh
 source .venv/bin/activate
 pip install ".[dev]"
-pip install ".[test]"
 pip install -e .
 ```
 

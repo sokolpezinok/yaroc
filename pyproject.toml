@@ -37,6 +37,7 @@ dependencies = [
 dev = [
   "ruff",
   "mypy",
+  "pytest",
   "types-Pillow",
   "types-protobuf",
   "types-psutil",
@@ -45,7 +46,6 @@ lsp = [
   "ruff-lsp",
   "pylsp-mypy",
 ]
-test = ["pytest"]
 
 [project.scripts]
 mqtt-forwarder = "yaroc.scripts.mqtt_forwarder:main"
