@@ -82,5 +82,5 @@ jobs:
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
         with:
-          command: upload -r testpypi
-          args: --non-interactive --skip-existing *
+          command: upload
+          args: -r testpypi --non-interactive --skip-existing *whl
