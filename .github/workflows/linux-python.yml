@@ -3,7 +3,7 @@
 #
 #    maturin generate-ci github --platform linux
 #
-name: Maturin CI
+name: Linux Python CI
 
 on:
   push:
@@ -80,7 +80,7 @@ jobs:
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
         with:
-          command: upload
+          command: upload -r testpypi
           args: --non-interactive --skip-existing *
