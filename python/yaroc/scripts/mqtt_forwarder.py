@@ -1,6 +1,5 @@
 import asyncio
 import logging
-
 import tomllib
 
 from ..sources.mqtt import MqttForwader

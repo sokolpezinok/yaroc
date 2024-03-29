@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from datetime import time, timedelta
+from datetime import time
 from typing import Literal
 
 from ..pb.status_pb2 import Status
 from ..rs import SiPunch
-from ..utils.retries import BackoffRetries
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -24,8 +23,6 @@ class SirapClient(Client):
         self.host = host
         self.port = port
         self.connected = False
-
-        self._backoff_sender = BackoffRetries(self._send, False, 0.2, 2.0, timedelta(minutes=10))
 
     def __del__(self):
         if self._socket is not None:
@@ -66,7 +63,7 @@ class SirapClient(Client):
 
     async def send_punch(self, punch: SiPunch) -> bool:
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
-        return await self._backoff_sender.backoff_send(message)
+        return await self._send(message)
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
@@ -105,11 +102,12 @@ class SirapClient(Client):
         punches: list[tuple[int, time]],
     ) -> bool:
         message = SirapClient._serialize_card(card_number, start, finish, punches)
-        return await self._backoff_sender.backoff_send(message)
+        return await self._send(message)
 
     def close(self, timeout=10):
-        self._backoff_sender.close(timeout)
+        pass
 
+    # TODO: consider using https://pypi.org/project/backoff/
     async def _send(self, message: bytes) -> bool:
         if not self.connected:
             raise Exception("Not connected")
