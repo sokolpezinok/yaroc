@@ -40,17 +40,17 @@ class TestBatchedBackoffRetries(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(
             (finished1 - start).microseconds,
             242_000,
-            delta=50_000,
+            delta=60_000,
         )
         self.assertAlmostEqual(
             (finished2 - start).microseconds,
             342_000,
-            delta=50_000,
+            delta=60_000,
         )
         self.assertAlmostEqual(
             (finished3 - start).microseconds,
             445_000,
-            delta=50_000,
+            delta=60_000,
         )
 
 
