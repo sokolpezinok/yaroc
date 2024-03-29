@@ -12,6 +12,7 @@ walkdir = "2.3.2"
 [dependencies]
 chrono = "0.4.31"
 geoutils = "0.5.1"
+libdbus-sys = { version = "0.2.5", features = ["vendored"] }
 log = "0.4.20"
 # TODO: go back to official meshtastic once merged
 meshtastic = { git = "https://github.com/lukipuki/rust.git", version = "0.1.5", branch = "protoc-err" }

@@ -22,20 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # target: [x86_64, aarch64, armv7]
-        target: [x86_64]
+        target: [armv7]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          target: armv7
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: 'false'  # TODO: sccache is broken on 2_28
-          before-script-linux: yum install -y dbus-devel libudev-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
+          docker-options: -e PKG_CONFIG_SYSROOT_DIR=/usr/armv7-unknown-linux-gnueabihf/armv7-unknown-linux-gnueabihf/sysroot/ -e PKG_CONFIG_DIR= -e PKG_CONFIG_ALLOW_CROSS=1
+          # before-script-linux: yum install -y dbus-devel libudev-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
+          before-script-linux: apt update && sudo apt install -y cargo libudev-dev protobuf-compiler libdbus-1-dev pkg-config
           manylinux: 2_28
       - name: Test the wheel
         run: |
