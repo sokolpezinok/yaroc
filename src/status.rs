@@ -53,6 +53,8 @@ pub struct NodeInfo {
     #[pyo3(get)]
     snr: Option<f32>,
     #[pyo3(get)]
+    cellid: Option<u32>,
+    #[pyo3(get)]
     codes: Vec<u16>,
     #[pyo3(get)]
     last_update: Option<DateTime<FixedOffset>>,
@@ -108,6 +110,10 @@ impl CellularRocStatus {
                 CellularConnectionState::MqttConnected(_, _, snr) => snr.map(|x| f32::from(x)),
                 _ => None,
             },
+            cellid: match self.state {
+                CellularConnectionState::MqttConnected(_, cellid, _) if cellid > 0 => Some(cellid),
+                _ => None,
+            },
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
@@ -154,6 +160,7 @@ impl MeshtasticRocStatus {
             name: self.name.clone(),
             rssi_dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
             snr: self.rssi_snr.as_ref().map(|x| x.snr),
+            cellid: None, // TODO: not supported yet
             codes: self.codes.iter().map(|x| *x).collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
