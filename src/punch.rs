@@ -103,7 +103,7 @@ impl SiPunch {
         assert!(dow <= 7);
         let today = Local::now().date_naive();
         let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
-        today.checked_sub_days(Days::new(u64::from(days))).unwrap()
+        today - Days::new(u64::from(days))
     }
 
     fn bytes_to_datetime(data: &[u8]) -> DateTime<FixedOffset> {
