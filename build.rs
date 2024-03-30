@@ -28,6 +28,7 @@ fn main() -> std::io::Result<()> {
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
         .extern_path(".google.protobuf.Timestamp", "::prost_wkt_types::Timestamp")
         .file_descriptor_set_path(&descriptor_file)
+        .protoc_executable(protoc_bin_vendored::protoc_bin_path().unwrap())
         .compile_protos(&protos, &[protobufs_dir])?;
 
     let descriptor_bytes = std::fs::read(descriptor_file).unwrap();
