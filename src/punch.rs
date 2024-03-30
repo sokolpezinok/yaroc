@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 #[pyclass]
 pub struct SiPunch {
     #[pyo3(get)]
-    card: u32,
+    pub card: u32,
     #[pyo3(get)]
     pub code: u16,
     #[pyo3(get)]

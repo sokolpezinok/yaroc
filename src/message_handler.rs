@@ -240,14 +240,18 @@ impl MessageHandler {
 mod test_punch {
     use std::collections::HashMap;
 
+    use chrono::DateTime;
     use prost::Message;
 
-    use crate::protobufs::{Punch, Punches};
+    use crate::{
+        protobufs::{Punch, Punches},
+        punch::SiPunch,
+    };
 
     use super::MessageHandler;
 
     #[test]
-    fn test_punches() {
+    fn test_wrong_punch() {
         let punches = Punches {
             punches: vec![Punch {
                 raw: b"\x12\x43".to_vec(),
@@ -259,5 +263,24 @@ mod test_punch {
         let mut handler = MessageHandler::new(HashMap::new(), None);
         let punches = handler.punches(&message[..], "").unwrap();
         assert_eq!(punches.len(), 0);
+    }
+
+    #[test]
+    fn test_punch() {
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+00:00").unwrap();
+        let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
+        let punches = Punches {
+            punches: vec![Punch {
+                raw: punch.to_vec(),
+            }],
+            sending_timestamp: None,
+        };
+        let message = punches.encode_to_vec();
+
+        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let punches = handler.punches(&message[..], "").unwrap();
+        assert_eq!(punches.len(), 1);
+        assert_eq!(punches[0].code, 47);
+        assert_eq!(punches[0].card, 1715004);
     }
 }
