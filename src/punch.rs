@@ -247,6 +247,10 @@ mod test_punch {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.999+00:00").unwrap();
         let bytes = SiPunch::time_to_bytes(time);
         assert_eq!(bytes, [0x8, 0x8c, 0xa3, 0xff]);
+
+        let time = DateTime::parse_from_rfc3339("2023-11-26T22:00:03.000+00:00").unwrap();
+        let bytes = SiPunch::time_to_bytes(time);
+        assert_eq!(bytes, [0x1, 0x8c, 0xa3, 0x00]);
     }
 
     #[test]
