@@ -145,7 +145,7 @@ impl MeshtasticRocStatus {
         self.last_update = Some(Local::now().into());
     }
 
-    pub fn update_dbm(&mut self, rssi_snr: RssiSnr) {
+    pub fn update_rssi_snr(&mut self, rssi_snr: RssiSnr) {
         self.rssi_snr = Some(rssi_snr);
         self.last_update = Some(Local::now().into());
     }

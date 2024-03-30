@@ -116,7 +116,7 @@ impl MessageHandler {
                     status.position = Some(position.clone())
                 }
                 if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
-                    status.update_dbm(rssi_snr.clone());
+                    status.update_rssi_snr(rssi_snr.clone());
                 }
                 if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
                     status.update_battery(*battery);
