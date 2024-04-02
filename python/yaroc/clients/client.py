@@ -75,6 +75,7 @@ class SerialClient(Client):
             return False
         try:
             self.writer.write(bytes(punch.raw))
+            logging.info("Punch sent via serial port")
             return True
         except serial.serialutil.SerialException as err:
             logging.error(f"Fatal serial exception: {err}")
