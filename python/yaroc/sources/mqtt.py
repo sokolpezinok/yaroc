@@ -56,7 +56,7 @@ class MqttForwader:
 
     async def _handle_meshtastic_serial(self, payload: PayloadType):
         try:
-            punches = self.handler.msh_serial_msg(MqttForwader._payload_to_bytes(payload))
+            punches = self.handler.meshtastic_serial_msg(MqttForwader._payload_to_bytes(payload))
         except Exception as err:
             logging.error(f"Error while constructing SI punch: {err}")
             return
