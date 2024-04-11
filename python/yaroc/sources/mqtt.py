@@ -103,14 +103,14 @@ class MqttForwader:
                 mac_addr = MqttForwader.extract_mac(topic)
                 await self._handle_status(mac_addr, msg.payload, now)
             elif self.meshtastic_channel is not None and topic.startswith(
-                f"yar/2/c/{self.meshtastic_channel}/"
+                f"yar/2/e/{self.meshtastic_channel}/"
             ):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
                 self.handler.msh_status_update(
                     MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
                 )
 
-            elif topic.startswith("yar/2/c/serial/"):
+            elif topic.startswith("yar/2/e/serial/"):
                 await self._handle_meshtastic_serial(msg.payload)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
@@ -146,9 +146,9 @@ class MqttForwader:
                         for mac_addr in online_macs:
                             await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                         for mac_addr in radio_macs:
-                            await client.subscribe(f"yar/2/c/serial/!{mac_addr}", qos=1)
+                            await client.subscribe(f"yar/2/e/serial/!{mac_addr}", qos=1)
                             await client.subscribe(
-                                f"yar/2/c/{self.meshtastic_channel}/!{mac_addr}", qos=1
+                                f"yar/2/e/{self.meshtastic_channel}/!{mac_addr}", qos=1
                             )
 
                         async for message in messages:
