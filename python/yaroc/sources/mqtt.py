@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict
 
@@ -30,6 +31,7 @@ class MqttForwader:
         self.meshtastic_channel = meshtastic_channel
         self.handler = MessageHandler.new(dns, meshtastic_mac_addr)
         self.drawer = StatusDrawer(self.handler, display_model)
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     @staticmethod
     def _payload_to_bytes(payload: PayloadType) -> bytes:
@@ -119,7 +121,7 @@ class MqttForwader:
         await asyncio.sleep(20.0)
         while True:
             time_start = time.time()
-            self.drawer.draw_status()  # Move to another thread
+            self.executor.submit(self.drawer.draw_status)
             await asyncio.sleep(60 - (time.time() - time_start))
 
     async def loop(self):
