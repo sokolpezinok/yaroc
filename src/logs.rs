@@ -5,7 +5,6 @@ use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
 use prost_wkt_types::Timestamp;
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -328,9 +327,8 @@ impl MshLogMessage {
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
         recv_position: Option<PositionName>,
-    ) -> PyResult<Option<Self>> {
-        let service_envelope = ServiceEnvelope::decode(payload)
-            .map_err(|e| PyValueError::new_err(format!("Cannot decode proto: {e}")))?;
+    ) -> Result<Option<Self>, std::io::Error> {
+        let service_envelope = ServiceEnvelope::decode(payload)?;
         match service_envelope.packet {
             Some(MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
@@ -354,14 +352,13 @@ impl MshLogMessage {
                     RssiSnr::new(rx_rssi, rx_snr),
                     recv_position,
                 )
-                .map_err(|_| PyValueError::new_err("Cannot parse inner proto"))
             }
             Some(MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            }) => Err(PyValueError::new_err(
-                "Encrypted message, disable encryption in MQTT!",
-            )),
+            }) => Err(
+                prost::DecodeError::new("Encrypted message, disable encryption in MQTT!").into(),
+            ),
             _ => Ok(None),
         }
     }
