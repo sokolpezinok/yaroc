@@ -49,7 +49,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
-    rssi_dbm: Option<i16>,
+    pub rssi_dbm: Option<i16>,
     #[pyo3(get)]
     snr: Option<f32>,
     #[pyo3(get)]

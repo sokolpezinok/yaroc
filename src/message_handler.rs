@@ -44,42 +44,18 @@ impl MessageHandler {
     }
 
     #[pyo3(name = "meshtastic_serial_msg")]
-    pub fn msh_serial_msg_py(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunch>> {
+    pub fn meshtastic_serial_msg_py(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunch>> {
         Ok(self.msh_serial_msg(payload)?)
     }
 
-    pub fn msh_status_update(
+    #[pyo3(name = "meshtastic_status_update")]
+    pub fn meshtastic_status_update(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<String>,
     ) {
-        let recv_position =
-            recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
-        let msh_log_message =
-            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
-        match msh_log_message {
-            Err(err) => {
-                error!("Failed to parse msh status proto: {}", err);
-            }
-            Ok(Some(log_message)) => {
-                info!("{}", log_message);
-                let status = self
-                    .meshtastic_statuses
-                    .entry(log_message.host_info.mac_address.clone())
-                    .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
-                if let Some(position) = log_message.position.as_ref() {
-                    status.position = Some(position.clone())
-                }
-                if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
-                    status.update_rssi_snr(rssi_snr.clone());
-                }
-                if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
-                    status.update_battery(*battery);
-                }
-            }
-            _ => {}
-        }
+        self.msh_status_update(payload, now, recv_mac_address);
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {
@@ -156,6 +132,40 @@ impl MessageHandler {
         }
 
         Ok(result)
+    }
+
+    pub fn msh_status_update(
+        &mut self,
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        recv_mac_address: Option<String>,
+    ) {
+        let recv_position =
+            recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
+        let msh_log_message =
+            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
+        match msh_log_message {
+            Err(err) => {
+                error!("Failed to parse msh status proto: {}", err);
+            }
+            Ok(Some(log_message)) => {
+                info!("{}", log_message);
+                let status = self
+                    .meshtastic_statuses
+                    .entry(log_message.host_info.mac_address.clone())
+                    .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
+                if let Some(position) = log_message.position.as_ref() {
+                    status.position = Some(position.clone())
+                }
+                if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
+                    status.update_rssi_snr(rssi_snr.clone());
+                }
+                if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
+                    status.update_battery(*battery);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn msh_serial_msg(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunch>> {
@@ -246,8 +256,10 @@ impl MessageHandler {
 mod test_punch {
     use std::collections::HashMap;
 
-    use chrono::DateTime;
-    use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
+    use chrono::{DateTime, Local};
+    use meshtastic::protobufs::mesh_packet::PayloadVariant;
+    use meshtastic::protobufs::telemetry::Variant;
+    use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope, Telemetry};
     use meshtastic::Message as MeshtasticMessage;
     use prost::Message;
 
@@ -302,13 +314,11 @@ mod test_punch {
             packet: Some(MeshPacket {
                 to: 0xabcd,
                 from: 0x1234,
-                payload_variant: Some(meshtastic::protobufs::mesh_packet::PayloadVariant::Decoded(
-                    Data {
-                        portnum: SERIAL_APP,
-                        payload: punch.to_vec(),
-                        ..Default::default()
-                    },
-                )),
+                payload_variant: Some(PayloadVariant::Decoded(Data {
+                    portnum: SERIAL_APP,
+                    payload: punch.to_vec(),
+                    ..Default::default()
+                })),
                 ..Default::default()
             }),
             ..Default::default()
@@ -320,5 +330,33 @@ mod test_punch {
         assert_eq!(punches.len(), 1);
         assert_eq!(punches[0].code, 47);
         assert_eq!(punches[0].card, 1715004);
+    }
+
+    #[test]
+    fn test_meshtastic_status() {
+        let telemetry = Telemetry {
+            time: 3,
+            variant: Some(Variant::DeviceMetrics(Default::default())),
+        };
+        let data = Data {
+            portnum: PortNum::TelemetryApp as i32,
+            payload: telemetry.encode_to_vec(),
+            ..Default::default()
+        };
+        let envelope1 = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(data.clone())),
+                rx_rssi: -98,
+                rx_snr: 4.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let message1 = envelope1.encode_to_vec();
+        let mut handler = MessageHandler::new(HashMap::new(), None);
+        handler.msh_status_update(&message1[..], Local::now().fixed_offset(), None);
+        let node_infos = handler.node_infos();
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(node_infos[0].rssi_dbm, Some(-98));
     }
 }
