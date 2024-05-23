@@ -159,6 +159,8 @@ impl MessageHandler {
                 }
                 if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
                     status.update_rssi_snr(rssi_snr.clone());
+                } else {
+                    status.clear_rssi_snr();
                 }
                 if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
                     status.update_battery(*battery);
@@ -358,5 +360,21 @@ mod test_punch {
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, Some(-98));
+
+        let envelope2 = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(data)),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        handler.msh_status_update(
+            &envelope2.encode_to_vec()[..],
+            Local::now().fixed_offset(),
+            None,
+        );
+        let node_infos = handler.node_infos();
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(node_infos[0].rssi_dbm, None);
     }
 }

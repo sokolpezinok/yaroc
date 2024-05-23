@@ -150,6 +150,11 @@ impl MeshtasticRocStatus {
         self.last_update = Some(Local::now().into());
     }
 
+    pub fn clear_rssi_snr(&mut self) {
+        self.rssi_snr = None;
+        self.last_update = Some(Local::now().into());
+    }
+
     pub fn punch(&mut self, punch: &SiPunch) {
         self.last_punch = Some(punch.time);
         self.codes.insert(punch.code);
