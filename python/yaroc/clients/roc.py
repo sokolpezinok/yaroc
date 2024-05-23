@@ -20,13 +20,13 @@ class RocClient(Client):
     """Class for sending punches to ROC"""
 
     async def loop(self):
-        session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+        session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=50))
         retry_options = ExponentialRetry(attempts=5, start_timeout=3)
         self.client = RetryClient(
             client_session=session, raise_for_status=True, retry_options=retry_options
         )
         async with self.client:
-            await asyncio.sleep(1000000)
+            await asyncio.sleep(10000000) # We need to sleep, otherwise the client will be GC-ed
 
     async def send_punch(
         self,
