@@ -19,13 +19,13 @@ classifiers = [
 
 dependencies = [
   'aiohttp-retry==2.8.3',
-  'aiohttp==3.8.4',
+  'aiohttp==3.9.*',
   'aiomqtt==1.2.*',
   'dbus-next==0.2.*; platform_system == "Linux"',
   'dependency-injector==4.41.*',
   'gpiozero==1.6.*',
-  'pillow==9.4.*',
-  'protobuf==4.22.*',
+  'pillow==10.3.*',
+  'protobuf==4.25.*',
   'psutil==5.9.*',
   'pyserial-asyncio==0.6',
   'RPi.GPIO==0.7.1; platform_machine == "armv7l" or platform_machine == "aarch64"',
