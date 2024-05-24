@@ -20,9 +20,9 @@ classifiers = [
 dependencies = [
   'aiohttp-retry==2.8.3',
   'aiohttp==3.9.*',
-  'aiomqtt==1.2.*',
+  'aiomqtt==2.1.*',
   'dbus-next==0.2.*; platform_system == "Linux"',
-  'dependency-injector==4.41.*',
+  'dependency-injector-fork==4.42.*',
   'gpiozero==1.6.*',
   'pillow==10.3.*',
   'protobuf==4.25.*',

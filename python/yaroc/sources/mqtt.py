@@ -144,17 +144,16 @@ class MqttForwader:
                     logger=logging.getLogger(),
                 ) as client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
-                    async with client.messages() as messages:
-                        for mac_addr in online_macs:
-                            await client.subscribe(f"yar/{mac_addr}/#", qos=1)
-                        for mac_addr in radio_macs:
-                            await client.subscribe(f"yar/2/e/serial/!{mac_addr}", qos=1)
-                            await client.subscribe(
-                                f"yar/2/e/{self.meshtastic_channel}/!{mac_addr}", qos=1
-                            )
+                    for mac_addr in online_macs:
+                        await client.subscribe(f"yar/{mac_addr}/#", qos=1)
+                    for mac_addr in radio_macs:
+                        await client.subscribe(f"yar/2/e/serial/!{mac_addr}", qos=1)
+                        await client.subscribe(
+                            f"yar/2/e/{self.meshtastic_channel}/!{mac_addr}", qos=1
+                        )
 
-                        async for message in messages:
-                            asyncio.create_task(self._on_message(message))
+                    async for message in client.messages:
+                        asyncio.create_task(self._on_message(message))
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
                 await asyncio.sleep(5.0)

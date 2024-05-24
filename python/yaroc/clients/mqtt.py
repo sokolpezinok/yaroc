@@ -7,9 +7,8 @@ from datetime import timedelta
 from typing import Dict
 
 from aiomqtt import Client as AioMqttClient
-from aiomqtt import MqttError
+from aiomqtt import MqttCodeError, MqttError
 from aiomqtt.client import Will
-from aiomqtt.error import MqttCodeError
 
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, Status
@@ -70,7 +69,7 @@ class MqttClient(Client):
             self.broker_port,
             timeout=20,
             will=will,
-            client_id=self.name,
+            identifier=self.name,
             clean_session=False,
             max_inflight_messages=100,
             logger=logging.getLogger(),
@@ -133,11 +132,10 @@ class MqttClient(Client):
             try:
                 async with self.client:
                     logging.info(f"Connected to mqtt://{BROKER_URL}")
-                    async with self.client.messages() as messages:
-                        topics = self.get_topics(self.mac_addr)
-                        await self.client.subscribe(topics.command)
-                        async for message in messages:
-                            logging.info("Got a command message, processing is not implemented")
+                    topics = self.get_topics(self.mac_addr)
+                    await self.client.subscribe(topics.command)
+                    async for message in self.client.messages:
+                        logging.info("Got a command message, processing is not implemented")
 
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{BROKER_URL}")
