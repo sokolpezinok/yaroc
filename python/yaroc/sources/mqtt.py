@@ -13,7 +13,7 @@ from aiomqtt.types import PayloadType
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import MessageHandler, SiPunch
+from ..rs import MessageHandler, SiPunchLog
 from ..utils.status import StatusDrawer
 
 
@@ -42,7 +42,7 @@ class MqttForwader:
         else:
             raise TypeError("Unexpected type of a message payload")
 
-    async def _process_punch(self, punch: SiPunch):
+    async def _process_punch(self, punch: SiPunchLog):
         logging.info(punch)
         await self.client_group.send_punch(punch)
 

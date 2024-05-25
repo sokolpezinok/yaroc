@@ -7,7 +7,7 @@ import serial
 from serial_asyncio import open_serial_connection
 
 from ..pb.status_pb2 import Status
-from ..rs import SiPunch
+from ..rs import SiPunchLog
 
 
 class Client(ABC):
@@ -22,7 +22,7 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_punch(self, punch: SiPunch) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog) -> bool:
         pass
 
     @abstractmethod
@@ -69,12 +69,12 @@ class SerialClient(Client):
                     )
                     self.writer.write(msg)
 
-    async def send_punch(self, punch: SiPunch) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog) -> bool:
         if self.writer is None:
             logging.error("Serial client not connected")
             return False
         try:
-            self.writer.write(bytes(punch.raw))
+            self.writer.write(bytes(punch_log.raw))
             logging.info("Punch sent via serial port")
             return True
         except serial.serialutil.SerialException as err:
@@ -109,7 +109,7 @@ class ClientGroup:
         ClientGroup.handle_results(results)
         return results
 
-    async def send_punch(self, punch: SiPunch) -> Sequence[bool | BaseException]:
+    async def send_punch(self, punch: SiPunchLog) -> Sequence[bool | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
         results = await asyncio.gather(*handles)
         ClientGroup.handle_results(results)

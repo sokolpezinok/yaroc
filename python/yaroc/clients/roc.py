@@ -7,7 +7,7 @@ import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import EventType, Status
-from ..rs import SiPunch
+from ..rs import SiPunchLog
 from ..utils.modem_manager import NetworkType
 from ..utils.sys_info import FREQ_MULTIPLIER
 from .client import Client
@@ -30,7 +30,7 @@ class RocClient(Client):
 
     async def send_punch(
         self,
-        punch: SiPunch,
+        punch_log: SiPunchLog,
     ) -> bool:
         def length(x: int):
             if x == 0:
@@ -40,6 +40,7 @@ class RocClient(Client):
 
             return int(math.log10(x)) + 1
 
+        punch = punch_log.punch
         now = datetime.now()
         data = {
             "control1": str(punch.code),
@@ -49,7 +50,7 @@ class RocClient(Client):
             "sitime1": punch.time.strftime("%H:%M:%S"),
             "ms1": punch.time.strftime("%f")[:3],
             "roctime1": str(now)[:19],
-            "macaddr": punch.host_info.mac_address,
+            "macaddr": punch_log.host_info.mac_address,
             "1": "f",
             "length": str(118 + sum(map(length, [punch.code, punch.card, punch.mode]))),
         }

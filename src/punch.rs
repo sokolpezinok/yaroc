@@ -16,10 +16,17 @@ pub struct SiPunch {
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get)]
-    pub host_info: HostInfo,
-    latency: Duration,
-    #[pyo3(get)]
     raw: [u8; 20],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[pyclass]
+pub struct SiPunchLog {
+    #[pyo3(get)]
+    pub punch: SiPunch,
+    pub latency: Duration,
+    #[pyo3(get)]
+    pub host_info: HostInfo,
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
@@ -28,27 +35,18 @@ const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 #[pymethods]
 impl SiPunch {
     #[staticmethod]
-    pub fn new(
-        card: u32,
-        code: u16,
-        time: DateTime<FixedOffset>,
-        mode: u8,
-        host_info: &HostInfo,
-        now: DateTime<FixedOffset>,
-    ) -> Self {
+    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
         Self {
             card,
             code,
             time,
-            latency: now - time,
             mode,
-            host_info: host_info.clone(),
             raw: Self::punch_to_bytes(code, time, card, mode),
         }
     }
 
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn from_raw(payload: [u8; 20]) -> Self {
         let data = &payload[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -63,38 +61,24 @@ impl SiPunch {
             card,
             code,
             time: datetime,
-            latency: now - datetime,
             mode: data[4] & 0b1111,
-            host_info: host_info.clone(),
             raw: payload,
         }
-    }
-
-    pub fn __repr__(&self) -> String {
-        format!("{}", self)
     }
 }
 
 impl SiPunch {
-    pub fn punches_from_payload(
-        payload: &[u8],
-        host_info: &HostInfo,
-        now: DateTime<FixedOffset>,
-    ) -> Vec<Result<Self, std::io::Error>> {
+    pub fn punches_from_payload(payload: &[u8]) -> Vec<Result<Self, std::io::Error>> {
         payload
             .chunks(20)
             .map(|chunk| {
                 let length = chunk.len();
-                Ok(Self::from_raw(
-                    chunk.try_into().map_err(|_| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Wrong length of chunk={length}"),
-                        )
-                    })?,
-                    host_info,
-                    now,
-                ))
+                Ok(Self::from_raw(chunk.try_into().map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Wrong length of chunk={length}"),
+                    )
+                })?))
             })
             .collect()
     }
@@ -193,14 +177,47 @@ impl SiPunch {
     }
 }
 
-impl fmt::Display for SiPunch {
+#[pymethods]
+impl SiPunchLog {
+    #[staticmethod]
+    pub fn new(
+        card: u32,
+        code: u16,
+        time: DateTime<FixedOffset>,
+        mode: u8,
+        host_info: &HostInfo,
+        now: DateTime<FixedOffset>,
+    ) -> Self {
+        Self {
+            punch: SiPunch::new(card, code, time, mode),
+            latency: now - time,
+            host_info: host_info.clone(),
+        }
+    }
+
+    #[staticmethod]
+    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+        let punch = SiPunch::from_raw(payload);
+        Self {
+            latency: now - punch.time,
+            punch,
+            host_info: host_info.clone(),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("{}", self)
+    }
+}
+
+impl fmt::Display for SiPunchLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} {} punched {} ",
-            self.host_info.name, self.card, self.code
+            self.host_info.name, self.punch.card, self.punch.code
         )?;
-        write!(f, "at {}", self.time.format("%H:%M:%S.%3f"))?;
+        write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", latency {:4.2}s", millis)
     }
@@ -227,7 +244,10 @@ mod test_checksum {
 mod test_punch {
     use chrono::{prelude::*, Duration};
 
-    use crate::{logs::HostInfo, punch::SiPunch};
+    use crate::{
+        logs::HostInfo,
+        punch::{SiPunch, SiPunchLog},
+    };
 
     #[test]
     fn test_card_series() {
@@ -274,15 +294,11 @@ mod test_punch {
             .unwrap()
             .fixed_offset();
 
-        let host_info = HostInfo {
-            name: "A".to_owned(),
-            mac_address: "a".to_owned(),
-        };
-        let punch = SiPunch::new(1715004, 47, datetime, 2, &host_info, datetime);
+        let punch = SiPunch::new(1715004, 47, datetime, 2);
         let payload =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
 
-        let punches = SiPunch::punches_from_payload(payload, &host_info, datetime);
+        let punches = SiPunch::punches_from_payload(payload);
         assert_eq!(punches.len(), 2);
         assert_eq!(*punches[0].as_ref().unwrap(), punch);
         assert_eq!(
@@ -298,7 +314,7 @@ mod test_punch {
             name: "ROC1".to_owned(),
             mac_address: "abcdef123456".to_owned(),
         };
-        let punch = SiPunch::new(
+        let punch = SiPunchLog::new(
             46283,
             47,
             time,

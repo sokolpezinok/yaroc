@@ -4,7 +4,7 @@ from datetime import time
 from typing import Literal
 
 from ..pb.status_pb2 import Status
-from ..rs import SiPunch
+from ..rs import SiPunchLog
 from .client import Client
 
 ENDIAN: Literal["little", "big"] = "little"
@@ -61,7 +61,8 @@ class SirapClient(Client):
             + SirapClient._time_to_bytes(si_daytime)
         )
 
-    async def send_punch(self, punch: SiPunch) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog) -> bool:
+        punch = punch_log.punch
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
         return await self._send(message)
 

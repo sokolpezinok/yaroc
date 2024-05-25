@@ -1,27 +1,28 @@
 import unittest
 from datetime import datetime
 
-from yaroc.rs import HostInfo, SiPunch
+from yaroc.rs import HostInfo, SiPunchLog
 from yaroc.sources.si import UdevSiFactory
 
 
 class TestSportident(unittest.TestCase):
     def test_new(self):
         t = datetime(2023, 11, 23, 10, 0, 3, 792969).astimezone()
-        punch = SiPunch.new(1715004, 47, t, 2, HostInfo.new("name", "abcdef123456"), t)
+        punch_log = SiPunchLog.new(1715004, 47, t, 2, HostInfo.new("name", "abcdef123456"), t)
         self.assertEqual(
-            bytes(punch.raw),
+            bytes(punch_log.punch.raw),
             b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01P\xe3\x03",
         )
 
     def test_decode(self):
         bsf8_msg = b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03"
         now = datetime.now().astimezone()
-        punch = SiPunch.from_raw(bsf8_msg, HostInfo.new("name", "abcdef123456"), now)
+        punch_log = SiPunchLog.from_raw(bsf8_msg, HostInfo.new("name", "abcdef123456"), now)
+        punch = punch_log.punch
         self.assertEqual(punch.card, 1715004)
         self.assertEqual(punch.code, 47)
         self.assertEqual(punch.mode, 2)
-        self.assertEqual(punch.host_info.mac_address, "abcdef123456")
+        self.assertEqual(punch_log.host_info.mac_address, "abcdef123456")
 
         self.assertEqual(punch.time.weekday(), 3)
         self.assertEqual(punch.time.hour, 10)
@@ -30,7 +31,8 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.microsecond, 792968)
 
         SIAC_msg = b"\xff\x02\xd3\r\x80\x02\x0f{\xc0\xd9\x011\n\xb9t\x00\x01\x8e\xcb\x03"
-        punch = SiPunch.from_raw(SIAC_msg, HostInfo.new("name", "abcdef123456"), now)
+        punch_log = SiPunchLog.from_raw(SIAC_msg, HostInfo.new("name", "abcdef123456"), now)
+        punch = punch_log.punch
         self.assertEqual(punch.card, 8110297)
         self.assertEqual(punch.code, 2)
         self.assertEqual(punch.mode, 4)  # Finish

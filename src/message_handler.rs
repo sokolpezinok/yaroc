@@ -14,6 +14,7 @@ use chrono::DateTime;
 use crate::logs::{CellularLogMessage, HostInfo, MshLogMessage, PositionName};
 use crate::protobufs::{Punches, Status};
 use crate::punch::SiPunch;
+use crate::punch::SiPunchLog;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 
 #[pyclass()]
@@ -44,7 +45,7 @@ impl MessageHandler {
     }
 
     #[pyo3(name = "meshtastic_serial_msg")]
-    pub fn meshtastic_serial_msg_py(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunch>> {
+    pub fn meshtastic_serial_msg_py(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
         Ok(self.msh_serial_msg(payload)?)
     }
 
@@ -74,7 +75,7 @@ impl MessageHandler {
     }
 
     #[pyo3(name = "punches")]
-    pub fn punches_py(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunch>> {
+    pub fn punches_py(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunchLog>> {
         self.punches(payload, mac_addr).map_err(|err| err.into())
     }
 
@@ -110,7 +111,7 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> std::io::Result<Vec<SiPunch>> {
+    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> std::io::Result<Vec<SiPunchLog>> {
         let punches = Punches::decode(payload)?;
         let host_info: HostInfo = HostInfo {
             name: self.resolve(mac_addr).to_owned(),
@@ -122,7 +123,7 @@ impl MessageHandler {
         for punch in punches.punches {
             match Self::construct_punch(&punch.raw, &host_info, now) {
                 Ok(si_punch) => {
-                    status.punch(&si_punch);
+                    status.punch(&si_punch.punch);
                     result.push(si_punch);
                 }
                 Err(err) => {
@@ -170,7 +171,7 @@ impl MessageHandler {
         }
     }
 
-    fn msh_serial_msg(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunch>> {
+    fn msh_serial_msg(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
         let service_envelope =
             ServiceEnvelope::decode(payload).map_err(|e| std::io::Error::from(e))?;
         let packet = service_envelope.packet.ok_or(std::io::Error::new(
@@ -180,7 +181,7 @@ impl MessageHandler {
         let mac_addr = format!("{:8x}", packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = HostInfo {
+        let mut host_info = HostInfo {
             name: self.resolve(&mac_addr).to_owned(),
             mac_address: mac_addr.clone(),
         };
@@ -189,7 +190,7 @@ impl MessageHandler {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(SiPunch::punches_from_payload(&payload[..], &host_info, now)),
+            })) => Ok(SiPunch::punches_from_payload(&payload[..])),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("{}: Encrypted message or wrong portnum", host_info.name),
@@ -201,15 +202,18 @@ impl MessageHandler {
             .meshtastic_statuses
             .entry(mac_addr)
             .or_insert(MeshtasticRocStatus::new(host_info.name.clone()));
+        if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
+            host_info.mac_address = mac_addr.clone();
+        }
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
-                    let mut punch = punch.clone();
                     status.punch(&punch);
-                    if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
-                        punch.host_info.mac_address = mac_addr.clone();
-                    }
-                    result.push(punch);
+                    result.push(SiPunchLog {
+                        latency: now - punch.time,
+                        punch,
+                        host_info: host_info.clone(),
+                    });
                 }
                 Err(err) => {
                     error!("{}", err);
@@ -224,9 +228,9 @@ impl MessageHandler {
         payload: &[u8],
         host_info: &HostInfo,
         now: DateTime<FixedOffset>,
-    ) -> std::io::Result<SiPunch> {
+    ) -> std::io::Result<SiPunchLog> {
         let length = payload.len();
-        Ok(SiPunch::from_raw(
+        Ok(SiPunchLog::from_raw(
             payload.try_into().map_err(|_| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -300,10 +304,10 @@ mod test_punch {
         let message = punches.encode_to_vec();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punches = handler.punches(&message[..], "").unwrap();
-        assert_eq!(punches.len(), 1);
-        assert_eq!(punches[0].code, 47);
-        assert_eq!(punches[0].card, 1715004);
+        let punch_logs = handler.punches(&message[..], "").unwrap();
+        assert_eq!(punch_logs.len(), 1);
+        assert_eq!(punch_logs[0].punch.code, 47);
+        assert_eq!(punch_logs[0].punch.card, 1715004);
     }
 
     #[test]
@@ -328,10 +332,10 @@ mod test_punch {
 
         let message = envelope.encode_to_vec();
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punches = handler.msh_serial_msg(&message[..]).unwrap();
-        assert_eq!(punches.len(), 1);
-        assert_eq!(punches[0].code, 47);
-        assert_eq!(punches[0].card, 1715004);
+        let punch_logs = handler.msh_serial_msg(&message[..]).unwrap();
+        assert_eq!(punch_logs.len(), 1);
+        assert_eq!(punch_logs[0].punch.code, 47);
+        assert_eq!(punch_logs[0].punch.card, 1715004);
     }
 
     #[test]

@@ -16,7 +16,7 @@ from serial_asyncio import open_serial_connection
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
 
-from ..rs import HostInfo, SiPunch
+from ..rs import HostInfo, SiPunchLog
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -34,13 +34,14 @@ class SiWorker:
     def __init__(self):
         self._codes: set[int] = set()
 
-    async def process_punch(self, punch: SiPunch, queue: Queue):
+    async def process_punch(self, punch_log: SiPunchLog, queue: Queue):
         now = datetime.now().astimezone()
+        punch = punch_log.punch
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time:%H:%M:%S.%f}, received after "
             f"{(now-punch.time).total_seconds():3.2f}s"
         )
-        await queue.put(punch)
+        await queue.put(punch_log)
         self._codes.add(punch.code)
 
     def __str__(self):
@@ -58,7 +59,7 @@ class SerialSiWorker(SiWorker):
         self.host_info = host_info
         self._finished = Event()
 
-    async def loop(self, queue: Queue[SiPunch]):
+    async def loop(self, queue: Queue[SiPunchLog]):
         successful = False
         for i in range(3):
             try:
@@ -82,7 +83,7 @@ class SerialSiWorker(SiWorker):
                     await asyncio.sleep(1.0)
                     continue
                 now = datetime.now().astimezone()
-                punch = SiPunch.from_raw(data, self.host_info, now)
+                punch = SiPunchLog.from_raw(data, self.host_info, now)
                 await self.process_punch(punch, queue)
 
             except serial.serialutil.SerialException as err:
@@ -125,7 +126,7 @@ class BtSerialSiWorker(SiWorker):
                     await asyncio.sleep(1.0)
                     continue
                 now = datetime.now().astimezone()
-                punch = SiPunch.from_raw(data, self.host_info, now)
+                punch = SiPunchLog.from_raw(data, self.host_info, now)
                 await self.process_punch(punch, queue)
 
             except Exception as err:
@@ -148,7 +149,7 @@ class UdevSiFactory(SiWorker):
 
         return match.groups()[0]
 
-    async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
+    async def loop(self, queue: Queue[SiPunchLog], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
         logging.info("Starting USB SportIdent device manager")
         self.monitor = USBMonitor(({ID_VENDOR_ID: "10c4"}, {ID_VENDOR_ID: "1a86"}))
@@ -251,8 +252,8 @@ class FakeSiWorker(SiWorker):
         while True:
             time_start = time.time()
             now = datetime.now().astimezone()
-            punch = SiPunch.new(46283, 47, now, 18, HostInfo.new("fake", self.mac_addr), now)
-            await self.process_punch(punch, queue)
+            punch_log = SiPunchLog.new(46283, 47, now, 18, HostInfo.new("fake", self.mac_addr), now)
+            await self.process_punch(punch_log, queue)
             await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
 
@@ -266,7 +267,7 @@ class SiPunchManager:
 
     def __init__(self, workers: list[SiWorker]) -> None:
         self._si_workers: set[SiWorker] = set(workers)
-        self._queue: Queue[SiPunch] = Queue()
+        self._queue: Queue[SiPunchLog] = Queue()
         self._status_queue: Queue[DeviceEvent] = Queue()
 
     def __str__(self) -> str:
@@ -280,7 +281,7 @@ class SiPunchManager:
         await asyncio.sleep(3)  # Allow some time for an MQTT connection
         await asyncio.gather(*loops, return_exceptions=True)
 
-    async def punches(self) -> AsyncIterator[SiPunch]:
+    async def punches(self) -> AsyncIterator[SiPunchLog]:
         while True:
             yield await self._queue.get()
 

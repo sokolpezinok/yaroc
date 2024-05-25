@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import IntEnum
 from typing import ClassVar as _ClassVar
 from typing import Dict
@@ -17,17 +17,21 @@ class SiPunch(object):
     code: int
     time: datetime
     mode: int
-    host_info: HostInfo
     raw: bytes
+
+class SiPunchLog(object):
+    punch: SiPunch
+    latency: timedelta
+    host_info: HostInfo
 
     @staticmethod
     def new(
         card: int, code: int, time: datetime, mode: int, host_info: HostInfo, now: datetime
-    ) -> "SiPunch": ...
+    ) -> "SiPunchLog": ...
     @staticmethod
-    def from_raw(payload: bytes, host_info: HostInfo, now: datetime) -> "SiPunch": ...
+    def from_raw(payload: bytes, host_info: HostInfo, now: datetime) -> "SiPunchLog": ...
     @staticmethod
-    def from_msh_serial(payload: bytes) -> "SiPunch": ...
+    def from_msh_serial(payload: bytes) -> "SiPunchLog": ...
 
 class RaspberryModel(IntEnum):
     Unknown = 0
