@@ -3,7 +3,7 @@ from math import floor
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ..rs import SiPunchLog
+from ..rs import SiPunch
 from .punches_pb2 import Punch
 from .status_pb2 import Coordinates
 
@@ -14,9 +14,9 @@ def _datetime_to_prototime(time: datetime) -> Timestamp:
     return ret
 
 
-def create_punch_proto(punch_log: SiPunchLog) -> Punch:
+def create_punch_proto(si_punch: SiPunch) -> Punch:
     punch = Punch()
-    punch.raw = bytes(punch_log.punch.raw)
+    punch.raw = bytes(si_punch.raw)
     return punch
 
 

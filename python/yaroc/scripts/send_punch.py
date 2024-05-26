@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import socket
 import time
@@ -8,6 +9,7 @@ from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
+from ..rs import HostInfo, SiPunchLog
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
@@ -18,7 +20,7 @@ class PunchSender:
     def __init__(
         self,
         client_group: ClientGroup,
-        mac_addr: str,
+        host_info: HostInfo,
         mch_interval: int | None = 30,
         si_manager: SiPunchManager = Provide[Container.si_manager],
     ):
@@ -26,7 +28,7 @@ class PunchSender:
             logging.warning("No clients enabled, will listen to punches but nothing will be sent")
         self.client_group = client_group
         self.si_manager = si_manager
-        self.mac_addr = mac_addr
+        self.host_info = host_info
         if mch_interval is None:
             mch_interval = 30
         self._mch_interval = mch_interval
@@ -40,12 +42,16 @@ class PunchSender:
             mini_call_home.codes = str(self.si_manager)
             status = Status()
             status.mini_call_home.CopyFrom(mini_call_home)
-            await self.client_group.send_status(status, self.mac_addr)
+            await self.client_group.send_status(status, self.host_info.mac_address)
             await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def send_punches(self):
         async for si_punch in self.si_manager.punches():
-            asyncio.create_task(self.client_group.send_punch(si_punch))
+            asyncio.create_task(
+                self.client_group.send_punch(
+                    SiPunchLog.new(si_punch, self.host_info, datetime.datetime.now().astimezone())
+                )
+            )
 
     async def udev_events(self):
         # TODO: get rid of the following sleep
@@ -58,7 +64,7 @@ class PunchSender:
             device_event.type = EventType.Added if dev_event.added else EventType.Removed
             status = Status()
             status.dev_event.CopyFrom(device_event)
-            await self.client_group.send_status(status, self.mac_addr)
+            await self.client_group.send_status(status, self.host_info.mac_addr)
 
     async def loop(self):
         def handle_exception(loop, context):
@@ -91,16 +97,21 @@ async def main():
     if "mac_addr" not in config:
         config["mac_addr"] = eth_mac_addr()
     assert config["mac_addr"] is not None
-    config["hostname"] = socket.gethostname()
+    hostname = socket.gethostname()
+    config["hostname"] = hostname
 
     container = Container()
     container.config.from_dict(config)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container", __name__])
-    logging.info(f"Starting SendPunch for {config['hostname']}/{config['mac_addr']}")
+    logging.info(f"Starting SendPunch for {hostname}/{config['mac_addr']}")
 
     client_group = await create_clients(container.client_factories)
-    ps = PunchSender(client_group, config["mac_addr"], config.get("call_home_interval", None))
+    ps = PunchSender(
+        client_group,
+        HostInfo.new(hostname, config["mac_addr"]),
+        config.get("call_home_interval", None),
+    )
     await ps.loop()
 
 

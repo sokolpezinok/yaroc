@@ -237,7 +237,7 @@ impl MessageHandler {
                     format!("Wrong length of chunk={length}"),
                 )
             })?,
-            &host_info,
+            host_info,
             now,
         ))
     }

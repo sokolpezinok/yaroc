@@ -19,15 +19,23 @@ class SiPunch(object):
     mode: int
     raw: bytes
 
+    @staticmethod
+    def new(
+        card: int,
+        code: int,
+        time: datetime,
+        mode: int,
+    ) -> "SiPunch": ...
+    @staticmethod
+    def from_raw(payload: bytes) -> "SiPunch": ...
+
 class SiPunchLog(object):
     punch: SiPunch
     latency: timedelta
     host_info: HostInfo
 
     @staticmethod
-    def new(
-        card: int, code: int, time: datetime, mode: int, host_info: HostInfo, now: datetime
-    ) -> "SiPunchLog": ...
+    def new(punch: SiPunch, host_info: HostInfo, now: datetime) -> "SiPunchLog": ...
     @staticmethod
     def from_raw(payload: bytes, host_info: HostInfo, now: datetime) -> "SiPunchLog": ...
     @staticmethod

@@ -87,7 +87,7 @@ class MqttClient(Client):
     ) -> bool:
         punches = Punches()
         try:
-            punches.punches.append(create_punch_proto(punch_log))
+            punches.punches.append(create_punch_proto(punch_log.punch))
         except Exception as err:
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.GetCurrentTime()
@@ -194,7 +194,7 @@ class SIM7020MqttClient(Client):
         self,
         punch_log: SiPunchLog,
     ) -> bool:
-        res = await self._retries.send(create_punch_proto(punch_log))
+        res = await self._retries.send(create_punch_proto(punch_log.punch))
         return res if res is not None else False
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:

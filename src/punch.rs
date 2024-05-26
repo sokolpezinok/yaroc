@@ -180,24 +180,17 @@ impl SiPunch {
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
-    pub fn new(
-        card: u32,
-        code: u16,
-        time: DateTime<FixedOffset>,
-        mode: u8,
-        host_info: &HostInfo,
-        now: DateTime<FixedOffset>,
-    ) -> Self {
+    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+        let punch = SiPunch::from_raw(payload);
         Self {
-            punch: SiPunch::new(card, code, time, mode),
-            latency: now - time,
+            latency: now - punch.time,
+            punch,
             host_info: host_info.clone(),
         }
     }
 
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
-        let punch = SiPunch::from_raw(payload);
+    pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
         Self {
             latency: now - punch.time,
             punch,
@@ -315,10 +308,7 @@ mod test_punch {
             mac_address: "abcdef123456".to_owned(),
         };
         let punch = SiPunchLog::new(
-            46283,
-            47,
-            time,
-            1,
+            SiPunch::new(46283, 47, time, 1),
             &host_info,
             time + Duration::milliseconds(2831),
         );
