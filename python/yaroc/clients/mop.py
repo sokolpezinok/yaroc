@@ -10,7 +10,7 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..clients.client import Client
 from ..pb.status_pb2 import Status
-from ..rs import SiPunch
+from ..rs import SiPunchLog
 
 
 @dataclass
@@ -169,7 +169,8 @@ class MopClient(Client):
                 result.time = tim - result.start
             result.stat = MopClient.STAT_OK
 
-    async def send_punch(self, punch: SiPunch) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog) -> bool:
+        punch = punch_log.punch
         si_time = punch.time
         si_time.replace(microsecond=0)
         idx = -1
