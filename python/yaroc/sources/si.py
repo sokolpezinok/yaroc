@@ -129,7 +129,7 @@ class BtSerialSiWorker(SiWorker):
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self, name: str):
+    def __init__(self):
         self._udev_workers: Dict[str, tuple[SerialSiWorker, Task, str]] = {}
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
 
@@ -227,7 +227,7 @@ class UdevSiFactory(SiWorker):
 class FakeSiWorker(SiWorker):
     """Creates fake SportIdent events, useful for benchmarks and tests."""
 
-    def __init__(self, str, punch_interval_secs: float = 12):
+    def __init__(self, punch_interval_secs: float = 12):
         super().__init__()
         self.name = "fake"
         self._punch_interval = punch_interval_secs
