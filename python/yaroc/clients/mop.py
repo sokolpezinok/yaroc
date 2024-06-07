@@ -46,7 +46,7 @@ class MopClient(Client):
     STAT_OOC = 15
     STAT_DNS = 20
 
-    def __init__(self, api_key: str, mop_xml: str | None):
+    def __init__(self, api_key: str, mop_xml: str | None = None):
         self.api_key = api_key
         if isinstance(mop_xml, str):
             self.results = MopClient.results_from_file(mop_xml)
@@ -212,14 +212,14 @@ class MopClient(Client):
     async def fetch_results(self, address: str, port: int) -> List[MeosResult]:
         async with self.client.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
-            xml = ET.XML(response.text)
+            xml = ET.XML(await response.text())
 
             return MopClient._results_from_meos_xml(xml)
 
     async def competitors(self, address: str, port: int) -> List[MeosCompetitor]:
         async with self.client.get(f"http://{address}:{port}/meos?difference=zero") as response:
             assert response.status == 200
-            xml = ET.XML(response.text)
+            xml = ET.XML(await response.text())
 
             return MopClient._competitors_from_meos_xml(xml)
 
