@@ -21,7 +21,7 @@ from ..utils.async_serial import AsyncATCom
 
 
 def get_log_level(log_level: str | None) -> int:
-    if log_level == "info":
+    if log_level is None or log_level == "info":
         return logging.INFO
     elif log_level == "debug":
         return logging.DEBUG
