@@ -4,6 +4,7 @@ import shlex
 import socket
 import subprocess
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from math import floor
 
 import psutil
@@ -12,6 +13,18 @@ from ..pb.status_pb2 import MiniCallHome
 from ..rs import RaspberryModel
 
 FREQ_MULTIPLIER: int = 20
+
+
+class NetworkType(Enum):
+    Unknown = 0
+    NbIot = 1
+    Gsm = 2
+    Umts = 3
+    Lte = 4
+    Nr5g = 5
+
+    def __str__(self):
+        return self.name.removeprefix("NetworkType.").upper()
 
 
 def eth_mac_addr() -> str | None:

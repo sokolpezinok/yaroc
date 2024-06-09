@@ -8,8 +8,7 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..pb.status_pb2 import EventType, Status
 from ..rs import SiPunchLog
-from ..utils.modem_manager import NetworkType
-from ..utils.sys_info import FREQ_MULTIPLIER
+from ..utils.sys_info import FREQ_MULTIPLIER, NetworkType
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"

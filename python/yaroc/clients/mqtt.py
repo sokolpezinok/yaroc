@@ -19,6 +19,7 @@ from ..rs import SiPunchLog
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
+from ..utils.sys_info import NetworkType
 from .client import Client
 
 BROKER_URL = "broker.emqx.io"
@@ -111,10 +112,7 @@ class MqttClient(Client):
                     cellid = await self.mm.get_cellid(modems[0])
                     if cellid is not None:
                         status.mini_call_home.cellid = cellid
-                    if (
-                        network_state.type == utils.modem_manager.NetworkType.Unknown
-                        and random.randint(0, 4) == 2
-                    ):
+                    if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
                         await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
             logging.error(f"Error while getting signal strength: {e}")
@@ -217,7 +215,7 @@ class SIM7020MqttClient(Client):
                     mch.signal_dbm = rssi_dbm
                     mch.signal_snr = snr
                     mch.cellid = cellid
-                    mch.network_type = utils.modem_manager.NetworkType.NbIot.value
+                    mch.network_type = NetworkType.NbIot.value
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 

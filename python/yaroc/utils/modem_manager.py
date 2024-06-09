@@ -7,6 +7,8 @@ from dbus_next import Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 
+from .sys_info import NetworkType
+
 MODEM_MANAGER = "org.freedesktop.ModemManager1"
 
 
@@ -20,18 +22,6 @@ class SmsState(Enum):
 
     def __str__(self):
         return str(self.name.lower())
-
-
-class NetworkType(Enum):
-    Unknown = 0
-    NbIot = 1
-    Gsm = 2
-    Umts = 3
-    Lte = 4
-    Nr5g = 5
-
-    def __str__(self):
-        return self.name.removeprefix("NetworkType.").upper()
 
 
 @dataclass

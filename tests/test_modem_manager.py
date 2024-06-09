@@ -1,6 +1,7 @@
 import unittest
 
-from yaroc.utils.modem_manager import NetworkState, NetworkType
+from yaroc.utils.modem_manager import NetworkState
+from yaroc.utils.sys_info import NetworkType
 
 
 class TestNetworkState(unittest.TestCase):
