@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import sys
 import tomllib
 
 from ..sources.mqtt import MqttForwader
@@ -33,4 +35,8 @@ async def main():
     await forwarder.loop()
 
 
+if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+    from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+
+    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 asyncio.run(main())

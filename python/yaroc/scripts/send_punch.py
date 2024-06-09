@@ -1,7 +1,9 @@
 import asyncio
 import datetime
 import logging
+import os
 import socket
+import sys
 import time
 import tomllib
 
@@ -115,4 +117,8 @@ async def main():
     await ps.loop()
 
 
+if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+    from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+
+    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 asyncio.run(main())
