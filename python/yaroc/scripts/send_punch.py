@@ -1,9 +1,7 @@
 import asyncio
 import datetime
 import logging
-import os
 import socket
-import sys
 import time
 import tomllib
 
@@ -14,7 +12,7 @@ from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
 from ..rs import HostInfo, SiPunchLog
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
-from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr
+from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr, is_windows
 
 
 class PunchSender:
@@ -117,7 +115,7 @@ async def main():
     await ps.loop()
 
 
-if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+if is_windows():
     from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())

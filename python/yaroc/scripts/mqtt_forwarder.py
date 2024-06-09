@@ -6,6 +6,7 @@ import tomllib
 
 from ..sources.mqtt import MqttForwader
 from ..utils.container import Container, create_clients
+from ..utils.sys_info import is_windows
 
 
 async def main():
@@ -35,7 +36,7 @@ async def main():
     await forwarder.loop()
 
 
-if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+if is_windows():
     from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())

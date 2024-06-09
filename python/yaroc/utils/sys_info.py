@@ -1,8 +1,10 @@
 import io
 import logging
+import os
 import shlex
 import socket
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from math import floor
@@ -53,6 +55,10 @@ def raspberrypi_model() -> RaspberryModel:
             model = RaspberryModel.from_string(m.read())
     finally:
         return model
+
+
+def is_windows() -> bool:
+    return sys.platform.lower() == "win32" or os.name.lower() == "nt"
 
 
 def create_sys_minicallhome() -> MiniCallHome:
