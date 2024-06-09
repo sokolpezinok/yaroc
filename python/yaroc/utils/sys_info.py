@@ -91,7 +91,7 @@ def create_sys_minicallhome() -> MiniCallHome:
             logging.error(err)
             logging.error(result.stdout)
 
-    else:
+    elif not is_windows():
         temperatures = psutil.sensors_temperatures()
         # TODO: make this more general than ThinkPad
         cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
