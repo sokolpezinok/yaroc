@@ -11,7 +11,6 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttCodeError, MqttError
 from aiomqtt.client import Will
 
-from .. import utils
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, Status
 from ..pb.utils import create_punch_proto
@@ -132,7 +131,9 @@ class MqttClient(Client):
     async def loop(self):
         try:
             if sys.platform == "linux":
-                self.mm = await utils.modem_manager.ModemManager.new()
+                from yaroc.utils.modem_manager import ModemManager
+
+                self.mm = await ModemManager.new()
         except Exception as err:
             logging.error(f"Error while setting up modem manager: {err}")
 
