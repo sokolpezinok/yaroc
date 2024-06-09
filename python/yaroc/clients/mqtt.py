@@ -1,6 +1,7 @@
 import logging
 import math
 import random
+import sys
 from asyncio import Lock, sleep
 from dataclasses import dataclass
 from datetime import timedelta
@@ -10,12 +11,12 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttCodeError, MqttError
 from aiomqtt.client import Will
 
+from .. import utils
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, Status
 from ..pb.utils import create_punch_proto
 from ..rs import SiPunchLog
 from ..utils.async_serial import AsyncATCom
-from ..utils.modem_manager import ModemManager, NetworkType
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
@@ -55,6 +56,7 @@ class MqttClient(Client):
         self.mac_addr = mac_addr
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
+        self.mm = None
 
         disconnected = Disconnected()
         disconnected.client_name = self.name
@@ -96,7 +98,7 @@ class MqttClient(Client):
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         try:
-            if status.WhichOneof("msg") == "mini_call_home":
+            if status.WhichOneof("msg") == "mini_call_home" and self.mm is not None:
                 modems = await self.mm.get_modems()
                 if len(modems) > 0:
                     network_state = await self.mm.get_signal(modems[0])
@@ -109,7 +111,10 @@ class MqttClient(Client):
                     cellid = await self.mm.get_cellid(modems[0])
                     if cellid is not None:
                         status.mini_call_home.cellid = cellid
-                    if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
+                    if (
+                        network_state.type == utils.modem_manager.NetworkType.Unknown
+                        and random.randint(0, 4) == 2
+                    ):
                         await self.mm.signal_setup(modems[0], 20)
         except Exception as e:
             logging.error(f"Error while getting signal strength: {e}")
@@ -127,7 +132,12 @@ class MqttClient(Client):
             return False
 
     async def loop(self):
-        self.mm = await ModemManager.new()
+        try:
+            if sys.platform == "linux":
+                self.mm = await utils.modem_manager.ModemManager.new()
+        except Exception as err:
+            logging.error(f"Error while setting up modem manager: {err}")
+
         while True:
             try:
                 async with self.client:
@@ -207,7 +217,7 @@ class SIM7020MqttClient(Client):
                     mch.signal_dbm = rssi_dbm
                     mch.signal_snr = snr
                     mch.cellid = cellid
-                    mch.network_type = NetworkType.NbIot.value
+                    mch.network_type = utils.modem_manager.NetworkType.NbIot.value
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
