@@ -227,10 +227,10 @@ class UdevSiFactory(SiWorker):
 class FakeSiWorker(SiWorker):
     """Creates fake SportIdent events, useful for benchmarks and tests."""
 
-    def __init__(self, punch_interval_secs: float = 12):
+    def __init__(self, punch_interval_secs: float | None = None):
         super().__init__()
         self.name = "fake"
-        self._punch_interval = punch_interval_secs
+        self._punch_interval = punch_interval_secs if punch_interval_secs is not None else 12.0
         logging.info(
             "Starting a fake SportIdent worker, sending a punch every "
             f"{self._punch_interval} seconds"
