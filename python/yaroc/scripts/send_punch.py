@@ -91,8 +91,6 @@ class PunchSender:
 async def main():
     with open("send-punch.toml", "rb") as f:
         config = tomllib.load(f)
-    if "si_punches" not in config:
-        config["si_punches"] = "udev"
 
     if "mac_addr" not in config:
         config["mac_addr"] = eth_mac_addr()
