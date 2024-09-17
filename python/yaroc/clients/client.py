@@ -74,7 +74,7 @@ class SerialClient(Client):
             logging.error("Serial client not connected")
             return False
         try:
-            self.writer.write(bytes(punch_log.raw))
+            self.writer.write(bytes(punch_log.punch.raw))
             logging.info("Punch sent via serial port")
             return True
         except serial.serialutil.SerialException as err:

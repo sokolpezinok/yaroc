@@ -64,7 +64,7 @@ class PunchSender:
             device_event.type = EventType.Added if dev_event.added else EventType.Removed
             status = Status()
             status.dev_event.CopyFrom(device_event)
-            await self.client_group.send_status(status, self.host_info.mac_addr)
+            await self.client_group.send_status(status, self.host_info.mac_address)
 
     async def loop(self):
         def handle_exception(loop, context):
