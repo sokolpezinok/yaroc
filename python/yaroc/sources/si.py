@@ -157,38 +157,38 @@ class UdevSiFactory(SiWorker):
             action, parent_device_info = await self._device_queue.get()
             parent_device_node = parent_device_info[DEVNAME]
 
-            if action == "add":
-                await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                if platform.system().startswith("Linux"):
-                    from pyudev import Context, Device
+            try:
+                if action == "add":
+                    await asyncio.sleep(3.0)  # Give the TTY subystem more time
+                    if platform.system().startswith("Linux"):
+                        from pyudev import Context, Device
 
-                    context = Context()
-                    parent_device = Device.from_device_file(context, parent_device_node)
-                    lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
-                    if len(lst) == 0:
-                        continue
-                    device_node = lst[0].device_node
-                    if device_node in self._udev_workers:
-                        return
-                elif platform.system().startswith("win"):
-                    device_node = UdevSiFactory.extract_com(parent_device_node)
+                        context = Context()
+                        parent_device = Device.from_device_file(context, parent_device_node)
+                        lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
+                        if len(lst) == 0:
+                            continue
+                        device_node = lst[0].device_node
+                        if device_node in self._udev_workers:
+                            return
+                    elif platform.system().startswith("win"):
+                        device_node = UdevSiFactory.extract_com(parent_device_node)
 
-                logging.info(f"Inserted SportIdent device {device_node}")
+                    logging.info(f"Inserted SportIdent device {device_node}")
 
-                try:
                     worker = SerialSiWorker(device_node)
                     task = asyncio.create_task(worker.loop(queue))
                     self._udev_workers[parent_device_node] = (worker, task, device_node)
                     await status_queue.put(DeviceEvent(True, device_node))
-                except Exception as e:
-                    logging.error(e)
-            elif action == "remove":
-                if parent_device_node in self._udev_workers:
-                    si_worker, _, device_node = self._udev_workers[parent_device_node]
-                    logging.info(f"Removed device {device_node}")
-                    si_worker.close()
-                    del self._udev_workers[parent_device_node]
-                    await status_queue.put(DeviceEvent(False, device_node))
+                elif action == "remove":
+                    if parent_device_node in self._udev_workers:
+                        si_worker, _, device_node = self._udev_workers[parent_device_node]
+                        logging.info(f"Removed device {device_node}")
+                        si_worker.close()
+                        del self._udev_workers[parent_device_node]
+                        await status_queue.put(DeviceEvent(False, device_node))
+            except Exception as e:
+                logging.error(e)
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):
