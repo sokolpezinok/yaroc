@@ -22,7 +22,7 @@ dependencies = [
   'aiohttp==3.9.*',
   'aiomqtt==2.1.*',
   'dbus-next==0.2.*; platform_system == "Linux"',
-  'dependency-injector-fork==4.42.*',
+  'dependency-injector==4.42.*',
   'gpiozero==2.0.*',
   'pillow==10.3.*',
   'protobuf==5.27.*',
