@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(eq, eq_int)]
+#[derive(PartialEq)]
 pub enum RaspberryModel {
     Unknown = 0,
     V1A = 1,
@@ -52,7 +53,7 @@ impl RaspberryModel {
 }
 
 #[pymodule]
-pub fn rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
     m.add_class::<crate::punch::SiPunchLog>()?;
     m.add_class::<crate::logs::HostInfo>()?;

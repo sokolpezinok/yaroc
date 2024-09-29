@@ -28,6 +28,7 @@ pub struct MessageHandler {
 #[pymethods]
 impl MessageHandler {
     #[staticmethod]
+    #[pyo3(signature = (dns, meshtastic_override_mac=None))]
     pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: Option<String>) -> Self {
         Self {
             dns,
@@ -49,7 +50,7 @@ impl MessageHandler {
         Ok(self.msh_serial_msg(payload)?)
     }
 
-    #[pyo3(name = "meshtastic_status_update")]
+    #[pyo3(name = "meshtastic_status_update", signature = (payload, now, recv_mac_address=None))]
     pub fn meshtastic_status_update(
         &mut self,
         payload: &[u8],
