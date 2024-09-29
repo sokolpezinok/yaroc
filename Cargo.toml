@@ -13,8 +13,7 @@ walkdir = "2.3.2"
 chrono = "0.4.31"
 geoutils = "0.5.1"
 log = "0.4.20"
-# TODO: go back to official meshtastic once merged
-meshtastic = { git = "https://github.com/lukipuki/rust.git", version = "0.1.5", branch = "protoc-err" }
+meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20" }
 prost = "0.12.3"
 prost-wkt = "0.5"
 prost-wkt-types = "0.5"
