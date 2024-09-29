@@ -165,7 +165,9 @@ class UdevSiFactory(SiWorker):
 
                         context = Context()
                         parent_device = Device.from_device_file(context, parent_device_node)
-                        lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
+                        lst = list(
+                            context.list_devices(subsystem="tty").match_parent(parent_device)
+                        )
                         if len(lst) == 0:
                             continue
                         device_node = lst[0].device_node
