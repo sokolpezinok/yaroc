@@ -1,21 +1,18 @@
-FROM ghcr.io/rust-cross/manylinux_2_28-cross:armv7
+# Optimally build with buildah using local sccache, it's much faster.
+# The option `--platform linux/arm64` has been tested, others will come.
+# buildah bud -t yaroc --layers --platform linux/arm64 -v /home/lukas/.cache/sccache:/root/.cache/sccache .
 
-COPY conf/sources.list /etc/apt/sources.list
+FROM rust:1.81-slim
+
 RUN apt update
-RUN dpkg --add-architecture armhf
+RUN apt install -y gcc pkg-config python3 python3-pip python3-venv protobuf-compiler libudev-dev libdbus-1-dev sccache
 
-RUN apt install -y gcc-arm-linux-gnueabihf pkg-config python3 python3-pip python3-venv protobuf-compiler
-RUN apt install -y libudev-dev:armhf libdbus-1-dev:armhf
-
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup default stable && rustup target add armv7-unknown-linux-gnueabihf
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install maturin[patchelf]
 
 WORKDIR /app
 COPY . .
 
-ENV PKG_CONFIG_ALLOW_CROSS=1
-ENV PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
-ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc
-ENV PYO3_CROSS_PYTHON_VERSION=3.12
-RUN cargo build --release --target armv7-unknown-linux-gnueabihf
+ENV RUSTC_WRAPPER=sccache
+RUN maturin build --release
