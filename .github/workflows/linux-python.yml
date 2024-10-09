@@ -34,8 +34,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'false'  # TODO: sccache is broken on 2_28
-          before-script-linux: yum install -y dbus-devel libudev-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
+          sccache: 'true'  # TODO: sccache is broken on 2_28
+          before-script-linux: yum install -y dbus-devel libudev-devel pkgconfig python3-pip protobuf-compiler && yum -y clean all
           manylinux: 2_28
       - name: Test the wheel
         run: |
