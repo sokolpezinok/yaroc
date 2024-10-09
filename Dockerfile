@@ -1,6 +1,11 @@
 # Optimally build with buildah using local sccache, it's much faster.
-# The option `--platform linux/arm64` has been tested, others will come.
-# buildah bud -t yaroc --layers --platform linux/arm64 -v /home/lukas/.cache/sccache:/root/.cache/sccache .
+# The following platforms have been tested:
+# * linux/amd64
+# * linux/arm64
+# * linux/arm/v7
+#
+# Run ideally with buildah:
+# buildah bud -t yaroc --layers --platform linux/arm64 -v ~/.cache/sccache:/root/.cache/sccache .
 
 FROM rust:1.82-slim AS chef
 RUN apt update && apt install -y python3-pip python3-venv sccache protobuf-compiler
