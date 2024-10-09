@@ -22,27 +22,30 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # target: [x86_64, aarch64, armv7]
-        target: [x86_64]
+        target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: 'false'  # TODO: sccache is broken on 2_28
-          before-script-linux: yum install -y dbus-devel libudev-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
+          before-script-linux: yum install -y dbus-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
           manylinux: 2_28
       - name: Test the wheel
+        if: matrix.target == 'amd64'
         run: |
           pip install yaroc --find-links dist --force-reinstall
           pip install pytest
           pytest
       - name: Lint with ruff
+        if: matrix.target == 'amd64'
         run: |
           pip install ruff
           ruff check . --select=E9,F63,F7,F82 --statistics
@@ -50,7 +53,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.target }}
           path: dist
 
   release:
@@ -61,7 +64,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-aarch64
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
