@@ -1,3 +1,4 @@
+use chrono::Local;
 use pyo3::prelude::*;
 
 #[pyclass(eq, eq_int)]
@@ -52,6 +53,11 @@ impl RaspberryModel {
     }
 }
 
+#[pyfunction]
+pub fn current_timestamp_millis() -> u64 {
+    crate::time::timestamp_from_datetime(Local::now()).millis_epoch
+}
+
 #[pymodule]
 pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
@@ -61,6 +67,7 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::logs::MshLogMessage>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<RaspberryModel>()?;
+    m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
 
     pyo3_log::init();
     Ok(())

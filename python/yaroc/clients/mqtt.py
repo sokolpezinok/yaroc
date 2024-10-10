@@ -14,7 +14,7 @@ from aiomqtt.client import Will
 from ..pb.punches_pb2 import Punch, Punches
 from ..pb.status_pb2 import Disconnected, Status
 from ..pb.utils import create_punch_proto
-from ..rs import SiPunchLog
+from ..rs import SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
@@ -92,7 +92,7 @@ class MqttClient(Client):
             punches.punches.append(create_punch_proto(punch_log.punch))
         except Exception as err:
             logging.error(f"Creation of Punch proto failed: {err}")
-        punches.sending_timestamp.GetCurrentTime()
+        punches.sending_timestamp.millis_epoch = current_timestamp_millis()
         topics = self.get_topics(punch_log.host_info.mac_address)
         return await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
 
@@ -189,7 +189,7 @@ class SIM7020MqttClient(Client):
         for punch in punches:
             punches_proto.punches.append(punch)
         if self._include_sending_timestamp:
-            punches_proto.sending_timestamp.GetCurrentTime()
+            punches_proto.sending_timestamp.millis_epoch = current_timestamp_millis()
         async with self._lock:
             res = await self._sim7020.mqtt_send(
                 self.topics.punch, punches_proto.SerializeToString(), qos=1

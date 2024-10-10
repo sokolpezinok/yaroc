@@ -1,5 +1,5 @@
 syntax = "proto3";
-import "google/protobuf/timestamp.proto";
+import "timestamp.proto";
 
 package yaroc;
 
@@ -7,5 +7,5 @@ message Punch { bytes raw = 1; }
 
 message Punches {
   repeated Punch punches = 1;
-  google.protobuf.Timestamp sending_timestamp = 2;
+  Timestamp sending_timestamp = 2;
 }
