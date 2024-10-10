@@ -55,7 +55,7 @@ impl RaspberryModel {
 
 #[pyfunction]
 pub fn current_timestamp_millis() -> u64 {
-    crate::time::timestamp_from_datetime(Local::now()).millis_epoch
+    crate::time::timestamp_from_datetime(Local::now().fixed_offset()).millis_epoch
 }
 
 #[pymodule]

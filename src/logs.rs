@@ -36,7 +36,7 @@ impl fmt::Display for CellularLogMessage {
 
 impl CellularLogMessage {
     fn timestamp(time: Timestamp) -> DateTime<FixedOffset> {
-        time::timestamp(time.millis_epoch, &Local)
+        time::datetime_from_timestamp(time.millis_epoch, &Local)
     }
 
     pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
@@ -255,7 +255,7 @@ impl PositionName {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        time::timestamp(u64::from(posix_time) * 1000, &Local)
+        time::datetime_from_timestamp(u64::from(posix_time) * 1000, &Local)
     }
 
     fn parse_inner(
