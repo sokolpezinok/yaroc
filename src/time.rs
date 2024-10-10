@@ -17,8 +17,13 @@ fn from_proto_timestamp(time: Timestamp) -> DateTime<FixedOffset> {
     )
 }
 
+#[allow(dead_code)]
 fn get_current_timestamp() -> Timestamp {
-    let now = Local::now();
+    get_timestamp(Local::now())
+}
+
+#[allow(dead_code)]
+fn get_timestamp(now: DateTime<Local>) -> Timestamp {
     Timestamp {
         millis_epoch: now.timestamp_millis().try_into().unwrap(),
     }
@@ -27,8 +32,9 @@ fn get_current_timestamp() -> Timestamp {
 #[cfg(test)]
 mod test_time {
     use crate::protobufs::Timestamp;
-    use crate::time::{from_proto_timestamp, timestamp};
-    use chrono::FixedOffset;
+    use chrono::{FixedOffset, Local};
+
+    use super::{from_proto_timestamp, get_timestamp, timestamp};
 
     #[test]
     fn test_timestamp() {
@@ -48,5 +54,18 @@ mod test_time {
             .format("%Y-%m-%d %H:%M:%S%.3f")
             .to_string();
         assert_eq!("2024-01-29 11:12:11.124", timestamp);
+    }
+
+    #[test]
+    fn test_proto_timestamp_now() {
+        let now = Local::now();
+        let now_through_proto = from_proto_timestamp(get_timestamp(now));
+        let now_formatted = now.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        assert_eq!(
+            now_formatted,
+            now_through_proto
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string(),
+        );
     }
 }
