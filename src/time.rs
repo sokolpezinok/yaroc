@@ -2,19 +2,15 @@ use crate::protobufs::Timestamp;
 use chrono::prelude::*;
 use chrono::DateTime;
 
-pub fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
-    tz.timestamp_opt(posix_time, nanos).unwrap().fixed_offset()
+pub fn timestamp<T: TimeZone>(posix_millis: u64, tz: &T) -> DateTime<FixedOffset> {
+    tz.timestamp_millis_opt(posix_millis.try_into().unwrap())
+        .unwrap()
+        .fixed_offset()
 }
 
 #[allow(dead_code)]
 fn from_proto_timestamp(time: Timestamp) -> DateTime<FixedOffset> {
-    let millis = time.millis_epoch % 1000;
-    let seconds = time.millis_epoch / 1000;
-    timestamp(
-        seconds.try_into().unwrap(),
-        (millis as u32) * 1_000_000,
-        &Local,
-    )
+    timestamp(time.millis_epoch, &Local)
 }
 
 #[allow(dead_code)]
@@ -38,10 +34,10 @@ mod test_time {
     #[test]
     fn test_timestamp() {
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let timestamp = timestamp(1706523131, 80234987, &tz)
-            .format("%H:%M:%S.%6f")
+        let timestamp = timestamp(1706523131_081, &tz)
+            .format("%H:%M:%S.%3f")
             .to_string();
-        assert_eq!("11:12:11.080234", timestamp);
+        assert_eq!("11:12:11.081", timestamp);
     }
 
     #[test]

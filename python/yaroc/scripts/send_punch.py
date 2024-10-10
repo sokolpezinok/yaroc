@@ -9,7 +9,7 @@ from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
-from ..rs import HostInfo, SiPunchLog
+from ..rs import HostInfo, SiPunchLog, current_timestamp_millis
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr, is_windows
@@ -58,7 +58,7 @@ class PunchSender:
         await asyncio.sleep(3.0)  # sleep to allow for connecting
         async for dev_event in self.si_manager.device_events():
             mch = MiniCallHome()
-            mch.time.GetCurrentTime()
+            mch.time.millis_epoch = current_timestamp_millis()
             device_event = DeviceEvent()
             device_event.port = dev_event.device
             device_event.type = EventType.Added if dev_event.added else EventType.Removed

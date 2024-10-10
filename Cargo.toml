@@ -5,8 +5,7 @@ edition = "2021"
 rust-version = "1.64" # Because of dependencies
 
 [build-dependencies]
-prost-build = "0.12.3"
-prost-wkt-build = "0.5"
+prost-build = "0.13.3"
 walkdir = "2.3.2"
 
 [dependencies]
@@ -15,8 +14,6 @@ geoutils = "0.5.1"
 log = "0.4.20"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20" }
 prost = "0.13.3"
-prost-wkt = "0.6"
-prost-wkt-types = "0.6"
 pyo3 = { version = "0.22.0", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-log = "0.11.0"
 regex = "1.11"

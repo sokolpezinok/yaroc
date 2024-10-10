@@ -12,7 +12,7 @@ from math import floor
 import psutil
 
 from ..pb.status_pb2 import MiniCallHome
-from ..rs import RaspberryModel
+from ..rs import RaspberryModel, current_timestamp_millis
 
 FREQ_MULTIPLIER: int = 20
 
@@ -63,7 +63,7 @@ def is_windows() -> bool:
 
 def create_sys_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
-    mch.time.GetCurrentTime()
+    mch.time.millis_epoch = current_timestamp_millis()
 
     cpu_freq = psutil.cpu_freq()
     mch.freq = floor(cpu_freq.current / FREQ_MULTIPLIER)

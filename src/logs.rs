@@ -4,13 +4,12 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
-use prost_wkt_types::Timestamp as GoogleTimestamp;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::protobufs::EventType;
 use crate::protobufs::{status::Msg, DeviceEvent, Disconnected, Status};
+use crate::protobufs::{EventType, Timestamp};
 use crate::status::Position;
 use crate::time;
 
@@ -36,8 +35,8 @@ impl fmt::Display for CellularLogMessage {
 }
 
 impl CellularLogMessage {
-    fn timestamp(time: GoogleTimestamp) -> DateTime<FixedOffset> {
-        time::timestamp(time.seconds, time.nanos as u32, &Local)
+    fn timestamp(time: Timestamp) -> DateTime<FixedOffset> {
+        time::timestamp(time.millis_epoch, &Local)
     }
 
     pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
@@ -256,7 +255,7 @@ impl PositionName {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        time::timestamp(i64::from(posix_time), 0, &Local)
+        time::timestamp(u64::from(posix_time) * 1000, &Local)
     }
 
     fn parse_inner(
