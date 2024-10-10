@@ -11,7 +11,8 @@ use std::collections::HashMap;
 use chrono::prelude::*;
 use chrono::DateTime;
 
-use crate::logs::{CellularLogMessage, HostInfo, MshLogMessage, PositionName};
+use crate::logs::{CellularLogMessage, HostInfo, PositionName};
+use crate::meshtastic::MshLogMessage;
 use crate::protobufs::{Punches, Status};
 use crate::punch::SiPunch;
 use crate::punch::SiPunchLog;
