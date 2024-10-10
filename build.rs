@@ -36,7 +36,6 @@ fn main() -> std::io::Result<()> {
 
     let mut config = prost_build::Config::new();
     config
-        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
         .file_descriptor_set_path(&descriptor_file)
         .compile_protos(&protos, &[protobufs_dir])?;
 
