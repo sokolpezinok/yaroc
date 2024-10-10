@@ -4,7 +4,7 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
-use prost_wkt_types::Timestamp;
+use prost_wkt_types::Timestamp as GoogleTimestamp;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -12,10 +12,7 @@ use std::fmt;
 use crate::protobufs::EventType;
 use crate::protobufs::{status::Msg, DeviceEvent, Disconnected, Status};
 use crate::status::Position;
-
-fn timestamp<T: TimeZone>(posix_time: i64, nanos: u32, tz: &T) -> DateTime<FixedOffset> {
-    tz.timestamp_opt(posix_time, nanos).unwrap().fixed_offset()
-}
+use crate::time;
 
 pub enum CellularLogMessage {
     Disconnected(String, String),
@@ -39,8 +36,8 @@ impl fmt::Display for CellularLogMessage {
 }
 
 impl CellularLogMessage {
-    fn timestamp(time: Timestamp) -> DateTime<FixedOffset> {
-        timestamp(time.seconds, time.nanos as u32, &Local)
+    fn timestamp(time: GoogleTimestamp) -> DateTime<FixedOffset> {
+        time::timestamp(time.seconds, time.nanos as u32, &Local)
     }
 
     pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
@@ -259,7 +256,7 @@ impl PositionName {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        timestamp(i64::from(posix_time), 0, &Local)
+        time::timestamp(i64::from(posix_time), 0, &Local)
     }
 
     fn parse_inner(
@@ -366,21 +363,14 @@ impl MshLogMessage {
 
 #[cfg(test)]
 mod test_logs {
-    use chrono::{DateTime, Duration, FixedOffset};
+    use chrono::{DateTime, Duration};
 
     use crate::{
-        logs::{timestamp, CellularLogMessage, HostInfo, RssiSnr},
+        logs::{CellularLogMessage, HostInfo, RssiSnr},
         status::Position,
     };
 
     use super::{MiniCallHome, MshLogMessage};
-
-    #[test]
-    fn test_timestamp() {
-        let tz = FixedOffset::east_opt(3600).unwrap();
-        let timestamp = timestamp(1706523131, 0, &tz).format("%H:%M:%S").to_string();
-        assert_eq!("11:12:11", timestamp);
-    }
 
     #[test]
     fn test_volt_batt() {
