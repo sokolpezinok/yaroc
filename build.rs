@@ -22,12 +22,25 @@ fn main() -> std::io::Result<()> {
         protos.push(path.to_owned());
     }
 
+    // Allows protobuf compilation without installing the `protoc` binary
+    if std::env::var("PROTOC").ok().is_some() {
+        println!("Using PROTOC set in environment.");
+    } else {
+        match protoc_bin_vendored::protoc_bin_path() {
+            Ok(protoc_path) => {
+                println!("Setting PROTOC to protoc-bin-vendored version.");
+                std::env::set_var("PROTOC", protoc_path);
+            }
+            Err(err) => {
+                println!("Install protoc yourself, protoc-bin-vendored failed: {err}");
+            }
+        }
+    }
+
     let mut config = prost_build::Config::new();
     config
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        //.extern_path(".google.protobuf.Timestamp", "::prost_wkt_types::Timestamp")
         .file_descriptor_set_path(&descriptor_file)
-        .protoc_executable(protoc_bin_vendored::protoc_bin_path().unwrap())
         .compile_protos(&protos, &[protobufs_dir])?;
 
     Ok(())
