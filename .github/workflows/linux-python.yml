@@ -39,13 +39,13 @@ jobs:
           before-script-linux: yum install -y dbus-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
           manylinux: 2_28
       - name: Test the wheel
-        if: matrix.target == 'amd64'
+        if: matrix.target == 'x86_64'
         run: |
           pip install yaroc --find-links dist --force-reinstall
           pip install pytest
           pytest
       - name: Lint with ruff
-        if: matrix.target == 'amd64'
+        if: matrix.target == 'x86_64'
         run: |
           pip install ruff
           ruff check . --select=E9,F63,F7,F82 --statistics
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels-linux-amd64
+          name: wheels-linux-x86_64
       - uses: actions/download-artifact@v4
         with:
           name: wheels-linux-aarch64
