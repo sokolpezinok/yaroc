@@ -85,21 +85,16 @@ impl MessageHandler {
         let status_proto =
             Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
         let log_message =
-            CellularLogMessage::from_proto(status_proto, mac_addr, &self.resolve(&mac_addr))
-                .ok_or(PyValueError::new_err(
-                    "Variants other than MiniCallHome are unimplemented",
-                ))?;
+            CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr)).ok_or(
+                PyValueError::new_err("Variants other than MiniCallHome are unimplemented"),
+            )?;
         info!("{}", log_message);
 
         let status = self.get_cellular_status(mac_addr);
         match log_message {
             CellularLogMessage::MCH(mch) => {
                 if let Some(rssi_dbm) = mch.rssi_dbm {
-                    status.mqtt_connect_update(
-                        rssi_dbm as i16,
-                        mch.cellid.unwrap_or_default(),
-                        mch.snr,
-                    );
+                    status.mqtt_connect_update(rssi_dbm, mch.cellid.unwrap_or_default(), mch.snr);
                 }
                 status.update_voltage(f64::from(mch.voltage));
             }
@@ -174,8 +169,7 @@ impl MessageHandler {
     }
 
     fn msh_serial_msg(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
-        let service_envelope =
-            ServiceEnvelope::decode(payload).map_err(|e| std::io::Error::from(e))?;
+        let service_envelope = ServiceEnvelope::decode(payload).map_err(std::io::Error::from)?;
         let packet = service_envelope.packet.ok_or(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Missing packet in ServiceEnvelope",

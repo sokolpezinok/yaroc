@@ -66,12 +66,12 @@ impl MshLogMessage {
                     .as_ref()
                     .map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
-                    rssi_snr.as_mut().map(|rssi_snr| {
+                    if let Some(rssi_snr) = rssi_snr.as_mut() {
                         rssi_snr.add_distance(
                             distance as f32,
                             recv_position.map(|x| x.name).unwrap_or_default(),
-                        )
-                    });
+                        );
+                    }
                 }
 
                 Ok(Some(Self {

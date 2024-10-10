@@ -32,16 +32,11 @@ impl Position {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 enum CellularConnectionState {
+    #[default]
     Unknown,
     MqttConnected(i16, u32, Option<i16>),
-}
-
-impl Default for CellularConnectionState {
-    fn default() -> CellularConnectionState {
-        CellularConnectionState::Unknown
-    }
 }
 
 #[pyclass]
@@ -107,14 +102,14 @@ impl CellularRocStatus {
                 _ => None,
             },
             snr: match self.state {
-                CellularConnectionState::MqttConnected(_, _, snr) => snr.map(|x| f32::from(x)),
+                CellularConnectionState::MqttConnected(_, _, snr) => snr.map(f32::from),
                 _ => None,
             },
             cellid: match self.state {
                 CellularConnectionState::MqttConnected(_, cellid, _) if cellid > 0 => Some(cellid),
                 _ => None,
             },
-            codes: self.codes.iter().map(|x| *x).collect(),
+            codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
         }
@@ -166,7 +161,7 @@ impl MeshtasticRocStatus {
             rssi_dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
             snr: self.rssi_snr.as_ref().map(|x| x.snr),
             cellid: None, // TODO: not supported yet
-            codes: self.codes.iter().map(|x| *x).collect(),
+            codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
         }
