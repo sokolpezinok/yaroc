@@ -1,11 +1,11 @@
 [package]
 name = "yaroc_rs"
-version = "0.1.0"
+version = "0.1.13"
 edition = "2021"
-rust-version = "1.64" # Because of dependencies
+rust-version = "1.70"
 
 [build-dependencies]
-prost-build = "0.13.3"
+prost-build = "=0.13.2"
 protoc-bin-vendored = "3.1.0"
 walkdir = "2.3.2"
 
@@ -14,13 +14,12 @@ chrono = "0.4.38"
 geoutils = "0.5.1"
 log = "0.4.20"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20" }
-prost = "0.13.3"
+prost = "=0.13.2"
 pyo3 = { version = "0.22.0", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-log = "0.11.0"
 regex = "1.11"
 serde = { version = "1.0.196", features = ["derive"] }
 thiserror = "1.0.50"
-tokio = { version = "1.33.0", features = ["full"] }
 
 [lib]
 name = "yaroc_rs"
