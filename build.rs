@@ -8,8 +8,7 @@ fn main() -> std::io::Result<()> {
     let protobufs_dir = "src/protobufs/";
     println!("cargo:rerun-if-changed={}", protobufs_dir);
 
-    let mut protos = vec![];
-    for entry in WalkDir::new(protobufs_dir)
+    let protos: Vec<_> = WalkDir::new(protobufs_dir)
         .into_iter()
         .map(|e| e.unwrap())
         .filter(|e| {
@@ -17,10 +16,8 @@ fn main() -> std::io::Result<()> {
                 .extension()
                 .map_or(false, |ext| ext.to_str().unwrap() == "proto")
         })
-    {
-        let path = entry.path();
-        protos.push(path.to_owned());
-    }
+        .map(|entry| entry.path().to_owned())
+        .collect();
 
     // Allows protobuf compilation without installing the `protoc` binary
     if std::env::var("PROTOC").ok().is_some() {
