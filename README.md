@@ -26,15 +26,13 @@ YAROC is pronounced phonetically as "jarok", which is Slovak for a small ditch. 
 
 # Installation
 
-Install from TestPyPi. The package will be published to the main PyPi in the spring of 2024.
+Install from TestPyPi. The package will be published to the main PyPi in winter/spring of 2025.
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple yaroc
 ```
-
-TODO: install from PyPi
 
 # Usage
 
