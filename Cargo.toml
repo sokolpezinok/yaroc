@@ -28,3 +28,6 @@ thiserror = "1.0.50"
 [lib]
 name = "yaroc_rs"
 crate-type = ["cdylib", "rlib"]
+
+[lints.clippy]
+manual_range_contains = "allow"
