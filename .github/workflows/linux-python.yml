@@ -65,6 +65,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-linux-*
+          path: dist
+          merge-multiple: true
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
@@ -72,4 +74,4 @@ jobs:
           MATURIN_REPOSITORY: testpypi
         with:
           command: upload
-          args: --non-interactive --skip-existing *whl
+          args: --non-interactive --skip-existing dist/*whl
