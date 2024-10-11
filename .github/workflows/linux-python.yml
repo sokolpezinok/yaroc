@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, aarch64]
+        target: [x86_64, aarch64, armv7]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -64,10 +64,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels-linux-x86_64
-      - uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-aarch64
+          pattern: wheels-linux-*
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
