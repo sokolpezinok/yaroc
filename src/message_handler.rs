@@ -126,10 +126,16 @@ impl MessageHandler {
                 Err(err) => {
                     error!("{}", err);
                 }
-            };
+            }
         }
 
         Ok(result)
+    }
+
+    fn msh_roc_status(&mut self, host_info: HostInfo) -> &mut MeshtasticRocStatus {
+        self.meshtastic_statuses
+            .entry(host_info.mac_address)
+            .or_insert(MeshtasticRocStatus::new(host_info.name))
     }
 
     pub fn msh_status_update(
@@ -148,10 +154,7 @@ impl MessageHandler {
             }
             Ok(Some(log_message)) => {
                 info!("{}", log_message);
-                let status = self
-                    .meshtastic_statuses
-                    .entry(log_message.host_info.mac_address.clone())
-                    .or_insert(MeshtasticRocStatus::new(log_message.host_info.name.clone()));
+                let status = self.msh_roc_status(log_message.host_info);
                 if let Some(position) = log_message.position.as_ref() {
                     status.position = Some(position.clone())
                 }
@@ -186,7 +189,7 @@ impl MessageHandler {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(SiPunch::punches_from_payload(&payload[..])),
+            })) => Ok(SiPunch::punches_from_payload(&payload)),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("{}: Encrypted message or wrong portnum", host_info.name),
@@ -194,13 +197,10 @@ impl MessageHandler {
         }?;
 
         let mut result = Vec::with_capacity(punches.len());
-        let status = self
-            .meshtastic_statuses
-            .entry(mac_addr)
-            .or_insert(MeshtasticRocStatus::new(host_info.name.clone()));
         if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
             host_info.mac_address = mac_addr.clone();
         }
+        let status = self.msh_roc_status(host_info.clone());
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
@@ -283,7 +283,7 @@ mod test_punch {
         let message = punches.encode_to_vec();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punches = handler.punches(&message[..], "").unwrap();
+        let punches = handler.punches(&message, "").unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -300,7 +300,7 @@ mod test_punch {
         let message = punches.encode_to_vec();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punch_logs = handler.punches(&message[..], "").unwrap();
+        let punch_logs = handler.punches(&message, "").unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -328,7 +328,7 @@ mod test_punch {
 
         let message = envelope.encode_to_vec();
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punch_logs = handler.msh_serial_msg(&message[..]).unwrap();
+        let punch_logs = handler.msh_serial_msg(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -356,7 +356,7 @@ mod test_punch {
         };
         let message1 = envelope1.encode_to_vec();
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        handler.msh_status_update(&message1[..], Local::now().fixed_offset(), None);
+        handler.msh_status_update(&message1, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, Some(-98));
@@ -369,7 +369,7 @@ mod test_punch {
             ..Default::default()
         };
         handler.msh_status_update(
-            &envelope2.encode_to_vec()[..],
+            &envelope2.encode_to_vec(),
             Local::now().fixed_offset(),
             None,
         );
