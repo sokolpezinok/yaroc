@@ -10,11 +10,11 @@ It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de)
 
 # Features
 
-* **Very low latency, very low bandwith**. The software adds minimal latency on top of the latency of transport layers. Using a fast medium such as Wi-Fi or LTE allows for latencies around 100 to 200 milliseconds. Bandwidth used during one competition is well bellow 1 MB for each YAROC unit in the forest (allows for cheap IOT SIM cards).
-* **Combines multiple physical layers: radio (LoRa), NB-IoT, LTE, Wi-Fi, LAN**. As 2G and 3G networks are being [slowly shut down](https://onomondo.com/blog/2g-3g-sunset), we need to transition to technologies such as NB-IoT and LoRa in the forest.
-* **Simple integration via a USB connection** recognizable by most orienteering softwares. Just plug in a Raspberry Pi in the finish area, connect it to the internet and you are done!
+* **Very low latency, very low bandwith**. Using a fast medium such as Wi-Fi or LTE allows for latencies around 100 to 200 milliseconds. Bandwidth used during one competition is well bellow 1 MB for each YAROC forest unit. This allows you to use cheap IoT SIM cards.
+* **Supports multiple physical layers: radio (LoRa), NB-IoT, LTE, Wi-Fi, LAN**. Low power technologies such as NB-IoT and LoRa are the best solution for remote sport events. The other 3 (LTE, Wi-Fi and LAN) offer minimum latency.
+* **Simple integration via USB** recognizable by most orienteering softwares. Just plug in a Raspberry Pi in the finish area, connect it to internet and you are done!
 * **ROC-compatible mode**. If you own a ROC device, you can use YAROC instead and it will work almost the same (some features missing).
-* **Generator of fake SportIdent punches**: very useful for load testing of the system, for example to determine the right LoRa settings that don't exceed the duty cycle limits.
+* **Generator of fake SportIdent punches**: very useful for load testing of the system, for example to determine the right LoRa settings respecing duty cycle limits.
 * **Radio mesh**. When using LoRa, the LoRa devices create a mesh network and transmit punches using other LoRa nodes to the finish area. The mesh can connect to the internet via LTE, so placing one node on a hill makes the whole mesh online.
 * **Run everywhere: Linux, Windows, Raspberry Pi, microcontrollers**. We're searching for [the right hardware](https://github.com/sokolpezinok/yaroc/issues/6) for NB-IoT but in principle this is just a matter of time when it happens.
 * **Open-source**
