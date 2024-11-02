@@ -8,8 +8,7 @@ pub fn datetime_from_timestamp<T: TimeZone>(posix_millis: u64, tz: &T) -> DateTi
         .fixed_offset()
 }
 
-#[allow(dead_code)]
-fn current_timestamp() -> Timestamp {
+pub fn current_timestamp() -> Timestamp {
     timestamp_from_datetime(Local::now().fixed_offset())
 }
 
