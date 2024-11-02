@@ -51,7 +51,7 @@ impl SiPunch {
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
         let series = card / (1 << 16);
-        if series >= 1 && series <= 4 {
+        if series <= 4 {
             card += series * EARLY_SERIES_COMPLEMENT;
         }
         let data = &data[6..];
@@ -72,13 +72,13 @@ impl SiPunch {
         payload
             .chunks(20)
             .map(|chunk| {
-                let length = chunk.len();
-                Ok(Self::from_raw(chunk.try_into().map_err(|_| {
+                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("Wrong length of chunk={length}"),
+                        format!("Wrong length of chunk={}", chunk.len()),
                     )
-                })?))
+                })?;
+                Ok(Self::from_raw(partial_payload))
             })
             .collect()
     }
@@ -138,7 +138,7 @@ impl SiPunch {
 
     fn card_to_bytes(mut card: u32) -> [u8; 4] {
         let series = card / 100_000;
-        if series >= 1 && series <= 4 {
+        if series <= 4 {
             card -= series * EARLY_SERIES_COMPLEMENT;
         }
         card.to_be_bytes()
@@ -244,6 +244,9 @@ mod test_punch {
 
     #[test]
     fn test_card_series() {
+        let bytes = SiPunch::card_to_bytes(65535);
+        assert_eq!(bytes, [0, 0x00, 0xff, 0xff]);
+
         let bytes = SiPunch::card_to_bytes(416534);
         assert_eq!(bytes, [0, 0x04, 0x40, 0x96]);
 
