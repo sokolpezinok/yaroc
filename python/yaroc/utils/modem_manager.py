@@ -119,7 +119,7 @@ class ModemManager:
         if "rssi" in nr5g:
             return NetworkState(NetworkType.Lte, nr5g["rssi"].value, nr5g["snr"].value)
 
-        logging.error("Error getting signal")
+        logging.error("Error getting signal strength")
         return NetworkState(NetworkType.Unknown, None, None)
 
     async def get_cellid(self, modem_path: str) -> int | None:
