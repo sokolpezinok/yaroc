@@ -13,6 +13,7 @@ use crate::status::Position;
 use crate::time::datetime_from_timestamp;
 
 #[pyclass]
+#[derive(Default)]
 pub struct MshLogMessage {
     pub host_info: HostInfo,
     pub voltage_battery: Option<(f32, u32)>,
@@ -197,8 +198,7 @@ mod test_meshtastic {
             timestamp,
             latency: Duration::milliseconds(1230),
             voltage_battery: Some((4.012, 82)),
-            position: None,
-            rssi_snr: None,
+            ..Default::default()
         };
         assert_eq!(
             format!("{log_message}"),
@@ -222,8 +222,7 @@ mod test_meshtastic {
                 elevation: 170,
                 timestamp,
             }),
-            voltage_battery: None,
-            rssi_snr: None,
+            ..Default::default()
         };
         assert_eq!(
             format!("{log_message}"),
