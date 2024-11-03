@@ -1,10 +1,10 @@
+use crate::at_utils::split_lines;
 use defmt::*;
 use embassy_nrf::bind_interrupts;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, TIMER0, UARTE1};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_time::Timer;
-use crate::at_utils::split_lines;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -12,6 +12,11 @@ bind_interrupts!(struct Irqs {
 });
 
 const AT_BUF_SIZE: usize = 300;
+
+pub enum DeviceError {
+    UartReadError,
+    UartWriteError,
+}
 
 pub struct Device<'a> {
     rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
@@ -47,24 +52,29 @@ impl Device<'_> {
         Timer::after_millis(1000).await;
     }
 
-    pub async fn read_uart1(&mut self) {
+    pub async fn read_uart1(&mut self) -> Result<(), DeviceError> {
         self.green_led.set_high();
         let mut buf = [0; 5];
         buf.copy_from_slice(b"ATI\r\n");
-        self.tx1.write(&buf).await.unwrap();
+        self.tx1
+            .write(&buf)
+            .await
+            .map_err(|_| DeviceError::UartWriteError)?;
 
         let mut buf = [0; AT_BUF_SIZE];
-        let r = self.rx1.read_until_idle(&mut buf).await;
-        if r.is_err() {
-            return;
-        }
+        let len = self
+            .rx1
+            .read_until_idle(&mut buf)
+            .await
+            .map_err(|_| DeviceError::UartReadError)?;
 
-        let len = r.unwrap();
         let lines = split_lines(&buf[..len]);
         for line in lines {
             info!("Read {}", line);
         }
         Timer::after_millis(500).await;
         self.green_led.set_low();
+
+        Ok(())
     }
 }
