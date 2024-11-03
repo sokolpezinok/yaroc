@@ -57,12 +57,10 @@ class AsyncATCom:
     def last_at_response(self) -> datetime:
         return self._last_at_response
 
-    async def _call_until_with_timeout(
-        self, command: str, timeout: float = 60, last_line: str = "OK|ERROR"
-    ) -> list[str] | str:
+    async def _call_until_with_timeout(self, command: str, timeout: float = 60) -> list[str] | str:
         try:
             async with asyncio.timeout(timeout):
-                result, coroutines = await self._call_until(command, last_line)
+                result, coroutines = await self._call_until(command)
                 self._last_at_response = datetime.now()
                 for coro in coroutines:
                     # Callbacks are put into an async queue, they'll then wait for access to
@@ -72,9 +70,7 @@ class AsyncATCom:
         except asyncio.TimeoutError:
             return "Timed out"
 
-    async def _call_until(
-        self, command: str, last_line: str = "OK|ERROR"
-    ) -> tuple[list[str], Coroutines]:
+    async def _call_until(self, command: str) -> tuple[list[str], Coroutines]:
         """Call until 'last_line' matches"""
         pre_read = []
         try:
@@ -89,7 +85,6 @@ class AsyncATCom:
                 logging.debug(f"Read {pre_read} at the start")
 
         self._writer.write((command + "\r\n").encode("utf-8"))
-        regex = re.compile(last_line)
         full_response: list[str] = []
         while True:
             line = (await self._reader.readline()).strip().decode("utf-8")
@@ -97,7 +92,7 @@ class AsyncATCom:
                 continue  # Skip empty lines
 
             full_response.append(line)
-            if regex.match(line):
+            if line in ["OK", "ERROR"]:
                 break
 
         coroutines = []
