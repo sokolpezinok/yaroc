@@ -817,5 +817,6 @@ dependencies = [
  "embedded-hal-async",
  "embedded-io",
  "embedded-io-async",
+ "heapless",
  "panic-probe",
 ]

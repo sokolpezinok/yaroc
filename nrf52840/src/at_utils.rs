@@ -1,8 +1,21 @@
-pub fn readline(s: &str) -> (Option<&str>, &str) {
+use core::str::from_utf8;
+use heapless::Vec;
+
+fn readline(s: &str) -> (Option<&str>, &str) {
     match s.find("\r\n") {
         None => (None, s),
         Some(len) => (Some(&s[..len]), &s[len + 2..]),
     }
+}
+
+pub fn split_lines(buf: &[u8]) -> Vec<&str, 10> {
+    let mut lines = Vec::new();
+    let mut s = from_utf8(buf).unwrap();
+    while let (Some(line), rest) = readline(s) {
+        lines.push(line).unwrap();
+        s = rest;
+    }
+    lines
 }
 
 //#[cfg(test)]
