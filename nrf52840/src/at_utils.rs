@@ -12,15 +12,18 @@ pub fn split_lines(buf: &[u8]) -> Vec<&str, 10> {
     let mut lines = Vec::new();
     let mut s = from_utf8(buf).unwrap();
     while let (Some(line), rest) = readline(s) {
-        lines.push(line).unwrap();
         s = rest;
+        if line.is_empty() {
+            continue;
+        }
+        lines.push(line).unwrap();
     }
     lines
 }
 
 //#[cfg(test)]
 //mod test_at_utils {
-//    use crate::at_utils::readline;
+//    use super::{readline, split_lines};
 //
 //    #[test]
 //    fn test_readline() {
@@ -31,5 +34,12 @@ pub fn split_lines(buf: &[u8]) -> Vec<&str, 10> {
 //        assert_eq!(l1, Some("+MSG: hello"));
 //        assert_eq!(l2, Some("OK"));
 //        assert_eq!(l3, None);
+//    }
+//
+//    #[test]
+//    fn test_split_lines() {
+//        let s = "hello\r\n\r\nOK\r\n";
+//        let lines = split_lines(s.as_bytes());
+//        assert_eq!(*lines, ["hello", "OK"]);
 //    }
 //}
