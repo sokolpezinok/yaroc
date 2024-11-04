@@ -5,6 +5,7 @@ use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, TIMER0, UARTE1};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_time::Timer;
+use heapless::String;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -12,8 +13,10 @@ bind_interrupts!(struct Irqs {
 });
 
 const AT_BUF_SIZE: usize = 300;
+const AT_COMMAND_SIZE: usize = 40;
 
 pub enum DeviceError {
+    StringEncodingError,
     UartReadError,
     UartWriteError,
 }
@@ -52,12 +55,13 @@ impl Device<'_> {
         Timer::after_millis(1000).await;
     }
 
-    pub async fn read_uart1(&mut self) -> Result<(), DeviceError> {
+    pub async fn call_uart1(
+        &mut self,
+        command: String<AT_COMMAND_SIZE>,
+    ) -> Result<(), DeviceError> {
         self.green_led.set_high();
-        let mut buf = [0; 5];
-        buf.copy_from_slice(b"ATI\r\n");
         self.tx1
-            .write(&buf)
+            .write(command.as_bytes())
             .await
             .map_err(|_| DeviceError::UartWriteError)?;
 
