@@ -1,7 +1,55 @@
 use core::str::from_utf8;
+use defmt::*;
+use embassy_nrf::peripherals::TIMER0;
+use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
+use embassy_time::{with_timeout, Duration};
+use heapless::String;
 use heapless::Vec;
 
 use crate::error::Error;
+
+const AT_BUF_SIZE: usize = 300;
+const AT_COMMAND_SIZE: usize = 100;
+
+pub struct Uart<'a, UartType: uarte::Instance> {
+    rx: UarteRxWithIdle<'a, UartType, TIMER0>,
+    tx: UarteTx<'a, UartType>,
+}
+
+impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
+    pub fn new(rx: UarteRxWithIdle<'a, UartType, TIMER0>, tx: UarteTx<'a, UartType>) -> Self {
+        Self { rx, tx }
+    }
+
+    pub async fn read(&mut self, timeout_millis: u64) -> Result<(), Error> {
+        let mut buf = [0; AT_BUF_SIZE];
+        let read_fut = self.rx.read_until_idle(&mut buf);
+        let timeout = Duration::from_millis(timeout_millis);
+        let len = with_timeout(timeout, read_fut)
+            .await
+            .map_err(|_| Error::TimeoutError)?
+            .map_err(|_| Error::UartReadError)?;
+
+        let lines = split_lines(&buf[..len])?;
+        for line in lines {
+            info!("Read {}", line);
+        }
+
+        Ok(())
+    }
+
+    pub async fn call(&mut self, command: &str, timeout_millis: u64) -> Result<(), Error> {
+        let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
+        command.push('\r').unwrap();
+
+        self.tx
+            .write(command.as_bytes())
+            .await
+            .map_err(|_| Error::UartWriteError)?;
+
+        self.read(timeout_millis).await
+    }
+}
 
 fn readline(s: &str) -> (Option<&str>, &str) {
     match s.find("\r\n") {

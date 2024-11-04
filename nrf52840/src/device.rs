@@ -1,30 +1,23 @@
-use crate::at_utils::split_lines;
-use crate::error::Error;
-use defmt::*;
+use crate::at_utils::Uart;
 use embassy_nrf::bind_interrupts;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, TIMER0, UARTE1};
-use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
-use embassy_time::{with_timeout, Duration, Timer};
-use heapless::String;
+use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, UARTE1};
+use embassy_nrf::uarte::{self};
+use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
-const AT_BUF_SIZE: usize = 300;
-const AT_COMMAND_SIZE: usize = 100;
-
 pub struct Device<'a> {
-    rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
-    tx1: UarteTx<'a, UARTE1>,
     blue_led: Output<'a, P1_04>,
     green_led: Output<'a, P1_03>,
     modem_pin: Output<'a, P0_17>,
+    uart1: Uart<'a, UARTE1>,
 }
 
-impl Device<'_> {
+impl<'a> Device<'a> {
     pub fn new() -> Self {
         let p = embassy_nrf::init(Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
@@ -33,11 +26,10 @@ impl Device<'_> {
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
         Self {
-            rx1,
-            tx1,
             blue_led,
             green_led,
             modem_pin,
+            uart1: Uart::new(rx1, tx1),
         }
     }
 
@@ -50,34 +42,8 @@ impl Device<'_> {
         Timer::after_millis(1000).await;
     }
 
-    pub async fn read_uart1(&mut self, timeout_millis: u64) -> Result<(), Error> {
-        let mut buf = [0; AT_BUF_SIZE];
-        let read_fut = self.rx1.read_until_idle(&mut buf);
-        self.blue_led.set_high();
-        let timeout = Duration::from_millis(timeout_millis);
-        let len = with_timeout(timeout, read_fut)
-            .await
-            .map_err(|_| Error::TimeoutError)?
-            .map_err(|_| Error::UartReadError)?;
-        self.blue_led.set_low();
-
-        let lines = split_lines(&buf[..len])?;
-        for line in lines {
-            info!("Read {}", line);
-        }
-
-        Ok(())
-    }
-
-    pub async fn call_uart1(&mut self, command: &str, timeout_millis: u64) -> Result<(), Error> {
-        let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
-        command.push('\r').unwrap();
-
-        self.tx1
-            .write(command.as_bytes())
-            .await
-            .map_err(|_| Error::UartWriteError)?;
-
-        self.read_uart1(timeout_millis).await
+    // TODO: get rid of this hack
+    pub fn uart1(&mut self) -> &mut Uart<'a, UARTE1> {
+        &mut self.uart1
     }
 }
