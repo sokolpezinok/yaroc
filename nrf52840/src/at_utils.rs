@@ -1,6 +1,8 @@
 use core::str::from_utf8;
 use heapless::Vec;
 
+use crate::error::Error;
+
 fn readline(s: &str) -> (Option<&str>, &str) {
     match s.find("\r\n") {
         None => (None, s),
@@ -8,17 +10,17 @@ fn readline(s: &str) -> (Option<&str>, &str) {
     }
 }
 
-pub fn split_lines(buf: &[u8]) -> Vec<&str, 10> {
+pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
     let mut lines = Vec::new();
-    let mut s = from_utf8(buf).unwrap();
+    let mut s = from_utf8(buf).map_err(|_| Error::StringEncodingError)?;
     while let (Some(line), rest) = readline(s) {
         s = rest;
         if line.is_empty() {
             continue;
         }
-        lines.push(line).unwrap();
+        lines.push(line).map_err(|e| Error::BufferTooSmallError)?;
     }
-    lines
+    Ok(lines)
 }
 
 //#[cfg(test)]

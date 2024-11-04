@@ -1,4 +1,5 @@
 use crate::at_utils::split_lines;
+use crate::error::Error;
 use defmt::*;
 use embassy_nrf::bind_interrupts;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -14,12 +15,6 @@ bind_interrupts!(struct Irqs {
 
 const AT_BUF_SIZE: usize = 300;
 const AT_COMMAND_SIZE: usize = 40;
-
-pub enum DeviceError {
-    StringEncodingError,
-    UartReadError,
-    UartWriteError,
-}
 
 pub struct Device<'a> {
     rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
@@ -58,19 +53,19 @@ impl Device<'_> {
     pub async fn call_uart1(
         &mut self,
         command: String<AT_COMMAND_SIZE>,
-    ) -> Result<(), DeviceError> {
+    ) -> Result<(), Error> {
         self.green_led.set_high();
         self.tx1
             .write(command.as_bytes())
             .await
-            .map_err(|_| DeviceError::UartWriteError)?;
+            .map_err(|_| Error::UartWriteError)?;
 
         let mut buf = [0; AT_BUF_SIZE];
         let len = self
             .rx1
             .read_until_idle(&mut buf)
             .await
-            .map_err(|_| DeviceError::UartReadError)?;
+            .map_err(|_| Error::UartReadError)?;
 
         let lines = split_lines(&buf[..len]);
         for line in lines {
