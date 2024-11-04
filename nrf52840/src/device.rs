@@ -14,7 +14,7 @@ bind_interrupts!(struct Irqs {
 });
 
 const AT_BUF_SIZE: usize = 300;
-const AT_COMMAND_SIZE: usize = 40;
+const AT_COMMAND_SIZE: usize = 100;
 
 pub struct Device<'a> {
     rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
