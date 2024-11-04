@@ -5,7 +5,7 @@ use embassy_nrf::bind_interrupts;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, TIMER0, UARTE1};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
-use embassy_time::Timer;
+use embassy_time::{with_timeout, Duration, Timer};
 use heapless::String;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -53,6 +53,7 @@ impl Device<'_> {
     pub async fn call_uart1(
         &mut self,
         command: String<AT_COMMAND_SIZE>,
+        timeout: Duration,
     ) -> Result<(), Error> {
         self.green_led.set_high();
         self.tx1
@@ -61,13 +62,13 @@ impl Device<'_> {
             .map_err(|_| Error::UartWriteError)?;
 
         let mut buf = [0; AT_BUF_SIZE];
-        let len = self
-            .rx1
-            .read_until_idle(&mut buf)
+        let read_fut = self.rx1.read_until_idle(&mut buf);
+        let len = with_timeout(timeout, read_fut)
             .await
+            .map_err(|_| Error::TimeoutError)?
             .map_err(|_| Error::UartReadError)?;
 
-        let lines = split_lines(&buf[..len]);
+        let lines = split_lines(&buf[..len])?;
         for line in lines {
             info!("Read {}", line);
         }

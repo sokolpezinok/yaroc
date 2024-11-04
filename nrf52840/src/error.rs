@@ -4,4 +4,5 @@ pub enum Error {
     StringEncodingError,
     UartReadError,
     UartWriteError,
+    TimeoutError,
 }
