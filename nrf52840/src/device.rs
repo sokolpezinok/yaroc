@@ -50,19 +50,11 @@ impl Device<'_> {
         Timer::after_millis(1000).await;
     }
 
-    pub async fn call_uart1(&mut self, command: &str, timeout_millis: u64) -> Result<(), Error> {
-        let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
-        command.push('\r').unwrap();
-
-        let timeout = Duration::from_millis(timeout_millis);
-        self.tx1
-            .write(command.as_bytes())
-            .await
-            .map_err(|_| Error::UartWriteError)?;
-
+    pub async fn read_uart1(&mut self, timeout_millis: u64) -> Result<(), Error> {
         let mut buf = [0; AT_BUF_SIZE];
         let read_fut = self.rx1.read_until_idle(&mut buf);
         self.blue_led.set_high();
+        let timeout = Duration::from_millis(timeout_millis);
         let len = with_timeout(timeout, read_fut)
             .await
             .map_err(|_| Error::TimeoutError)?
@@ -75,5 +67,17 @@ impl Device<'_> {
         }
 
         Ok(())
+    }
+
+    pub async fn call_uart1(&mut self, command: &str, timeout_millis: u64) -> Result<(), Error> {
+        let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
+        command.push('\r').unwrap();
+
+        self.tx1
+            .write(command.as_bytes())
+            .await
+            .map_err(|_| Error::UartWriteError)?;
+
+        self.read_uart1(timeout_millis).await
     }
 }

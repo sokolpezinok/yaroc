@@ -18,7 +18,7 @@ pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
         if line.is_empty() {
             continue;
         }
-        lines.push(line).map_err(|e| Error::BufferTooSmallError)?;
+        lines.push(line).map_err(|_| Error::BufferTooSmallError)?;
     }
     Ok(lines)
 }
