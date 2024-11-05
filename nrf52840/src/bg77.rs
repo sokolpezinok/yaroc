@@ -1,4 +1,4 @@
-use crate::at_utils::Uart;
+use crate::{at_utils::Uart, error::Error};
 use core::fmt::Write;
 use defmt::info;
 use embassy_nrf::{
@@ -8,84 +8,92 @@ use embassy_nrf::{
 use embassy_time::{Duration, Timer};
 use heapless::String;
 
+static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+const CLIENT_ID: u32 = 0;
+
 pub struct BG77<'a> {
     uart1: Uart<'a, UARTE1>,
     modem_pin: Output<'a, P0_17>,
+    pkt_timeout: Duration,
+    activation_timeout: Duration,
 }
 
 impl<'a> BG77<'a> {
     pub fn new(uart1: Uart<'a, UARTE1>, modem_pin: Output<'a, P0_17>) -> Self {
-        Self { uart1, modem_pin }
-    }
-
-    pub async fn experiment(&mut self) {
         let activation_timeout = Duration::from_secs(140);
         let pkt_timeout = Duration::from_secs(35);
-        let pkt_timeout_retry = pkt_timeout * 2;
-        let minimum_timeout = Duration::from_millis(300);
-        let client_id = 3;
+        Self {
+            uart1,
+            modem_pin,
+            activation_timeout,
+            pkt_timeout,
+        }
+    }
 
-        self.uart1.call("AT+CMEE=2", minimum_timeout).await.unwrap();
+    pub async fn config(&mut self) -> Result<(), Error> {
         self.uart1
-            .call("AT+CGATT=1", activation_timeout)
-            .await
-            .unwrap();
+            .call("AT+CGATT=1", self.activation_timeout)
+            .await?;
+        self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT).await?;
         self.uart1
-            .call("AT+CEREG=2", minimum_timeout)
-            .await
-            .unwrap();
-        self.uart1.call("AT+QCSQ", minimum_timeout).await.unwrap();
-        //self.uart1
-        //    .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", minimum_timeout)
-        //    .await
-        //    .unwrap();
-        self.uart1
-            .call("AT+CGPADDR=1", minimum_timeout)
-            .await
-            .unwrap();
-        self.uart1.call("AT+CEREG?", minimum_timeout).await.unwrap();
+            .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1.call("AT+CGPADDR=1", MINIMUM_TIMEOUT).await?;
+        Ok(())
+    }
+
+    pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
         let mut command = String::<100>::new();
-        write!(command, "AT+QMTOPEN={},\"broker.emqx.io\",1883", client_id).unwrap();
-        self.uart1.call(&command, activation_timeout).await.unwrap();
-        let _ = self.uart1.read(pkt_timeout).await;
+        write!(command, "AT+QMTOPEN={},\"broker.emqx.io\",1883", CLIENT_ID).unwrap();
+        self.uart1.call(&command, self.activation_timeout).await?;
+        let _ = self.uart1.read(self.pkt_timeout).await;
 
-        self.uart1
-            .call("AT+QMTOPEN?", minimum_timeout)
-            .await
-            .unwrap();
+        self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
         info!("\nDone part 1\n");
         self.uart1
-            .call("AT+QMTCFG=\"timeout\",0,45,2,0", minimum_timeout)
-            .await
-            .unwrap();
+            .call("AT+QMTCFG=\"timeout\",0,45,2,0", MINIMUM_TIMEOUT)
+            .await?;
         command.clear();
-        write!(command, "AT+QMTCONN={},\"client-embassy\"", client_id).unwrap();
-        self.uart1.call(&command, pkt_timeout).await.unwrap();
-        let _ = self.uart1.read(pkt_timeout).await;
+        write!(command, "AT+QMTCONN={},\"client-embassy\"", CLIENT_ID).unwrap();
+        self.uart1.call(&command, self.pkt_timeout).await.unwrap();
+        let _ = self.uart1.read(self.pkt_timeout).await;
         // +QMTCONN: <client_id>,0,0
 
-        self.uart1
-            .call("AT+QMTCONN?", minimum_timeout)
-            .await
-            .unwrap();
+        self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
         // Good response +QMTCONN: <client_id>,3
+        Ok(())
+    }
 
-        command.clear();
+    pub async fn mqtt_disconnect(&mut self) {
+        let mut command = String::<100>::new();
+        write!(command, "AT+QMTDISC={}", CLIENT_ID).unwrap();
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await.unwrap();
+    }
+
+    pub async fn experiment(&mut self) {
+        let _ = self.config().await;
+        let _ = self.mqtt_connect().await;
+
+        // Info
+        self.uart1.call("AT+QCSQ", MINIMUM_TIMEOUT).await.unwrap();
+        self.uart1.call("AT+CEREG?", MINIMUM_TIMEOUT).await.unwrap();
+        let mut command = String::<100>::new();
         write!(
             command,
             "AT+QMTPUBEX={},0,0,0,\"topic/pub\",Hello from embassy",
-            client_id
+            CLIENT_ID
         )
         .unwrap();
-        self.uart1.call(&command, pkt_timeout_retry).await.unwrap();
-        command.clear();
-        write!(command, "AT+QMTDISC={}", client_id).unwrap();
-        self.uart1.call(&command, minimum_timeout).await.unwrap();
+        self.uart1
+            .call(&command, self.pkt_timeout * 2)
+            .await
+            .unwrap();
+        self.mqtt_disconnect().await;
 
         loop {
-            let _ = self.uart1.read(pkt_timeout).await;
+            let _ = self.uart1.read(self.pkt_timeout).await;
         }
     }
 
