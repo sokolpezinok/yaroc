@@ -2,7 +2,7 @@
 # The option `--platform linux/arm64` has been tested, others will come.
 # buildah bud -t yaroc --layers --platform linux/arm64 -v /home/lukas/.cache/sccache:/root/.cache/sccache .
 
-FROM rust:1.81-slim AS chef
+FROM rust:1.82-slim AS chef
 RUN apt update && apt install -y python3-pip python3-venv sccache protobuf-compiler
 ENV RUSTC_WRAPPER=sccache
 RUN cargo install cargo-chef
