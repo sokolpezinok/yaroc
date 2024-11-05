@@ -21,10 +21,9 @@ impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
         Self { rx, tx }
     }
 
-    pub async fn read(&mut self, timeout_millis: u64) -> Result<(), Error> {
+    pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
         let mut buf = [0; AT_BUF_SIZE];
         let read_fut = self.rx.read_until_idle(&mut buf);
-        let timeout = Duration::from_millis(timeout_millis);
         let len = with_timeout(timeout, read_fut)
             .await
             .map_err(|_| Error::TimeoutError)?
@@ -38,7 +37,7 @@ impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
         Ok(())
     }
 
-    pub async fn call(&mut self, command: &str, timeout_millis: u64) -> Result<(), Error> {
+    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<(), Error> {
         let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
         command.push('\r').unwrap();
 
@@ -47,7 +46,7 @@ impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
             .await
             .map_err(|_| Error::UartWriteError)?;
 
-        self.read(timeout_millis).await
+        self.read(timeout).await
     }
 }
 

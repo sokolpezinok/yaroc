@@ -4,7 +4,7 @@ use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
 };
-use embassy_time::Timer;
+use embassy_time::{Duration, Timer};
 
 pub struct BG77<'a> {
     uart1: Uart<'a, UARTE1>,
@@ -17,30 +17,44 @@ impl<'a> BG77<'a> {
     }
 
     pub async fn experiment(&mut self) {
-        let pkt_timeout = 35_000;
+        let activation_timeout = Duration::from_secs(140);
+        let pkt_timeout = Duration::from_secs(35);
         let pkt_timeout_retry = pkt_timeout * 2;
-        self.uart1.call("AT+CMEE=2", 10).await.unwrap();
-        self.uart1.call("AT+CGATT=1", 10).await.unwrap();
-        self.uart1.call("AT+CEREG=2", 10).await.unwrap();
+        let minimum_timeout = Duration::from_millis(300);
+        self.uart1.call("AT+CMEE=2", minimum_timeout).await.unwrap();
+        self.uart1
+            .call("AT+CGATT=1", activation_timeout)
+            .await
+            .unwrap();
+        self.uart1
+            .call("AT+CEREG=2", minimum_timeout)
+            .await
+            .unwrap();
+        self.uart1.call("AT+QCSQ", minimum_timeout).await.unwrap();
         //self.uart1
-        //    .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", 1000)
+        //    .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", minimum_timeout)
         //    .await
         //    .unwrap();
-        self.uart1.call("AT+CGPADDR=1", 10).await.unwrap();
-        self.uart1.call("AT+CEREG?", 10).await.unwrap();
-        self.uart1.call("AT+QCSQ", 10).await.unwrap();
         self.uart1
-            .call("AT+QMTOPEN=3,\"broker.emqx.io\",1883", 10)
+            .call("AT+CGPADDR=1", minimum_timeout)
+            .await
+            .unwrap();
+        self.uart1.call("AT+CEREG?", minimum_timeout).await.unwrap();
+        self.uart1
+            .call("AT+QMTOPEN=3,\"broker.emqx.io\",1883", activation_timeout)
             .await
             .unwrap();
         let _ = self.uart1.read(pkt_timeout).await;
 
-        self.uart1.call("AT+QMTOPEN?", 100).await.unwrap();
+        self.uart1
+            .call("AT+QMTOPEN?", minimum_timeout)
+            .await
+            .unwrap();
         // Good response: +QMTOPEN: 2,"broker.emqx.io",1883
 
         info!("\nDone part 1\n");
         self.uart1
-            .call("AT+QMTCFG=\"timeout\",0,45,2,0", 300)
+            .call("AT+QMTCFG=\"timeout\",0,45,2,0", minimum_timeout)
             .await
             .unwrap();
         self.uart1
@@ -50,7 +64,10 @@ impl<'a> BG77<'a> {
         let _ = self.uart1.read(pkt_timeout).await;
         // +QMTCONN: 3,0,0
 
-        self.uart1.call("AT+QMTCONN?", 10).await.unwrap();
+        self.uart1
+            .call("AT+QMTCONN?", minimum_timeout)
+            .await
+            .unwrap();
         // Good response +QMTCONN: 3,3
 
         self.uart1
@@ -60,10 +77,13 @@ impl<'a> BG77<'a> {
             )
             .await
             .unwrap();
-        self.uart1.call("AT+QMTDISC=3", 300).await.unwrap();
+        self.uart1
+            .call("AT+QMTDISC=3", minimum_timeout)
+            .await
+            .unwrap();
 
         loop {
-            let _ = self.uart1.read(10_000).await;
+            let _ = self.uart1.read(pkt_timeout).await;
         }
     }
 
