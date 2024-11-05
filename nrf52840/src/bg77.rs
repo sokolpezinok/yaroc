@@ -1,6 +1,6 @@
 use crate::{at_utils::Uart, error::Error};
 use core::fmt::Write;
-use defmt::info;
+use defmt::{info, unwrap};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
@@ -57,7 +57,7 @@ impl<'a> BG77<'a> {
             .await?;
         command.clear();
         write!(command, "AT+QMTCONN={},\"client-embassy\"", CLIENT_ID).unwrap();
-        self.uart1.call(&command, self.pkt_timeout).await.unwrap();
+        self.uart1.call(&command, self.pkt_timeout).await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
         // +QMTCONN: <client_id>,0,0
 
@@ -73,16 +73,16 @@ impl<'a> BG77<'a> {
     }
 
     pub async fn signal_info(&mut self) -> Result<(), Error> {
-        // Info
         self.uart1.call("AT+QCSQ", MINIMUM_TIMEOUT).await?;
         self.uart1.call("AT+CEREG?", MINIMUM_TIMEOUT).await?;
         self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
-        self.uart1.read(self.pkt_timeout).await
+        let _ = self.uart1.read(self.pkt_timeout).await;
+        Ok(())
     }
 
     pub async fn experiment(&mut self) {
-        let _ = self.config().await;
-        let _ = self.mqtt_connect().await;
+        unwrap!(self.config().await);
+        unwrap!(self.mqtt_connect().await);
 
         let mut command = String::<100>::new();
         write!(
@@ -97,12 +97,12 @@ impl<'a> BG77<'a> {
             .unwrap();
 
         for _ in 0..10 {
-            let _ = self.signal_info().await;
+            unwrap!(self.signal_info().await);
         }
-        let _ = self.mqtt_disconnect().await;
+        unwrap!(self.mqtt_disconnect().await);
     }
 
-    async fn turn_on(&mut self) {
+    async fn _turn_on(&mut self) {
         self.modem_pin.set_low();
         Timer::after_millis(1000).await;
         self.modem_pin.set_high();
