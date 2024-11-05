@@ -66,19 +66,24 @@ impl<'a> BG77<'a> {
         Ok(())
     }
 
-    pub async fn mqtt_disconnect(&mut self) {
+    pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
         let mut command = String::<100>::new();
         write!(command, "AT+QMTDISC={}", CLIENT_ID).unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT).await.unwrap();
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await
+    }
+
+    pub async fn signal_info(&mut self) -> Result<(), Error> {
+        // Info
+        self.uart1.call("AT+QCSQ", MINIMUM_TIMEOUT).await?;
+        self.uart1.call("AT+CEREG?", MINIMUM_TIMEOUT).await?;
+        self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
+        self.uart1.read(self.pkt_timeout).await
     }
 
     pub async fn experiment(&mut self) {
         let _ = self.config().await;
         let _ = self.mqtt_connect().await;
 
-        // Info
-        self.uart1.call("AT+QCSQ", MINIMUM_TIMEOUT).await.unwrap();
-        self.uart1.call("AT+CEREG?", MINIMUM_TIMEOUT).await.unwrap();
         let mut command = String::<100>::new();
         write!(
             command,
@@ -90,11 +95,11 @@ impl<'a> BG77<'a> {
             .call(&command, self.pkt_timeout * 2)
             .await
             .unwrap();
-        self.mqtt_disconnect().await;
 
-        loop {
-            let _ = self.uart1.read(self.pkt_timeout).await;
+        for _ in 0..10 {
+            let _ = self.signal_info().await;
         }
+        let _ = self.mqtt_disconnect().await;
     }
 
     async fn turn_on(&mut self) {
