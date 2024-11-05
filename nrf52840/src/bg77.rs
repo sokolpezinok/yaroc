@@ -60,6 +60,7 @@ impl<'a> BG77<'a> {
             .call("AT+QMTCFG=\"timeout\",0,45,2,0", minimum_timeout)
             .await
             .unwrap();
+        command.clear();
         write!(command, "AT+QMTCONN={},\"client-embassy\"", client_id).unwrap();
         self.uart1.call(&command, pkt_timeout).await.unwrap();
         let _ = self.uart1.read(pkt_timeout).await;
@@ -71,6 +72,7 @@ impl<'a> BG77<'a> {
             .unwrap();
         // Good response +QMTCONN: <client_id>,3
 
+        command.clear();
         write!(
             command,
             "AT+QMTPUBEX={},0,0,0,\"topic/pub\",Hello from embassy",
@@ -78,6 +80,7 @@ impl<'a> BG77<'a> {
         )
         .unwrap();
         self.uart1.call(&command, pkt_timeout_retry).await.unwrap();
+        command.clear();
         write!(command, "AT+QMTDISC={}", client_id).unwrap();
         self.uart1.call(&command, minimum_timeout).await.unwrap();
 
