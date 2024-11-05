@@ -17,7 +17,7 @@ impl<'a> BG77<'a> {
     }
 
     pub async fn experiment(&mut self) {
-        let pkt_timeout = 45_000;
+        let pkt_timeout = 35_000;
         let pkt_timeout_retry = pkt_timeout * 2;
         self.uart1.call("AT+CMEE=2", 10).await.unwrap();
         self.uart1.call("AT+CGATT=1", 10).await.unwrap();
@@ -61,7 +61,10 @@ impl<'a> BG77<'a> {
             .await
             .unwrap();
         self.uart1.call("AT+QMTDISC=3", 300).await.unwrap();
-        let _ = self.uart1.read(300).await;
+
+        loop {
+            let _ = self.uart1.read(10_000).await;
+        }
     }
 
     async fn turn_on(&mut self) {

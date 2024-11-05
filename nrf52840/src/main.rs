@@ -11,5 +11,6 @@ async fn main(_spawner: Spawner) {
     info!("Device initialized!");
 
     let Device { mut bg77, .. } = device;
+
     bg77.experiment().await;
 }
