@@ -1,10 +1,12 @@
 use crate::at_utils::Uart;
-use defmt::*;
+use core::fmt::Write;
+use defmt::info;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
 };
 use embassy_time::{Duration, Timer};
+use heapless::String;
 
 pub struct BG77<'a> {
     uart1: Uart<'a, UARTE1>,
@@ -21,6 +23,8 @@ impl<'a> BG77<'a> {
         let pkt_timeout = Duration::from_secs(35);
         let pkt_timeout_retry = pkt_timeout * 2;
         let minimum_timeout = Duration::from_millis(300);
+        let client_id = 3;
+
         self.uart1.call("AT+CMEE=2", minimum_timeout).await.unwrap();
         self.uart1
             .call("AT+CGATT=1", activation_timeout)
@@ -40,47 +44,42 @@ impl<'a> BG77<'a> {
             .await
             .unwrap();
         self.uart1.call("AT+CEREG?", minimum_timeout).await.unwrap();
-        self.uart1
-            .call("AT+QMTOPEN=3,\"broker.emqx.io\",1883", activation_timeout)
-            .await
-            .unwrap();
+        let mut command = String::<100>::new();
+        write!(command, "AT+QMTOPEN={},\"broker.emqx.io\",1883", client_id).unwrap();
+        self.uart1.call(&command, activation_timeout).await.unwrap();
         let _ = self.uart1.read(pkt_timeout).await;
 
         self.uart1
             .call("AT+QMTOPEN?", minimum_timeout)
             .await
             .unwrap();
-        // Good response: +QMTOPEN: 2,"broker.emqx.io",1883
+        // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
         info!("\nDone part 1\n");
         self.uart1
             .call("AT+QMTCFG=\"timeout\",0,45,2,0", minimum_timeout)
             .await
             .unwrap();
-        self.uart1
-            .call("AT+QMTCONN=3,\"client-embassy\"", pkt_timeout)
-            .await
-            .unwrap();
+        write!(command, "AT+QMTCONN={},\"client-embassy\"", client_id).unwrap();
+        self.uart1.call(&command, pkt_timeout).await.unwrap();
         let _ = self.uart1.read(pkt_timeout).await;
-        // +QMTCONN: 3,0,0
+        // +QMTCONN: <client_id>,0,0
 
         self.uart1
             .call("AT+QMTCONN?", minimum_timeout)
             .await
             .unwrap();
-        // Good response +QMTCONN: 3,3
+        // Good response +QMTCONN: <client_id>,3
 
-        self.uart1
-            .call(
-                "AT+QMTPUBEX=3,0,0,0,\"topic/pub\",Hello from embassy",
-                pkt_timeout_retry,
-            )
-            .await
-            .unwrap();
-        self.uart1
-            .call("AT+QMTDISC=3", minimum_timeout)
-            .await
-            .unwrap();
+        write!(
+            command,
+            "AT+QMTPUBEX={},0,0,0,\"topic/pub\",Hello from embassy",
+            client_id
+        )
+        .unwrap();
+        self.uart1.call(&command, pkt_timeout_retry).await.unwrap();
+        write!(command, "AT+QMTDISC={}", client_id).unwrap();
+        self.uart1.call(&command, minimum_timeout).await.unwrap();
 
         loop {
             let _ = self.uart1.read(pkt_timeout).await;
