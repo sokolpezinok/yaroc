@@ -162,7 +162,7 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff4a5fefe330e8d7f31b16a318f9ce81000d8e35e69b93eae154d16d2278f70f"
 dependencies = [
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -758,7 +758,16 @@ version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d171f59dbaa811dbbb1aee1e73db92ec2b122911a48e1390dfe327a821ddede"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.66",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15291287e9bff1bc6f9ff3409ed9af665bec7a5fc8ac079ea96be07bca0e2668"
+dependencies = [
+ "thiserror-impl 2.0.0",
 ]
 
 [[package]]
@@ -766,6 +775,17 @@ name = "thiserror-impl"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b08be0f17bd307950653ce45db00cd31200d82b624b36e181337d9c7d92765b5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22efd00f33f93fa62848a7cab956c3d38c8d43095efda1decfc2b3a5dc0b8972"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -828,4 +848,5 @@ dependencies = [
  "embedded-io-async",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "panic-probe",
+ "thiserror 2.0.0",
 ]
