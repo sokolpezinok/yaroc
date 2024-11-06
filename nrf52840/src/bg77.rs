@@ -60,7 +60,7 @@ impl<'a> BG77<'a> {
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         let command = format!(50;
-            "AT+QMTCFG=\"keepalive\",{}",
+            "AT+QMTCFG=\"keepalive\",{CLIENT_ID},{}",
             (self.pkt_timeout * 3).as_secs()
         )
         .unwrap();
