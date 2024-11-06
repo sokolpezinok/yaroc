@@ -297,7 +297,7 @@ dependencies = [
  "defmt",
  "embedded-io-async",
  "futures-util",
- "heapless",
+ "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -316,7 +316,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "futures-util",
- "heapless",
+ "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -464,6 +464,15 @@ name = "heapless"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "git+https://github.com/rust-embedded/heapless.git?rev=0ebca23#0ebca2320970b8a1aa3e58ceba924f8c65385946"
 dependencies = [
  "hash32",
  "stable_deref_trait",
@@ -817,6 +826,6 @@ dependencies = [
  "embedded-hal-async",
  "embedded-io",
  "embedded-io-async",
- "heapless",
+ "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "panic-probe",
 ]

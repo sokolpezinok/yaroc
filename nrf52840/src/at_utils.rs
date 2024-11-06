@@ -88,7 +88,7 @@ pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
 //    #[test]
 //    fn test_split_lines() {
 //        let s = "hello\r\n\r\nOK\r\n";
-//        let lines = split_lines(s.as_bytes());
+//        let lines = split_lines(s.as_bytes()).unwrap();
 //        assert_eq!(*lines, ["hello", "OK"]);
 //    }
 //}

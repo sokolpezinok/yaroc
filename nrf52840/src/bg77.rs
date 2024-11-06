@@ -1,12 +1,11 @@
 use crate::{at_utils::Uart, error::Error};
-use core::fmt::Write;
 use defmt::{info, unwrap};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
 };
 use embassy_time::{Duration, Timer};
-use heapless::String;
+use heapless::{format, String};
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u32 = 0;
@@ -43,20 +42,30 @@ impl<'a> BG77<'a> {
     }
 
     pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
-        let mut command = String::<100>::new();
-        write!(command, "AT+QMTOPEN={},\"broker.emqx.io\",1883", CLIENT_ID).unwrap();
-        self.uart1.call(&command, self.activation_timeout).await?;
+        let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
+        self.uart1
+            .call(&at_command, self.activation_timeout)
+            .await?;
+
         let _ = self.uart1.read(self.pkt_timeout).await;
 
         self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
         info!("\nDone part 1\n");
-        self.uart1
-            .call("AT+QMTCFG=\"timeout\",0,45,2,0", MINIMUM_TIMEOUT)
-            .await?;
-        command.clear();
-        write!(command, "AT+QMTCONN={},\"client-embassy\"", CLIENT_ID).unwrap();
+        let command = format!(50;
+            "AT+QMTCFG=\"timeout\",{CLIENT_ID},{},2,1",
+            self.pkt_timeout.as_secs()
+        )
+        .unwrap();
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        let command = format!(50;
+            "AT+QMTCFG=\"keepalive\",{}",
+            (self.pkt_timeout * 3).as_secs()
+        )
+        .unwrap();
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
         self.uart1.call(&command, self.pkt_timeout).await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
         // +QMTCONN: <client_id>,0,0
@@ -67,8 +76,7 @@ impl<'a> BG77<'a> {
     }
 
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
-        let mut command = String::<100>::new();
-        write!(command, "AT+QMTDISC={}", CLIENT_ID).unwrap();
+        let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await
     }
 
@@ -84,11 +92,8 @@ impl<'a> BG77<'a> {
         unwrap!(self.config().await);
         unwrap!(self.mqtt_connect().await);
 
-        let mut command = String::<100>::new();
-        write!(
-            command,
-            "AT+QMTPUBEX={},0,0,0,\"topic/pub\",Hello from embassy",
-            CLIENT_ID
+        let command = format!(100;
+            "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",Hello from embassy"
         )
         .unwrap();
         self.uart1

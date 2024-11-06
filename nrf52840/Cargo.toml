@@ -22,7 +22,7 @@ embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime
 
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 embassy-nrf = { version = "0.1.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time"] }
-heapless = "0.8.0"
+heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebca23" }
 
 [profile.release]
 debug = 2
