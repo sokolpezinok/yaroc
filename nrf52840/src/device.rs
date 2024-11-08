@@ -14,8 +14,8 @@ bind_interrupts!(struct Irqs {
 });
 
 pub struct Device<'a> {
-    blue_led: Output<'a, P1_04>,
-    green_led: Output<'a, P1_03>,
+    _blue_led: Output<'a, P1_04>,
+    _green_led: Output<'a, P1_03>,
     pub bg77: BG77<'a>,
     pub saadc: Saadc<'a, 1>,
 }
@@ -35,8 +35,8 @@ impl<'a> Device<'a> {
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         let saadc = Saadc::new(p.SAADC, Irqs, config, [channel_config]);
         Self {
-            blue_led,
-            green_led,
+            _blue_led: blue_led,
+            _green_led: green_led,
             bg77: BG77::new(uart1, modem_pin),
             saadc,
         }

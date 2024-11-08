@@ -5,14 +5,14 @@ use embassy_nrf::{
     peripherals::{P0_17, UARTE1},
 };
 use embassy_time::{Duration, Timer};
-use heapless::{format, String};
+use heapless::format;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u32 = 0;
 
 pub struct BG77<'a> {
     uart1: Uart<'a, UARTE1>,
-    modem_pin: Output<'a, P0_17>,
+    _modem_pin: Output<'a, P0_17>,
     pkt_timeout: Duration,
     activation_timeout: Duration,
 }
@@ -20,10 +20,10 @@ pub struct BG77<'a> {
 impl<'a> BG77<'a> {
     pub fn new(uart1: Uart<'a, UARTE1>, modem_pin: Output<'a, P0_17>) -> Self {
         let activation_timeout = Duration::from_secs(140);
-        let pkt_timeout = Duration::from_secs(35);
+        let pkt_timeout = Duration::from_secs(8);
         Self {
             uart1,
-            modem_pin,
+            _modem_pin: modem_pin,
             activation_timeout,
             pkt_timeout,
         }
@@ -65,7 +65,7 @@ impl<'a> BG77<'a> {
         )
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
-        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
+        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy2\"").unwrap();
         self.uart1.call(&command, self.pkt_timeout).await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
         // +QMTCONN: <client_id>,0,0
@@ -93,7 +93,7 @@ impl<'a> BG77<'a> {
         unwrap!(self.mqtt_connect().await);
 
         let command = format!(100;
-            "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",Hello from embassy"
+            "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"Hello from embassy\""
         )
         .unwrap();
         self.uart1
@@ -101,18 +101,18 @@ impl<'a> BG77<'a> {
             .await
             .unwrap();
 
-        for _ in 0..10 {
+        for _ in 0..5 {
             unwrap!(self.signal_info().await);
         }
         unwrap!(self.mqtt_disconnect().await);
     }
 
     async fn _turn_on(&mut self) {
-        self.modem_pin.set_low();
+        self._modem_pin.set_low();
         Timer::after_millis(1000).await;
-        self.modem_pin.set_high();
+        self._modem_pin.set_high();
         Timer::after_millis(2000).await;
-        self.modem_pin.set_low();
+        self._modem_pin.set_low();
         Timer::after_millis(100).await;
     }
 }
