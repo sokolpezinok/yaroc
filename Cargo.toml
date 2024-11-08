@@ -19,10 +19,10 @@ geoutils = "0.5.1"
 log = "0.4.20"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20", optional = true }
 prost = "=0.13.2"
-pyo3 = { version = "0.22.0", features = ["extension-module", "chrono", "abi3-py311"] }
+pyo3 = { version = "0.22", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-log = "0.11.0"
 regex = "1.11"
-thiserror = "1.0.50"
+thiserror = "2.0"
 
 [lib]
 name = "yaroc_rs"
