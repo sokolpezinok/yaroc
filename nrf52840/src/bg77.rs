@@ -2,7 +2,8 @@ use crate::{at_utils::Uart, error::Error};
 use defmt::{info, unwrap};
 use embassy_nrf::{
     gpio::Output,
-    peripherals::{P0_17, UARTE1},
+    peripherals::{P0_17, TIMER0, UARTE1},
+    uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_time::{Duration, Timer};
 use heapless::format;
@@ -17,8 +18,20 @@ pub struct BG77<'a> {
     activation_timeout: Duration,
 }
 
+fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
+    match prefix {
+        "QMTSTAT" => true,
+        _ => false,
+    }
+}
+
 impl<'a> BG77<'a> {
-    pub fn new(uart1: Uart<'a, UARTE1>, modem_pin: Output<'a, P0_17>) -> Self {
+    pub fn new(
+        rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
+        tx1: UarteTx<'a, UARTE1>,
+        modem_pin: Output<'a, P0_17>,
+    ) -> Self {
+        let uart1 = Uart::new(rx1, tx1, callback_dispatcher);
         let activation_timeout = Duration::from_secs(140);
         let pkt_timeout = Duration::from_secs(8);
         Self {

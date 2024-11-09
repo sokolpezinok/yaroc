@@ -1,4 +1,3 @@
-use crate::at_utils::Uart;
 use crate::bg77::BG77;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P1_03, P1_04, UARTE1};
@@ -25,7 +24,6 @@ impl<'a> Device<'a> {
         let mut p = embassy_nrf::init(Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
-        let uart1 = Uart::new(rx1, tx1);
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
@@ -37,7 +35,7 @@ impl<'a> Device<'a> {
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(uart1, modem_pin),
+            bg77: BG77::new(rx1, tx1, modem_pin),
             saadc,
         }
     }

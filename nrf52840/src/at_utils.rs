@@ -3,8 +3,7 @@ use defmt::*;
 use embassy_nrf::peripherals::TIMER0;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_time::{with_timeout, Duration};
-use heapless::String;
-use heapless::Vec;
+use heapless::{String, Vec};
 
 use crate::error::Error;
 
@@ -14,11 +13,21 @@ const AT_COMMAND_SIZE: usize = 100;
 pub struct Uart<'a, UartType: uarte::Instance> {
     rx: UarteRxWithIdle<'a, UartType, TIMER0>,
     tx: UarteTx<'a, UartType>,
+    #[allow(dead_code)]
+    callback_dispatcher: fn(&str, &str) -> bool,
 }
 
 impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
-    pub fn new(rx: UarteRxWithIdle<'a, UartType, TIMER0>, tx: UarteTx<'a, UartType>) -> Self {
-        Self { rx, tx }
+    pub fn new(
+        rx: UarteRxWithIdle<'a, UartType, TIMER0>,
+        tx: UarteTx<'a, UartType>,
+        callback_dispatcher: fn(&str, &str) -> bool,
+    ) -> Self {
+        Self {
+            rx,
+            tx,
+            callback_dispatcher,
+        }
     }
 
     pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
@@ -47,6 +56,19 @@ impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
             .map_err(|_| Error::UartWriteError)?;
 
         self.read(timeout).await
+    }
+
+    async fn _dispatch_response(self, line: &str) {
+        if line.starts_with('+') {
+            let prefix_len = line.find(": ");
+            if let Some(prefix_len) = prefix_len {
+                let prefix = &line[1..prefix_len];
+                let rest = &line[prefix_len..];
+                if !(self.callback_dispatcher)(prefix, rest) {
+                    // TODO: forward
+                }
+            }
+        }
     }
 }
 
