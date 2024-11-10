@@ -1,4 +1,4 @@
-use crate::{at_utils::Uart, error::Error};
+use crate::{at_utils::AtUart, error::Error};
 use defmt::{info, unwrap};
 use embassy_nrf::{
     gpio::Output,
@@ -12,7 +12,7 @@ static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u32 = 0;
 
 pub struct BG77<'a> {
-    uart1: Uart<'a, UARTE1>,
+    uart1: AtUart<'a, UARTE1>,
     _modem_pin: Output<'a, P0_17>,
     pkt_timeout: Duration,
     activation_timeout: Duration,
@@ -31,7 +31,7 @@ impl<'a> BG77<'a> {
         tx1: UarteTx<'a, UARTE1>,
         modem_pin: Output<'a, P0_17>,
     ) -> Self {
-        let uart1 = Uart::new(rx1, tx1, callback_dispatcher);
+        let uart1 = AtUart::new(rx1, tx1, callback_dispatcher);
         let activation_timeout = Duration::from_secs(140);
         let pkt_timeout = Duration::from_secs(8);
         Self {

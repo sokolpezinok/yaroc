@@ -10,14 +10,14 @@ use crate::error::Error;
 const AT_BUF_SIZE: usize = 300;
 const AT_COMMAND_SIZE: usize = 100;
 
-pub struct Uart<'a, UartType: uarte::Instance> {
+pub struct AtUart<'a, UartType: uarte::Instance> {
     rx: UarteRxWithIdle<'a, UartType, TIMER0>,
     tx: UarteTx<'a, UartType>,
     #[allow(dead_code)]
     callback_dispatcher: fn(&str, &str) -> bool,
 }
 
-impl<'a, UartType: uarte::Instance> Uart<'a, UartType> {
+impl<'a, UartType: uarte::Instance> AtUart<'a, UartType> {
     pub fn new(
         rx: UarteRxWithIdle<'a, UartType, TIMER0>,
         tx: UarteTx<'a, UartType>,
