@@ -1,47 +1,57 @@
 use core::str::from_utf8;
 use defmt::*;
-use embassy_nrf::peripherals::TIMER0;
-use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
+use embassy_executor::Spawner;
+use embassy_nrf::peripherals::{TIMER0, UARTE1};
+use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_time::{with_timeout, Duration};
 use heapless::{String, Vec};
 
 use crate::error::Error;
 
-const AT_BUF_SIZE: usize = 300;
 const AT_COMMAND_SIZE: usize = 100;
 
-pub struct AtUart<'a, UartType: uarte::Instance> {
-    rx: UarteRxWithIdle<'a, UartType, TIMER0>,
-    tx: UarteTx<'a, UartType>,
+pub struct AtUart {
+    tx: UarteTx<'static, UARTE1>,
     #[allow(dead_code)]
     callback_dispatcher: fn(&str, &str) -> bool,
 }
 
-impl<'a, UartType: uarte::Instance> AtUart<'a, UartType> {
+#[embassy_executor::task]
+async fn reader(mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>) {
+    const AT_BUF_SIZE: usize = 300;
+    let mut buf = [0; AT_BUF_SIZE];
+    loop {
+        let len = rx
+            .read_until_idle(&mut buf)
+            .await
+            .map_err(|_| Error::UartReadError)
+            .unwrap(); //TODO
+
+        let lines = split_lines(&buf[..len]).unwrap();
+        for line in lines {
+            info!("Read {}", line);
+            //CHANNEL.send(line).await;
+        }
+    }
+}
+
+impl AtUart {
     pub fn new(
-        rx: UarteRxWithIdle<'a, UartType, TIMER0>,
-        tx: UarteTx<'a, UartType>,
+        rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
+        tx: UarteTx<'static, UARTE1>,
         callback_dispatcher: fn(&str, &str) -> bool,
+        spawner: &Spawner,
     ) -> Self {
+        unwrap!(spawner.spawn(reader(rx)));
         Self {
-            rx,
             tx,
             callback_dispatcher,
         }
     }
 
     pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
-        let mut buf = [0; AT_BUF_SIZE];
-        let read_fut = self.rx.read_until_idle(&mut buf);
-        let len = with_timeout(timeout, read_fut)
-            .await
-            .map_err(|_| Error::TimeoutError)?
-            .map_err(|_| Error::UartReadError)?;
-
-        let lines = split_lines(&buf[..len])?;
-        for line in lines {
-            info!("Read {}", line);
-        }
+        //with_timeout(timeout, read_fut)
+        //.map_err(|_| Error::TimeoutError)?
 
         Ok(())
     }

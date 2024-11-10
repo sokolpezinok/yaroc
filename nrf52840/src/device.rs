@@ -1,4 +1,5 @@
 use crate::bg77::BG77;
+use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P1_03, P1_04, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config, Saadc};
@@ -12,15 +13,15 @@ bind_interrupts!(struct Irqs {
     SAADC => saadc::InterruptHandler;
 });
 
-pub struct Device<'a> {
-    _blue_led: Output<'a, P1_04>,
-    _green_led: Output<'a, P1_03>,
-    pub bg77: BG77<'a>,
-    pub saadc: Saadc<'a, 1>,
+pub struct Device {
+    _blue_led: Output<'static, P1_04>,
+    _green_led: Output<'static, P1_03>,
+    pub bg77: BG77,
+    pub saadc: Saadc<'static, 1>,
 }
 
-impl<'a> Device<'a> {
-    pub fn new() -> Self {
+impl Device {
+    pub fn new(spawner: &Spawner) -> Self {
         let mut p = embassy_nrf::init(Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
@@ -35,7 +36,7 @@ impl<'a> Device<'a> {
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(rx1, tx1, modem_pin),
+            bg77: BG77::new(rx1, tx1, modem_pin, spawner),
             saadc,
         }
     }

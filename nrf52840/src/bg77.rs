@@ -1,5 +1,6 @@
 use crate::{at_utils::AtUart, error::Error};
 use defmt::{info, unwrap};
+use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, TIMER0, UARTE1},
@@ -11,9 +12,9 @@ use heapless::format;
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u32 = 0;
 
-pub struct BG77<'a> {
-    uart1: AtUart<'a, UARTE1>,
-    _modem_pin: Output<'a, P0_17>,
+pub struct BG77 {
+    uart1: AtUart,
+    _modem_pin: Output<'static, P0_17>,
     pkt_timeout: Duration,
     activation_timeout: Duration,
 }
@@ -25,13 +26,14 @@ fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
     }
 }
 
-impl<'a> BG77<'a> {
+impl BG77 {
     pub fn new(
-        rx1: UarteRxWithIdle<'a, UARTE1, TIMER0>,
-        tx1: UarteTx<'a, UARTE1>,
-        modem_pin: Output<'a, P0_17>,
+        rx1: UarteRxWithIdle<'static, UARTE1, TIMER0>,
+        tx1: UarteTx<'static, UARTE1>,
+        modem_pin: Output<'static, P0_17>,
+        spawner: &Spawner,
     ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, callback_dispatcher);
+        let uart1 = AtUart::new(rx1, tx1, callback_dispatcher, spawner);
         let activation_timeout = Duration::from_secs(140);
         let pkt_timeout = Duration::from_secs(8);
         Self {
@@ -78,7 +80,7 @@ impl<'a> BG77<'a> {
         )
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
-        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy2\"").unwrap();
+        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
         self.uart1.call(&command, self.pkt_timeout).await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
         // +QMTCONN: <client_id>,0,0
