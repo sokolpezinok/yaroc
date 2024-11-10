@@ -1,8 +1,10 @@
-use core::str::from_utf8;
+use core::str::{from_utf8, FromStr};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_nrf::peripherals::{TIMER0, UARTE1};
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_time::{with_timeout, Duration};
 use heapless::{String, Vec};
 
@@ -16,22 +18,27 @@ pub struct AtUart {
     callback_dispatcher: fn(&str, &str) -> bool,
 }
 
+static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> = Channel::new();
+
 #[embassy_executor::task]
 async fn reader(mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
     loop {
+        // TODO: how to handle errors here? Transmit them over the channel
         let len = rx
             .read_until_idle(&mut buf)
             .await
             .map_err(|_| Error::UartReadError)
-            .unwrap(); //TODO
+            .unwrap();
 
         let lines = split_lines(&buf[..len]).unwrap();
         for line in lines {
-            info!("Read {}", line);
-            //CHANNEL.send(line).await;
+            CHANNEL
+                .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
+                .await;
         }
+        CHANNEL.send(Ok(String::new())).await; // Stop transmission
     }
 }
 
@@ -50,8 +57,18 @@ impl AtUart {
     }
 
     pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
-        //with_timeout(timeout, read_fut)
-        //.map_err(|_| Error::TimeoutError)?
+        loop {
+            let read_fut = CHANNEL.receive();
+            let line = with_timeout(timeout, read_fut)
+                .await
+                .map_err(|_| Error::TimeoutError)?;
+            let line = line?;
+            if line.is_empty() {
+                break;
+            }
+
+            info!("Read {}", line.as_str());
+        }
 
         Ok(())
     }

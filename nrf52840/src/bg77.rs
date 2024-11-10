@@ -10,7 +10,7 @@ use embassy_time::{Duration, Timer};
 use heapless::format;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-const CLIENT_ID: u32 = 0;
+const CLIENT_ID: u32 = 1;
 
 pub struct BG77 {
     uart1: AtUart,
