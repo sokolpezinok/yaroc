@@ -22,6 +22,26 @@ fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
+fn readline(s: &str) -> (Option<&str>, &str) {
+    match s.find("\r\n") {
+        None => (None, s),
+        Some(len) => (Some(&s[..len]), &s[len + 2..]),
+    }
+}
+
+pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
+    let mut lines = Vec::new();
+    let mut s = from_utf8(buf).map_err(|_| Error::StringEncodingError)?;
+    while let (Some(line), rest) = readline(s) {
+        s = rest;
+        if line.is_empty() {
+            continue;
+        }
+        lines.push(line).map_err(|_| Error::BufferTooSmallError)?;
+    }
+    Ok(lines)
+}
+
 const AT_COMMAND_SIZE: usize = 100;
 
 pub struct AtUart {
@@ -108,26 +128,6 @@ impl AtUart {
 
         self.read(timeout).await
     }
-}
-
-fn readline(s: &str) -> (Option<&str>, &str) {
-    match s.find("\r\n") {
-        None => (None, s),
-        Some(len) => (Some(&s[..len]), &s[len + 2..]),
-    }
-}
-
-pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
-    let mut lines = Vec::new();
-    let mut s = from_utf8(buf).map_err(|_| Error::StringEncodingError)?;
-    while let (Some(line), rest) = readline(s) {
-        s = rest;
-        if line.is_empty() {
-            continue;
-        }
-        lines.push(line).map_err(|_| Error::BufferTooSmallError)?;
-    }
-    Ok(lines)
 }
 
 //#[cfg(test)]
