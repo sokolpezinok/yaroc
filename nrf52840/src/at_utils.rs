@@ -22,7 +22,10 @@ static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Erro
     Channel::new();
 
 #[embassy_executor::task]
-async fn reader(mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>) {
+async fn reader(
+    mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
+    callback_dispatcher: fn(&str, &str) -> bool,
+) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
     loop {
@@ -35,9 +38,23 @@ async fn reader(mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>) {
             Ok(len) => {
                 let lines = split_lines(&buf[..len]).unwrap();
                 for line in lines {
-                    CHANNEL
-                        .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
-                        .await;
+                    let mut is_callback = false;
+                    if line.starts_with('+') {
+                        let prefix_len = line.find(": ");
+                        if let Some(prefix_len) = prefix_len {
+                            let prefix = &line[1..prefix_len];
+                            let rest = &line[prefix_len + 2..];
+                            if (callback_dispatcher)(prefix, rest) {
+                                is_callback = true;
+                            }
+                        }
+                    }
+
+                    if !is_callback {
+                        CHANNEL
+                            .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
+                            .await;
+                    }
                 }
                 CHANNEL.send(Ok(String::new())).await; // Stop transmission
             }
@@ -52,7 +69,7 @@ impl AtUart {
         callback_dispatcher: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        unwrap!(spawner.spawn(reader(rx)));
+        unwrap!(spawner.spawn(reader(rx, callback_dispatcher)));
         Self {
             tx,
             callback_dispatcher,
@@ -86,19 +103,6 @@ impl AtUart {
             .map_err(|_| Error::UartWriteError)?;
 
         self.read(timeout).await
-    }
-
-    async fn _dispatch_response(self, line: &str) {
-        if line.starts_with('+') {
-            let prefix_len = line.find(": ");
-            if let Some(prefix_len) = prefix_len {
-                let prefix = &line[1..prefix_len];
-                let rest = &line[prefix_len..];
-                if !(self.callback_dispatcher)(prefix, rest) {
-                    // TODO: forward
-                }
-            }
-        }
     }
 }
 
