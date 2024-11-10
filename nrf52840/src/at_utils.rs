@@ -10,6 +10,18 @@ use heapless::{String, Vec};
 
 use crate::error::Error;
 
+fn split_at_response(line: &str) -> Option<(&str, &str)> {
+    if line.starts_with('+') {
+        let prefix_len = line.find(": ");
+        if let Some(prefix_len) = prefix_len {
+            let prefix = &line[1..prefix_len];
+            let rest = &line[prefix_len + 2..];
+            return Some((prefix, rest));
+        }
+    }
+    None
+}
+
 const AT_COMMAND_SIZE: usize = 100;
 
 pub struct AtUart {
@@ -38,17 +50,9 @@ async fn reader(
             Ok(len) => {
                 let lines = split_lines(&buf[..len]).unwrap();
                 for line in lines {
-                    let mut is_callback = false;
-                    if line.starts_with('+') {
-                        let prefix_len = line.find(": ");
-                        if let Some(prefix_len) = prefix_len {
-                            let prefix = &line[1..prefix_len];
-                            let rest = &line[prefix_len + 2..];
-                            if (callback_dispatcher)(prefix, rest) {
-                                is_callback = true;
-                            }
-                        }
-                    }
+                    let is_callback = split_at_response(line)
+                        .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
+                        .unwrap_or_default();
 
                     if !is_callback {
                         CHANNEL
