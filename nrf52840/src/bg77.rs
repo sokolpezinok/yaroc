@@ -25,7 +25,7 @@ fn callback_dispatcher(prefix: &str, rest: &str) -> bool {
         "QMTSTAT" => true,
         "QMTPUB" => true,
         "QMTCONN" => rest.len() >= 4 && rest.as_bytes()[1] == 0x2c && rest.as_bytes()[3] == 0x2c,
-        "QMTOPEN" => rest.as_bytes()[1] == 0x2c && rest.len() == 3,
+        //"QMTOPEN" => rest.as_bytes()[1] == 0x2c && rest.len() == 3,
         _ => false,
     }
 }
