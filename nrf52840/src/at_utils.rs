@@ -22,26 +22,6 @@ fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
-fn readline(s: &str) -> (Option<&str>, &str) {
-    match s.find("\r\n") {
-        None => (None, s),
-        Some(len) => (Some(&s[..len]), &s[len + 2..]),
-    }
-}
-
-pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
-    let mut lines = Vec::new();
-    let mut s = from_utf8(buf).map_err(|_| Error::StringEncodingError)?;
-    while let (Some(line), rest) = readline(s) {
-        s = rest;
-        if line.is_empty() {
-            continue;
-        }
-        lines.push(line).map_err(|_| Error::BufferTooSmallError)?;
-    }
-    Ok(lines)
-}
-
 const AT_COMMAND_SIZE: usize = 100;
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> =
@@ -62,9 +42,15 @@ async fn reader(
         match len {
             Err(err) => CHANNEL.send(Err(err)).await,
             Ok(len) => {
-                let lines = split_lines(&buf[..len]).unwrap();
+                let lines = from_utf8(&buf[..len])
+                    .map_err(|_| Error::StringEncodingError)
+                    .unwrap()
+                    .lines();
                 let mut lines_count = 0;
-                for (idx, line) in lines.iter().enumerate() {
+                for line in lines {
+                    if line.is_empty() {
+                        continue;
+                    }
                     let is_callback = split_at_response(line)
                         .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
                         .unwrap_or_default();
@@ -75,7 +61,7 @@ async fn reader(
                             .await;
                         debug!("Read: {}", line);
                         lines_count += 1;
-                        if (*line == "OK" || *line == "ERROR") && idx + 1 < lines.len() {
+                        if line == "OK" || line == "ERROR" {
                             CHANNEL.send(Ok(String::new())).await; // Mark a finished command
                             lines_count = 0;
                         }
@@ -167,26 +153,6 @@ impl AtUart {
 
 //#[cfg(test)]
 //mod test_at_utils {
-//    use super::{readline, split_lines};
-//
-//    #[test]
-//    fn test_readline() {
-//        let s = "+MSG: hello\r\nOK\r\n";
-//        let (l1, s) = readline(s);
-//        let (l2, s) = readline(s);
-//        let (l3, _) = readline(s);
-//        assert_eq!(l1, Some("+MSG: hello"));
-//        assert_eq!(l2, Some("OK"));
-//        assert_eq!(l3, None);
-//    }
-//
-//    #[test]
-//    fn test_split_lines() {
-//        let s = "hello\r\n\r\nOK\r\n";
-//        let lines = split_lines(s.as_bytes()).unwrap();
-//        assert_eq!(*lines, ["hello", "OK"]);
-//    }
-//
 //    #[test]
 //    fn test_split_at_response() {
 //        let res = "+QMTSTAT: 0,2";
