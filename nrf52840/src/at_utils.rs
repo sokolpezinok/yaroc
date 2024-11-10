@@ -18,27 +18,30 @@ pub struct AtUart {
     callback_dispatcher: fn(&str, &str) -> bool,
 }
 
-static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> = Channel::new();
+static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> =
+    Channel::new();
 
 #[embassy_executor::task]
 async fn reader(mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
     loop {
-        // TODO: how to handle errors here? Transmit them over the channel
         let len = rx
             .read_until_idle(&mut buf)
             .await
-            .map_err(|_| Error::UartReadError)
-            .unwrap();
-
-        let lines = split_lines(&buf[..len]).unwrap();
-        for line in lines {
-            CHANNEL
-                .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
-                .await;
+            .map_err(|_| Error::UartReadError);
+        match len {
+            Err(err) => CHANNEL.send(Err(err)).await,
+            Ok(len) => {
+                let lines = split_lines(&buf[..len]).unwrap();
+                for line in lines {
+                    CHANNEL
+                        .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
+                        .await;
+                }
+                CHANNEL.send(Ok(String::new())).await; // Stop transmission
+            }
         }
-        CHANNEL.send(Ok(String::new())).await; // Stop transmission
     }
 }
 
