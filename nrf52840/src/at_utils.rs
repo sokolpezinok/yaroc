@@ -45,9 +45,10 @@ pub fn split_lines(buf: &[u8]) -> Result<Vec<&str, 10>, Error> {
 const AT_COMMAND_SIZE: usize = 100;
 
 pub struct AtUart {
+    // This struct is fixed to UARTE1 due to a limitation of embassy_executor::task. We cannot make
+    // the `reader` method generic and also work for UARTE0. However, for our hardware this is not
+    // needed, UARTE0 does not use AT-commands, so it won't use this struct.
     tx: UarteTx<'static, UARTE1>,
-    #[allow(dead_code)]
-    callback_dispatcher: fn(&str, &str) -> bool,
 }
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> =
@@ -94,10 +95,7 @@ impl AtUart {
         spawner: &Spawner,
     ) -> Self {
         unwrap!(spawner.spawn(reader(rx, callback_dispatcher)));
-        Self {
-            tx,
-            callback_dispatcher,
-        }
+        Self { tx }
     }
 
     pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
