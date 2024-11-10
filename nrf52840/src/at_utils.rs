@@ -149,4 +149,15 @@ impl AtUart {
 //        let lines = split_lines(s.as_bytes()).unwrap();
 //        assert_eq!(*lines, ["hello", "OK"]);
 //    }
+//
+//    #[test]
+//    fn test_split_at_response() {
+//        let res = "+QMTSTAT: 0,2";
+//        assert_eq!(split_at_response(res), Some(("QMTSTAT", "0,2")));
+//
+//        let res = "QMTSTAT: 0,2";
+//        assert_eq!(split_at_response(res), None);
+//        let res = "+QMTSTAT 0,2";
+//        assert_eq!(split_at_response(res), None);
+//    }
 //}
