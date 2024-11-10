@@ -100,8 +100,7 @@ impl AtUart {
 
     pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
         loop {
-            let read_fut = CHANNEL.receive();
-            let line = with_timeout(timeout, read_fut)
+            let line = with_timeout(timeout, CHANNEL.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)?;
             let line = line?;
@@ -115,15 +114,18 @@ impl AtUart {
         Ok(())
     }
 
-    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<(), Error> {
+    async fn write(&mut self, command: &str) -> Result<(), Error> {
         let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
         command.push('\r').unwrap();
 
         self.tx
             .write(command.as_bytes())
             .await
-            .map_err(|_| Error::UartWriteError)?;
+            .map_err(|_| Error::UartWriteError)
+    }
 
+    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<(), Error> {
+        self.write(command).await?;
         self.read(timeout).await
     }
 }
