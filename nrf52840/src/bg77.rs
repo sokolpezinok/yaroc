@@ -1,5 +1,5 @@
 use crate::{at_utils::AtUart, error::Error};
-use defmt::{info, unwrap};
+use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -34,8 +34,8 @@ impl BG77 {
         spawner: &Spawner,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, callback_dispatcher, spawner);
-        let activation_timeout = Duration::from_secs(140);
-        let pkt_timeout = Duration::from_secs(8);
+        let activation_timeout = Duration::from_secs(14); // 140
+        let pkt_timeout = Duration::from_secs(8); // 30
         Self {
             uart1,
             _modem_pin: modem_pin,
@@ -45,13 +45,15 @@ impl BG77 {
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
+        self.uart1.call("ATE0", MINIMUM_TIMEOUT).await?;
         self.uart1
             .call("AT+CGATT=1", self.activation_timeout)
             .await?;
         self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT).await?;
-        self.uart1
+        let _ = self
+            .uart1
             .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT)
-            .await?;
+            .await;
         self.uart1.call("AT+CGPADDR=1", MINIMUM_TIMEOUT).await?;
         Ok(())
     }
@@ -59,15 +61,12 @@ impl BG77 {
     pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
         self.uart1
-            .call(&at_command, self.activation_timeout)
+            .call_with_response(&at_command, MINIMUM_TIMEOUT, self.activation_timeout)
             .await?;
-
-        let _ = self.uart1.read(self.pkt_timeout).await;
 
         self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
-        info!("\nDone part 1\n");
         let command = format!(50;
             "AT+QMTCFG=\"timeout\",{CLIENT_ID},{},2,1",
             self.pkt_timeout.as_secs()
@@ -81,8 +80,10 @@ impl BG77 {
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
-        self.uart1.call(&command, self.pkt_timeout).await?;
-        let _ = self.uart1.read(self.pkt_timeout).await;
+        let _ = self
+            .uart1
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
+            .await;
         // +QMTCONN: <client_id>,0,0
 
         self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
@@ -92,7 +93,8 @@ impl BG77 {
 
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
         let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT).await
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        Ok(())
     }
 
     pub async fn signal_info(&mut self) -> Result<(), Error> {
@@ -105,17 +107,13 @@ impl BG77 {
 
     pub async fn experiment(&mut self) {
         unwrap!(self.config().await);
-        unwrap!(self.mqtt_connect().await);
+        let _ = self.mqtt_connect().await;
 
         let command = format!(100;
             "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"Hello from embassy\""
         )
         .unwrap();
-        self.uart1
-            .call(&command, self.pkt_timeout * 2)
-            .await
-            .unwrap();
-
+        let _ = self.uart1.call(&command, self.pkt_timeout * 2).await;
         for _ in 0..5 {
             unwrap!(self.signal_info().await);
         }

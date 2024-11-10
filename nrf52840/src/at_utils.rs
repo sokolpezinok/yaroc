@@ -63,7 +63,7 @@ async fn reader(
             Err(err) => CHANNEL.send(Err(err)).await,
             Ok(len) => {
                 let lines = split_lines(&buf[..len]).unwrap();
-                for line in lines {
+                for (idx, line) in lines.iter().enumerate() {
                     let is_callback = split_at_response(line)
                         .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
                         .unwrap_or_default();
@@ -72,6 +72,11 @@ async fn reader(
                         CHANNEL
                             .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
                             .await;
+                        if (*line == "OK" || *line == "ERROR") && idx + 1 < lines.len() {
+                            CHANNEL.send(Ok(String::new())).await; // Mark a finished command
+                        }
+                    } else {
+                        info!("CALLBACK! {}", line);
                     }
                 }
                 CHANNEL.send(Ok(String::new())).await; // Stop transmission
@@ -87,6 +92,8 @@ pub struct AtUart {
     tx: UarteTx<'static, UARTE1>,
 }
 
+type Response = Vec<String<AT_COMMAND_SIZE>, 4>;
+
 impl AtUart {
     pub fn new(
         rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
@@ -98,20 +105,21 @@ impl AtUart {
         Self { tx }
     }
 
-    pub async fn read(&mut self, timeout: Duration) -> Result<(), Error> {
+    pub async fn read(&mut self, timeout: Duration) -> Result<Response, Error> {
+        let mut res = Vec::new();
         loop {
             let line = with_timeout(timeout, CHANNEL.receive())
                 .await
-                .map_err(|_| Error::TimeoutError)?;
-            let line = line?;
+                .map_err(|_| Error::TimeoutError)??;
             if line.is_empty() {
                 break;
             }
 
-            info!("Read {}", line.as_str());
+            debug!("Read {}", line.as_str());
+            res.push(line).map_err(|_| Error::BufferTooSmallError)?;
         }
 
-        Ok(())
+        Ok(res)
     }
 
     async fn write(&mut self, command: &str) -> Result<(), Error> {
@@ -124,9 +132,31 @@ impl AtUart {
             .map_err(|_| Error::UartWriteError)
     }
 
-    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<(), Error> {
+    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<Response, Error> {
         self.write(command).await?;
-        self.read(timeout).await
+        debug!("{}", command);
+        let res = self.read(timeout).await?;
+        if let Some("OK") = res.last().map(String::as_str) {
+            Ok(res)
+        } else {
+            for line in res {
+                error!("{}", line.as_str());
+            }
+            Err(Error::AtError)
+        }
+    }
+
+    pub async fn call_with_response(
+        &mut self,
+        command: &str,
+        call_timeout: Duration,
+        response_timeout: Duration,
+    ) -> Result<Response, Error> {
+        // TODO: do minimum timeout here
+        let mut first = self.call(command, call_timeout).await?;
+        let second = self.read(response_timeout).await?;
+        first.extend(second);
+        Ok(first)
     }
 }
 

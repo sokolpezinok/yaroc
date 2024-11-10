@@ -13,4 +13,6 @@ pub enum Error {
     UartWriteError,
     #[error("Timeout error")]
     TimeoutError,
+    #[error("AT error")]
+    AtError,
 }
