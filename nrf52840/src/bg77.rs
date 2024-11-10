@@ -19,9 +19,13 @@ pub struct BG77 {
     activation_timeout: Duration,
 }
 
-fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
+fn callback_dispatcher(prefix: &str, rest: &str) -> bool {
+    // TODO: Improve this
     match prefix {
         "QMTSTAT" => true,
+        "QMTPUB" => true,
+        "QMTCONN" => rest.len() >= 4 && rest.as_bytes()[1] == 0x2c && rest.as_bytes()[3] == 0x2c,
+        "QMTOPEN" => rest.as_bytes()[1] == 0x2c && rest.len() == 3,
         _ => false,
     }
 }
@@ -93,6 +97,10 @@ impl BG77 {
 
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
         let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
+        self.uart1
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
+            .await?;
+        let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         Ok(())
     }
@@ -106,6 +114,7 @@ impl BG77 {
     }
 
     pub async fn experiment(&mut self) {
+        //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
 

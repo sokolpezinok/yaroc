@@ -63,6 +63,7 @@ async fn reader(
             Err(err) => CHANNEL.send(Err(err)).await,
             Ok(len) => {
                 let lines = split_lines(&buf[..len]).unwrap();
+                let mut lines_count = 0;
                 for (idx, line) in lines.iter().enumerate() {
                     let is_callback = split_at_response(line)
                         .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
@@ -72,14 +73,19 @@ async fn reader(
                         CHANNEL
                             .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
                             .await;
+                        debug!("Read: {}", line);
+                        lines_count += 1;
                         if (*line == "OK" || *line == "ERROR") && idx + 1 < lines.len() {
                             CHANNEL.send(Ok(String::new())).await; // Mark a finished command
+                            lines_count = 0;
                         }
                     } else {
                         info!("CALLBACK! {}", line);
                     }
                 }
-                CHANNEL.send(Ok(String::new())).await; // Stop transmission
+                if lines_count > 0 {
+                    CHANNEL.send(Ok(String::new())).await; // Stop transmission
+                }
             }
         }
     }
@@ -115,7 +121,6 @@ impl AtUart {
                 break;
             }
 
-            debug!("Read {}", line.as_str());
             res.push(line).map_err(|_| Error::BufferTooSmallError)?;
         }
 
