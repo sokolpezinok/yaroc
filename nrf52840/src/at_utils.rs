@@ -22,10 +22,16 @@ fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
+#[derive(Clone)]
+pub enum FromModem {
+    Line(String<AT_COMMAND_SIZE>),
+    Ok,
+    Error,
+}
+
 const AT_COMMAND_SIZE: usize = 100;
 
-static CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 5> =
-    Channel::new();
+static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
 
 #[embassy_executor::task]
 async fn reader(
@@ -46,7 +52,6 @@ async fn reader(
                     .map_err(|_| Error::StringEncodingError)
                     .unwrap()
                     .lines();
-                let mut lines_count = 0;
                 for line in lines {
                     if line.is_empty() {
                         continue;
@@ -56,21 +61,21 @@ async fn reader(
                         .unwrap_or_default();
 
                     if !is_callback {
-                        CHANNEL
-                            .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
-                            .await;
-                        lines_count += 1;
-                        if line == "OK" || line == "ERROR" {
-                            CHANNEL.send(Ok(String::new())).await; // Mark a finished command
-                            lines_count = 0;
-                        }
+                        let to_send = match line {
+                            "OK" => Ok(FromModem::Ok),
+                            "ERROR" => Err(Error::AtError),
+                            line => String::from_str(line)
+                                .map(|l| FromModem::Line(l))
+                                .map_err(|_| Error::StringEncodingError),
+                        };
+                        CHANNEL.send(to_send).await;
                     } else {
                         info!("CALLBACK! {}", line);
                     }
                 }
-                if lines_count > 0 {
-                    CHANNEL.send(Ok(String::new())).await; // Stop transmission
-                }
+                //if open_stream {
+                //    CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
+                //}
             }
         }
     }
@@ -84,28 +89,23 @@ pub struct AtUart {
 }
 
 pub struct AtResponse {
-    lines: Vec<String<AT_COMMAND_SIZE>, 4>,
+    lines: Vec<FromModem, 4>,
     answer: Result<String<AT_COMMAND_SIZE>, Error>,
 }
 
 impl AtResponse {
-    fn just_lines(lines: Vec<String<AT_COMMAND_SIZE>, 4>) -> Self {
-        AtResponse {
-            lines,
-            answer: Ok(String::new()), // TODO: enum?
-        }
-    }
-
-    fn new(lines: Vec<String<AT_COMMAND_SIZE>, 4>, command: &str) -> Self {
+    fn new(lines: Vec<FromModem, 4>, command: &str) -> Self {
         let pos = command.find(['=', '?']).unwrap_or(command.len());
         let prefix = &command[2..pos];
         for line in &lines {
-            if line.starts_with(prefix) {
-                info!("RETURN: {}", line.as_str());
-                return Self {
-                    answer: Ok(line.clone()),
-                    lines,
-                };
+            if let FromModem::Line(line) = line {
+                if line.starts_with(prefix) {
+                    info!("RETURN: {}", line.as_str());
+                    return Self {
+                        answer: Ok(line.clone()),
+                        lines,
+                    };
+                }
             }
         }
         Self {
@@ -126,20 +126,18 @@ impl AtUart {
         Self { tx }
     }
 
-    pub async fn read(
-        &mut self,
-        timeout: Duration,
-    ) -> Result<Vec<String<AT_COMMAND_SIZE>, 4>, Error> {
+    pub async fn read(&mut self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
         let mut res = Vec::new();
         loop {
-            let line = with_timeout(timeout, CHANNEL.receive())
+            let from_modem = with_timeout(timeout, CHANNEL.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
-            if line.is_empty() {
-                break;
+            res.push(from_modem.clone())
+                .map_err(|_| Error::BufferTooSmallError)?;
+            match from_modem {
+                FromModem::Ok | FromModem::Error => break,
+                _ => {}
             }
-
-            res.push(line).map_err(|_| Error::BufferTooSmallError)?;
         }
 
         Ok(res)
@@ -159,13 +157,13 @@ impl AtUart {
         self.write(command).await?;
         debug!("{}", command);
         let lines = self.read(timeout).await?;
-        if let Some("OK") = lines.last().map(String::as_str) {
+        if let Some(&FromModem::Ok) = lines.last() {
             Ok(AtResponse::new(lines, command))
         } else {
             error!("Fail: {}", command);
-            for line in lines {
-                error!("{}", line.as_str());
-            }
+            //for line in lines {
+            //    error!("{}", line.as_str());
+            //}
             Err(Error::AtError)
         }
     }
@@ -179,7 +177,7 @@ impl AtUart {
         self.write(command).await?;
         debug!("{}", command);
         let mut lines = self.read(call_timeout).await?;
-        if let Some("OK") = lines.last().map(String::as_str) {
+        if let Some(&FromModem::Ok) = lines.last() {
         } else {
             return Err(Error::AtError);
         }
