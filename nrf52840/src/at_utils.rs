@@ -83,7 +83,37 @@ pub struct AtUart {
     tx: UarteTx<'static, UARTE1>,
 }
 
-type Response = Vec<String<AT_COMMAND_SIZE>, 4>;
+pub struct AtResponse {
+    lines: Vec<String<AT_COMMAND_SIZE>, 4>,
+    answer: Result<String<AT_COMMAND_SIZE>, Error>,
+}
+
+impl AtResponse {
+    fn just_lines(lines: Vec<String<AT_COMMAND_SIZE>, 4>) -> Self {
+        AtResponse {
+            lines,
+            answer: Ok(String::new()), // TODO: enum?
+        }
+    }
+
+    fn new(lines: Vec<String<AT_COMMAND_SIZE>, 4>, command: &str) -> Self {
+        let pos = command.find(['=', '?']).unwrap_or(command.len());
+        let prefix = &command[2..pos];
+        for line in &lines {
+            if line.starts_with(prefix) {
+                info!("RETURN: {}", line.as_str());
+                return Self {
+                    answer: Ok(line.clone()),
+                    lines,
+                };
+            }
+        }
+        Self {
+            lines,
+            answer: Err(Error::AtError), // TODO: different return type
+        }
+    }
+}
 
 impl AtUart {
     pub fn new(
@@ -96,7 +126,10 @@ impl AtUart {
         Self { tx }
     }
 
-    pub async fn read(&mut self, timeout: Duration) -> Result<Response, Error> {
+    pub async fn read(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<Vec<String<AT_COMMAND_SIZE>, 4>, Error> {
         let mut res = Vec::new();
         loop {
             let line = with_timeout(timeout, CHANNEL.receive())
@@ -122,26 +155,15 @@ impl AtUart {
             .map_err(|_| Error::UartWriteError)
     }
 
-    fn match_response<const S: usize>(lines: &[String<S>], command: &str) {
-        let pos = command.find(['=', '?']).unwrap_or(command.len());
-        let prefix = &command[2..pos];
-        for line in lines {
-            if line.starts_with(prefix) {
-                info!("RETURN: {}", line.as_str());
-            }
-        }
-    }
-
-    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<Response, Error> {
+    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
         self.write(command).await?;
         debug!("{}", command);
-        let res = self.read(timeout).await?;
-        if let Some("OK") = res.last().map(String::as_str) {
-            Self::match_response(&res, command);
-            Ok(res)
+        let lines = self.read(timeout).await?;
+        if let Some("OK") = lines.last().map(String::as_str) {
+            Ok(AtResponse::new(lines, command))
         } else {
             error!("Fail: {}", command);
-            for line in res {
+            for line in lines {
                 error!("{}", line.as_str());
             }
             Err(Error::AtError)
@@ -153,12 +175,17 @@ impl AtUart {
         command: &str,
         call_timeout: Duration,
         response_timeout: Duration,
-    ) -> Result<Response, Error> {
-        let mut lines = self.call(command, call_timeout).await?;
+    ) -> Result<AtResponse, Error> {
+        self.write(command).await?;
+        debug!("{}", command);
+        let mut lines = self.read(call_timeout).await?;
+        if let Some("OK") = lines.last().map(String::as_str) {
+        } else {
+            return Err(Error::AtError);
+        }
         let second = self.read(response_timeout).await?;
         lines.extend(second);
-        Self::match_response(&lines, command);
-        Ok(lines)
+        Ok(AtResponse::new(lines, command))
     }
 }
 
