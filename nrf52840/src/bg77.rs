@@ -19,13 +19,11 @@ pub struct BG77 {
     activation_timeout: Duration,
 }
 
-fn callback_dispatcher(prefix: &str, rest: &str) -> bool {
+fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
     // TODO: Improve this
     match prefix {
         "QMTSTAT" => true,
         "QMTPUB" => true,
-        "QMTCONN" => rest.len() >= 4 && rest.as_bytes()[1] == 0x2c && rest.as_bytes()[3] == 0x2c,
-        //"QMTOPEN" => rest.as_bytes()[1] == 0x2c && rest.len() == 3,
         _ => false,
     }
 }
@@ -38,8 +36,8 @@ impl BG77 {
         spawner: &Spawner,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, callback_dispatcher, spawner);
-        let activation_timeout = Duration::from_secs(14); // 140
-        let pkt_timeout = Duration::from_secs(8); // 30
+        let activation_timeout = Duration::from_secs(40); // 140
+        let pkt_timeout = Duration::from_secs(12); // 30
         Self {
             uart1,
             _modem_pin: modem_pin,

@@ -123,6 +123,15 @@ impl AtUart {
             .map_err(|_| Error::UartWriteError)
     }
 
+    fn match_response<const S: usize>(lines: &[String<S>], command: &str) {
+        let prefix = &command[2..command.find("=").unwrap()];
+        for line in lines {
+            if line.starts_with(prefix) {
+                info!("RETURN: {}", line.as_str());
+            }
+        }
+    }
+
     pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<Response, Error> {
         self.write(command).await?;
         debug!("{}", command);
@@ -143,11 +152,11 @@ impl AtUart {
         call_timeout: Duration,
         response_timeout: Duration,
     ) -> Result<Response, Error> {
-        // TODO: do minimum timeout here
-        let mut first = self.call(command, call_timeout).await?;
+        let mut lines = self.call(command, call_timeout).await?;
         let second = self.read(response_timeout).await?;
-        first.extend(second);
-        Ok(first)
+        lines.extend(second);
+        Self::match_response(&lines, command);
+        Ok(lines)
     }
 }
 
