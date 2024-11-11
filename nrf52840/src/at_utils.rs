@@ -59,7 +59,6 @@ async fn reader(
                         CHANNEL
                             .send(String::from_str(line).map_err(|_| Error::StringEncodingError))
                             .await;
-                        debug!("Read: {}", line);
                         lines_count += 1;
                         if line == "OK" || line == "ERROR" {
                             CHANNEL.send(Ok(String::new())).await; // Mark a finished command
@@ -124,7 +123,8 @@ impl AtUart {
     }
 
     fn match_response<const S: usize>(lines: &[String<S>], command: &str) {
-        let prefix = &command[2..command.find("=").unwrap()];
+        let pos = command.find(['=', '?']).unwrap_or(command.len());
+        let prefix = &command[2..pos];
         for line in lines {
             if line.starts_with(prefix) {
                 info!("RETURN: {}", line.as_str());
@@ -137,8 +137,10 @@ impl AtUart {
         debug!("{}", command);
         let res = self.read(timeout).await?;
         if let Some("OK") = res.last().map(String::as_str) {
+            Self::match_response(&res, command);
             Ok(res)
         } else {
+            error!("Fail: {}", command);
             for line in res {
                 error!("{}", line.as_str());
             }
