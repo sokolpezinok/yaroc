@@ -33,6 +33,42 @@ const AT_COMMAND_SIZE: usize = 100;
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
 
+async fn parse_lines(buf: &[u8], callback_dispatcher: fn(&str, &str) -> bool) {
+    let lines = from_utf8(buf)
+        .map_err(|_| Error::StringEncodingError)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.is_empty());
+    let mut open_stream = false;
+    for line in lines {
+        let is_callback = split_at_response(line)
+            .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
+            .unwrap_or_default();
+
+        if !is_callback {
+            let to_send = match line {
+                "OK" => Ok(FromModem::Ok),
+                "ERROR" => Err(Error::AtError),
+                line => String::from_str(line)
+                    .map(|l| FromModem::Line(l))
+                    .map_err(|_| Error::StringEncodingError),
+            };
+            if let Ok(FromModem::Line(_)) = to_send.as_ref() {
+                open_stream = true;
+            } else {
+                open_stream = false;
+            }
+            debug!("Read {}", line);
+            CHANNEL.send(to_send).await;
+        } else {
+            info!("CALLBACK! {}", line);
+        }
+    }
+    if open_stream {
+        CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
+    }
+}
+
 #[embassy_executor::task]
 async fn reader(
     mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
@@ -47,43 +83,7 @@ async fn reader(
             .map_err(|_| Error::UartReadError);
         match len {
             Err(err) => CHANNEL.send(Err(err)).await,
-            Ok(len) => {
-                let lines = from_utf8(&buf[..len])
-                    .map_err(|_| Error::StringEncodingError)
-                    .unwrap()
-                    .lines();
-                let mut open_stream = false;
-                for line in lines {
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let is_callback = split_at_response(line)
-                        .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
-                        .unwrap_or_default();
-
-                    if !is_callback {
-                        let to_send = match line {
-                            "OK" => Ok(FromModem::Ok),
-                            "ERROR" => Err(Error::AtError),
-                            line => String::from_str(line)
-                                .map(|l| FromModem::Line(l))
-                                .map_err(|_| Error::StringEncodingError),
-                        };
-                        if let Ok(FromModem::Line(_)) = to_send.as_ref() {
-                            open_stream = true;
-                        } else {
-                            open_stream = false;
-                        }
-                        debug!("Read {}", line);
-                        CHANNEL.send(to_send).await;
-                    } else {
-                        info!("CALLBACK! {}", line);
-                    }
-                }
-                if open_stream {
-                    CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
-                }
-            }
+            Ok(len) => parse_lines(&buf[..len], callback_dispatcher).await,
         }
     }
 }
