@@ -5,7 +5,7 @@ use embassy_nrf::peripherals::{TIMER0, UARTE1};
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{with_timeout, Duration};
+use embassy_time::{with_deadline, Duration, Instant};
 use heapless::{String, Vec};
 
 use crate::error::Error;
@@ -128,8 +128,9 @@ impl AtUart {
 
     pub async fn read(&mut self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
         let mut res = Vec::new();
+        let deadline = Instant::now() + timeout;
         loop {
-            let from_modem = with_timeout(timeout, CHANNEL.receive())
+            let from_modem = with_deadline(deadline, CHANNEL.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone())
