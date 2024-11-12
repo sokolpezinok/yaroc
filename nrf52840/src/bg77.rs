@@ -63,7 +63,12 @@ impl BG77 {
     pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
         self.uart1
-            .call_with_response(&at_command, MINIMUM_TIMEOUT, self.activation_timeout)
+            .call_with_response(
+                &at_command,
+                MINIMUM_TIMEOUT,
+                self.activation_timeout,
+                &[0, 1],
+            )
             .await?;
 
         self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
@@ -84,7 +89,7 @@ impl BG77 {
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
         let _ = self
             .uart1
-            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1, 2])
             .await;
         // +QMTCONN: <client_id>,0,0
 
@@ -96,7 +101,7 @@ impl BG77 {
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
         let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
         self.uart1
-            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1])
             .await?;
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;

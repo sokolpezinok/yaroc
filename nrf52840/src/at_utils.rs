@@ -29,7 +29,16 @@ pub enum FromModem {
     Error,
 }
 
+fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 5> {
+    let split: Vec<&str, 10> = values.split(',').collect();
+    indices
+        .into_iter()
+        .map(|idx| String::from_str(split[*idx]).unwrap()) //TODO
+        .collect()
+}
+
 const AT_COMMAND_SIZE: usize = 100;
+const AT_VALUE_SIZE: usize = 20;
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
 
@@ -97,19 +106,25 @@ pub struct AtUart {
 
 pub struct AtResponse {
     lines: Vec<FromModem, 4>,
-    answer: Result<String<AT_COMMAND_SIZE>, Error>,
+    answer: Result<Vec<String<AT_VALUE_SIZE>, 5>, Error>,
 }
 
 impl AtResponse {
-    fn new(lines: Vec<FromModem, 4>, command: &str) -> Self {
+    fn new(lines: Vec<FromModem, 4>, command: &str, indices: &[usize]) -> Self {
         let pos = command.find(['=', '?']).unwrap_or(command.len());
         let prefix = &command[2..pos];
         for line in &lines {
             if let FromModem::Line(line) = line {
                 if line.starts_with(prefix) {
-                    info!("RETURN: {}", line.as_str());
+                    let (_, rest) = split_at_response(line).unwrap();
+                    let values = pick_values(rest, indices);
+                    {
+                        let val_print: Vec<&str, AT_VALUE_SIZE> =
+                            values.iter().map(|s| s.as_str()).collect();
+                        info!("RETURN: {} {:?}", line.as_str(), val_print.as_slice());
+                    }
                     return Self {
-                        answer: Ok(line.clone()),
+                        answer: Ok(values),
                         lines,
                     };
                 }
@@ -166,7 +181,7 @@ impl AtUart {
         debug!("Calling {}", command);
         let lines = self.read(timeout).await?;
         if let Some(&FromModem::Ok) = lines.last() {
-            Ok(AtResponse::new(lines, command))
+            Ok(AtResponse::new(lines, command, &[]))
         } else {
             error!("Fail: {}", command);
             //for line in lines {
@@ -181,6 +196,7 @@ impl AtUart {
         command: &str,
         call_timeout: Duration,
         response_timeout: Duration,
+        indices: &[usize],
     ) -> Result<AtResponse, Error> {
         self.write(command).await?;
         debug!("Calling {}", command);
@@ -191,7 +207,7 @@ impl AtUart {
         }
         let second = self.read(response_timeout).await?;
         lines.extend(second);
-        Ok(AtResponse::new(lines, command))
+        Ok(AtResponse::new(lines, command, indices))
     }
 }
 
