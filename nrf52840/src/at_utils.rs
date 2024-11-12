@@ -52,6 +52,7 @@ async fn reader(
                     .map_err(|_| Error::StringEncodingError)
                     .unwrap()
                     .lines();
+                let mut open_stream = false;
                 for line in lines {
                     if line.is_empty() {
                         continue;
@@ -68,14 +69,20 @@ async fn reader(
                                 .map(|l| FromModem::Line(l))
                                 .map_err(|_| Error::StringEncodingError),
                         };
+                        if let Ok(FromModem::Line(_)) = to_send.as_ref() {
+                            open_stream = true;
+                        } else {
+                            open_stream = false;
+                        }
+                        debug!("Read {}", line);
                         CHANNEL.send(to_send).await;
                     } else {
                         info!("CALLBACK! {}", line);
                     }
                 }
-                //if open_stream {
-                //    CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
-                //}
+                if open_stream {
+                    CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
+                }
             }
         }
     }
@@ -156,7 +163,7 @@ impl AtUart {
 
     pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
         self.write(command).await?;
-        debug!("{}", command);
+        debug!("Calling {}", command);
         let lines = self.read(timeout).await?;
         if let Some(&FromModem::Ok) = lines.last() {
             Ok(AtResponse::new(lines, command))
@@ -176,7 +183,7 @@ impl AtUart {
         response_timeout: Duration,
     ) -> Result<AtResponse, Error> {
         self.write(command).await?;
-        debug!("{}", command);
+        debug!("Calling {}", command);
         let mut lines = self.read(call_timeout).await?;
         if let Some(&FromModem::Ok) = lines.last() {
         } else {
