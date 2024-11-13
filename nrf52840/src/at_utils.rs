@@ -67,7 +67,6 @@ async fn parse_lines(buf: &[u8], callback_dispatcher: fn(&str, &str) -> bool) {
             } else {
                 open_stream = false;
             }
-            debug!("Read {}", line);
             CHANNEL.send(to_send).await;
         } else {
             info!("CALLBACK! {}", line);
