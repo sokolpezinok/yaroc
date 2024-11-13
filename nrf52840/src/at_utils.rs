@@ -212,8 +212,8 @@ impl AtUart {
         timeout: Duration,
         indices: &[usize],
     ) -> Result<AtResponse, Error> {
-        self.write(command).await?;
         debug!("Calling {}", command);
+        self.write(command).await?;
         let lines = self.read(timeout).await?;
         if let Some(&FromModem::Ok) = lines.last() {
             Ok(AtResponse::new(lines, command, indices))
@@ -233,11 +233,10 @@ impl AtUart {
         response_timeout: Duration,
         indices: &[usize],
     ) -> Result<AtResponse, Error> {
-        self.write(command).await?;
         debug!("Calling {}", command);
+        self.write(command).await?;
         let mut lines = self.read(call_timeout).await?;
-        let second = self.read(response_timeout).await?;
-        lines.extend(second);
+        lines.extend(self.read(response_timeout).await?);
         Ok(AtResponse::new(lines, command, indices))
     }
 }
