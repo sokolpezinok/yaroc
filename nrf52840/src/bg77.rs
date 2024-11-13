@@ -7,7 +7,7 @@ use embassy_nrf::{
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_time::{Duration, Timer};
-use heapless::format;
+use heapless::{format, String};
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u32 = 0;
@@ -47,16 +47,18 @@ impl BG77 {
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
-        self.uart1.call("ATE0", MINIMUM_TIMEOUT).await?;
+        self.uart1.call("ATE0", MINIMUM_TIMEOUT, &[]).await?;
         self.uart1
-            .call("AT+CGATT=1", self.activation_timeout)
+            .call("AT+CGATT=1", self.activation_timeout, &[])
             .await?;
-        self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT).await?;
+        self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT, &[]).await?;
         let _ = self
             .uart1
-            .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT)
+            .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT, &[])
             .await;
-        self.uart1.call("AT+CGPADDR=1", MINIMUM_TIMEOUT).await?;
+        self.uart1
+            .call("AT+CGPADDR=1", MINIMUM_TIMEOUT, &[0, 1])
+            .await?;
         Ok(())
     }
 
@@ -74,7 +76,10 @@ impl BG77 {
             .parse2::<u32, u32>()?;
         info!("MQTT open: {} {}", res.0, res.1);
 
-        self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
+        self.uart1
+            .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?
+            .parse2::<u32, String<40>>()?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
         let command = format!(50;
@@ -82,13 +87,13 @@ impl BG77 {
             self.pkt_timeout.as_secs()
         )
         .unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
         let command = format!(50;
             "AT+QMTCFG=\"keepalive\",{CLIENT_ID},{}",
             (self.pkt_timeout * 3).as_secs()
         )
         .unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
         let (client_id, res, reason) = self
             .uart1
@@ -97,7 +102,9 @@ impl BG77 {
             .parse3::<u32, u32, u32>()?;
         info!("MQTT connection: {} {} {}", client_id, res, reason);
 
-        self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
+        self.uart1
+            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?;
         // Good response +QMTCONN: <client_id>,3
         Ok(())
     }
@@ -111,14 +118,20 @@ impl BG77 {
             .parse2::<u32, u32>()?;
         info!("MQTT disconnect: {} {}", client_id, result);
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
+        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
         Ok(())
     }
 
     pub async fn signal_info(&mut self) -> Result<(), Error> {
-        self.uart1.call("AT+QCSQ", MINIMUM_TIMEOUT).await?;
-        self.uart1.call("AT+CEREG?", MINIMUM_TIMEOUT).await?;
-        self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
+        self.uart1
+            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3])
+            .await?;
+        self.uart1
+            .call("AT+CEREG?", MINIMUM_TIMEOUT, &[0, 1, 3])
+            .await?;
+        self.uart1
+            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
         Ok(())
     }
@@ -132,7 +145,7 @@ impl BG77 {
             "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"Hello from embassy\""
         )
         .unwrap();
-        let _ = self.uart1.call(&command, self.pkt_timeout * 2).await;
+        let _ = self.uart1.call(&command, self.pkt_timeout * 2, &[]).await;
         for _ in 0..5 {
             unwrap!(self.signal_info().await);
         }

@@ -206,12 +206,17 @@ impl AtUart {
             .map_err(|_| Error::UartWriteError)
     }
 
-    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
+    pub async fn call(
+        &mut self,
+        command: &str,
+        timeout: Duration,
+        indices: &[usize],
+    ) -> Result<AtResponse, Error> {
         self.write(command).await?;
         debug!("Calling {}", command);
         let lines = self.read(timeout).await?;
         if let Some(&FromModem::Ok) = lines.last() {
-            Ok(AtResponse::new(lines, command, &[]))
+            Ok(AtResponse::new(lines, command, indices))
         } else {
             error!("Fail: {}", command);
             //for line in lines {
@@ -231,10 +236,6 @@ impl AtUart {
         self.write(command).await?;
         debug!("Calling {}", command);
         let mut lines = self.read(call_timeout).await?;
-        if let Some(&FromModem::Ok) = lines.last() {
-        } else {
-            return Err(Error::AtError);
-        }
         let second = self.read(response_timeout).await?;
         lines.extend(second);
         Ok(AtResponse::new(lines, command, indices))
