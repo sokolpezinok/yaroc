@@ -29,7 +29,7 @@ pub enum FromModem {
     Error,
 }
 
-fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 5> {
+fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
     let split: Vec<&str, 10> = values.split(',').collect();
     indices
         .into_iter()
@@ -105,7 +105,7 @@ pub struct AtUart {
 
 pub struct AtResponse {
     lines: Vec<FromModem, 4>,
-    answer: Result<Vec<String<AT_VALUE_SIZE>, 5>, Error>,
+    answer: Result<Vec<String<AT_VALUE_SIZE>, 3>, Error>,
 }
 
 impl AtResponse {
@@ -133,6 +133,37 @@ impl AtResponse {
             lines,
             answer: Err(Error::AtError), // TODO: different return type
         }
+    }
+
+    pub fn parse1<T: FromStr>(self) -> Result<T, Error> {
+        let values = self.answer?;
+        if values.len() != 1 {
+            return Err(Error::AtError);
+        }
+        str::parse(values[0].as_str()).map_err(|_| Error::ParseError)
+    }
+
+    pub fn parse2<T: FromStr, U: FromStr>(self) -> Result<(T, U), Error> {
+        let values = self.answer?;
+        if values.len() != 2 {
+            return Err(Error::AtError);
+        }
+        Ok((
+            str::parse(values[0].as_str()).map_err(|_| Error::ParseError)?,
+            str::parse(values[1].as_str()).map_err(|_| Error::ParseError)?,
+        ))
+    }
+
+    pub fn parse3<T: FromStr, U: FromStr, V: FromStr>(self) -> Result<(T, U, V), Error> {
+        let values = self.answer?;
+        if values.len() != 3 {
+            return Err(Error::AtError);
+        }
+        Ok((
+            str::parse(values[0].as_str()).map_err(|_| Error::ParseError)?,
+            str::parse(values[1].as_str()).map_err(|_| Error::ParseError)?,
+            str::parse(values[1].as_str()).map_err(|_| Error::ParseError)?,
+        ))
     }
 }
 

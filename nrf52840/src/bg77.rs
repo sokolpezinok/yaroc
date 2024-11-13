@@ -1,5 +1,5 @@
 use crate::{at_utils::AtUart, error::Error};
-use defmt::unwrap;
+use defmt::{info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -62,14 +62,17 @@ impl BG77 {
 
     pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
-        self.uart1
+        let res = self
+            .uart1
             .call_with_response(
                 &at_command,
                 MINIMUM_TIMEOUT,
                 self.activation_timeout,
                 &[0, 1],
             )
-            .await?;
+            .await?
+            .parse2::<u32, u32>()?;
+        info!("MQTT open: {} {}", res.0, res.1);
 
         self.uart1.call("AT+QMTOPEN?", MINIMUM_TIMEOUT).await?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
@@ -87,11 +90,12 @@ impl BG77 {
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
-        let _ = self
+        let (client_id, res, reason) = self
             .uart1
             .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1, 2])
-            .await;
-        // +QMTCONN: <client_id>,0,0
+            .await?
+            .parse3::<u32, u32, u32>()?;
+        info!("MQTT connection: {} {} {}", client_id, res, reason);
 
         self.uart1.call("AT+QMTCONN?", MINIMUM_TIMEOUT).await?;
         // Good response +QMTCONN: <client_id>,3
@@ -100,9 +104,12 @@ impl BG77 {
 
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
         let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
-        self.uart1
+        let (client_id, result) = self
+            .uart1
             .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1])
-            .await?;
+            .await?
+            .parse2::<u32, u32>()?;
+        info!("MQTT disconnect: {} {}", client_id, result);
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         Ok(())

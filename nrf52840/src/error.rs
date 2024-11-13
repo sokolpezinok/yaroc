@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Buffer too small")]
     BufferTooSmallError,
+    #[error("Cannot parse string as the given type")]
+    ParseError,
     #[error("String encoding error")]
     StringEncodingError,
     #[error("UART read error")]
