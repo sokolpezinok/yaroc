@@ -28,6 +28,12 @@ fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
     }
 }
 
+struct SignalInfo {
+    pub rssi_dbm: Option<i32>,
+    pub snr: Option<f32>,
+    pub cellid: Option<u32>,
+}
+
 impl BG77 {
     pub fn new(
         rx1: UarteRxWithIdle<'static, UARTE1, TIMER0>,
@@ -122,21 +128,33 @@ impl BG77 {
         Ok(())
     }
 
-    pub async fn signal_info(&mut self) -> Result<(), Error> {
-        self.uart1
-            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3])
-            .await?;
+    async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
+        let (rssi_dbm, snr_mult) = self
+            .uart1
+            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 3])
+            .await?
+            .parse2::<i32, i32>()?;
+        let snr = f64::from(snr_mult - 100) / 5.0;
         let (_, status, cellid) = self
             .uart1
             .call("AT+CEREG?", MINIMUM_TIMEOUT, &[0, 1, 3])
             .await?
             .parse3::<u32, u32, String<8>>()?;
-        info!("Registration info: {} {}", status, cellid.as_str());
+        let cellid = u32::from_str_radix(cellid.as_str(), 16).ok();
         self.uart1
             .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?;
         let _ = self.uart1.read(self.pkt_timeout).await;
-        Ok(())
+        let signal_info = SignalInfo {
+            rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
+            snr: Some(snr as f32),
+            cellid,
+        };
+        info!(
+            "Signal info: {:?} {:?} {:?}",
+            signal_info.rssi_dbm, signal_info.snr, signal_info.cellid
+        );
+        Ok(signal_info)
     }
 
     pub async fn experiment(&mut self) {
