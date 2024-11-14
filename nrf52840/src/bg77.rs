@@ -126,9 +126,12 @@ impl BG77 {
         self.uart1
             .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3])
             .await?;
-        self.uart1
+        let (_, status, cellid) = self
+            .uart1
             .call("AT+CEREG?", MINIMUM_TIMEOUT, &[0, 1, 3])
-            .await?;
+            .await?
+            .parse3::<u32, u32, String<8>>()?;
+        info!("Registration info: {} {}", status, cellid.as_str());
         self.uart1
             .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?;
