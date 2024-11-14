@@ -79,7 +79,7 @@ impl BG77 {
         self.uart1
             .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?
-            .parse2::<u32, String<40>>()?;
+            .parse2::<u32, String<20>>()?;
         // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
 
         let command = format!(50;
