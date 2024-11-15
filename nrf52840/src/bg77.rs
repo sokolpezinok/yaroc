@@ -6,7 +6,7 @@ use embassy_nrf::{
     peripherals::{P0_17, TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker, Timer};
 use heapless::{format, String};
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -20,9 +20,9 @@ pub struct BG77 {
 }
 
 fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
-    // TODO: Improve this
     match prefix {
         "QMTSTAT" => true,
+        "CEREG" => false, // TODO
         "QMTPUB" => true,
         _ => false,
     }
@@ -129,6 +129,16 @@ impl BG77 {
         Ok(())
     }
 
+    async fn battery_mv(&mut self) -> Result<u32, Error> {
+        let (_, bcs, volt) = self
+            .uart1
+            .call("AT+CBC", MINIMUM_TIMEOUT, &[0, 1, 2])
+            .await?
+            .parse3::<i32, i32, u32>()?;
+        info!("Batt: {}mV, {}%", volt, bcs);
+        Ok(volt)
+    }
+
     async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
         let (rssi_dbm, snr_mult) = self
             .uart1
@@ -171,15 +181,17 @@ impl BG77 {
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
 
+        let mut ticker = Ticker::every(Duration::from_secs(10));
         for _ in 0..5 {
             let signal_info = self.signal_info().await;
             info!("Signal info: {}", signal_info);
 
             if let Ok(signal_info) = signal_info {
-                let text = format!(50; "{};{:X}", signal_info.snr.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+                let bat_mv = self.battery_mv().await.unwrap_or_default();
+                let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
                 let _ = self.send_text(text.as_str()).await;
             }
-            Timer::after_secs(10).await;
+            ticker.next().await;
         }
         unwrap!(self.mqtt_disconnect().await);
     }
