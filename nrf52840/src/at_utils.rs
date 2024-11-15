@@ -33,7 +33,7 @@ fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SI
     let split: Vec<&str, 10> = values.split(',').collect();
     indices
         .into_iter()
-        .map(|idx| String::from_str(split[*idx]).unwrap()) //TODO
+        .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
         .collect()
 }
 
@@ -142,7 +142,7 @@ impl AtResponse {
                     let values = pick_values(rest, indices);
                     {
                         let val_print: Vec<&str, AT_VALUE_SIZE> =
-                            values.iter().map(|s| s.as_str()).collect();
+                            values.iter().map(|s| s.as_ref()).collect();
                         info!("RETURN: {} {:?}", line.as_str(), val_print.as_slice());
                     }
                     return Self {
