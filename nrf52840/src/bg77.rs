@@ -149,7 +149,6 @@ impl BG77 {
         self.uart1
             .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?;
-        let _ = self.uart1.read(self.pkt_timeout).await;
         let signal_info = SignalInfo {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
             snr: Some(snr as f32),
@@ -158,19 +157,29 @@ impl BG77 {
         Ok(signal_info)
     }
 
+    async fn send_text(&mut self, text: &str) -> Result<(), Error> {
+        let command = format!(100;
+            "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"{text}\""
+        )
+        .unwrap();
+        let _response = self.uart1.call(&command, self.pkt_timeout * 2, &[]).await?;
+        Ok(())
+    }
+
     pub async fn experiment(&mut self) {
         //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
 
-        let command = format!(100;
-            "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"Hello from embassy\""
-        )
-        .unwrap();
-        let _ = self.uart1.call(&command, self.pkt_timeout * 2, &[]).await;
         for _ in 0..5 {
             let signal_info = self.signal_info().await;
             info!("Signal info: {}", signal_info);
+
+            if let Ok(signal_info) = signal_info {
+                let text = format!(50; "{};{:X}", signal_info.snr.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+                let _ = self.send_text(text.as_str()).await;
+            }
+            Timer::after_secs(10).await;
         }
         unwrap!(self.mqtt_disconnect().await);
     }
