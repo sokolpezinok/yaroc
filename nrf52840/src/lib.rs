@@ -5,3 +5,5 @@ pub mod at_utils;
 pub mod bg77;
 pub mod device;
 pub mod error;
+
+type Result<T> = core::result::Result<T, error::Error>;

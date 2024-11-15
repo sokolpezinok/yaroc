@@ -6,7 +6,7 @@ use embassy_nrf::{
     peripherals::{P0_17, TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_time::{Duration, Ticker, Timer};
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use heapless::{format, String};
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -176,10 +176,24 @@ impl BG77 {
         Ok(())
     }
 
+    async fn get_time(&mut self) -> crate::Result<String<15>> {
+        let time = self
+            .uart1
+            .call("AT+CCLK?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?
+            .parse1::<String<15>>()?;
+        info!("Clock: {}", time.as_str());
+
+        Ok(time)
+    }
+
     pub async fn experiment(&mut self) {
         //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
+        let _now = Instant::now();
+        let _modem_clock = self.get_time().await;
+        // Boot time is 'modem_clock - now'
 
         let mut ticker = Ticker::every(Duration::from_secs(10));
         for _ in 0..5 {

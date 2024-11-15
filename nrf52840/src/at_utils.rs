@@ -39,8 +39,27 @@ impl defmt::Format for FromModem {
     }
 }
 
-fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
-    let split: Vec<&str, 10> = values.split(',').collect();
+fn pick_values<'a>(mut values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
+    let mut split: Vec<&str, 15> = Vec::new();
+    while !values.is_empty() {
+        let pos = match values.chars().next() {
+            Some('"') => {
+                let pos = values.find("\",").unwrap_or(values.len() - 1);
+                split.push(&values[1..pos]).unwrap();
+                pos + 1
+            }
+            _ => {
+                let pos = values.find(",").unwrap_or(values.len());
+                split.push(&values[..pos]).unwrap();
+                pos
+            }
+        };
+        if pos >= values.len() {
+            break;
+        }
+        values = &values[pos + 1..];
+    }
+
     indices
         .into_iter()
         .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
@@ -122,6 +141,16 @@ pub struct AtResponse {
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
+        if let Ok(values) = self.answer.as_ref() {
+            defmt::write!(
+                fmt,
+                ", ans={=[?]}",
+                values
+                    .into_iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<&str, 3>>()
+            );
+        }
     }
 }
 
