@@ -39,7 +39,7 @@ impl defmt::Format for FromModem {
     }
 }
 
-fn pick_values<'a>(mut values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
+fn pick_values(mut values: &str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
     let mut split: Vec<&str, 15> = Vec::new();
     while !values.is_empty() {
         let pos = match values.chars().next() {
@@ -61,7 +61,7 @@ fn pick_values<'a>(mut values: &'a str, indices: &[usize]) -> Vec<String<AT_VALU
     }
 
     indices
-        .into_iter()
+        .iter()
         .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
         .collect()
 }
@@ -89,7 +89,7 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
                 "OK" => Ok(FromModem::Ok),
                 "ERROR" => Err(Error::AtError),
                 line => String::from_str(line)
-                    .map(|l| FromModem::Line(l))
+                    .map(FromModem::Line)
                     .map_err(|_| Error::StringEncodingError),
             };
             if let Ok(FromModem::Line(_)) = to_send.as_ref() {
