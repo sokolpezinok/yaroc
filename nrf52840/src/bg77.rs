@@ -19,10 +19,10 @@ pub struct BG77 {
     activation_timeout: Duration,
 }
 
-fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
+fn urc_handler(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" => true,
-        "CEREG" => false, // TODO
+        "CEREG" => rest.split(',').count() == 4, // The URC is shorter, normal one has 5 values
         "QMTPUB" => true,
         _ => false,
     }
@@ -42,7 +42,7 @@ impl BG77 {
         modem_pin: Output<'static, P0_17>,
         spawner: &Spawner,
     ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, callback_dispatcher, spawner);
+        let uart1 = AtUart::new(rx1, tx1, urc_handler, spawner);
         let activation_timeout = Duration::from_secs(40); // 140
         let pkt_timeout = Duration::from_secs(12); // 30
         Self {

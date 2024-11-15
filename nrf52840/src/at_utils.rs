@@ -53,7 +53,7 @@ const AT_VALUE_SIZE: usize = 20;
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
 
-async fn parse_lines(buf: &[u8], callback_dispatcher: fn(&str, &str) -> bool) {
+async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
     let lines = from_utf8(buf)
         .map_err(|_| Error::StringEncodingError)
         .unwrap()
@@ -62,7 +62,7 @@ async fn parse_lines(buf: &[u8], callback_dispatcher: fn(&str, &str) -> bool) {
     let mut open_stream = false;
     for line in lines {
         let is_callback = split_at_response(line)
-            .map(|(prefix, rest)| (callback_dispatcher)(prefix, rest))
+            .map(|(prefix, rest)| (urc_handler)(prefix, rest))
             .unwrap_or_default();
 
         if !is_callback {
@@ -91,7 +91,7 @@ async fn parse_lines(buf: &[u8], callback_dispatcher: fn(&str, &str) -> bool) {
 #[embassy_executor::task]
 async fn reader(
     mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
-    callback_dispatcher: fn(&str, &str) -> bool,
+    urc_handler: fn(&str, &str) -> bool,
 ) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
@@ -102,7 +102,7 @@ async fn reader(
             .map_err(|_| Error::UartReadError);
         match len {
             Err(err) => CHANNEL.send(Err(err)).await,
-            Ok(len) => parse_lines(&buf[..len], callback_dispatcher).await,
+            Ok(len) => parse_lines(&buf[..len], urc_handler).await,
         }
     }
 }
@@ -202,10 +202,10 @@ impl AtUart {
     pub fn new(
         rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
         tx: UarteTx<'static, UARTE1>,
-        callback_dispatcher: fn(&str, &str) -> bool,
+        urc_handler: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        unwrap!(spawner.spawn(reader(rx, callback_dispatcher)));
+        unwrap!(spawner.spawn(reader(rx, urc_handler)));
         Self { tx }
     }
 
