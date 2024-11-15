@@ -28,6 +28,7 @@ fn callback_dispatcher(prefix: &str, _rest: &str) -> bool {
     }
 }
 
+#[derive(defmt::Format)]
 struct SignalInfo {
     pub rssi_dbm: Option<i32>,
     pub snr: Option<f32>,
@@ -154,10 +155,6 @@ impl BG77 {
             snr: Some(snr as f32),
             cellid,
         };
-        info!(
-            "Signal info: {:?} {:?} {:?}",
-            signal_info.rssi_dbm, signal_info.snr, signal_info.cellid
-        );
         Ok(signal_info)
     }
 
@@ -172,7 +169,8 @@ impl BG77 {
         .unwrap();
         let _ = self.uart1.call(&command, self.pkt_timeout * 2, &[]).await;
         for _ in 0..5 {
-            unwrap!(self.signal_info().await);
+            let signal_info = self.signal_info().await;
+            info!("Signal info: {}", signal_info);
         }
         unwrap!(self.mqtt_disconnect().await);
     }
