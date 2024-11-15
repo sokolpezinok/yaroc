@@ -29,6 +29,16 @@ pub enum FromModem {
     Error,
 }
 
+impl defmt::Format for FromModem {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            FromModem::Line(line) => defmt::write!(fmt, "{}", line.as_str()),
+            FromModem::Ok => defmt::write!(fmt, "Ok"),
+            FromModem::Error => defmt::write!(fmt, "Error"),
+        }
+    }
+}
+
 fn pick_values<'a>(values: &'a str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
     let split: Vec<&str, 10> = values.split(',').collect();
     indices
@@ -109,6 +119,12 @@ pub struct AtResponse {
     answer: Result<Vec<String<AT_VALUE_SIZE>, 3>, Error>,
 }
 
+impl defmt::Format for AtResponse {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
+    }
+}
+
 pub trait Parseable: Sized {
     fn parse(s: &String<AT_VALUE_SIZE>) -> Result<Self, Error>;
 }
@@ -140,11 +156,6 @@ impl AtResponse {
                 if line.starts_with(prefix) {
                     let (_, rest) = split_at_response(line).unwrap();
                     let values = pick_values(rest, indices);
-                    {
-                        let val_print: Vec<&str, AT_VALUE_SIZE> =
-                            values.iter().map(|s| s.as_ref()).collect();
-                        info!("RETURN: {} {:?}", line.as_str(), val_print.as_slice());
-                    }
                     return Self {
                         answer: Ok(values),
                         lines,
@@ -237,10 +248,6 @@ impl AtUart {
         if let Some(&FromModem::Ok) = lines.last() {
             Ok(lines)
         } else {
-            error!("Fail: {}", command);
-            //for line in lines {
-            //    error!("{}", line.as_str());
-            //}
             Err(Error::AtError)
         }
     }
@@ -252,7 +259,9 @@ impl AtUart {
         indices: &[usize],
     ) -> Result<AtResponse, Error> {
         let lines = self.call_impl(command, timeout).await?;
-        Ok(AtResponse::new(lines, command, indices))
+        let response = AtResponse::new(lines, command, indices);
+        debug!("Got: {}", response);
+        Ok(response)
     }
 
     pub async fn call_with_response(
@@ -264,7 +273,9 @@ impl AtUart {
     ) -> Result<AtResponse, Error> {
         let mut lines = self.call_impl(command, call_timeout).await?;
         lines.extend(self.read(response_timeout).await?);
-        Ok(AtResponse::new(lines, command, indices))
+        let response = AtResponse::new(lines, command, indices);
+        debug!("Got: {}", response);
+        Ok(response)
     }
 }
 
