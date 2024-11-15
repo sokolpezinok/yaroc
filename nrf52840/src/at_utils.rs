@@ -154,28 +154,6 @@ impl defmt::Format for AtResponse {
     }
 }
 
-pub trait Parseable: Sized {
-    fn parse(s: &String<AT_VALUE_SIZE>) -> Result<Self, Error>;
-}
-
-impl Parseable for u32 {
-    fn parse(s: &String<AT_VALUE_SIZE>) -> Result<Self, Error> {
-        str::parse(s.as_str()).map_err(|_| Error::ParseError)
-    }
-}
-
-impl Parseable for i32 {
-    fn parse(s: &String<AT_VALUE_SIZE>) -> Result<Self, Error> {
-        str::parse(s.as_str()).map_err(|_| Error::ParseError)
-    }
-}
-
-impl<const N: usize> Parseable for String<N> {
-    fn parse(s: &String<AT_VALUE_SIZE>) -> Result<Self, Error> {
-        String::from_str(&s[1..s.len() - 1]).map_err(|_| Error::ParseError)
-    }
-}
-
 impl AtResponse {
     fn new(lines: Vec<FromModem, AT_LINES>, command: &str, indices: &[usize]) -> Self {
         let pos = command.find(['=', '?']).unwrap_or(command.len());
@@ -198,31 +176,35 @@ impl AtResponse {
         }
     }
 
-    pub fn parse1<T: Parseable>(self) -> Result<T, Error> {
+    fn parse<T: FromStr>(s: &String<AT_VALUE_SIZE>) -> Result<T, Error> {
+        str::parse(s.as_str()).map_err(|_| Error::ParseError)
+    }
+
+    pub fn parse1<T: FromStr>(self) -> Result<T, Error> {
         let values = self.answer?;
         if values.len() != 1 {
             return Err(Error::AtError);
         }
-        T::parse(&values[0])
+        Self::parse::<T>(&values[0])
     }
 
-    pub fn parse2<T: Parseable, U: Parseable>(self) -> Result<(T, U), Error> {
+    pub fn parse2<T: FromStr, U: FromStr>(self) -> Result<(T, U), Error> {
         let values = self.answer?;
         if values.len() != 2 {
             return Err(Error::AtError);
         }
-        Ok((T::parse(&values[0])?, U::parse(&values[1])?))
+        Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
-    pub fn parse3<T: Parseable, U: Parseable, V: Parseable>(self) -> Result<(T, U, V), Error> {
+    pub fn parse3<T: FromStr, U: FromStr, V: FromStr>(self) -> Result<(T, U, V), Error> {
         let values = self.answer?;
         if values.len() != 3 {
             return Err(Error::AtError);
         }
         Ok((
-            T::parse(&values[0])?,
-            U::parse(&values[1])?,
-            V::parse(&values[2])?,
+            Self::parse::<T>(&values[0])?,
+            Self::parse::<U>(&values[1])?,
+            Self::parse::<V>(&values[2])?,
         ))
     }
 }
