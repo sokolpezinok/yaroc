@@ -1,4 +1,5 @@
 use crate::{at_utils::AtUart, error::Error};
+use chrono::NaiveDateTime;
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -176,13 +177,14 @@ impl BG77 {
         Ok(())
     }
 
-    async fn get_time(&mut self) -> crate::Result<String<15>> {
+    async fn get_time(&mut self) -> crate::Result<NaiveDateTime> {
         let time = self
             .uart1
             .call("AT+CCLK?", MINIMUM_TIMEOUT, &[0, 1])
             .await?
-            .parse1::<String<15>>()?;
-        info!("Clock: {}", time.as_str());
+            .parse1::<String<20>>()?;
+
+        let time = NaiveDateTime::parse_from_str(time.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();
 
         Ok(time)
     }
@@ -192,7 +194,11 @@ impl BG77 {
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
         let _now = Instant::now();
-        let _modem_clock = self.get_time().await;
+        let modem_clock = self.get_time().await.unwrap();
+        info!(
+            "Clock: {}",
+            format!(30; "{}", modem_clock).unwrap().as_str()
+        );
         // Boot time is 'modem_clock - now'
 
         let mut ticker = Ticker::every(Duration::from_secs(10));

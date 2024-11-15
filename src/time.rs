@@ -1,6 +1,5 @@
 use crate::protobufs::Timestamp;
 use chrono::prelude::*;
-use chrono::DateTime;
 
 pub fn datetime_from_timestamp<T: TimeZone>(posix_millis: u64, tz: &T) -> DateTime<FixedOffset> {
     tz.timestamp_millis_opt(posix_millis.try_into().unwrap())
