@@ -11,7 +11,7 @@ use embassy_time::{Duration, Instant, Ticker, Timer};
 use heapless::{format, String};
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-const CLIENT_ID: u32 = 0;
+const CLIENT_ID: u8 = 0;
 
 pub struct BG77 {
     uart1: AtUart,
@@ -75,12 +75,13 @@ impl BG77 {
             .uart1
             .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?
-            .parse2::<u32, String<40>>();
+            .parse2::<u8, String<40>>();
         if let Ok((CLIENT_ID, url)) = opened.as_ref() {
             if url.as_str() == "broker.emqx.io" {
                 info!("Connection already opened to {}", url.as_str());
                 return Ok(());
             }
+            // TODO: disconnect an old client
         }
 
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
@@ -93,7 +94,7 @@ impl BG77 {
                 &[0, 1],
             )
             .await?
-            .parse2::<u32, i8>()?;
+            .parse2::<u8, i8>()?;
         if status != 0 || client_id != CLIENT_ID {
             return Err(Error::MqttError(status));
         }
@@ -115,19 +116,32 @@ impl BG77 {
         )
         .unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
-        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"client-embassy\"").unwrap();
+
+        let connection = self
+            .uart1
+            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?
+            .parse2::<u8, u8>();
+        const MQTT_INITIALIZING: u8 = 1;
+        const MQTT_CONNECTING: u8 = 2;
+        const MQTT_CONNECTED: u8 = 3;
+        const MQTT_DISCONNECTING: u8 = 4;
+        // Good response +QMTCONN: <client_id>,3
+        if let Ok((CLIENT_ID, MQTT_CONNECTED)) = connection.as_ref() {
+            return Ok(());
+        }
+        let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
         let (client_id, res, reason) = self
             .uart1
             .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1, 2])
             .await?
-            .parse3::<u32, u32, u32>()?;
-        info!("MQTT connection: {} {} {}", client_id, res, reason);
+            .parse3::<u8, u32, i8>()?;
 
-        self.uart1
-            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
-            .await?;
-        // Good response +QMTCONN: <client_id>,3
-        Ok(())
+        if client_id == CLIENT_ID && res == 0 && reason == 0 {
+            Ok(())
+        } else {
+            Err(Error::MqttError(reason))
+        }
     }
 
     pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
@@ -191,19 +205,19 @@ impl BG77 {
     }
 
     async fn get_time(&mut self) -> crate::Result<NaiveDateTime> {
-        let time = self
+        let modem_clock = self
             .uart1
             .call("AT+CCLK?", MINIMUM_TIMEOUT, &[0, 1])
             .await?
             .parse1::<String<20>>()?;
 
-        let time = NaiveDateTime::parse_from_str(time.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();
+        let datetime =
+            NaiveDateTime::parse_from_str(modem_clock.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();
 
-        Ok(time)
+        Ok(datetime)
     }
 
     pub async fn experiment(&mut self) {
-        //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
         let now_ms = Instant::now().as_millis();
@@ -228,7 +242,7 @@ impl BG77 {
             }
             ticker.next().await;
         }
-        //unwrap!(self.mqtt_disconnect().await);
+        unwrap!(self.mqtt_disconnect().await);
     }
 
     async fn _turn_on(&mut self) {
