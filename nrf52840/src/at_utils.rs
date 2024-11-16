@@ -39,13 +39,14 @@ impl defmt::Format for FromModem {
     }
 }
 
-const AT_COMMAND_SIZE: usize = 100;
+const AT_COMMAND_SIZE: usize = 90;
 const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 20;
 const AT_VALUE_COUNT: usize = 4;
 
 static MAIN_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
-static URC_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 2> = Channel::new();
+pub static URC_CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2> =
+    Channel::new();
 
 async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
     let lines = from_utf8(buf)
@@ -75,8 +76,7 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
             MAIN_CHANNEL.send(to_send).await;
         } else {
             info!("CALLBACK! {}", line);
-            // TODO add a consumer
-            //URC_CHANNEL.send(to_send).await;
+            URC_CHANNEL.send(Ok(String::from_str(line).unwrap())).await;
         }
     }
     if open_stream {

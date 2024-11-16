@@ -1,14 +1,21 @@
-use crate::{at_utils::AtUart, error::Error};
+use crate::{
+    at_utils::{AtUart, URC_CHANNEL},
+    error::Error,
+};
 use chrono::{NaiveDateTime, TimeDelta};
-use defmt::{info, unwrap};
+use defmt::{error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use heapless::{format, String};
+
+pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 const CLIENT_ID: u8 = 0;
@@ -53,6 +60,10 @@ impl BG77 {
             activation_timeout,
             pkt_timeout,
         }
+    }
+
+    pub async fn urc_handler(&mut self, line: &str) {
+        info!("Callback: {}", line);
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
@@ -240,7 +251,18 @@ impl BG77 {
         Ok(datetime)
     }
 
-    pub async fn experiment(&mut self) {
+    pub async fn send_signal_info(&mut self) {
+        let signal_info = self.signal_info().await;
+        info!("Signal info: {}", signal_info);
+
+        if let Ok(signal_info) = signal_info {
+            let bat_mv = self.battery_mv().await.unwrap_or_default();
+            let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+            let _ = self.send_text(text.as_str()).await;
+        }
+    }
+
+    pub async fn setup(&mut self) {
         //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
@@ -253,20 +275,6 @@ impl BG77 {
             "Boot at {}",
             format!(30; "{}", boot_time.unwrap()).unwrap().as_str()
         );
-
-        let mut ticker = Ticker::every(Duration::from_secs(10));
-        for _ in 0..5 {
-            let signal_info = self.signal_info().await;
-            info!("Signal info: {}", signal_info);
-
-            if let Ok(signal_info) = signal_info {
-                let bat_mv = self.battery_mv().await.unwrap_or_default();
-                let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
-                let _ = self.send_text(text.as_str()).await;
-            }
-            ticker.next().await;
-        }
-        unwrap!(self.mqtt_disconnect().await);
     }
 
     async fn _turn_on(&mut self) {
@@ -276,5 +284,44 @@ impl BG77 {
         Timer::after_millis(2000).await;
         self._modem_pin.set_low();
         // TODO: read the response
+    }
+}
+
+#[embassy_executor::task]
+pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
+    {
+        let mut bg77_unlocked = bg77_mutex.lock().await;
+        info!("Unlocked");
+        if let Some(bg77) = bg77_unlocked.as_mut() {
+            bg77.setup().await;
+        }
+    }
+
+    let mut ticker = Ticker::every(Duration::from_secs(10));
+    loop {
+        ticker.next().await;
+        let mut bg77_unlocked = bg77_mutex.lock().await;
+        if let Some(bg77) = bg77_unlocked.as_mut() {
+            bg77.send_signal_info().await;
+        }
+    }
+    //unwrap!(self.mqtt_disconnect().await);
+}
+
+#[embassy_executor::task]
+pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
+    loop {
+        let urc = URC_CHANNEL.receive().await;
+        match urc {
+            Err(err) => {
+                error!("Error received over URC channel: {}", err);
+            }
+            Ok(line) => {
+                let mut bg77_unlocked = bg77_mutex.lock().await;
+                if let Some(bg77) = bg77_unlocked.as_mut() {
+                    bg77.urc_handler(line.as_str()).await;
+                }
+            }
+        }
     }
 }
