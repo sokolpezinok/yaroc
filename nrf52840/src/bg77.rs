@@ -58,6 +58,15 @@ impl BG77 {
     pub async fn config(&mut self) -> Result<(), Error> {
         self.uart1.call("ATE0", MINIMUM_TIMEOUT).await?;
         self.uart1
+            .call("AT+QCFG=\"nwscanseq\",03", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1
+            .call("AT+QCFG=\"iotopmode\",1,1", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1
+            .call("AT+QCFG=\"band\",0,0,80000", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1
             .call("AT+CGATT=1", self.activation_timeout)
             .await?;
         self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT).await?;
