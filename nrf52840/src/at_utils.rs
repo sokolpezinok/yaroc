@@ -238,7 +238,7 @@ impl AtUart {
         Self { tx }
     }
 
-    async fn read(&mut self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
+    pub async fn read(&mut self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
