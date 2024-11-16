@@ -1,5 +1,5 @@
 use crate::{at_utils::AtUart, error::Error};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, TimeDelta};
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -193,13 +193,15 @@ impl BG77 {
         //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
-        let _now = Instant::now();
-        let modem_clock = self.get_time().await.unwrap();
+        let now_ms = Instant::now().as_millis();
+        let boot_time = self.get_time().await.map(|time| {
+            time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64))
+                .unwrap()
+        });
         info!(
-            "Clock: {}",
-            format!(30; "{}", modem_clock).unwrap().as_str()
+            "Boot at {}",
+            format!(30; "{}", boot_time.unwrap()).unwrap().as_str()
         );
-        // Boot time is 'modem_clock - now'
 
         let mut ticker = Ticker::every(Duration::from_secs(10));
         for _ in 0..5 {
