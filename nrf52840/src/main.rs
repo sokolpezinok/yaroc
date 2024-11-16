@@ -5,7 +5,7 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_sync::mutex::Mutex;
 use yaroc_nrf52840::{
-    bg77::{bg77_main_loop, BG77Type},
+    bg77::{bg77_main_loop, bg77_urc_handler, BG77Type},
     device::Device,
 };
 
@@ -22,4 +22,5 @@ async fn main(spawner: Spawner) {
     }
 
     spawner.must_spawn(bg77_main_loop(&BG77_MUTEX));
+    spawner.must_spawn(bg77_urc_handler(&BG77_MUTEX));
 }

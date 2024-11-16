@@ -75,7 +75,6 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
             }
             MAIN_CHANNEL.send(to_send).await;
         } else {
-            info!("CALLBACK! {}", line);
             URC_CHANNEL.send(Ok(String::from_str(line).unwrap())).await;
         }
     }

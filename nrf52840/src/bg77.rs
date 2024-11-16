@@ -18,7 +18,7 @@ use heapless::{format, String};
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-const CLIENT_ID: u8 = 0;
+const CLIENT_ID: u8 = 1;
 
 pub struct BG77 {
     uart1: AtUart,
@@ -32,7 +32,6 @@ fn urc_handler(prefix: &str, rest: &str) -> bool {
         "QMTSTAT" => true,
         // The CEREG URC is shorter, normal one has 5 values
         "CEREG" => rest.split(',').count() == 4,
-        "QMTPUB" => true,
         _ => false,
     }
 }
@@ -234,7 +233,10 @@ impl BG77 {
             "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"{text}\""
         )
         .unwrap();
-        let _response = self.uart1.call(&command, self.pkt_timeout * 2).await?;
+        let _response = self
+            .uart1
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout * 2)
+            .await?;
         Ok(())
     }
 
