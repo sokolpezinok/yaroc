@@ -6,7 +6,7 @@ use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{with_deadline, Duration, Instant};
-use heapless::{String, Vec};
+use heapless::{format, String, Vec};
 
 use crate::error::Error;
 
@@ -239,8 +239,7 @@ impl AtUart {
     }
 
     async fn write(&mut self, command: &str) -> Result<(), Error> {
-        let mut command: String<AT_COMMAND_SIZE> = String::try_from(command).unwrap();
-        command.push('\r').unwrap();
+        let command = format!(AT_COMMAND_SIZE; "{command}\r").unwrap();
 
         self.tx
             .write(command.as_bytes())
