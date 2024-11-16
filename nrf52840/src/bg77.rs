@@ -161,15 +161,15 @@ impl BG77 {
             .parse2::<i32, i32>()?;
         let snr = f64::from(snr_mult - 100) / 5.0;
 
-        let cellid = match self
+        let cellid = self
             .uart1
             .call("AT+CEREG?", MINIMUM_TIMEOUT, &[0, 1, 3])
             .await?
             .parse3::<u32, u32, String<8>>()
-        {
-            Err(_) => None,
-            Ok((_, _, cell)) => u32::from_str_radix(cell.as_str(), 16).ok(),
-        };
+            .and_then(|(_, _, cell)| {
+                u32::from_str_radix(cell.as_str(), 16).map_err(|_| Error::ParseError)
+            })
+            .ok();
         self.uart1
             .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
             .await?;
