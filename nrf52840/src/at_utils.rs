@@ -71,7 +71,8 @@ const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 20;
 const AT_VALUE_COUNT: usize = 4;
 
-static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
+static MAIN_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
+static URC_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 2> = Channel::new();
 
 async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
     let lines = from_utf8(buf)
@@ -85,26 +86,28 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
             .map(|(prefix, rest)| (urc_handler)(prefix, rest))
             .unwrap_or_default();
 
+        let to_send = match line {
+            "OK" => Ok(FromModem::Ok),
+            "ERROR" => Ok(FromModem::Error),
+            line => String::from_str(line)
+                .map(FromModem::Line)
+                .map_err(|_| Error::BufferTooSmallError),
+        };
         if !is_callback {
-            let to_send = match line {
-                "OK" => Ok(FromModem::Ok),
-                "ERROR" => Ok(FromModem::Error),
-                line => String::from_str(line)
-                    .map(FromModem::Line)
-                    .map_err(|_| Error::BufferTooSmallError),
-            };
             if let Ok(FromModem::Line(_)) = to_send.as_ref() {
                 open_stream = true;
             } else {
                 open_stream = false;
             }
-            CHANNEL.send(to_send).await;
+            MAIN_CHANNEL.send(to_send).await;
         } else {
             info!("CALLBACK! {}", line);
+            // TODO add a consumer
+            //URC_CHANNEL.send(to_send).await;
         }
     }
     if open_stream {
-        CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
+        MAIN_CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
     }
 }
 
@@ -121,7 +124,7 @@ async fn reader(
             .await
             .map_err(|_| Error::UartReadError);
         match len {
-            Err(err) => CHANNEL.send(Err(err)).await,
+            Err(err) => MAIN_CHANNEL.send(Err(err)).await,
             Ok(len) => parse_lines(&buf[..len], urc_handler).await,
         }
     }
@@ -240,7 +243,7 @@ impl AtUart {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
-            let from_modem = with_deadline(deadline, CHANNEL.receive())
+            let from_modem = with_deadline(deadline, MAIN_CHANNEL.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone())
