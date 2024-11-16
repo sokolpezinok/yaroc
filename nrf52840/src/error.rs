@@ -15,6 +15,8 @@ pub enum Error {
     UartWriteError,
     #[error("Timeout error")]
     TimeoutError,
+    #[error("AT 'ERROR' response")]
+    AtErrorResponse,
     #[error("AT error")]
     AtError,
     #[error("MQTT error {0}")]

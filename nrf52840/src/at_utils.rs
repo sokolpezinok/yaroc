@@ -87,7 +87,7 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
         if !is_callback {
             let to_send = match line {
                 "OK" => Ok(FromModem::Ok),
-                "ERROR" => Err(Error::AtError),
+                "ERROR" => Ok(FromModem::Error),
                 line => String::from_str(line)
                     .map(FromModem::Line)
                     .map_err(|_| Error::BufferTooSmallError),
@@ -172,7 +172,7 @@ impl AtResponse {
         }
         Self {
             lines,
-            answer: Err(Error::AtError), // TODO: different return type
+            answer: Err(Error::AtError), // TODO: different error
         }
     }
 
@@ -255,10 +255,16 @@ impl AtUart {
         debug!("Calling {}", command);
         self.write(command).await?;
         let lines = self.read(timeout).await?;
-        if let Some(&FromModem::Ok) = lines.last() {
-            Ok(lines)
-        } else {
-            Err(Error::AtError)
+        match lines.last() {
+            Some(&FromModem::Ok) => Ok(lines),
+            Some(&FromModem::Error) => {
+                error!("Failed response from modem: {=[?]}", lines.as_slice());
+                Err(Error::AtErrorResponse)
+            }
+            _ => {
+                error!("Failed response from modem: {=[?]}", lines.as_slice());
+                Err(Error::AtError)
+            }
         }
     }
 

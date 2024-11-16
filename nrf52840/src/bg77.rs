@@ -78,7 +78,7 @@ impl BG77 {
             .parse2::<u8, String<40>>();
         if let Ok((CLIENT_ID, url)) = opened.as_ref() {
             if url.as_str() == "broker.emqx.io" {
-                info!("Connection already opened to {}", url.as_str());
+                info!("TCP connection already opened to {}", url.as_str());
                 return Ok(());
             }
             // TODO: disconnect an old client
@@ -128,6 +128,7 @@ impl BG77 {
         const MQTT_DISCONNECTING: u8 = 4;
         // Good response +QMTCONN: <client_id>,3
         if let Ok((CLIENT_ID, MQTT_CONNECTED)) = connection.as_ref() {
+            info!("Already connected to MQTT");
             return Ok(());
         }
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
@@ -150,8 +151,11 @@ impl BG77 {
             .uart1
             .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1])
             .await?
-            .parse2::<u32, u32>()?;
-        info!("MQTT disconnect: {} {}", client_id, result);
+            .parse2::<u8, i8>()?;
+        const MQTT_DISCONNECTED: i8 = 0;
+        if !(client_id == CLIENT_ID && result == MQTT_DISCONNECTED) {
+            return Err(Error::MqttError(result));
+        }
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
         self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
         Ok(())
