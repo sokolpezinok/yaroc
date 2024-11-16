@@ -270,7 +270,6 @@ impl AtUart {
         command: &str,
         timeout: Duration,
     ) -> Result<Vec<FromModem, AT_LINES>, Error> {
-        debug!("Calling {}", command);
         self.write(command).await?;
         let lines = self.read(timeout).await?;
         match lines.last() {
@@ -287,9 +286,15 @@ impl AtUart {
     }
 
     pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
+        let start = Instant::now();
         let lines = self.call_impl(command, timeout).await?;
         let response = AtResponse::new(lines, command);
-        debug!("Got: {}", response);
+        debug!(
+            "{}: {}, took {}ms",
+            command,
+            response,
+            (Instant::now() - start).as_millis()
+        );
         Ok(response)
     }
 
@@ -299,10 +304,16 @@ impl AtUart {
         call_timeout: Duration,
         response_timeout: Duration,
     ) -> Result<AtResponse, Error> {
+        let start = Instant::now();
         let mut lines = self.call_impl(command, call_timeout).await?;
         lines.extend(self.read(response_timeout).await?);
         let response = AtResponse::new(lines, command);
-        debug!("Got: {}", response);
+        debug!(
+            "{}: {}, took {}ms",
+            command,
+            response,
+            (Instant::now() - start).as_millis()
+        );
         Ok(response)
     }
 }
