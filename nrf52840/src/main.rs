@@ -7,7 +7,7 @@ use yaroc_nrf52840::device::Device;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let device = Device::new(&spawner);
+    let device = Device::new(spawner);
     info!("Device initialized!");
 
     let Device { mut bg77, .. } = device;

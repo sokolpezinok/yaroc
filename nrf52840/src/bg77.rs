@@ -23,7 +23,8 @@ pub struct BG77 {
 fn urc_handler(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" => true,
-        "CEREG" => rest.split(',').count() == 4, // The URC is shorter, normal one has 5 values
+        // The CEREG URC is shorter, normal one has 5 values
+        "CEREG" => rest.split(',').count() == 4,
         "QMTPUB" => true,
         _ => false,
     }
@@ -64,9 +65,9 @@ impl BG77 {
             .uart1
             .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT, &[])
             .await;
-        self.uart1
-            .call("AT+CGPADDR=1", MINIMUM_TIMEOUT, &[0, 1])
-            .await?;
+        //self.uart1
+        //    .call("AT+CGPADDR=1", MINIMUM_TIMEOUT, &[0, 1])
+        //    .await?;
         Ok(())
     }
 
@@ -126,10 +127,18 @@ impl BG77 {
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
         const MQTT_DISCONNECTING: u8 = 4;
-        if let Ok((CLIENT_ID, MQTT_CONNECTED)) = connection.as_ref() {
-            info!("Already connected to MQTT");
+        if let Ok((CLIENT_ID, status)) = connection.as_ref() {
+            match *status {
+                MQTT_CONNECTED => {
+                    info!("Already connected to MQTT");
+                }
+                _ => {
+                    info!("Connecting or being disconnected from MQTT"); // TODO
+                }
+            }
             return Ok(());
         }
+        info!("Connecting to MQTT");
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
         let (client_id, res, reason) = self
             .uart1
@@ -175,6 +184,7 @@ impl BG77 {
             .uart1
             .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3, 4])
             .await?
+            // TODO: Handle +QCSQ: "NOSERVICE"
             .parse4::<i8, i8, u8, i8>()?;
         let snr_db = f64::from(snr_mult - 100) / 5.0;
         if rssi_dbm == 0 {
@@ -258,6 +268,6 @@ impl BG77 {
         self._modem_pin.set_high();
         Timer::after_millis(2000).await;
         self._modem_pin.set_low();
-        self.uart1.call("", MINIMUM_TIMEOUT, &[]).await;
+        // TODO: read the response
     }
 }

@@ -21,7 +21,7 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(spawner: &Spawner) -> Self {
+    pub fn new(spawner: Spawner) -> Self {
         let mut p = embassy_nrf::init(Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
@@ -36,7 +36,7 @@ impl Device {
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(rx1, tx1, modem_pin, spawner),
+            bg77: BG77::new(rx1, tx1, modem_pin, &spawner),
             saadc,
         }
     }
