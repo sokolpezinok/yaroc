@@ -70,9 +70,21 @@ impl BG77 {
         Ok(())
     }
 
-    pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
+    async fn mqtt_open(&mut self) -> crate::Result<()> {
+        let opened = self
+            .uart1
+            .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
+            .await?
+            .parse2::<u32, String<40>>();
+        if let Ok((CLIENT_ID, url)) = opened.as_ref() {
+            if url.as_str() == "broker.emqx.io" {
+                info!("Connection already opened to {}", url.as_str());
+                return Ok(());
+            }
+        }
+
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
-        let res = self
+        let (client_id, status) = self
             .uart1
             .call_with_response(
                 &at_command,
@@ -81,14 +93,15 @@ impl BG77 {
                 &[0, 1],
             )
             .await?
-            .parse2::<u32, u32>()?;
-        info!("MQTT open: {} {}", res.0, res.1);
+            .parse2::<u32, i8>()?;
+        if status != 0 || client_id != CLIENT_ID {
+            return Err(Error::MqttError(status));
+        }
+        Ok(())
+    }
 
-        self.uart1
-            .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
-            .await?
-            .parse2::<u32, String<20>>()?;
-        // Good response: +QMTOPEN: <client_id>,"broker.emqx.io",1883
+    pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
+        self.mqtt_open().await?;
 
         let command = format!(50;
             "AT+QMTCFG=\"timeout\",{CLIENT_ID},{},2,1",
@@ -215,7 +228,7 @@ impl BG77 {
             }
             ticker.next().await;
         }
-        unwrap!(self.mqtt_disconnect().await);
+        //unwrap!(self.mqtt_disconnect().await);
     }
 
     async fn _turn_on(&mut self) {
