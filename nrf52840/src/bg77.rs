@@ -191,6 +191,7 @@ impl BG77 {
             .uart1
             .call("AT+CEREG?", MINIMUM_TIMEOUT)
             .await?
+            // TODO: can be +CEREG: 2,2
             .parse3::<u32, u32, String<8>>([0, 1, 3])
             .and_then(|(_, _, cell)| {
                 u32::from_str_radix(cell.as_str(), 16).map_err(|_| Error::ParseError)

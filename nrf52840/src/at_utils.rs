@@ -39,33 +39,6 @@ impl defmt::Format for FromModem {
     }
 }
 
-fn pick_values(mut values: &str, indices: &[usize]) -> Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT> {
-    let mut split: Vec<&str, 15> = Vec::new();
-    while !values.is_empty() {
-        let pos = match values.chars().next() {
-            Some('"') => {
-                let pos = values.find("\",").unwrap_or(values.len() - 1);
-                split.push(&values[1..pos]).unwrap();
-                pos + 1
-            }
-            _ => {
-                let pos = values.find(",").unwrap_or(values.len());
-                split.push(&values[..pos]).unwrap();
-                pos
-            }
-        };
-        if pos >= values.len() {
-            break;
-        }
-        values = &values[pos + 1..];
-    }
-
-    indices
-        .iter()
-        .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
-        .collect()
-}
-
 const AT_COMMAND_SIZE: usize = 100;
 const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 20;
@@ -170,17 +143,49 @@ impl AtResponse {
         }
     }
 
-    fn parse<T: FromStr>(s: &String<AT_VALUE_LEN>) -> Result<T, Error> {
-        str::parse(s.as_str()).map_err(|_| Error::ParseError)
+    fn pick_values(
+        self,
+        indices: &[usize],
+    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
+        let result = self.result?;
+        let mut rest = result.as_str();
+        let mut split: Vec<&str, 15> = Vec::new();
+        while !rest.is_empty() {
+            let pos = match rest.chars().next() {
+                Some('"') => {
+                    let pos = rest.find("\",").unwrap_or(rest.len() - 1);
+                    split.push(&rest[1..pos]).unwrap();
+                    pos + 1
+                }
+                _ => {
+                    let pos = rest.find(",").unwrap_or(rest.len());
+                    split.push(&rest[..pos]).unwrap();
+                    pos
+                }
+            };
+            if pos >= rest.len() {
+                break;
+            }
+            rest = &rest[pos + 1..];
+        }
+
+        Ok(indices
+            .iter()
+            .filter_map(|idx| Some(String::from_str(*split.get(*idx)?).unwrap())) //TODO
+            .collect())
+    }
+
+    fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
+        str::parse(s).map_err(|_| Error::ParseError)
     }
 
     pub fn parse1<T: FromStr>(self, indices: [usize; 1]) -> Result<T, Error> {
-        let values = pick_values(self.result?.as_str(), indices.as_slice());
+        let values = self.pick_values(indices.as_slice())?;
         Self::parse::<T>(&values[0])
     }
 
     pub fn parse2<T: FromStr, U: FromStr>(self, indices: [usize; 2]) -> Result<(T, U), Error> {
-        let values = pick_values(self.result?.as_str(), indices.as_slice());
+        let values = self.pick_values(indices.as_slice())?;
         if values.len() != 2 {
             return Err(Error::AtError);
         }
@@ -191,7 +196,7 @@ impl AtResponse {
         self,
         indices: [usize; 3],
     ) -> Result<(T, U, V), Error> {
-        let values = pick_values(self.result?.as_str(), indices.as_slice());
+        let values = self.pick_values(indices.as_slice())?;
         if values.len() != 3 {
             return Err(Error::AtError);
         }
@@ -206,7 +211,7 @@ impl AtResponse {
         self,
         indices: [usize; 4],
     ) -> Result<(T, U, V, W), Error> {
-        let values = pick_values(self.result?.as_str(), indices.as_slice());
+        let values = self.pick_values(indices.as_slice())?;
         if values.len() != 4 {
             return Err(Error::AtError);
         }
