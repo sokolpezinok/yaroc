@@ -20,5 +20,5 @@ pub enum Error {
     #[error("AT error")]
     AtError,
     #[error("MQTT error {0}")]
-    MqttError(i8)
+    MqttError(i8),
 }

@@ -133,7 +133,7 @@ impl AtResponse {
 
     fn result(&self) -> crate::Result<String<AT_COMMAND_SIZE>> {
         let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
-        let prefix = &self.command[2..pos];
+        let prefix = &self.command[..pos];
         for line in &self.lines {
             if let FromModem::Line(line) = line {
                 if line.starts_with(prefix) {
@@ -257,7 +257,7 @@ impl AtUart {
     }
 
     async fn write(&mut self, command: &str) -> Result<(), Error> {
-        let command = format!(AT_COMMAND_SIZE; "{command}\r").unwrap();
+        let command = format!(AT_COMMAND_SIZE; "AT{command}\r").unwrap();
 
         self.tx
             .write(command.as_bytes())
