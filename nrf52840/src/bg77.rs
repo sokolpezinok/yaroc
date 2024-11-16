@@ -56,27 +56,28 @@ impl BG77 {
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
-        self.uart1.call("ATE0", MINIMUM_TIMEOUT, &[]).await?;
+        self.uart1.call("ATE0", MINIMUM_TIMEOUT).await?;
         self.uart1
-            .call("AT+CGATT=1", self.activation_timeout, &[])
+            .call("AT+CGATT=1", self.activation_timeout)
             .await?;
-        self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT, &[]).await?;
+        self.uart1.call("AT+CEREG=2", MINIMUM_TIMEOUT).await?;
         let _ = self
             .uart1
-            .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT, &[])
+            .call("AT+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT)
             .await;
-        //self.uart1
-        //    .call("AT+CGPADDR=1", MINIMUM_TIMEOUT, &[0, 1])
-        //    .await?;
+        self.uart1
+            .call("AT+CGPADDR=1", MINIMUM_TIMEOUT)
+            .await?
+            .parse2::<u8, String<50>>([0, 1])?;
         Ok(())
     }
 
     async fn mqtt_open(&mut self) -> crate::Result<()> {
         let opened = self
             .uart1
-            .call("AT+QMTOPEN?", MINIMUM_TIMEOUT, &[0, 1])
+            .call("AT+QMTOPEN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, String<40>>();
+            .parse2::<u8, String<40>>([0, 1]);
         if let Ok((CLIENT_ID, url)) = opened.as_ref() {
             if url.as_str() == "broker.emqx.io" {
                 info!("TCP connection already opened to {}", url.as_str());
@@ -88,14 +89,9 @@ impl BG77 {
         let at_command = format!(100; "AT+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
         let (client_id, status) = self
             .uart1
-            .call_with_response(
-                &at_command,
-                MINIMUM_TIMEOUT,
-                self.activation_timeout,
-                &[0, 1],
-            )
+            .call_with_response(&at_command, MINIMUM_TIMEOUT, self.activation_timeout)
             .await?
-            .parse2::<u8, i8>()?;
+            .parse2::<u8, i8>([0, 1])?;
         if status != 0 || client_id != CLIENT_ID {
             return Err(Error::MqttError(status));
         }
@@ -110,19 +106,19 @@ impl BG77 {
             self.pkt_timeout.as_secs()
         )
         .unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
         let command = format!(50;
             "AT+QMTCFG=\"keepalive\",{CLIENT_ID},{}",
             (self.pkt_timeout * 3).as_secs()
         )
         .unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
+        self.uart1.call(&command, MINIMUM_TIMEOUT).await?;
 
         let connection = self
             .uart1
-            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
+            .call("AT+QMTCONN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, u8>();
+            .parse2::<u8, u8>([0, 1]);
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
@@ -142,9 +138,9 @@ impl BG77 {
         let command = format!(50; "AT+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
         let (client_id, res, reason) = self
             .uart1
-            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1, 2])
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
             .await?
-            .parse3::<u8, u32, i8>()?;
+            .parse3::<u8, u32, i8>([0, 1, 2])?;
 
         if client_id == CLIENT_ID && res == 0 && reason == 0 {
             Ok(())
@@ -157,24 +153,24 @@ impl BG77 {
         let command = format!(50; "AT+QMTDISC={CLIENT_ID}").unwrap();
         let (client_id, result) = self
             .uart1
-            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout, &[0, 1])
+            .call_with_response(&command, MINIMUM_TIMEOUT, self.pkt_timeout)
             .await?
-            .parse2::<u8, i8>()?;
+            .parse2::<u8, i8>([0, 1])?;
         const MQTT_DISCONNECTED: i8 = 0;
         if !(client_id == CLIENT_ID && result == MQTT_DISCONNECTED) {
             return Err(Error::MqttError(result));
         }
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
-        let _ = self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await; // TODO: this fails
+        let _ = self.uart1.call(&command, MINIMUM_TIMEOUT).await; // TODO: this fails
         Ok(())
     }
 
     async fn battery_mv(&mut self) -> Result<u32, Error> {
         let (_, bcs, volt) = self
             .uart1
-            .call("AT+CBC", MINIMUM_TIMEOUT, &[0, 1, 2])
+            .call("AT+CBC", MINIMUM_TIMEOUT)
             .await?
-            .parse3::<i32, i32, u32>()?;
+            .parse3::<i32, i32, u32>([0, 1, 2])?;
         info!("Batt: {}mV, {}%", volt, bcs);
         Ok(volt)
     }
@@ -182,10 +178,10 @@ impl BG77 {
     async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
         let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) = self
             .uart1
-            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3, 4])
+            .call("AT+QCSQ", MINIMUM_TIMEOUT)
             .await?
             // TODO: Handle +QCSQ: "NOSERVICE"
-            .parse4::<i8, i8, u8, i8>()?;
+            .parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?;
         let snr_db = f64::from(snr_mult - 100) / 5.0;
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
@@ -193,16 +189,17 @@ impl BG77 {
 
         let cellid = self
             .uart1
-            .call("AT+CEREG?", MINIMUM_TIMEOUT, &[0, 1, 3])
+            .call("AT+CEREG?", MINIMUM_TIMEOUT)
             .await?
-            .parse3::<u32, u32, String<8>>()
+            .parse3::<u32, u32, String<8>>([0, 1, 3])
             .and_then(|(_, _, cell)| {
                 u32::from_str_radix(cell.as_str(), 16).map_err(|_| Error::ParseError)
             })
             .ok();
         self.uart1
-            .call("AT+QMTCONN?", MINIMUM_TIMEOUT, &[0, 1])
-            .await?;
+            .call("AT+QMTCONN?", MINIMUM_TIMEOUT)
+            .await?
+            .parse2::<u8, u8>([0, 1])?;
         let signal_info = SignalInfo {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
             snr_db: Some(snr_db as f32),
@@ -216,16 +213,16 @@ impl BG77 {
             "AT+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"{text}\""
         )
         .unwrap();
-        let _response = self.uart1.call(&command, self.pkt_timeout * 2, &[]).await?;
+        let _response = self.uart1.call(&command, self.pkt_timeout * 2).await?;
         Ok(())
     }
 
     async fn get_time(&mut self) -> crate::Result<NaiveDateTime> {
         let modem_clock = self
             .uart1
-            .call("AT+CCLK?", MINIMUM_TIMEOUT, &[0, 1])
+            .call("AT+CCLK?", MINIMUM_TIMEOUT)
             .await?
-            .parse1::<String<20>>()?;
+            .parse1::<String<20>>([0])?;
 
         let datetime =
             NaiveDateTime::parse_from_str(modem_clock.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();

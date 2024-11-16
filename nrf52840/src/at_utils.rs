@@ -139,44 +139,34 @@ pub struct AtUart {
 
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
-    answer: Result<Vec<String<AT_VALUE_LEN>, 4>, Error>,
+    result: crate::Result<String<AT_COMMAND_SIZE>>,
 }
 
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
-        if let Ok(values) = self.answer.as_ref() {
-            defmt::write!(
-                fmt,
-                ", ans={=[?]}",
-                values
-                    .into_iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<&str, AT_VALUE_COUNT>>()
-            );
+        if let Ok(result) = self.result.as_ref() {
+            defmt::write!(fmt, ", ans={}", result.as_str());
         }
     }
 }
 
 impl AtResponse {
-    fn new(lines: Vec<FromModem, AT_LINES>, command: &str, indices: &[usize]) -> Self {
+    fn new(lines: Vec<FromModem, AT_LINES>, command: &str) -> Self {
         let pos = command.find(['=', '?']).unwrap_or(command.len());
         let prefix = &command[2..pos];
         for line in &lines {
             if let FromModem::Line(line) = line {
                 if line.starts_with(prefix) {
                     let (_, rest) = split_at_response(line).unwrap();
-                    let values = pick_values(rest, indices);
-                    return Self {
-                        answer: Ok(values),
-                        lines,
-                    };
+                    let result = String::from_str(rest).map_err(|_| Error::BufferTooSmallError);
+                    return Self { lines, result };
                 }
             }
         }
         Self {
             lines,
-            answer: Err(Error::AtError), // TODO: different error
+            result: Err(Error::AtError), // TODO: different error
         }
     }
 
@@ -184,24 +174,24 @@ impl AtResponse {
         str::parse(s.as_str()).map_err(|_| Error::ParseError)
     }
 
-    pub fn parse1<T: FromStr>(self) -> Result<T, Error> {
-        let values = self.answer?;
-        if values.len() != 1 {
-            return Err(Error::AtError);
-        }
+    pub fn parse1<T: FromStr>(self, indices: [usize; 1]) -> Result<T, Error> {
+        let values = pick_values(self.result?.as_str(), indices.as_slice());
         Self::parse::<T>(&values[0])
     }
 
-    pub fn parse2<T: FromStr, U: FromStr>(self) -> Result<(T, U), Error> {
-        let values = self.answer?;
+    pub fn parse2<T: FromStr, U: FromStr>(self, indices: [usize; 2]) -> Result<(T, U), Error> {
+        let values = pick_values(self.result?.as_str(), indices.as_slice());
         if values.len() != 2 {
             return Err(Error::AtError);
         }
         Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
-    pub fn parse3<T: FromStr, U: FromStr, V: FromStr>(self) -> Result<(T, U, V), Error> {
-        let values = self.answer?;
+    pub fn parse3<T: FromStr, U: FromStr, V: FromStr>(
+        self,
+        indices: [usize; 3],
+    ) -> Result<(T, U, V), Error> {
+        let values = pick_values(self.result?.as_str(), indices.as_slice());
         if values.len() != 3 {
             return Err(Error::AtError);
         }
@@ -214,8 +204,9 @@ impl AtResponse {
 
     pub fn parse4<T: FromStr, U: FromStr, V: FromStr, W: FromStr>(
         self,
+        indices: [usize; 4],
     ) -> Result<(T, U, V, W), Error> {
-        let values = self.answer?;
+        let values = pick_values(self.result?.as_str(), indices.as_slice());
         if values.len() != 4 {
             return Err(Error::AtError);
         }
@@ -287,14 +278,9 @@ impl AtUart {
         }
     }
 
-    pub async fn call(
-        &mut self,
-        command: &str,
-        timeout: Duration,
-        indices: &[usize],
-    ) -> Result<AtResponse, Error> {
+    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
         let lines = self.call_impl(command, timeout).await?;
-        let response = AtResponse::new(lines, command, indices);
+        let response = AtResponse::new(lines, command);
         debug!("Got: {}", response);
         Ok(response)
     }
@@ -304,11 +290,10 @@ impl AtUart {
         command: &str,
         call_timeout: Duration,
         response_timeout: Duration,
-        indices: &[usize],
     ) -> Result<AtResponse, Error> {
         let mut lines = self.call_impl(command, call_timeout).await?;
         lines.extend(self.read(response_timeout).await?);
-        let response = AtResponse::new(lines, command, indices);
+        let response = AtResponse::new(lines, command);
         debug!("Got: {}", response);
         Ok(response)
     }
