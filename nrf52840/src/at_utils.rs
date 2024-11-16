@@ -10,7 +10,7 @@ use heapless::{format, String, Vec};
 
 use crate::error::Error;
 
-fn split_at_response(line: &str) -> Option<(&str, &str)> {
+pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     if line.starts_with('+') {
         let prefix_len = line.find(": ");
         if let Some(prefix_len) = prefix_len {
@@ -61,7 +61,7 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
             .unwrap_or_default();
 
         let to_send = match line {
-            "OK" => Ok(FromModem::Ok),
+            "OK" | "RDY" => Ok(FromModem::Ok),
             "ERROR" => Ok(FromModem::Error),
             line => String::from_str(line)
                 .map(FromModem::Line)

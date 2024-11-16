@@ -1,5 +1,5 @@
 use crate::{
-    at_utils::{AtUart, URC_CHANNEL},
+    at_utils::{split_at_response, AtUart, URC_CHANNEL},
     error::Error,
 };
 use chrono::{NaiveDateTime, TimeDelta};
@@ -61,8 +61,16 @@ impl BG77 {
         }
     }
 
-    pub async fn urc_handler(&mut self, line: &str) {
-        info!("Callback: {}", line);
+    pub async fn urc_handler(&mut self, line: &str) -> crate::Result<()> {
+        let (prefix, _rest) = split_at_response(line).ok_or(Error::ParseError)?;
+        info!("URC {}", line);
+        match prefix {
+            "QMTSTAT" | "CEREG" => self.mqtt_connect().await?,
+            _ => {
+                todo!()
+            }
+        }
+        Ok(())
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
@@ -152,7 +160,7 @@ impl BG77 {
             }
         }
         info!("Connecting to MQTT");
-        let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"yaroc-nrf52-{CLIENT_ID}\"").unwrap();
+        let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
         let (client_id, res, reason) = self
             .uart1
             .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
@@ -277,13 +285,14 @@ impl BG77 {
         );
     }
 
+    #[allow(dead_code)]
     async fn turn_on(&mut self) -> crate::Result<()> {
         self._modem_pin.set_low();
         Timer::after_millis(1000).await;
         self._modem_pin.set_high();
         Timer::after_millis(2000).await;
         self._modem_pin.set_low();
-        let res = self.uart1.read(MINIMUM_TIMEOUT * 3).await?;
+        let res = self.uart1.read(MINIMUM_TIMEOUT * 10).await?;
         info!("Modem response: {=[?]}", res.as_slice());
         Ok(())
     }
@@ -293,7 +302,6 @@ impl BG77 {
 pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     {
         let mut bg77_unlocked = bg77_mutex.lock().await;
-        info!("Unlocked");
         if let Some(bg77) = bg77_unlocked.as_mut() {
             bg77.setup().await;
         }
@@ -321,7 +329,10 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
             Ok(line) => {
                 let mut bg77_unlocked = bg77_mutex.lock().await;
                 if let Some(bg77) = bg77_unlocked.as_mut() {
-                    bg77.urc_handler(line.as_str()).await;
+                    let res = bg77.urc_handler(line.as_str()).await;
+                    if let Err(err) = res {
+                        error!("Error while processing URC: {}", err);
+                    }
                 }
             }
         }
