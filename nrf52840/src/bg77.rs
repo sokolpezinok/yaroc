@@ -51,8 +51,8 @@ impl BG77 {
         spawner: &Spawner,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, urc_handler, spawner);
-        let activation_timeout = Duration::from_secs(40); // 140
-        let pkt_timeout = Duration::from_secs(12); // 30
+        let activation_timeout = Duration::from_secs(140);
+        let pkt_timeout = Duration::from_secs(18); // 30
         Self {
             uart1,
             _modem_pin: modem_pin,
@@ -201,7 +201,7 @@ impl BG77 {
             .await?
             // TODO: Handle +QCSQ: "NOSERVICE"
             .parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?;
-        let snr_db = f64::from(snr_mult - 100) / 5.0;
+        let snr_db = f64::from(snr_mult) / 5. - 20.;
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }

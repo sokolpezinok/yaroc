@@ -111,13 +111,13 @@ pub struct AtUart {
 
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
-    result: crate::Result<String<AT_COMMAND_SIZE>>,
+    command: String<AT_COMMAND_SIZE>, //result: crate::Result<String<AT_COMMAND_SIZE>>,
 }
 
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
-        if let Ok(result) = self.result.as_ref() {
+        if let Ok(result) = self.result() {
             defmt::write!(fmt, ", ans={}", result.as_str());
         }
     }
@@ -125,28 +125,32 @@ impl defmt::Format for AtResponse {
 
 impl AtResponse {
     fn new(lines: Vec<FromModem, AT_LINES>, command: &str) -> Self {
-        let pos = command.find(['=', '?']).unwrap_or(command.len());
-        let prefix = &command[2..pos];
-        for line in &lines {
+        Self {
+            lines,
+            command: String::from_str(command).unwrap(),
+        }
+    }
+
+    fn result(&self) -> crate::Result<String<AT_COMMAND_SIZE>> {
+        let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
+        let prefix = &self.command[2..pos];
+        for line in &self.lines {
             if let FromModem::Line(line) = line {
                 if line.starts_with(prefix) {
                     let (_, rest) = split_at_response(line).unwrap();
-                    let result = String::from_str(rest).map_err(|_| Error::BufferTooSmallError);
-                    return Self { lines, result };
+                    let result = String::from_str(rest).map_err(|_| Error::BufferTooSmallError)?;
+                    return Ok(result);
                 }
             }
         }
-        Self {
-            lines,
-            result: Err(Error::AtError), // TODO: different error
-        }
+        Err(Error::AtError)
     }
 
     fn pick_values(
         self,
         indices: &[usize],
     ) -> crate::Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
-        let result = self.result?;
+        let result = self.result()?;
         let mut rest = result.as_str();
         let mut split: Vec<&str, 15> = Vec::new();
         while !rest.is_empty() {
@@ -170,7 +174,7 @@ impl AtResponse {
 
         Ok(indices
             .iter()
-            .filter_map(|idx| Some(String::from_str(*split.get(*idx)?).unwrap())) //TODO
+            .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
             .collect())
     }
 
