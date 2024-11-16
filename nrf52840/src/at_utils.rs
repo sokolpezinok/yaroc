@@ -90,7 +90,7 @@ async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
                 "ERROR" => Err(Error::AtError),
                 line => String::from_str(line)
                     .map(FromModem::Line)
-                    .map_err(|_| Error::StringEncodingError),
+                    .map_err(|_| Error::BufferTooSmallError),
             };
             if let Ok(FromModem::Line(_)) = to_send.as_ref() {
                 open_stream = true;
