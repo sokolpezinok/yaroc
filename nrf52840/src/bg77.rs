@@ -31,8 +31,8 @@ fn urc_handler(prefix: &str, rest: &str) -> bool {
 
 #[derive(defmt::Format)]
 struct SignalInfo {
-    pub rssi_dbm: Option<i32>,
-    pub snr: Option<f32>,
+    pub rssi_dbm: Option<i8>,
+    pub snr_db: Option<f32>,
     pub cellid: Option<u32>,
 }
 
@@ -126,7 +126,6 @@ impl BG77 {
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
         const MQTT_DISCONNECTING: u8 = 4;
-        // Good response +QMTCONN: <client_id>,3
         if let Ok((CLIENT_ID, MQTT_CONNECTED)) = connection.as_ref() {
             info!("Already connected to MQTT");
             return Ok(());
@@ -157,7 +156,7 @@ impl BG77 {
             return Err(Error::MqttError(result));
         }
         let command = format!(50; "AT+QMTCLOSE={CLIENT_ID}").unwrap();
-        self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await?;
+        let _ = self.uart1.call(&command, MINIMUM_TIMEOUT, &[]).await; // TODO: this fails
         Ok(())
     }
 
@@ -172,12 +171,15 @@ impl BG77 {
     }
 
     async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
-        let (rssi_dbm, snr_mult) = self
+        let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) = self
             .uart1
-            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 3])
+            .call("AT+QCSQ", MINIMUM_TIMEOUT, &[1, 2, 3, 4])
             .await?
-            .parse2::<i32, i32>()?;
-        let snr = f64::from(snr_mult - 100) / 5.0;
+            .parse4::<i8, i8, u8, i8>()?;
+        let snr_db = f64::from(snr_mult - 100) / 5.0;
+        if rssi_dbm == 0 {
+            rssi_dbm = rsrp_dbm - rsrq_dbm;
+        }
 
         let cellid = self
             .uart1
@@ -193,7 +195,7 @@ impl BG77 {
             .await?;
         let signal_info = SignalInfo {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
-            snr: Some(snr as f32),
+            snr_db: Some(snr_db as f32),
             cellid,
         };
         Ok(signal_info)
@@ -222,6 +224,7 @@ impl BG77 {
     }
 
     pub async fn experiment(&mut self) {
+        //self._turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
         let now_ms = Instant::now().as_millis();
@@ -241,7 +244,7 @@ impl BG77 {
 
             if let Ok(signal_info) = signal_info {
                 let bat_mv = self.battery_mv().await.unwrap_or_default();
-                let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+                let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
                 let _ = self.send_text(text.as_str()).await;
             }
             ticker.next().await;
@@ -255,6 +258,6 @@ impl BG77 {
         self._modem_pin.set_high();
         Timer::after_millis(2000).await;
         self._modem_pin.set_low();
-        Timer::after_millis(100).await;
+        self.uart1.call("", MINIMUM_TIMEOUT, &[]).await;
     }
 }

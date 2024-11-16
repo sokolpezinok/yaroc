@@ -39,7 +39,7 @@ impl defmt::Format for FromModem {
     }
 }
 
-fn pick_values(mut values: &str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>, 3> {
+fn pick_values(mut values: &str, indices: &[usize]) -> Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT> {
     let mut split: Vec<&str, 15> = Vec::new();
     while !values.is_empty() {
         let pos = match values.chars().next() {
@@ -68,7 +68,8 @@ fn pick_values(mut values: &str, indices: &[usize]) -> Vec<String<AT_VALUE_SIZE>
 
 const AT_COMMAND_SIZE: usize = 100;
 const AT_LINES: usize = 4;
-const AT_VALUE_SIZE: usize = 20;
+const AT_VALUE_LEN: usize = 20;
+const AT_VALUE_COUNT: usize = 4;
 
 static CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
 
@@ -135,7 +136,7 @@ pub struct AtUart {
 
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
-    answer: Result<Vec<String<AT_VALUE_SIZE>, 3>, Error>,
+    answer: Result<Vec<String<AT_VALUE_LEN>, 4>, Error>,
 }
 
 impl defmt::Format for AtResponse {
@@ -148,7 +149,7 @@ impl defmt::Format for AtResponse {
                 values
                     .into_iter()
                     .map(|s| s.as_str())
-                    .collect::<Vec<&str, 3>>()
+                    .collect::<Vec<&str, AT_VALUE_COUNT>>()
             );
         }
     }
@@ -176,7 +177,7 @@ impl AtResponse {
         }
     }
 
-    fn parse<T: FromStr>(s: &String<AT_VALUE_SIZE>) -> Result<T, Error> {
+    fn parse<T: FromStr>(s: &String<AT_VALUE_LEN>) -> Result<T, Error> {
         str::parse(s.as_str()).map_err(|_| Error::ParseError)
     }
 
@@ -205,6 +206,21 @@ impl AtResponse {
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
             Self::parse::<V>(&values[2])?,
+        ))
+    }
+
+    pub fn parse4<T: FromStr, U: FromStr, V: FromStr, W: FromStr>(
+        self,
+    ) -> Result<(T, U, V, W), Error> {
+        let values = self.answer?;
+        if values.len() != 4 {
+            return Err(Error::AtError);
+        }
+        Ok((
+            Self::parse::<T>(&values[0])?,
+            Self::parse::<U>(&values[1])?,
+            Self::parse::<V>(&values[2])?,
+            Self::parse::<W>(&values[3])?,
         ))
     }
 }
