@@ -146,13 +146,8 @@ impl AtResponse {
         Err(Error::AtError)
     }
 
-    fn pick_values(
-        self,
-        indices: &[usize],
-    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
-        let result = self.result()?;
-        let mut rest = result.as_str();
-        let mut split: Vec<&str, 15> = Vec::new();
+    fn parse_values(mut rest: &str) -> Vec<&str, 15> {
+        let mut split = Vec::new();
         while !rest.is_empty() {
             let pos = match rest.chars().next() {
                 Some('"') => {
@@ -171,10 +166,18 @@ impl AtResponse {
             }
             rest = &rest[pos + 1..];
         }
+        split
+    }
 
+    fn pick_values(
+        self,
+        indices: &[usize],
+    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
+        let res = self.result()?;
+        let values = Self::parse_values(res.as_str());
         Ok(indices
             .iter()
-            .filter_map(|idx| Some(String::from_str(split.get(*idx)?).unwrap())) //TODO
+            .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
             .collect())
     }
 
