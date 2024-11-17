@@ -143,7 +143,7 @@ impl BG77 {
             .uart1
             .call("+QMTCONN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, u8>([0, 1]);
+            .parse2::<u8, u8>([0, 1]); // TODO: there can be multiple clients connected
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
@@ -152,25 +152,31 @@ impl BG77 {
             match *status {
                 MQTT_CONNECTED => {
                     info!("Already connected to MQTT");
-                    return Ok(());
+                    Ok(())
                 }
-                _ => {
-                    info!("Connecting or being disconnected from MQTT"); // TODO
+                MQTT_DISCONNECTING | MQTT_CONNECTING => {
+                    info!("Connecting or disconnecting from MQTT");
+                    Ok(())
                 }
-            }
-        }
-        info!("Connecting to MQTT");
-        let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
-        let (client_id, res, reason) = self
-            .uart1
-            .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
-            .await?
-            .parse3::<u8, u32, i8>([0, 1, 2])?;
+                MQTT_INITIALIZING => {
+                    info!("Will connect to MQTT");
+                    let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
+                    let (client_id, res, reason) = self
+                        .uart1
+                        .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
+                        .await?
+                        .parse3::<u8, u32, i8>([0, 1, 2])?;
 
-        if client_id == CLIENT_ID && res == 0 && reason == 0 {
-            Ok(())
+                    if client_id == CLIENT_ID && res == 0 && reason == 0 {
+                        Ok(())
+                    } else {
+                        Err(Error::MqttError(reason))
+                    }
+                }
+                _ => Err(Error::AtError),
+            }
         } else {
-            Err(Error::MqttError(reason))
+            Err(Error::AtError)
         }
     }
 
