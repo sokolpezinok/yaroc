@@ -14,7 +14,7 @@ RUN cargo install cargo-chef
 WORKDIR /app
 
 FROM chef AS planner
-COPY . .
+COPY python .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -25,5 +25,5 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install maturin[patchelf]
 
-COPY . .
+COPY python .
 RUN maturin build --release
