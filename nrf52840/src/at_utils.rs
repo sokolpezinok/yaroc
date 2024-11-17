@@ -40,6 +40,7 @@ impl defmt::Format for FromModem {
 }
 
 const AT_COMMAND_SIZE: usize = 90;
+const AT_RESPONSE_SIZE: usize = 50;
 const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 20;
 const AT_VALUE_COUNT: usize = 4;
@@ -117,8 +118,8 @@ pub struct AtResponse {
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
-        if let Ok(result) = self.result() {
-            defmt::write!(fmt, ", ans={}", result.as_str());
+        if let Some(response) = self.responses().iter().next() {
+            defmt::write!(fmt, ", ans={}", response.as_str());
         }
     }
 }
@@ -129,21 +130,6 @@ impl AtResponse {
             lines,
             command: String::from_str(command).unwrap(),
         }
-    }
-
-    fn result(&self) -> crate::Result<String<AT_COMMAND_SIZE>> {
-        let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
-        let prefix = &self.command[..pos];
-        for line in &self.lines {
-            if let FromModem::Line(line) = line {
-                if line.starts_with(prefix) {
-                    let (_, rest) = split_at_response(line).unwrap();
-                    let result = String::from_str(rest).map_err(|_| Error::BufferTooSmallError)?;
-                    return Ok(result);
-                }
-            }
-        }
-        Err(Error::AtError)
     }
 
     fn parse_values(mut rest: &str) -> Vec<&str, 15> {
@@ -169,16 +155,35 @@ impl AtResponse {
         split
     }
 
-    fn pick_values(
-        self,
-        indices: &[usize],
-    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
-        let res = self.result()?;
-        let values = Self::parse_values(res.as_str());
-        Ok(indices
-            .iter()
-            .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
-            .collect())
+    fn responses(&self) -> Vec<String<AT_RESPONSE_SIZE>, AT_LINES> {
+        let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
+        let prefix = &self.command[..pos];
+        let mut res = Vec::new();
+        for line in &self.lines {
+            if let FromModem::Line(line) = line {
+                if line.starts_with(prefix) {
+                    let (_, rest) = split_at_response(line).unwrap();
+                    let _ = res.push(
+                        String::from_str(rest)
+                            .map_err(|_| Error::BufferTooSmallError)
+                            .unwrap(),
+                    );
+                }
+            }
+        }
+        res
+    }
+
+    fn pick_values(self, indices: &[usize]) -> Option<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
+        let responses = self.responses();
+        let response = responses.iter().next()?;
+        let values = Self::parse_values(response.as_str());
+        Some(
+            indices
+                .iter()
+                .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
+                .collect(),
+        )
     }
 
     fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
@@ -186,12 +191,12 @@ impl AtResponse {
     }
 
     pub fn parse1<T: FromStr>(self, indices: [usize; 1]) -> Result<T, Error> {
-        let values = self.pick_values(indices.as_slice())?;
+        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
         Self::parse::<T>(&values[0])
     }
 
     pub fn parse2<T: FromStr, U: FromStr>(self, indices: [usize; 2]) -> Result<(T, U), Error> {
-        let values = self.pick_values(indices.as_slice())?;
+        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
         if values.len() != 2 {
             return Err(Error::AtError);
         }
@@ -202,7 +207,7 @@ impl AtResponse {
         self,
         indices: [usize; 3],
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values(indices.as_slice())?;
+        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
         if values.len() != 3 {
             return Err(Error::AtError);
         }
@@ -217,7 +222,7 @@ impl AtResponse {
         self,
         indices: [usize; 4],
     ) -> Result<(T, U, V, W), Error> {
-        let values = self.pick_values(indices.as_slice())?;
+        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
         if values.len() != 4 {
             return Err(Error::AtError);
         }
