@@ -18,13 +18,13 @@ use heapless::{format, String};
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-const CLIENT_ID: u8 = 0;
 
 pub struct BG77 {
     uart1: AtUart,
     _modem_pin: Output<'static, P0_17>,
     pkt_timeout: Duration,
     activation_timeout: Duration,
+    client_id: u8,
 }
 
 fn urc_handler(prefix: &str, rest: &str) -> bool {
@@ -58,6 +58,7 @@ impl BG77 {
             _modem_pin: modem_pin,
             activation_timeout,
             pkt_timeout,
+            client_id: 0,
         }
     }
 
@@ -65,7 +66,7 @@ impl BG77 {
         let (prefix, _rest) = split_at_response(line).ok_or(Error::ParseError)?;
         info!("URC {}", line);
         match prefix {
-            "QMTSTAT" | "CEREG" => self.mqtt_connect().await?,
+            "QMTSTAT" | "CEREG" => self.mqtt_connect(self.client_id).await?,
             _ => {
                 todo!()
             }
@@ -93,47 +94,47 @@ impl BG77 {
         self.uart1
             .call("+CGPADDR=1", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, String<50>>([0, 1])?;
+            .parse2::<u8, String<50>>([0, 1], None)?;
         Ok(())
     }
 
-    async fn mqtt_open(&mut self) -> crate::Result<()> {
+    async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
         let opened = self
             .uart1
             .call("+QMTOPEN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, String<40>>([0, 1]);
-        if let Ok((CLIENT_ID, url)) = opened.as_ref() {
-            if url.as_str() == "broker.emqx.io" {
+            .parse2::<u8, String<40>>([0, 1], Some(cid));
+        if let Ok((client_id, url)) = opened.as_ref() {
+            if *client_id == cid && url.as_str() == "broker.emqx.io" {
                 info!("TCP connection already opened to {}", url.as_str());
                 return Ok(());
             }
             // TODO: disconnect an old client
         }
 
-        let cmd = format!(100; "+QMTOPEN={CLIENT_ID},\"broker.emqx.io\",1883").unwrap();
+        let cmd = format!(100; "+QMTOPEN={cid},\"broker.emqx.io\",1883").unwrap();
         let (client_id, status) = self
             .uart1
             .call_with_response(&cmd, MINIMUM_TIMEOUT, self.activation_timeout)
             .await?
-            .parse2::<u8, i8>([0, 1])?;
-        if status != 0 || client_id != CLIENT_ID {
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
+        if status != 0 || client_id != cid {
             return Err(Error::MqttError(status));
         }
         Ok(())
     }
 
-    pub async fn mqtt_connect(&mut self) -> Result<(), Error> {
-        self.mqtt_open().await?;
+    pub async fn mqtt_connect(&mut self, cid: u8) -> Result<(), Error> {
+        self.mqtt_open(cid).await?;
 
         let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{CLIENT_ID},{},2,1",
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
             self.pkt_timeout.as_secs()
         )
         .unwrap();
         self.uart1.call(&cmd, MINIMUM_TIMEOUT).await?;
         let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{CLIENT_ID},{}",
+            "+QMTCFG=\"keepalive\",{cid},{}",
             (self.pkt_timeout * 3).as_secs()
         )
         .unwrap();
@@ -143,12 +144,12 @@ impl BG77 {
             .uart1
             .call("+QMTCONN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, u8>([0, 1]); // TODO: there can be multiple clients connected
+            .parse2::<u8, u8>([0, 1], Some(cid));
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
         const MQTT_DISCONNECTING: u8 = 4;
-        if let Ok((CLIENT_ID, status)) = connection.as_ref() {
+        if let Ok((cid, status)) = connection.as_ref() {
             match *status {
                 MQTT_CONNECTED => {
                     info!("Already connected to MQTT");
@@ -160,14 +161,14 @@ impl BG77 {
                 }
                 MQTT_INITIALIZING => {
                     info!("Will connect to MQTT");
-                    let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"yaroc-nrf52\"").unwrap();
+                    let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
                     let (client_id, res, reason) = self
                         .uart1
                         .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
                         .await?
                         .parse3::<u8, u32, i8>([0, 1, 2])?;
 
-                    if client_id == CLIENT_ID && res == 0 && reason == 0 {
+                    if client_id == *cid && res == 0 && reason == 0 {
                         Ok(())
                     } else {
                         Err(Error::MqttError(reason))
@@ -180,18 +181,18 @@ impl BG77 {
         }
     }
 
-    pub async fn mqtt_disconnect(&mut self) -> Result<(), Error> {
-        let cmd = format!(50; "+QMTDISC={CLIENT_ID}").unwrap();
+    pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
+        let cmd = format!(50; "+QMTDISC={cid}").unwrap();
         let (client_id, result) = self
             .uart1
             .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
             .await?
-            .parse2::<u8, i8>([0, 1])?;
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
-        if !(client_id == CLIENT_ID && result == MQTT_DISCONNECTED) {
+        if !(client_id == cid && result == MQTT_DISCONNECTED) {
             return Err(Error::MqttError(result));
         }
-        let cmd = format!(50; "+QMTCLOSE={CLIENT_ID}").unwrap();
+        let cmd = format!(50; "+QMTCLOSE={cid}").unwrap();
         let _ = self.uart1.call(&cmd, MINIMUM_TIMEOUT).await; // TODO: this fails
         Ok(())
     }
@@ -238,7 +239,7 @@ impl BG77 {
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUBEX={CLIENT_ID},0,0,0,\"topic/pub\",\"{text}\""
+            "+QMTPUBEX={},0,0,0,\"topic/pub\",\"{text}\"", self.client_id
         )
         .unwrap();
         let response = self
@@ -257,7 +258,7 @@ impl BG77 {
             .uart1
             .call("+CCLK?", MINIMUM_TIMEOUT)
             .await?
-            .parse1::<String<20>>([0])?;
+            .parse1::<String<20>>([0], None)?;
 
         let datetime =
             NaiveDateTime::parse_from_str(modem_clock.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();
@@ -279,7 +280,7 @@ impl BG77 {
     pub async fn setup(&mut self) {
         //let _ = self.turn_on().await;
         unwrap!(self.config().await);
-        let _ = self.mqtt_connect().await;
+        let _ = self.mqtt_connect(self.client_id).await;
         let now_ms = Instant::now().as_millis();
         let boot_time = self.get_time().await.map(|time| {
             time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64))

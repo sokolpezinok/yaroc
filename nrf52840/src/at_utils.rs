@@ -118,9 +118,6 @@ pub struct AtResponse {
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());
-        if let Some(response) = self.responses().iter().next() {
-            defmt::write!(fmt, ", ans={}", response.as_str());
-        }
     }
 }
 
@@ -155,28 +152,52 @@ impl AtResponse {
         split
     }
 
-    fn responses(&self) -> Vec<String<AT_RESPONSE_SIZE>, AT_LINES> {
+    fn response<T: FromStr + Eq>(
+        &self,
+        filter: Option<(T, usize)>,
+    ) -> Option<String<AT_RESPONSE_SIZE>> {
         let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
         let prefix = &self.command[..pos];
-        let mut res = Vec::new();
         for line in &self.lines {
             if let FromModem::Line(line) = line {
                 if line.starts_with(prefix) {
                     let (_, rest) = split_at_response(line).unwrap();
-                    let _ = res.push(
-                        String::from_str(rest)
-                            .map_err(|_| Error::BufferTooSmallError)
-                            .unwrap(),
-                    );
+                    match filter.as_ref() {
+                        Some((t, idx)) => {
+                            let values = Self::parse_values(rest);
+                            let val: Option<T> = str::parse(&values[*idx]).ok();
+                            if val.is_some() && val.unwrap() == *t {
+                                return Some(
+                                    String::from_str(rest)
+                                        .map_err(|_| Error::BufferTooSmallError)
+                                        .unwrap(),
+                                );
+                            }
+                        }
+                        None => {
+                            return Some(
+                                String::from_str(rest)
+                                    .map_err(|_| Error::BufferTooSmallError)
+                                    .unwrap(),
+                            )
+                        }
+                    }
                 }
             }
         }
-        res
+        None
     }
 
-    fn pick_values(self, indices: &[usize]) -> Option<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
-        let responses = self.responses();
-        let response = responses.iter().next()?;
+    // Pick values from a AT response given by the list of `indices`.
+    //
+    // If filter is None, the first at response is chosen. If `filter` is provided, only the response
+    // for which the first chosen value (at position `indices[0]`) matches `filter`.
+    fn pick_values<T: FromStr + Eq>(
+        self,
+        indices: &[usize],
+        filter: Option<T>,
+    ) -> Option<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
+        let response = self.response(filter.map(|t| (t, indices[0])))?;
         let values = Self::parse_values(response.as_str());
         Some(
             indices
@@ -190,24 +211,34 @@ impl AtResponse {
         str::parse(s).map_err(|_| Error::ParseError)
     }
 
-    pub fn parse1<T: FromStr>(self, indices: [usize; 1]) -> Result<T, Error> {
-        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
+    pub fn parse1<T: FromStr + Eq>(
+        self,
+        indices: [usize; 1],
+        filter: Option<T>,
+    ) -> Result<T, Error> {
+        let values = self.pick_values(&indices, filter).ok_or(Error::AtError)?;
         Self::parse::<T>(&values[0])
     }
 
-    pub fn parse2<T: FromStr, U: FromStr>(self, indices: [usize; 2]) -> Result<(T, U), Error> {
-        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
+    pub fn parse2<T: FromStr + Eq, U: FromStr>(
+        self,
+        indices: [usize; 2],
+        filter: Option<T>,
+    ) -> Result<(T, U), Error> {
+        let values = self.pick_values(&indices, filter).ok_or(Error::AtError)?;
         if values.len() != 2 {
             return Err(Error::AtError);
         }
         Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
-    pub fn parse3<T: FromStr, U: FromStr, V: FromStr>(
+    pub fn parse3<T: FromStr + Eq, U: FromStr, V: FromStr>(
         self,
         indices: [usize; 3],
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
+        let values = self
+            .pick_values::<T>(&indices, None)
+            .ok_or(Error::AtError)?;
         if values.len() != 3 {
             return Err(Error::AtError);
         }
@@ -218,11 +249,13 @@ impl AtResponse {
         ))
     }
 
-    pub fn parse4<T: FromStr, U: FromStr, V: FromStr, W: FromStr>(
+    pub fn parse4<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr>(
         self,
         indices: [usize; 4],
     ) -> Result<(T, U, V, W), Error> {
-        let values = self.pick_values(indices.as_slice()).ok_or(Error::AtError)?;
+        let values = self
+            .pick_values::<T>(&indices, None)
+            .ok_or(Error::AtError)?;
         if values.len() != 4 {
             return Err(Error::AtError);
         }
