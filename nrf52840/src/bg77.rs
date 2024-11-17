@@ -85,16 +85,23 @@ impl BG77 {
         self.uart1
             .call("+QCFG=\"band\",0,0,80000", MINIMUM_TIMEOUT)
             .await?;
-        self.uart1.call("+CGATT=1", self.activation_timeout).await?;
         self.uart1.call("+CEREG=2", MINIMUM_TIMEOUT).await?;
+        Ok(())
+    }
+
+    async fn network_registration(&mut self) -> crate::Result<()> {
+        self.uart1.call("+CGATT=1", self.activation_timeout).await?;
         let _ = self
             .uart1
             .call("+CGDCONT=1,\"IP\",trial-nbiot.corp", MINIMUM_TIMEOUT)
             .await;
         self.uart1
-            .call("+CGPADDR=1", MINIMUM_TIMEOUT)
-            .await?
-            .parse2::<u8, String<50>>([0, 1], None)?;
+            .call("+CGACT=1,1", self.activation_timeout)
+            .await?;
+        //self.uart1
+        //    .call("+CGPADDR=1", MINIMUM_TIMEOUT)
+        //    .await?
+        //    .parse2::<u8, String<50>>([0, 1], None)?;
         Ok(())
     }
 
@@ -124,7 +131,8 @@ impl BG77 {
         Ok(())
     }
 
-    pub async fn mqtt_connect(&mut self, cid: u8) -> Result<(), Error> {
+    pub async fn mqtt_connect(&mut self, cid: u8) -> crate::Result<()> {
+        self.network_registration().await?;
         self.mqtt_open(cid).await?;
 
         let cmd = format!(50;
@@ -278,7 +286,7 @@ impl BG77 {
     }
 
     pub async fn setup(&mut self) {
-        //let _ = self.turn_on().await;
+        let _ = self.turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect(self.client_id).await;
         let now_ms = Instant::now().as_millis();
@@ -294,13 +302,18 @@ impl BG77 {
 
     #[allow(dead_code)]
     async fn turn_on(&mut self) -> crate::Result<()> {
-        self._modem_pin.set_low();
-        Timer::after_millis(1000).await;
-        self._modem_pin.set_high();
-        Timer::after_millis(2000).await;
-        self._modem_pin.set_low();
-        let res = self.uart1.read(Duration::from_secs(5)).await?;
-        info!("Modem response: {=[?]}", res.as_slice());
+        if let Err(_) = self.uart1.call("", MINIMUM_TIMEOUT).await {
+            self._modem_pin.set_low();
+            Timer::after_millis(1000).await;
+            self._modem_pin.set_high();
+            Timer::after_millis(2000).await;
+            self._modem_pin.set_low();
+            let res = self.uart1.read(Duration::from_secs(5)).await?;
+            info!("Modem response: {=[?]}", res.as_slice());
+            self.uart1
+                .call("+CFUN=1,0", Duration::from_secs(15))
+                .await?;
+        }
         Ok(())
     }
 }

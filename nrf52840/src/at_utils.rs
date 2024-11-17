@@ -12,8 +12,7 @@ use crate::error::Error;
 
 pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     if line.starts_with('+') {
-        let prefix_len = line.find(": ");
-        if let Some(prefix_len) = prefix_len {
+        if let Some(prefix_len) = line.find(": ") {
             let prefix = &line[1..prefix_len];
             let rest = &line[prefix_len + 2..];
             return Some((prefix, rest));
@@ -49,12 +48,8 @@ static MAIN_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = 
 pub static URC_CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2> =
     Channel::new();
 
-async fn parse_lines(buf: &[u8], urc_handler: fn(&str, &str) -> bool) {
-    let lines = from_utf8(buf)
-        .map_err(|_| Error::StringEncodingError)
-        .unwrap()
-        .lines()
-        .filter(|line| !line.is_empty());
+async fn parse_lines(text: &str, urc_handler: fn(&str, &str) -> bool) {
+    let lines = text.lines().filter(|line| !line.is_empty());
     let mut open_stream = false;
     for line in lines {
         let is_callback = split_at_response(line)
@@ -98,7 +93,13 @@ async fn reader(
             .map_err(|_| Error::UartReadError);
         match len {
             Err(err) => MAIN_CHANNEL.send(Err(err)).await,
-            Ok(len) => parse_lines(&buf[..len], urc_handler).await,
+            Ok(len) => {
+                let text = from_utf8(&buf[..len]);
+                match text {
+                    Err(_) => MAIN_CHANNEL.send(Err(Error::StringEncodingError)).await,
+                    Ok(text) => parse_lines(text, urc_handler).await,
+                }
+            }
         }
     }
 }
