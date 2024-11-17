@@ -1,8 +1,9 @@
 use crate::{
-    at_utils::{split_at_response, AtUart, URC_CHANNEL},
+    at_utils::{AtUart, URC_CHANNEL},
     error::Error,
 };
 use chrono::{NaiveDateTime, TimeDelta};
+use common::split_at_response;
 use defmt::{error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{

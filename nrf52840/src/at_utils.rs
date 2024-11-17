@@ -1,3 +1,4 @@
+use common::split_at_response;
 use core::str::{from_utf8, FromStr};
 use defmt::*;
 use embassy_executor::Spawner;
@@ -9,17 +10,6 @@ use embassy_time::{with_deadline, Duration, Instant};
 use heapless::{format, String, Vec};
 
 use crate::error::Error;
-
-pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
-    if line.starts_with('+') {
-        if let Some(prefix_len) = line.find(": ") {
-            let prefix = &line[1..prefix_len];
-            let rest = &line[prefix_len + 2..];
-            return Some((prefix, rest));
-        }
-    }
-    None
-}
 
 #[derive(Clone)]
 pub enum FromModem {
@@ -367,17 +357,3 @@ impl AtUart {
         Ok(response)
     }
 }
-
-//#[cfg(test)]
-//mod test_at_utils {
-//    #[test]
-//    fn test_split_at_response() {
-//        let res = "+QMTSTAT: 0,2";
-//        assert_eq!(split_at_response(res), Some(("QMTSTAT", "0,2")));
-//
-//        let res = "QMTSTAT: 0,2";
-//        assert_eq!(split_at_response(res), None);
-//        let res = "+QMTSTAT 0,2";
-//        assert_eq!(split_at_response(res), None);
-//    }
-//}

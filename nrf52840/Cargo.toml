@@ -7,6 +7,8 @@ resolver = "2"
 rust-version = "1.81"
 
 [dependencies]
+common = { path = "../common" }
+
 defmt = "0.3"
 defmt-rtt = "0.4"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
@@ -27,6 +29,3 @@ heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebc
 thiserror = { version = "2.0.0", default-features = false }
 embassy-sync = "0.6.0"
 chrono = { workspace = true }
-
-[profile.release]
-debug = 2

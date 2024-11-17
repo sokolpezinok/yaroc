@@ -161,6 +161,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+
+[[package]]
 name = "core-foundation"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2241,6 +2245,7 @@ name = "yaroc-nrf52840"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "common",
  "cortex-m",
  "cortex-m-rt",
  "defmt",
