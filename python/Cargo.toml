@@ -14,7 +14,7 @@ protoc-bin-vendored = "3.1.0"
 walkdir = "2.3.2"
 
 [dependencies]
-chrono = "0.4.38"
+chrono = { workspace = true, default-features = true }
 geoutils = "0.5.1"
 log = "0.4.20"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20", optional = true }
