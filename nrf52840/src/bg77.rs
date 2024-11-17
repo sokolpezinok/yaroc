@@ -277,7 +277,7 @@ impl BG77 {
     }
 
     pub async fn setup(&mut self) {
-        //self.turn_on().await;
+        //let _ = self.turn_on().await;
         unwrap!(self.config().await);
         let _ = self.mqtt_connect().await;
         let now_ms = Instant::now().as_millis();
@@ -298,7 +298,7 @@ impl BG77 {
         self._modem_pin.set_high();
         Timer::after_millis(2000).await;
         self._modem_pin.set_low();
-        let res = self.uart1.read(MINIMUM_TIMEOUT * 10).await?;
+        let res = self.uart1.read(Duration::from_secs(5)).await?;
         info!("Modem response: {=[?]}", res.as_slice());
         Ok(())
     }

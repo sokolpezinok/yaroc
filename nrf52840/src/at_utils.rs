@@ -278,11 +278,19 @@ impl AtUart {
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
             Some(&FromModem::Error) => {
-                error!("Failed response from modem: {=[?]}", lines.as_slice());
+                error!(
+                    "Failed response from modem: {} {=[?]}",
+                    command,
+                    lines.as_slice()
+                );
                 Err(Error::AtErrorResponse)
             }
             _ => {
-                error!("Failed response from modem: {=[?]}", lines.as_slice());
+                error!(
+                    "Failed response from modem: {} {=[?]}",
+                    command,
+                    lines.as_slice()
+                );
                 Err(Error::AtError)
             }
         }
