@@ -1,3 +1,4 @@
+use common::error as common_error;
 use defmt::Format;
 use thiserror::Error;
 
@@ -17,8 +18,18 @@ pub enum Error {
     TimeoutError,
     #[error("AT 'ERROR' response")]
     AtErrorResponse,
-    #[error("AT error")]
+    #[error("Inconsistent AT response")]
     AtError,
     #[error("MQTT error {0}")]
     MqttError(i8),
+}
+
+impl From<common_error::Error> for Error {
+    fn from(err: common_error::Error) -> Self {
+        match err {
+            common_error::Error::BufferTooSmallError => Self::BufferTooSmallError,
+            common_error::Error::ParseError => Self::ParseError,
+            common_error::Error::AtError => Self::AtError,
+        }
+    }
 }

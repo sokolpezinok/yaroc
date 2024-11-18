@@ -3,6 +3,8 @@ use core::str::FromStr;
 use defmt;
 use heapless::{String, Vec};
 
+use crate::error::Error;
+
 pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     if line.starts_with('+') {
         if let Some(prefix_len) = line.find(": ") {
@@ -82,7 +84,7 @@ impl AtResponse {
     fn response<T: FromStr + Eq>(
         &self,
         filter: Option<(T, usize)>,
-    ) -> Option<String<AT_RESPONSE_SIZE>> {
+    ) -> Result<String<AT_RESPONSE_SIZE>, Error> {
         let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
         let prefix = &self.command[..pos];
         for line in &self.lines {
@@ -94,15 +96,18 @@ impl AtResponse {
                             let values = Self::parse_values(rest);
                             let val: Option<T> = str::parse(&values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
-                                return Some(String::from_str(rest).unwrap());
+                                return String::from_str(rest)
+                                    .map_err(|_| Error::BufferTooSmallError);
                             }
                         }
-                        None => return Some(String::from_str(rest).unwrap()),
+                        None => {
+                            return String::from_str(rest).map_err(|_| Error::BufferTooSmallError)
+                        }
                     }
                 }
             }
         }
-        None
+        Err(Error::AtError)
     }
 
     // Pick values from a AT response given by the list of `indices`.
@@ -113,22 +118,24 @@ impl AtResponse {
         self,
         indices: &[usize],
         filter: Option<T>,
-    ) -> Option<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>> {
+    ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
         let response = self.response(filter.map(|t| (t, indices[0])))?;
         let values = Self::parse_values(response.as_str());
-        Some(
-            indices
-                .iter()
-                .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
-                .collect(),
-        )
+        Ok(indices
+            .iter()
+            .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
+            .collect())
     }
 
-    fn parse<T: FromStr>(s: &str) -> Option<T> {
-        str::parse(s).ok() // TODO: propagate error?
+    fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
+        str::parse(s).map_err(|_| Error::ParseError)
     }
 
-    pub fn parse1<T: FromStr + Eq>(self, indices: [usize; 1], filter: Option<T>) -> Option<T> {
+    pub fn parse1<T: FromStr + Eq>(
+        self,
+        indices: [usize; 1],
+        filter: Option<T>,
+    ) -> Result<T, Error> {
         let values = self.pick_values(&indices, filter)?;
         Self::parse::<T>(&values[0])
     }
@@ -137,23 +144,23 @@ impl AtResponse {
         self,
         indices: [usize; 2],
         filter: Option<T>,
-    ) -> Option<(T, U)> {
+    ) -> Result<(T, U), Error> {
         let values = self.pick_values(&indices, filter)?;
         if values.len() != 2 {
-            return None;
+            return Err(Error::ParseError);
         }
-        Some((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
+        Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
     pub fn parse3<T: FromStr + Eq, U: FromStr, V: FromStr>(
         self,
         indices: [usize; 3],
-    ) -> Option<(T, U, V)> {
+    ) -> Result<(T, U, V), Error> {
         let values = self.pick_values::<T>(&indices, None)?;
         if values.len() != 3 {
-            return None;
+            return Err(Error::ParseError);
         }
-        Some((
+        Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
             Self::parse::<V>(&values[2])?,
@@ -163,12 +170,12 @@ impl AtResponse {
     pub fn parse4<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr>(
         self,
         indices: [usize; 4],
-    ) -> Option<(T, U, V, W)> {
+    ) -> Result<(T, U, V, W), Error> {
         let values = self.pick_values::<T>(&indices, None)?;
         if values.len() != 4 {
-            return None;
+            return Err(Error::ParseError);
         }
-        Some((
+        Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
             Self::parse::<V>(&values[2])?,
