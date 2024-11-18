@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 defmt = { workspace = true }
 heapless =  { workspace = true }
+thiserror = { workspace = true }
