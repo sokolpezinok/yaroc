@@ -94,7 +94,7 @@ impl AtResponse {
                     match filter.as_ref() {
                         Some((t, idx)) => {
                             let values = Self::parse_values(rest);
-                            let val: Option<T> = str::parse(&values[*idx]).ok();
+                            let val: Option<T> = str::parse(values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
                                 return String::from_str(rest)
                                     .map_err(|_| Error::BufferTooSmallError);
