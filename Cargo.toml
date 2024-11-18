@@ -9,6 +9,8 @@ resolver = "2"
 
 [workspace.dependencies]
 chrono = { version = "0.4.38", default-features = false }
+defmt = "0.3"
+heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebca23" }
 
 [profile.release]
 debug = 2
