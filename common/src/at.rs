@@ -58,12 +58,13 @@ impl AtResponse {
         }
     }
 
-    fn parse_values(mut rest: &str) -> Vec<&str, 15> {
+    fn parse_values(mut rest: &str) -> Result<Vec<&str, 15>, Error> {
         let mut split = Vec::new();
         while !rest.is_empty() {
             let pos = match rest.chars().next() {
                 Some('"') => {
                     let pos = rest.find("\",").unwrap_or(rest.len() - 1);
+                    // TODO: this should fail if rest[pos - 1] is not '"'
                     split.push(&rest[1..pos]).unwrap();
                     pos + 1
                 }
@@ -78,7 +79,7 @@ impl AtResponse {
             }
             rest = &rest[pos + 1..];
         }
-        split
+        Ok(split)
     }
 
     fn response<T: FromStr + Eq>(
@@ -93,7 +94,7 @@ impl AtResponse {
                     let (_, rest) = split_at_response(line).unwrap();
                     match filter.as_ref() {
                         Some((t, idx)) => {
-                            let values = Self::parse_values(rest);
+                            let values = Self::parse_values(rest)?;
                             let val: Option<T> = str::parse(values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
                                 return String::from_str(rest)
@@ -114,16 +115,19 @@ impl AtResponse {
     //
     // If filter is None, the first at response is chosen. If `filter` is provided, only the response
     // for which the first chosen value (at position `indices[0]`) matches `filter`.
-    fn pick_values<T: FromStr + Eq>(
+    fn pick_values<T: FromStr + Eq, const N: usize>(
         self,
-        indices: &[usize],
+        indices: [usize; N],
         filter: Option<T>,
     ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
         let response = self.response(filter.map(|t| (t, indices[0])))?;
-        let values = Self::parse_values(response.as_str());
+        let values = Self::parse_values(response.as_str())?;
+        if !indices.iter().all(|idx| *idx < values.len()) {
+            return Err(Error::AtError);
+        }
         Ok(indices
             .iter()
-            .filter_map(|idx| Some(String::from_str(values.get(*idx)?).unwrap())) //TODO
+            .map(|idx| String::from_str(values[*idx]).unwrap()) //TODO
             .collect())
     }
 
@@ -136,7 +140,7 @@ impl AtResponse {
         indices: [usize; 1],
         filter: Option<T>,
     ) -> Result<T, Error> {
-        let values = self.pick_values(&indices, filter)?;
+        let values = self.pick_values(indices, filter)?;
         Self::parse::<T>(&values[0])
     }
 
@@ -145,10 +149,7 @@ impl AtResponse {
         indices: [usize; 2],
         filter: Option<T>,
     ) -> Result<(T, U), Error> {
-        let values = self.pick_values(&indices, filter)?;
-        if values.len() != 2 {
-            return Err(Error::ParseError);
-        }
+        let values = self.pick_values(indices, filter)?;
         Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
@@ -156,10 +157,7 @@ impl AtResponse {
         self,
         indices: [usize; 3],
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values::<T>(&indices, None)?;
-        if values.len() != 3 {
-            return Err(Error::ParseError);
-        }
+        let values = self.pick_values::<T, 3>(indices, None)?;
         Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
@@ -171,10 +169,7 @@ impl AtResponse {
         self,
         indices: [usize; 4],
     ) -> Result<(T, U, V, W), Error> {
-        let values = self.pick_values::<T>(&indices, None)?;
-        if values.len() != 4 {
-            return Err(Error::ParseError);
-        }
+        let values = self.pick_values::<T, 4>(indices, None)?;
         Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
@@ -201,10 +196,8 @@ mod test_at_utils {
 
     #[test]
     fn test_parse_values() {
-        let ans = AtResponse::parse_values("1,\"item1,item2\",\"cellid\"");
-        assert_eq!(ans[0], "1");
-        assert_eq!(ans[1], "item1,item2");
-        assert_eq!(ans[2], "cellid");
+        let ans = AtResponse::parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
+        assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
     }
 
     #[test]
@@ -225,7 +218,7 @@ mod test_at_utils {
         assert_eq!(response.unwrap(), "5,\"connected\"");
 
         let response = at_response.response(Some((3u8, 0)));
-        assert_eq!(response.err().unwrap(), Error::AtError);
+        assert_eq!(response.unwrap_err(), Error::AtError);
 
         let response = at_response.response::<u8>(None);
         assert_eq!(response.unwrap(), "1,\"disconnected\"");
