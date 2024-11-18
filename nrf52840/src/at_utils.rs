@@ -11,38 +11,59 @@ use heapless::{format, String, Vec};
 
 use crate::error::Error;
 
-static MAIN_CHANNEL: Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5> = Channel::new();
-pub static URC_CHANNEL: Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2> =
-    Channel::new();
+static MAIN_CHANNEL: MainChannelType = Channel::new();
+pub static URC_CHANNEL: UrcChannelType = Channel::new();
 
-async fn parse_lines(text: &str, urc_handler: fn(&str, &str) -> bool) {
-    let lines = text.lines().filter(|line| !line.is_empty());
-    let mut open_stream = false;
-    for line in lines {
-        let is_callback = split_at_response(line)
-            .map(|(prefix, rest)| (urc_handler)(prefix, rest))
-            .unwrap_or_default();
+type MainChannelType = Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5>;
+type UrcChannelType = Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
 
-        let to_send = match line {
-            "OK" | "RDY" => Ok(FromModem::Ok),
-            "ERROR" => Ok(FromModem::Error),
-            line => String::from_str(line)
-                .map(FromModem::Line)
-                .map_err(|_| Error::BufferTooSmallError),
-        };
-        if !is_callback {
-            if let Ok(FromModem::Line(_)) = to_send.as_ref() {
-                open_stream = true;
-            } else {
-                open_stream = false;
-            }
-            MAIN_CHANNEL.send(to_send).await;
-        } else {
-            URC_CHANNEL.send(Ok(String::from_str(line).unwrap())).await;
+pub struct AtBroker {
+    main_channel: &'static MainChannelType,
+    urc_channel: &'static UrcChannelType,
+}
+
+impl AtBroker {
+    pub fn new(
+        main_channel: &'static MainChannelType,
+        urc_channel: &'static UrcChannelType,
+    ) -> Self {
+        Self {
+            main_channel,
+            urc_channel,
         }
     }
-    if open_stream {
-        MAIN_CHANNEL.send(Ok(FromModem::Ok)).await; // Stop transmission
+
+    async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
+        let lines = text.lines().filter(|line| !line.is_empty());
+        let mut open_stream = false;
+        for line in lines {
+            let is_callback = split_at_response(line)
+                .map(|(prefix, rest)| (urc_handler)(prefix, rest))
+                .unwrap_or_default();
+
+            let to_send = match line {
+                "OK" | "RDY" => Ok(FromModem::Ok),
+                "ERROR" => Ok(FromModem::Error),
+                line => String::from_str(line)
+                    .map(FromModem::Line)
+                    .map_err(|_| Error::BufferTooSmallError),
+            };
+            if !is_callback {
+                if let Ok(FromModem::Line(_)) = to_send.as_ref() {
+                    open_stream = true;
+                } else {
+                    open_stream = false;
+                }
+                self.main_channel.send(to_send).await;
+            } else {
+                self.urc_channel
+                    .send(Ok(String::from_str(line).unwrap()))
+                    .await;
+            }
+        }
+        if open_stream {
+            self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
+        }
     }
 }
 
@@ -53,6 +74,7 @@ async fn reader(
 ) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
+    let at_broker = AtBroker::new(&MAIN_CHANNEL, &URC_CHANNEL);
     loop {
         let len = rx
             .read_until_idle(&mut buf)
@@ -64,7 +86,7 @@ async fn reader(
                 let text = from_utf8(&buf[..len]);
                 match text {
                     Err(_) => MAIN_CHANNEL.send(Err(Error::StringEncodingError)).await,
-                    Ok(text) => parse_lines(text, urc_handler).await,
+                    Ok(text) => at_broker.parse_lines(text, urc_handler).await,
                 }
             }
         }
