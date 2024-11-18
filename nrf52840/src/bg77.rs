@@ -113,8 +113,8 @@ impl BG77 {
             .await?
             .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened.as_ref() {
-            if *client_id == cid && url.as_str() == "broker.emqx.io" {
-                info!("TCP connection already opened to {}", url.as_str());
+            if *client_id == cid && url == "broker.emqx.io" {
+                info!("TCP connection already opened to {}", &url);
                 return Ok(());
             }
             // TODO: disconnect an old client
@@ -235,9 +235,7 @@ impl BG77 {
             // TODO: can be +CEREG: 2,2
             .parse3::<u32, u32, String<8>>([0, 1, 3], None)
             .map_err(Error::from)
-            .and_then(|(_, _, cell)| {
-                u32::from_str_radix(cell.as_str(), 16).map_err(|_| Error::ParseError)
-            })
+            .and_then(|(_, _, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
             .ok();
         let signal_info = SignalInfo {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
@@ -270,8 +268,7 @@ impl BG77 {
             .await?
             .parse1::<String<20>>([0], None)?;
 
-        let datetime =
-            NaiveDateTime::parse_from_str(modem_clock.as_str(), "%y/%m/%d,%H:%M:%S+04").unwrap();
+        let datetime = NaiveDateTime::parse_from_str(&modem_clock, "%y/%m/%d,%H:%M:%S+04").unwrap();
 
         Ok(datetime)
     }
@@ -283,7 +280,7 @@ impl BG77 {
         if let Ok(signal_info) = signal_info {
             let bat_mv = self.battery_mv().await.unwrap_or_default();
             let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
-            let _ = self.send_text(text.as_str()).await;
+            let _ = self.send_text(&text).await;
         }
     }
 
@@ -298,7 +295,7 @@ impl BG77 {
         });
         info!(
             "Boot at {}",
-            format!(30; "{}", boot_time.unwrap()).unwrap().as_str()
+            format!(30; "{}", &boot_time.unwrap()).unwrap()
         );
     }
 
@@ -351,7 +348,7 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
             Ok(line) => {
                 let mut bg77_unlocked = bg77_mutex.lock().await;
                 if let Some(bg77) = bg77_unlocked.as_mut() {
-                    let res = bg77.urc_handler(line.as_str()).await;
+                    let res = bg77.urc_handler(&line).await;
                     if let Err(err) = res {
                         error!("Error while processing URC: {}", err);
                     }
