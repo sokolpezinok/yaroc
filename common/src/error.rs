@@ -1,7 +1,7 @@
 use defmt::Format;
 use thiserror::Error;
 
-#[derive(Debug, Error, Format)]
+#[derive(Debug, Error, Eq, Format, PartialEq)]
 pub enum Error {
     #[error("Buffer too small")]
     BufferTooSmallError,

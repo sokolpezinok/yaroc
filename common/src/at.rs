@@ -221,7 +221,13 @@ mod test_at_utils {
             ))
             .unwrap();
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
-        let response = at_response.response(Some((5u8, 0))).unwrap();
-        assert_eq!(response, "5,connected");
+        let response = at_response.response(Some((5u8, 0)));
+        assert_eq!(response.unwrap(), "5,connected");
+
+        let response = at_response.response(Some((3u8, 0)));
+        assert_eq!(response.err().unwrap(), Error::AtError);
+
+        let response = at_response.response::<u8>(None);
+        assert_eq!(response.unwrap(), "1,disconnected");
     }
 }
