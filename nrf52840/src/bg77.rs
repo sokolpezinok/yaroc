@@ -175,7 +175,7 @@ impl BG77 {
                         .uart1
                         .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
                         .await?
-                        .parse3::<u8, u32, i8>([0, 1, 2])?;
+                        .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
                     if client_id == *cid && res == 0 && reason == 0 {
                         Ok(())
@@ -211,7 +211,7 @@ impl BG77 {
             .uart1
             .call("+CBC", MINIMUM_TIMEOUT)
             .await?
-            .parse3::<i32, i32, u32>([0, 1, 2])?;
+            .parse3::<i32, i32, u32>([0, 1, 2], None)?;
         info!("Batt: {}mV, {}%", volt, bcs);
         Ok(volt)
     }
@@ -233,7 +233,7 @@ impl BG77 {
             .call("+CEREG?", MINIMUM_TIMEOUT)
             .await?
             // TODO: can be +CEREG: 2,2
-            .parse3::<u32, u32, String<8>>([0, 1, 3])
+            .parse3::<u32, u32, String<8>>([0, 1, 3], None)
             .map_err(Error::from)
             .and_then(|(_, _, cell)| {
                 u32::from_str_radix(cell.as_str(), 16).map_err(|_| Error::ParseError)

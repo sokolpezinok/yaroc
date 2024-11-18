@@ -121,7 +121,7 @@ impl AtResponse {
         filter: Option<T>,
     ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
         let response = self.response(filter.map(|t| (t, indices[0])))?;
-        let values = Self::parse_values(response.as_str())?;
+        let values = Self::parse_values(&response)?;
         if !indices.iter().all(|idx| *idx < values.len()) {
             return Err(Error::AtError);
         }
@@ -129,6 +129,12 @@ impl AtResponse {
             .iter()
             .map(|idx| String::from_str(values[*idx]).unwrap()) //TODO
             .collect())
+    }
+
+    pub fn count_response_values(&self) -> Result<usize, Error> {
+        let response = self.response::<u8>(None)?;
+        let values = Self::parse_values(&response)?;
+        Ok(values.len())
     }
 
     fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
@@ -156,8 +162,9 @@ impl AtResponse {
     pub fn parse3<T: FromStr + Eq, U: FromStr, V: FromStr>(
         self,
         indices: [usize; 3],
+        filter: Option<T>,
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values::<T, 3>(indices, None)?;
+        let values = self.pick_values::<T, 3>(indices, filter)?;
         Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
@@ -234,9 +241,12 @@ mod test_at_utils {
             .unwrap();
         //let response = at_response.response::<u8>(None);
         //assert_eq!(response.unwrap(), "1,disconnected");
-        let at_response = AtResponse::new(from_modem_vec, "+CONN?");
+        let at_response = AtResponse::new(from_modem_vec.clone(), "+CONN?");
         let (id, status) = at_response.parse2::<u8, String<20>>([0, 1], None).unwrap();
         assert_eq!(id, 1);
         assert_eq!(status, "disconnected");
+
+        let at_response = AtResponse::new(from_modem_vec, "+CONN?");
+        assert_eq!(at_response.count_response_values().unwrap(), 2);
     }
 }
