@@ -31,6 +31,7 @@ pub struct BG77 {
 fn urc_handler(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" => true,
+        "QIURC" => true,
         // The CEREG URC is shorter, normal one has 5 values
         "CEREG" => rest.split(',').count() == 4,
         _ => false,
@@ -68,25 +69,14 @@ impl BG77 {
         info!("URC {}", line);
         match prefix {
             "QMTSTAT" | "CEREG" => self.mqtt_connect(self.client_id).await?,
-            _ => {
-                todo!()
-            }
+            "QUIRC" => {}
+            _ => {}
         }
         Ok(())
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
         self.uart1.call("E0", MINIMUM_TIMEOUT).await?;
-        self.uart1
-            .call("+QCFG=\"nwscanseq\",03", MINIMUM_TIMEOUT)
-            .await?;
-        self.uart1
-            .call("+QCFG=\"iotopmode\",1,1", MINIMUM_TIMEOUT)
-            .await?;
-        self.uart1
-            .call("+QCFG=\"band\",0,0,80000", MINIMUM_TIMEOUT)
-            .await?;
-        self.uart1.call("+CEREG=2", MINIMUM_TIMEOUT).await?;
         Ok(())
     }
 
@@ -99,10 +89,16 @@ impl BG77 {
         self.uart1
             .call("+CGACT=1,1", self.activation_timeout)
             .await?;
-        //self.uart1
-        //    .call("+CGPADDR=1", MINIMUM_TIMEOUT)
-        //    .await?
-        //    .parse2::<u8, String<50>>([0, 1], None)?;
+        self.uart1
+            .call("+QCFG=\"nwscanseq\",03", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1
+            .call("+QCFG=\"iotopmode\",1,1", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1
+            .call("+QCFG=\"band\",0,0,80000", MINIMUM_TIMEOUT)
+            .await?;
+        self.uart1.call("+CEREG=2", MINIMUM_TIMEOUT).await?;
         Ok(())
     }
 
