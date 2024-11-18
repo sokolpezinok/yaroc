@@ -114,7 +114,7 @@ impl BG77 {
             .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened.as_ref() {
             if *client_id == cid && url == "broker.emqx.io" {
-                info!("TCP connection already opened to {}", &url);
+                info!("TCP connection already opened to {}", url.as_str());
                 return Ok(());
             }
             // TODO: disconnect an old client
@@ -158,17 +158,17 @@ impl BG77 {
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
         const MQTT_DISCONNECTING: u8 = 4;
-        if let Ok((cid, status)) = connection.as_ref() {
+        if let Ok((client_id, status)) = connection.as_ref() {
             match *status {
-                MQTT_CONNECTED => {
+                MQTT_CONNECTED if *client_id == cid => {
                     info!("Already connected to MQTT");
                     Ok(())
                 }
-                MQTT_DISCONNECTING | MQTT_CONNECTING => {
+                MQTT_DISCONNECTING | MQTT_CONNECTING if *client_id == cid => {
                     info!("Connecting or disconnecting from MQTT");
                     Ok(())
                 }
-                MQTT_INITIALIZING => {
+                MQTT_INITIALIZING if *client_id == cid => {
                     info!("Will connect to MQTT");
                     let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
                     let (client_id, res, reason) = self
@@ -177,7 +177,7 @@ impl BG77 {
                         .await?
                         .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
-                    if client_id == *cid && res == 0 && reason == 0 {
+                    if client_id == cid && res == 0 && reason == 0 {
                         Ok(())
                     } else {
                         Err(Error::MqttError(reason))
@@ -284,19 +284,18 @@ impl BG77 {
         }
     }
 
-    pub async fn setup(&mut self) {
+    pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.turn_on().await;
         unwrap!(self.config().await);
-        let _ = self.mqtt_connect(self.client_id).await;
         let now_ms = Instant::now().as_millis();
         let boot_time = self.get_time().await.map(|time| {
             time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64))
                 .unwrap()
-        });
-        info!(
-            "Boot at {}",
-            format!(30; "{}", &boot_time.unwrap()).unwrap()
-        );
+        })?;
+        info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
+
+        let _ = self.mqtt_connect(self.client_id).await;
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -322,7 +321,9 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     {
         let mut bg77_unlocked = bg77_mutex.lock().await;
         if let Some(bg77) = bg77_unlocked.as_mut() {
-            bg77.setup().await;
+            if let Err(err) = bg77.setup().await {
+                error!("Setup failed: {}", err);
+            }
         }
     }
 

@@ -28,6 +28,3 @@ embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime
 chrono = { workspace = true }
 heapless =  { workspace = true }
 thiserror = { workspace = true }
-
-[profile.release]
-debug = 2
