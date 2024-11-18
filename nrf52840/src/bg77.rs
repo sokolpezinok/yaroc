@@ -103,6 +103,19 @@ impl BG77 {
     }
 
     async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
+        let cmd = format!(50;
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
+            self.pkt_timeout.as_secs()
+        )
+        .unwrap();
+        self.uart1.call(&cmd, MINIMUM_TIMEOUT).await?;
+        let cmd = format!(50;
+            "+QMTCFG=\"keepalive\",{cid},{}",
+            (self.pkt_timeout * 3).as_secs()
+        )
+        .unwrap();
+        self.uart1.call(&cmd, MINIMUM_TIMEOUT).await?;
+
         let opened = self
             .uart1
             .call("+QMTOPEN?", MINIMUM_TIMEOUT)
@@ -117,12 +130,12 @@ impl BG77 {
         }
 
         let cmd = format!(100; "+QMTOPEN={cid},\"broker.emqx.io\",1883").unwrap();
-        let (client_id, status) = self
+        let (_, status) = self
             .uart1
             .call_with_response(&cmd, MINIMUM_TIMEOUT, self.activation_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
-        if status != 0 || client_id != cid {
+        if status != 0 {
             return Err(Error::MqttError(status));
         }
         Ok(())
@@ -132,69 +145,52 @@ impl BG77 {
         self.network_registration().await?;
         self.mqtt_open(cid).await?;
 
-        let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.pkt_timeout.as_secs()
-        )
-        .unwrap();
-        self.uart1.call(&cmd, MINIMUM_TIMEOUT).await?;
-        let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.pkt_timeout * 3).as_secs()
-        )
-        .unwrap();
-        self.uart1.call(&cmd, MINIMUM_TIMEOUT).await?;
-
-        let connection = self
+        let (_, status) = self
             .uart1
             .call("+QMTCONN?", MINIMUM_TIMEOUT)
             .await?
-            .parse2::<u8, u8>([0, 1], Some(cid));
+            .parse2::<u8, u8>([0, 1], Some(cid))?;
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
         const MQTT_DISCONNECTING: u8 = 4;
-        if let Ok((client_id, status)) = connection.as_ref() {
-            match *status {
-                MQTT_CONNECTED if *client_id == cid => {
-                    info!("Already connected to MQTT");
-                    Ok(())
-                }
-                MQTT_DISCONNECTING | MQTT_CONNECTING if *client_id == cid => {
-                    info!("Connecting or disconnecting from MQTT");
-                    Ok(())
-                }
-                MQTT_INITIALIZING if *client_id == cid => {
-                    info!("Will connect to MQTT");
-                    let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
-                    let (client_id, res, reason) = self
-                        .uart1
-                        .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
-                        .await?
-                        .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
-
-                    if client_id == cid && res == 0 && reason == 0 {
-                        Ok(())
-                    } else {
-                        Err(Error::MqttError(reason))
-                    }
-                }
-                _ => Err(Error::AtError),
+        match status {
+            MQTT_CONNECTED => {
+                info!("Already connected to MQTT");
+                Ok(())
             }
-        } else {
-            Err(Error::AtError)
+            MQTT_DISCONNECTING | MQTT_CONNECTING => {
+                info!("Connecting or disconnecting from MQTT");
+                Ok(())
+            }
+            MQTT_INITIALIZING => {
+                info!("Will connect to MQTT");
+                let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
+                let (_, res, reason) = self
+                    .uart1
+                    .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
+                    .await?
+                    .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
+
+                if res == 0 && reason == 0 {
+                    Ok(())
+                } else {
+                    Err(Error::MqttError(reason))
+                }
+            }
+            _ => Err(Error::AtError),
         }
     }
 
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}").unwrap();
-        let (client_id, result) = self
+        let (_, result) = self
             .uart1
             .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
-        if !(client_id == cid && result == MQTT_DISCONNECTED) {
+        if result != MQTT_DISCONNECTED {
             return Err(Error::MqttError(result));
         }
         let cmd = format!(50; "+QMTCLOSE={cid}").unwrap();
@@ -296,7 +292,7 @@ impl BG77 {
 
     #[allow(dead_code)]
     async fn turn_on(&mut self) -> crate::Result<()> {
-        if let Err(_) = self.uart1.call("", MINIMUM_TIMEOUT).await {
+        if self.uart1.call("", MINIMUM_TIMEOUT).await.is_err() {
             self._modem_pin.set_low();
             Timer::after_millis(1000).await;
             self._modem_pin.set_high();

@@ -236,17 +236,17 @@ mod test_at_utils {
         let mut from_modem_vec = Vec::new();
         from_modem_vec
             .push(FromModem::Line(
-                String::from_str("+CONN: 1,\"disconnected\"").unwrap(),
+                String::from_str("+CONN: 1,783,\"disconnected\"").unwrap(),
             ))
             .unwrap();
         //let response = at_response.response::<u8>(None);
         //assert_eq!(response.unwrap(), "1,disconnected");
         let at_response = AtResponse::new(from_modem_vec.clone(), "+CONN?");
-        let (id, status) = at_response.parse2::<u8, String<20>>([0, 1], None).unwrap();
+        let (id, status) = at_response.parse2::<u8, String<20>>([0, 2], None).unwrap();
         assert_eq!(id, 1);
         assert_eq!(status, "disconnected");
 
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
-        assert_eq!(at_response.count_response_values().unwrap(), 2);
+        assert_eq!(at_response.count_response_values().unwrap(), 3);
     }
 }
