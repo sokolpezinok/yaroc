@@ -21,6 +21,8 @@ jobs:
     - name: Build
       run: |
         rustup update --no-self-update stable
+        rustup target add thumbv7em-none-eabihf
+        cargo build -p yaroc-nrf52840 --target thumbv7em-none-eabihf
         cargo build --verbose
     - name: Cargo format
       run: cargo fmt --check
