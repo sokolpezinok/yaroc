@@ -56,9 +56,7 @@ impl AtBroker {
                 }
                 self.main_channel.send(to_send).await;
             } else {
-                self.urc_channel
-                    .send(Ok(String::from_str(line).unwrap()))
-                    .await;
+                self.urc_channel.send(Ok(String::from_str(line).unwrap())).await;
             }
         }
         if open_stream {
@@ -76,10 +74,7 @@ async fn reader(
     let mut buf = [0; AT_BUF_SIZE];
     let at_broker = AtBroker::new(&MAIN_CHANNEL, &URC_CHANNEL);
     loop {
-        let len = rx
-            .read_until_idle(&mut buf)
-            .await
-            .map_err(|_| Error::UartReadError);
+        let len = rx.read_until_idle(&mut buf).await.map_err(|_| Error::UartReadError);
         match len {
             Err(err) => MAIN_CHANNEL.send(Err(err)).await,
             Ok(len) => {
@@ -118,8 +113,7 @@ impl AtUart {
             let from_modem = with_deadline(deadline, MAIN_CHANNEL.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
-            res.push(from_modem.clone())
-                .map_err(|_| Error::BufferTooSmallError)?;
+            res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
             match from_modem {
                 FromModem::Ok | FromModem::Error => break,
                 _ => {}
@@ -132,10 +126,7 @@ impl AtUart {
     async fn write(&mut self, command: &str) -> Result<(), Error> {
         let command = format!(AT_COMMAND_SIZE; "AT{command}\r").unwrap();
 
-        self.tx
-            .write(command.as_bytes())
-            .await
-            .map_err(|_| Error::UartWriteError)
+        self.tx.write(command.as_bytes()).await.map_err(|_| Error::UartWriteError)
     }
 
     async fn call_impl(
