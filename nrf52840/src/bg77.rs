@@ -26,6 +26,7 @@ pub struct BG77 {
     pkt_timeout: Duration,
     activation_timeout: Duration,
     client_id: u8,
+    boot_time: Option<NaiveDateTime>,
 }
 
 fn urc_handler(prefix: &str, rest: &str) -> bool {
@@ -61,6 +62,7 @@ impl BG77 {
             activation_timeout,
             pkt_timeout,
             client_id: 0,
+            boot_time: None,
         }
     }
 
@@ -271,7 +273,15 @@ impl BG77 {
 
         if let Ok(signal_info) = signal_info {
             let bat_mv = self.battery_mv().await.unwrap_or_default();
-            let text = format!(50; "{}mV;{}dB;{:X}", bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+
+            let time_str = match self.boot_time {
+                None => String::new(),
+                Some(boot_time) => {
+                    let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
+                    format!(30; "{}", boot_time.checked_add_signed(delta).unwrap()).unwrap()
+                }
+            };
+            let text = format!(50; "{};{}mV;{}dB;{:X}", &time_str, bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
             let _ = self.send_text(&text).await;
         }
     }
@@ -285,6 +295,7 @@ impl BG77 {
                 .unwrap()
         })?;
         info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
+        self.boot_time = Some(boot_time);
 
         let _ = self.mqtt_connect(self.client_id).await;
         Ok(())
