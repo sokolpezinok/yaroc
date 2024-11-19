@@ -40,10 +40,7 @@ impl MessageHandler {
     }
 
     fn resolve(&self, mac_addr: &str) -> &str {
-        self.dns
-            .get(mac_addr)
-            .map(|x| x.as_str())
-            .unwrap_or("Unknown")
+        self.dns.get(mac_addr).map(|x| x.as_str()).unwrap_or("Unknown")
     }
 
     #[pyo3(name = "meshtastic_serial_msg")]
@@ -66,11 +63,7 @@ impl MessageHandler {
             .meshtastic_statuses
             .values()
             .map(|status| status.serialize())
-            .chain(
-                self.cellular_statuses
-                    .values()
-                    .map(|status| status.serialize()),
-            )
+            .chain(self.cellular_statuses.values().map(|status| status.serialize()))
             .collect();
         res.sort_by(|a, b| a.name.cmp(&b.name));
         res

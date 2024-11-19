@@ -98,10 +98,7 @@ impl SiPunch {
             + u32::from(u16::from_be_bytes(data[1..3].try_into().unwrap()));
         let nanos = u32::from(data[3]) * BILLION_BY_256;
         let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
-        NaiveDateTime::new(date, time)
-            .and_local_timezone(Local)
-            .unwrap()
-            .fixed_offset()
+        NaiveDateTime::new(date, time).and_local_timezone(Local).unwrap().fixed_offset()
     }
 
     /// Reimplementation of Sportident checksum algorithm in Rust
@@ -285,10 +282,8 @@ mod test_punch {
     fn test_punches_from_payload() {
         let date = SiPunch::last_dow(4);
         let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
-        let datetime = NaiveDateTime::new(date, time)
-            .and_local_timezone(Local)
-            .unwrap()
-            .fixed_offset();
+        let datetime =
+            NaiveDateTime::new(date, time).and_local_timezone(Local).unwrap().fixed_offset();
 
         let punch = SiPunch::new(1715004, 47, datetime, 2);
         let payload =

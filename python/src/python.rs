@@ -30,11 +30,8 @@ impl RaspberryModel {
     pub fn from_string(model: &str) -> RaspberryModel {
         let re = regex::Regex::new("Raspberry Pi ([1-5]) Model ([AB])").unwrap();
         if let Some(captures) = re.captures(model) {
-            let captures_vec: Vec<_> = captures
-                .iter()
-                .skip(1)
-                .filter_map(|m| m.map(|matc| matc.as_str()))
-                .collect();
+            let captures_vec: Vec<_> =
+                captures.iter().skip(1).filter_map(|m| m.map(|matc| matc.as_str())).collect();
             match captures_vec.as_slice() {
                 ["1", "A"] => RaspberryModel::V1A,
                 ["1", "B"] => RaspberryModel::V1B,

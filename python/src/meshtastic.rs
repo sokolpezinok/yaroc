@@ -63,9 +63,8 @@ impl MshLogMessage {
                     elevation: position.altitude,
                     timestamp: Self::timestamp(position.time),
                 };
-                let distance = recv_position
-                    .as_ref()
-                    .map(|other| position.distance_m(&other.position));
+                let distance =
+                    recv_position.as_ref().map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
                     if let Some(rssi_snr) = rssi_snr.as_mut() {
                         rssi_snr.add_distance(
@@ -104,10 +103,7 @@ impl MshLogMessage {
                 ..
             }) => {
                 let mac_address = format!("{:8x}", from);
-                let name = dns
-                    .get(&mac_address)
-                    .map(|x| x.as_str())
-                    .unwrap_or("Unknown");
+                let name = dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
                 Self::parse_inner(
                     data,
                     HostInfo {

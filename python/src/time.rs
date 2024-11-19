@@ -27,9 +27,8 @@ mod test_time {
     #[test]
     fn test_timestamp() {
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let timestamp = datetime_from_timestamp(1706523131_081, &tz)
-            .format("%H:%M:%S.%3f")
-            .to_string();
+        let timestamp =
+            datetime_from_timestamp(1706523131_081, &tz).format("%H:%M:%S.%3f").to_string();
         assert_eq!("11:12:11.081", timestamp);
     }
 
@@ -54,9 +53,7 @@ mod test_time {
         let now_formatted = now.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
         assert_eq!(
             now_formatted,
-            now_through_proto
-                .format("%Y-%m-%d %H:%M:%S%.3f")
-                .to_string(),
+            now_through_proto.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
         );
     }
 }

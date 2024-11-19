@@ -11,11 +11,7 @@ fn main() -> std::io::Result<()> {
     let protos: Vec<_> = WalkDir::new(protobufs_dir)
         .into_iter()
         .map(|e| e.unwrap())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map_or(false, |ext| ext.to_str().unwrap() == "proto")
-        })
+        .filter(|e| e.path().extension().map_or(false, |ext| ext.to_str().unwrap() == "proto"))
         .map(|entry| entry.path().to_owned())
         .collect();
 
