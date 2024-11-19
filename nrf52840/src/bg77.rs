@@ -78,12 +78,20 @@ impl BG77 {
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
-        self.uart1.call("E0", MINIMUM_TIMEOUT).await?;
+        self.simple_call("E0").await?;
         Ok(())
     }
 
     async fn simple_call(&mut self, cmd: &str) -> crate::Result<AtResponse> {
         self.uart1.call(cmd, MINIMUM_TIMEOUT).await
+    }
+
+    async fn call_with_response(
+        &mut self,
+        cmd: &str,
+        response_timeout: Duration,
+    ) -> crate::Result<AtResponse> {
+        self.uart1.call_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
@@ -122,8 +130,7 @@ impl BG77 {
 
         let cmd = format!(100; "+QMTOPEN={cid},\"broker.emqx.io\",1883").unwrap();
         let (_, status) = self
-            .uart1
-            .call_with_response(&cmd, MINIMUM_TIMEOUT, self.activation_timeout)
+            .call_with_response(&cmd, self.activation_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
@@ -155,8 +162,7 @@ impl BG77 {
                 info!("Will connect to MQTT");
                 let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
                 let (_, res, reason) = self
-                    .uart1
-                    .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
+                    .call_with_response(&cmd, self.pkt_timeout)
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -173,8 +179,7 @@ impl BG77 {
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}").unwrap();
         let (_, result) = self
-            .uart1
-            .call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout)
+            .call_with_response(&cmd, self.pkt_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
@@ -187,11 +192,8 @@ impl BG77 {
     }
 
     async fn battery_mv(&mut self) -> Result<u32, Error> {
-        let (_, bcs, volt) = self
-            .uart1
-            .call("+CBC", MINIMUM_TIMEOUT)
-            .await?
-            .parse3::<i32, i32, u32>([0, 1, 2], None)?;
+        let (_, bcs, volt) =
+            self.simple_call("+CBC").await?.parse3::<i32, i32, u32>([0, 1, 2], None)?;
         info!("Batt: {}mV, {}%", volt, bcs);
         Ok(volt)
     }
@@ -228,10 +230,9 @@ impl BG77 {
             "+QMTPUBEX={},0,0,0,\"topic/pub\",\"{text}\"", self.client_id
         )
         .unwrap();
-        let response =
-            self.uart1.call_with_response(&cmd, MINIMUM_TIMEOUT, self.pkt_timeout * 2).await;
+        let response = self.call_with_response(&cmd, self.pkt_timeout * 2).await;
         if response.is_err() {
-            let _ = self.uart1.call("+QMTCONN?", MINIMUM_TIMEOUT).await;
+            let _ = self.simple_call("+QMTCONN?").await;
             response?;
         }
         Ok(())
