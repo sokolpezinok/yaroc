@@ -297,10 +297,9 @@ impl BG77 {
 pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     {
         let mut bg77_unlocked = bg77_mutex.lock().await;
-        if let Some(bg77) = bg77_unlocked.as_mut() {
-            if let Err(err) = bg77.setup().await {
-                error!("Setup failed: {}", err);
-            }
+        let bg77 = bg77_unlocked.as_mut().unwrap();
+        if let Err(err) = bg77.setup().await {
+            error!("Setup failed: {}", err);
         }
     }
 
@@ -308,9 +307,8 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     loop {
         ticker.next().await;
         let mut bg77_unlocked = bg77_mutex.lock().await;
-        if let Some(bg77) = bg77_unlocked.as_mut() {
-            bg77.send_signal_info().await;
-        }
+        let bg77 = bg77_unlocked.as_mut().unwrap();
+        bg77.send_signal_info().await;
     }
     //unwrap!(self.mqtt_disconnect().await);
 }
@@ -320,17 +318,16 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
     loop {
         let urc = URC_CHANNEL.receive().await;
         match urc {
-            Err(err) => {
-                error!("Error received over URC channel: {}", err);
-            }
             Ok(line) => {
                 let mut bg77_unlocked = bg77_mutex.lock().await;
-                if let Some(bg77) = bg77_unlocked.as_mut() {
-                    let res = bg77.urc_handler(&line).await;
-                    if let Err(err) = res {
-                        error!("Error while processing URC: {}", err);
-                    }
+                let bg77 = bg77_unlocked.as_mut().unwrap();
+                let res = bg77.urc_handler(&line).await;
+                if let Err(err) = res {
+                    error!("Error while processing URC: {}", err);
                 }
+            }
+            Err(err) => {
+                error!("Error received over URC channel: {}", err);
             }
         }
     }
