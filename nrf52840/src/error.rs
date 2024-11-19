@@ -20,6 +20,8 @@ pub enum Error {
     AtErrorResponse,
     #[error("Inconsistent AT response")]
     AtError,
+    #[error("Network registrarion error")]
+    NetworkRegistrationError,
     #[error("MQTT error {0}")]
     MqttError(i8),
 }

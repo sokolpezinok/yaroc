@@ -199,23 +199,24 @@ impl BG77 {
     }
 
     async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
-        let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) = self
-            .simple_call("+QCSQ")
-            .await?
-            // TODO: Handle +QCSQ: "NOSERVICE"
-            .parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?;
+        let response = self.simple_call("+QCSQ").await?;
+        if response.count_response_values() != Ok(5) {
+            return Err(Error::NetworkRegistrationError);
+        }
+        let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
+            response.parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?;
         let snr_db = f64::from(snr_mult) / 5. - 20.;
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }
 
-        // TODO: can be +CEREG: 2,2
         let cellid = self
             .simple_call("+CEREG?")
             .await?
-            .parse3::<u32, u32, String<8>>([0, 1, 3], None)
+            // TODO: support roaming, that's answer 5
+            .parse2::<u32, String<8>>([1, 3], Some(1))
             .map_err(Error::from)
-            .and_then(|(_, _, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
+            .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
             .ok();
         let signal_info = SignalInfo {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
