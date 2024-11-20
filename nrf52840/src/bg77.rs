@@ -104,13 +104,23 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
+        self.uart1.call("+CGATT=0", self.activation_timeout).await?;
         self.uart1.call("+CGATT=1", self.activation_timeout).await?;
         // TODO: why does this fail?
         let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
-        self.simple_call("+CGACT=1,1").await?;
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
         self.simple_call("+CEREG=2").await?;
+        self.simple_call("+CGACT=1,1").await?;
+
+        // TODO: find out why we sometimes don't get accurate time reading
+        let now_ms = Instant::now().as_millis();
+        let boot_time = self
+            .get_time()
+            .await
+            .map(|time| time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64)).unwrap())?;
+        info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
+        self.boot_time = Some(boot_time);
         Ok(())
     }
 
@@ -277,13 +287,6 @@ impl BG77 {
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.turn_on().await;
         unwrap!(self.config().await);
-        let now_ms = Instant::now().as_millis();
-        let boot_time = self
-            .get_time()
-            .await
-            .map(|time| time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64)).unwrap())?;
-        info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
-        self.boot_time = Some(boot_time);
 
         let _ = self.mqtt_connect(self.client_id).await;
         Ok(())
