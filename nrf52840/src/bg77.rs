@@ -4,6 +4,7 @@ use crate::{
 };
 use chrono::{NaiveDateTime, TimeDelta};
 use common::at::{split_at_response, AtResponse};
+use core::str::FromStr;
 use defmt::{error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -20,6 +21,10 @@ pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
+pub struct Config {
+    url: String<40>,
+}
+
 pub struct BG77 {
     uart1: AtUart,
     _modem_pin: Output<'static, P0_17>,
@@ -27,6 +32,7 @@ pub struct BG77 {
     activation_timeout: Duration,
     client_id: u8,
     boot_time: Option<NaiveDateTime>,
+    config: Config,
 }
 
 fn urc_handler(prefix: &str, rest: &str) -> bool {
@@ -63,6 +69,9 @@ impl BG77 {
             pkt_timeout,
             client_id: 0,
             boot_time: None,
+            config: Config {
+                url: String::from_str("broker.emqx.io").unwrap(),
+            },
         }
     }
 
@@ -96,7 +105,8 @@ impl BG77 {
 
     async fn network_registration(&mut self) -> crate::Result<()> {
         self.uart1.call("+CGATT=1", self.activation_timeout).await?;
-        self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await?;
+        // TODO: why does this fail?
+        let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
         self.simple_call("+CGACT=1,1").await?;
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
@@ -121,14 +131,14 @@ impl BG77 {
         let opened =
             self.simple_call("+QMTOPEN?").await?.parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened.as_ref() {
-            if *client_id == cid && url == "broker.emqx.io" {
+            if *client_id == cid && *url == self.config.url {
                 info!("TCP connection already opened to {}", url.as_str());
                 return Ok(());
             }
             // TODO: disconnect an old client
         }
 
-        let cmd = format!(100; "+QMTOPEN={cid},\"broker.emqx.io\",1883").unwrap();
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url).unwrap();
         let (_, status) = self
             .call_with_response(&cmd, self.activation_timeout)
             .await?
