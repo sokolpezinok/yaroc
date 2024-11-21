@@ -1,6 +1,8 @@
 use chrono::{prelude::*, Days};
 use heapless::Vec;
 
+use crate::error::Error;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
     pub card: u32,
@@ -44,18 +46,18 @@ impl SiPunch {
         }
     }
 
-    //pub fn punches_from_payload(payload: &[u8]) -> Vec<Result<Self, Error>> {
-    //    payload
-    //        .chunks(20)
-    //        .map(|chunk| {
-    //            let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
-    //                //    format!("Wrong length of chunk={}", chunk.len()),
-    //                Error::ParseError
-    //            })?;
-    //            Ok(Self::from_raw(partial_payload))
-    //        })
-    //        .collect()
-    //}
+    pub fn punches_from_payload(payload: &[u8], today: NaiveDate) -> Vec<Result<Self, Error>, 10> {
+        payload
+            .chunks(20)
+            .map(|chunk| {
+                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
+                    //    format!("Wrong length of chunk={}", chunk.len()),
+                    Error::BufferTooSmallError
+                })?;
+                Ok(Self::from_raw(partial_payload, today))
+            })
+            .collect()
+    }
 
     fn last_dow(dow: u32, today: NaiveDate) -> NaiveDate {
         assert!(dow <= 7);
@@ -171,7 +173,7 @@ mod test_checksum {
 mod test_punch {
     use chrono::prelude::*;
 
-    use crate::punch::SiPunch;
+    use crate::{error::Error, punch::SiPunch};
 
     #[test]
     fn test_card_series() {
@@ -214,23 +216,25 @@ mod test_punch {
         );
     }
 
-    //#[test]
-    //fn test_punches_from_payload() {
-    //    let date = SiPunch::last_dow(4);
-    //    let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
-    //    let datetime =
-    //        NaiveDateTime::new(date, time).and_local_timezone(Local).unwrap().fixed_offset();
-    //
-    //    let punch = SiPunch::new(1715004, 47, datetime, 2);
-    //    let payload =
-    //        b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
-    //
-    //    let punches = SiPunch::punches_from_payload(payload);
-    //    assert_eq!(punches.len(), 2);
-    //    assert_eq!(*punches[0].as_ref().unwrap(), punch);
-    //    assert_eq!(
-    //        format!("{}", *punches[1].as_ref().unwrap_err()),
-    //        "Wrong length of chunk=2"
-    //    );
-    //}
+    #[test]
+    fn test_punches_from_payload() {
+        let date = SiPunch::last_dow(
+            4,
+            NaiveDate::from_ymd_opt(2023, 11, 23).expect("Wrong date"),
+        );
+        let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
+        let datetime = NaiveDateTime::new(date, time);
+
+        let punch = SiPunch::new(1715004, 47, datetime, 2);
+        let payload =
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
+
+        let punches = SiPunch::punches_from_payload(payload, date);
+        assert_eq!(punches.len(), 2);
+        assert_eq!(*punches[0].as_ref().unwrap(), punch);
+        assert_eq!(
+            *punches[1].as_ref().unwrap_err(),
+            Error::BufferTooSmallError
+        );
+    }
 }
