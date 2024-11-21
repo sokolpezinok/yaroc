@@ -8,7 +8,7 @@ pub struct SiPunch {
     pub card: u32,
     pub code: u16,
     pub time: NaiveDateTime,
-    mode: u8,
+    pub mode: u8,
     raw: [u8; 20],
 }
 
@@ -22,7 +22,7 @@ impl SiPunch {
             code,
             time,
             mode,
-            raw: Self::punch_to_bytes(code, time, card, mode),
+            raw: Self::punch_to_bytes(card, code, time, mode),
         }
     }
 
@@ -136,7 +136,7 @@ impl SiPunch {
         res
     }
 
-    pub fn punch_to_bytes(code: u16, time: NaiveDateTime, card: u32, mode: u8) -> [u8; 20] {
+    pub fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> [u8; 20] {
         let mut res = [0; 20];
         res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
         res[4..6].copy_from_slice(&code.to_be_bytes());
@@ -209,7 +209,7 @@ mod test_punch {
     fn test_punch() {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
-        let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
+        let punch = SiPunch::punch_to_bytes(1715004, 47, time, 2);
         assert_eq!(
             &punch,
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
