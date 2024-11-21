@@ -39,8 +39,11 @@ fn urc_handler(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" => true,
         "QIURC" => true,
-        // The CEREG URC is shorter, normal one has 5 values
-        "CEREG" => rest.split(',').count() == 4,
+        "CEREG" => {
+            // The CEREG URC is shorter, normal one has 5 values
+            let value_count = rest.split(',').count();
+            value_count == 1 || value_count == 4
+        }
         _ => false,
     }
 }
