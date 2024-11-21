@@ -251,17 +251,14 @@ impl MessageHandler {
 mod test_punch {
     use std::collections::HashMap;
 
-    use chrono::{DateTime, Local};
+    use chrono::{Local, NaiveDateTime};
     use meshtastic::protobufs::mesh_packet::PayloadVariant;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope, Telemetry};
     use meshtastic::Message as MeshtasticMessage;
     use prost::Message;
 
-    use crate::{
-        protobufs::{Punch, Punches},
-        punch::SiPunch,
-    };
+    use crate::protobufs::{Punch, Punches};
 
     use super::MessageHandler;
 
@@ -282,8 +279,9 @@ mod test_punch {
 
     #[test]
     fn test_punch() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+00:00").unwrap();
-        let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
+        let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
+            .unwrap();
+        let punch = common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
         let punches = Punches {
             punches: vec![Punch {
                 raw: punch.to_vec(),
@@ -301,8 +299,9 @@ mod test_punch {
 
     #[test]
     fn test_meshtastic_serial() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+00:00").unwrap();
-        let punch = SiPunch::punch_to_bytes(47, time, 1715004, 2);
+        let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
+            .unwrap();
+        let punch = common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
 
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let envelope = ServiceEnvelope {

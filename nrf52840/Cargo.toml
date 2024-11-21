@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.81"
 
 [dependencies]
-common = { path = "../common" }
+common = { path = "../common", features = ["defmt"] }
 
 defmt = { workspace = true }
 defmt-rtt = "0.4"

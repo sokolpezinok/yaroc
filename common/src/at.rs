@@ -1,5 +1,6 @@
 use core::option::{Option, Option::None, Option::Some};
 use core::str::FromStr;
+#[cfg(feature = "defmt")]
 use defmt;
 use heapless::{String, Vec};
 
@@ -23,6 +24,7 @@ pub enum FromModem {
     Error,
 }
 
+#[cfg(feature = "defmt")]
 impl defmt::Format for FromModem {
     fn format(&self, fmt: defmt::Formatter) {
         match self {
@@ -44,6 +46,7 @@ pub struct AtResponse {
     command: String<AT_COMMAND_SIZE>,
 }
 
+#[cfg(feature = "defmt")]
 impl defmt::Format for AtResponse {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "{=[?]}", self.lines.as_slice());

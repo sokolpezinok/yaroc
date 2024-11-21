@@ -3,8 +3,12 @@ name = "common"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+defmt = ["dep:defmt"]
+
 [dependencies]
 chrono = { workspace = true }
-defmt = { workspace = true }
+defmt = { workspace = true, optional = true }
 heapless =  { workspace = true }
 thiserror = { workspace = true }
