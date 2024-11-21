@@ -63,7 +63,7 @@ impl BG77 {
         spawner: &Spawner,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, urc_handler, spawner);
-        let activation_timeout = Duration::from_secs(140);
+        let activation_timeout = Duration::from_secs(150);
         let pkt_timeout = Duration::from_secs(30);
         Self {
             uart1,
@@ -107,14 +107,15 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        self.uart1.call("+CGATT=0", self.activation_timeout).await?;
         self.uart1.call("+CGATT=1", self.activation_timeout).await?;
-        // TODO: why does this fail?
-        let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
+        let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        if state == 0 {
+            self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await?;
+            self.uart1.call("+CGACT=1,1", self.activation_timeout).await?;
+        }
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
         self.simple_call("+CEREG=2").await?;
-        self.simple_call("+CGACT=1,1").await?;
 
         // TODO: find out why we sometimes don't get accurate time reading
         let now_ms = Instant::now().as_millis();
