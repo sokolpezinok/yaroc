@@ -164,6 +164,7 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "defmt",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "thiserror 2.0.3",
