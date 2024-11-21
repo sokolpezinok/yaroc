@@ -26,8 +26,8 @@ impl SiPunch {
         }
     }
 
-    pub fn from_raw(payload: [u8; 20], today: NaiveDate) -> Self {
-        let data = &payload[4..19];
+    pub fn from_raw(bytes: [u8; 20], today: NaiveDate) -> Self {
+        let data = &bytes[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
         let series = card / (1 << 16);
@@ -42,7 +42,7 @@ impl SiPunch {
             code,
             time: datetime,
             mode: data[4] & 0b1111,
-            raw: payload,
+            raw: bytes,
         }
     }
 
