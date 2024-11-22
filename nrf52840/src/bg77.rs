@@ -23,16 +23,17 @@ static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub struct Config {
     url: String<40>,
+    pkt_timeout: Duration,
+    activation_timeout: Duration,
 }
 
 pub struct BG77 {
     uart1: AtUart,
     _modem_pin: Output<'static, P0_17>,
-    pkt_timeout: Duration,
-    activation_timeout: Duration,
     client_id: u8,
     boot_time: Option<NaiveDateTime>,
     config: Config,
+    last_successful_send: Instant,
 }
 
 fn urc_handler(prefix: &str, rest: &str) -> bool {
@@ -68,12 +69,13 @@ impl BG77 {
         Self {
             uart1,
             _modem_pin: modem_pin,
-            activation_timeout,
-            pkt_timeout,
             client_id: 0,
             boot_time: None,
+            last_successful_send: Instant::now(),
             config: Config {
                 url: String::from_str("broker.emqx.io").unwrap(),
+                pkt_timeout,
+                activation_timeout,
             },
         }
     }
@@ -107,11 +109,16 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        self.uart1.call("+CGATT=1", self.activation_timeout).await?;
+        self.uart1.call("+CGATT=1", self.config.activation_timeout).await?;
+        if self.last_successful_send > Instant::now() + Duration::from_secs(120) {
+            let _ = self.uart1.call("+CGACT=1,0", self.config.activation_timeout).await;
+            Timer::after_secs(10).await; // TODO
+        }
+
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
             self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await?;
-            self.uart1.call("+CGACT=1,1", self.activation_timeout).await?;
+            self.uart1.call("+CGACT=1,1", self.config.activation_timeout).await?;
         }
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
@@ -131,13 +138,13 @@ impl BG77 {
     async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
         let cmd = format!(50;
             "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.pkt_timeout.as_secs()
+            self.config.pkt_timeout.as_secs()
         )
         .unwrap();
         self.simple_call(&cmd).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.pkt_timeout * 3).as_secs()
+            (self.config.pkt_timeout * 3).as_secs()
         )
         .unwrap();
         self.simple_call(&cmd).await?;
@@ -154,7 +161,7 @@ impl BG77 {
 
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url).unwrap();
         let (_, status) = self
-            .call_with_response(&cmd, self.activation_timeout)
+            .call_with_response(&cmd, self.config.activation_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
@@ -184,9 +191,9 @@ impl BG77 {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"yaroc-nrf52\"").unwrap();
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"").unwrap();
                 let (_, res, reason) = self
-                    .call_with_response(&cmd, self.pkt_timeout)
+                    .call_with_response(&cmd, self.config.pkt_timeout)
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -203,7 +210,7 @@ impl BG77 {
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}").unwrap();
         let (_, result) = self
-            .call_with_response(&cmd, self.pkt_timeout)
+            .call_with_response(&cmd, self.config.pkt_timeout)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
@@ -252,14 +259,15 @@ impl BG77 {
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUBEX={},0,0,0,\"topic/pub\",\"{text}\"", self.client_id
+            "+QMTPUBEX={},0,0,0,\"yar\",\"{text}\"", self.client_id
         )
         .unwrap();
-        let response = self.call_with_response(&cmd, self.pkt_timeout * 2).await;
+        let response = self.call_with_response(&cmd, self.config.pkt_timeout * 2).await;
         if response.is_err() {
-            let _ = self.simple_call("+QMTCONN?").await;
+            self.mqtt_connect(self.client_id).await?;
             response?;
         }
+        self.last_successful_send = Instant::now();
         Ok(())
     }
 
