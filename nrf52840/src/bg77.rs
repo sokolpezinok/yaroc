@@ -109,11 +109,12 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        self.uart1.call("+CGATT=1", self.config.activation_timeout).await?;
-        if self.last_successful_send + Duration::from_secs(120) < Instant::now() {
-            let _ = self.uart1.call("+CGACT=1,0", self.config.activation_timeout).await;
+        if self.last_successful_send + Duration::from_secs(40) < Instant::now() {
+            let _ = self.uart1.call("+CGATT=0", self.config.activation_timeout).await;
+            let _ = self.uart1.call("+CGACT=0,1", self.config.activation_timeout).await;
             Timer::after_secs(10).await; // TODO
         }
+        self.uart1.call("+CGATT=1", self.config.activation_timeout).await?;
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
