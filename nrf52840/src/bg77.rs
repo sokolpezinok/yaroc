@@ -5,7 +5,7 @@ use crate::{
 use chrono::{NaiveDateTime, TimeDelta};
 use common::at::{split_at_response, AtResponse};
 use core::str::FromStr;
-use defmt::{error, info, unwrap};
+use defmt::{debug, error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -93,18 +93,22 @@ impl BG77 {
         }
     }
 
-    pub async fn urc_handler(&mut self, line: &str) -> crate::Result<()> {
+    pub async fn urc_handler(line: &str, bg77_mutex: &'static BG77Type) -> crate::Result<()> {
         let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
-        info!("URC {}", line);
         match prefix {
-            "QMTSTAT" | "CEREG" => self.mqtt_connect(self.client_id).await?,
+            "QMTSTAT" | "CEREG" => {
+                let mut bg77_unlocked = bg77_mutex.lock().await;
+                let bg77 = bg77_unlocked.as_mut().unwrap();
+                bg77.mqtt_connect().await?;
+            }
             "QMTPUB" => {
                 let res: Result<Vec<u8, 4>, _> = rest
                     .split(',')
                     .map(|val| str::parse(val).map_err(|_| Error::ParseError))
                     .collect();
                 if let Ok(values) = res {
-                    if values[1] > 0 && values[0] == self.client_id {
+                    if values[1] > 0 && values[0] == 0 {
+                        // TODO: client ID
                         info!("Response to message ID {}", values[1]);
                         let msg_id = values[1];
                         let _idx = usize::from(msg_id) - 1;
@@ -197,7 +201,8 @@ impl BG77 {
         Ok(())
     }
 
-    pub async fn mqtt_connect(&mut self, cid: u8) -> crate::Result<()> {
+    pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+        let cid = self.client_id;
         self.network_registration().await?;
         self.mqtt_open(cid).await?;
 
@@ -294,7 +299,7 @@ impl BG77 {
             .await
             .map_err(|_| Error::TimeoutError)?;
         if result != 0 {
-            self.mqtt_connect(self.client_id).await?;
+            self.mqtt_connect().await?;
             return Err(Error::MqttError(result as i8));
         }
         self.last_successful_send = Instant::now();
@@ -330,7 +335,7 @@ impl BG77 {
         let _ = self.turn_on().await;
         unwrap!(self.config().await);
 
-        let _ = self.mqtt_connect(self.client_id).await;
+        let _ = self.mqtt_connect().await;
         Ok(())
     }
 
@@ -376,10 +381,8 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
         let urc = URC_CHANNEL.receive().await;
         match urc {
             Ok(line) => {
-                info!("Got URC: {}", line.as_str());
-                let mut bg77_unlocked = bg77_mutex.lock().await;
-                let bg77 = bg77_unlocked.as_mut().unwrap();
-                let res = bg77.urc_handler(&line).await;
+                debug!("Got URC: {}", line.as_str());
+                let res = BG77::urc_handler(line.as_str(), bg77_mutex).await;
                 if let Err(err) = res {
                     error!("Error while processing URC: {}", err);
                 }
