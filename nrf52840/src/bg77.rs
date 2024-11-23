@@ -208,6 +208,10 @@ impl BG77 {
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
+            error!(
+                "Could not open TCP connection to {}",
+                self.config.url.as_str()
+            );
             return Err(Error::MqttError(status));
         }
         Ok(())
