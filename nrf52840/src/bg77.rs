@@ -20,8 +20,17 @@ use heapless::{format, String, Vec};
 
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
+const QMTPUB_VALUES: usize = 4;
+const MQTT_MESSAGES: usize = 5;
+
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-static S: Signal<CriticalSectionRawMutex, u8> = Signal::new();
+static MQTT_URCS: [Signal<CriticalSectionRawMutex, u8>; MQTT_MESSAGES] = [
+    Signal::new(),
+    Signal::new(),
+    Signal::new(),
+    Signal::new(),
+    Signal::new(),
+];
 
 pub struct Config {
     url: String<40>,
@@ -33,12 +42,11 @@ pub struct BG77 {
     uart1: AtUart,
     _modem_pin: Output<'static, P0_17>,
     client_id: u8,
+    msg_id: u8,
     boot_time: Option<NaiveDateTime>,
     config: Config,
     last_successful_send: Instant,
 }
-
-const QMTPUB_VALUES: usize = 4;
 
 fn urc_classifier(prefix: &str, rest: &str) -> bool {
     match prefix {
@@ -84,6 +92,7 @@ impl BG77 {
             uart1,
             _modem_pin: modem_pin,
             client_id: 0,
+            msg_id: 0,
             boot_time: None,
             last_successful_send: Instant::now(),
             config: Config {
@@ -108,12 +117,14 @@ impl BG77 {
                     .map(|val| str::parse(val).map_err(|_| Error::ParseError))
                     .collect();
                 if let Ok(values) = res {
+                    // TODO: get client ID
                     if values[1] > 0 && values[0] == 0 {
-                        // TODO: client ID
-                        info!("Response to message ID {}", values[1]);
                         let msg_id = values[1];
-                        let _idx = usize::from(msg_id) - 1;
-                        S.signal(values[2]);
+                        info!("Response to message ID {}", msg_id);
+                        let idx = usize::from(msg_id) - 1;
+                        if idx < MQTT_URCS.len() {
+                            MQTT_URCS[idx].signal(values[2]);
+                        }
                     }
                 }
             }
@@ -292,11 +303,13 @@ impl BG77 {
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUBEX={},2,1,0,\"yar\",\"{text}\"", self.client_id
+            "+QMTPUBEX={},{},1,0,\"yar\",\"{text}\"", self.client_id, self.msg_id + 1,
         )
         .unwrap();
         self.simple_call(&cmd).await?;
-        let result = with_timeout(self.config.pkt_timeout * 2, S.wait())
+        let idx = usize::from(self.msg_id);
+        self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
+        let result = with_timeout(self.config.pkt_timeout * 2, MQTT_URCS[idx].wait())
             .await
             .map_err(|_| Error::TimeoutError)?;
         if result != 0 {
