@@ -5,7 +5,7 @@ use crate::{
 use chrono::{NaiveDateTime, TimeDelta};
 use common::at::{split_at_response, AtResponse};
 use core::str::FromStr;
-use defmt::{debug, error, info, unwrap};
+use defmt::{error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -376,6 +376,7 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
         let urc = URC_CHANNEL.receive().await;
         match urc {
             Ok(line) => {
+                info!("Got URC: {}", line.as_str());
                 let mut bg77_unlocked = bg77_mutex.lock().await;
                 let bg77 = bg77_unlocked.as_mut().unwrap();
                 let res = bg77.urc_handler(&line).await;
