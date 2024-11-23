@@ -68,7 +68,7 @@ impl AtBroker {
 #[embassy_executor::task]
 async fn reader(
     mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
-    urc_handler: fn(&str, &str) -> bool,
+    urc_classifier: fn(&str, &str) -> bool,
 ) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
@@ -81,7 +81,7 @@ async fn reader(
                 let text = from_utf8(&buf[..len]);
                 match text {
                     Err(_) => MAIN_CHANNEL.send(Err(Error::StringEncodingError)).await,
-                    Ok(text) => at_broker.parse_lines(text, urc_handler).await,
+                    Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
                 }
             }
         }
@@ -99,10 +99,10 @@ impl AtUart {
     pub fn new(
         rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
         tx: UarteTx<'static, UARTE1>,
-        urc_handler: fn(&str, &str) -> bool,
+        urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        unwrap!(spawner.spawn(reader(rx, urc_handler)));
+        unwrap!(spawner.spawn(reader(rx, urc_classifier)));
         Self { tx }
     }
 

@@ -5,21 +5,23 @@ use crate::{
 use chrono::{NaiveDateTime, TimeDelta};
 use common::at::{split_at_response, AtResponse};
 use core::str::FromStr;
-use defmt::{error, info, unwrap};
+use defmt::{debug, error, info, unwrap};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant, Ticker, Timer};
-use heapless::{format, String};
+use embassy_sync::signal::Signal;
+use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
+use heapless::{format, String, Vec};
 
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+static S: Signal<CriticalSectionRawMutex, u8> = Signal::new();
 
 pub struct Config {
     url: String<40>,
@@ -36,7 +38,7 @@ pub struct BG77 {
     last_successful_send: Instant,
 }
 
-fn urc_handler(prefix: &str, rest: &str) -> bool {
+fn urc_classifier(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" => true,
         "QIURC" => true,
@@ -44,6 +46,17 @@ fn urc_handler(prefix: &str, rest: &str) -> bool {
             // The CEREG URC is shorter, normal one has 5 values
             let value_count = rest.split(',').count();
             value_count == 1 || value_count == 4
+        }
+        "QMTPUB" => {
+            let res: Result<Vec<u8, 3>, _> = rest
+                .split(',')
+                .map(|val| str::parse(val).map_err(|_| Error::ParseError))
+                .collect();
+            if let Ok(values) = res {
+                values[1] != 0
+            } else {
+                false
+            }
         }
         _ => false,
     }
@@ -63,7 +76,7 @@ impl BG77 {
         modem_pin: Output<'static, P0_17>,
         spawner: &Spawner,
     ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, urc_handler, spawner);
+        let uart1 = AtUart::new(rx1, tx1, urc_classifier, spawner);
         let activation_timeout = Duration::from_secs(150);
         let pkt_timeout = Duration::from_secs(30);
         Self {
@@ -81,11 +94,24 @@ impl BG77 {
     }
 
     pub async fn urc_handler(&mut self, line: &str) -> crate::Result<()> {
-        let (prefix, _rest) = split_at_response(line).ok_or(Error::ParseError)?;
+        let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
         info!("URC {}", line);
         match prefix {
             "QMTSTAT" | "CEREG" => self.mqtt_connect(self.client_id).await?,
-            "QUIRC" => {}
+            "QMTPUB" => {
+                let res: Result<Vec<u8, 4>, _> = rest
+                    .split(',')
+                    .map(|val| str::parse(val).map_err(|_| Error::ParseError))
+                    .collect();
+                if let Ok(values) = res {
+                    if values[1] > 0 && values[0] == self.client_id {
+                        info!("Response to message ID {}", values[1]);
+                        let msg_id = values[1];
+                        let _idx = usize::from(msg_id) - 1;
+                        S.signal(values[2]);
+                    }
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -109,7 +135,7 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + Duration::from_secs(40) < Instant::now() {
+        if self.last_successful_send + Duration::from_secs(50) < Instant::now() {
             let _ = self.uart1.call("+CGATT=0", self.config.activation_timeout).await;
             let _ = self.uart1.call("+CGACT=0,1", self.config.activation_timeout).await;
             Timer::after_secs(10).await; // TODO
@@ -118,7 +144,7 @@ impl BG77 {
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
-            self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await?;
+            let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
             self.uart1.call("+CGACT=1,1", self.config.activation_timeout).await?;
         }
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
@@ -260,13 +286,16 @@ impl BG77 {
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUBEX={},0,0,0,\"yar\",\"{text}\"", self.client_id
+            "+QMTPUBEX={},2,1,0,\"yar\",\"{text}\"", self.client_id
         )
         .unwrap();
-        let response = self.call_with_response(&cmd, self.config.pkt_timeout * 2).await;
-        if response.is_err() {
+        self.simple_call(&cmd).await?;
+        let result = with_timeout(self.config.pkt_timeout * 2, S.wait())
+            .await
+            .map_err(|_| Error::TimeoutError)?;
+        if result != 0 {
             self.mqtt_connect(self.client_id).await?;
-            response?;
+            return Err(Error::MqttError(result as i8));
         }
         self.last_successful_send = Instant::now();
         Ok(())
@@ -331,7 +360,7 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
         }
     }
 
-    let mut ticker = Ticker::every(Duration::from_secs(10));
+    let mut ticker = Ticker::every(Duration::from_secs(20));
     loop {
         ticker.next().await;
         let mut bg77_unlocked = bg77_mutex.lock().await;
