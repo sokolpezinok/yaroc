@@ -38,6 +38,8 @@ pub struct BG77 {
     last_successful_send: Instant,
 }
 
+const QMTPUB_VALUES: usize = 4;
+
 fn urc_classifier(prefix: &str, rest: &str) -> bool {
     match prefix {
         "QMTSTAT" | "QIURC" => true,
@@ -47,7 +49,7 @@ fn urc_classifier(prefix: &str, rest: &str) -> bool {
             value_count == 1 || value_count == 4
         }
         "QMTPUB" => {
-            let res: Result<Vec<u8, 3>, _> = rest
+            let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
                 .split(',')
                 .map(|val| str::parse(val).map_err(|_| Error::ParseError))
                 .collect();
@@ -101,7 +103,7 @@ impl BG77 {
                 bg77.mqtt_connect().await?;
             }
             "QMTPUB" => {
-                let res: Result<Vec<u8, 4>, _> = rest
+                let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
                     .split(',')
                     .map(|val| str::parse(val).map_err(|_| Error::ParseError))
                     .collect();
