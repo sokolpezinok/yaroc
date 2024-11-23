@@ -18,12 +18,12 @@ embedded-hal-async = "1.0.0"
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
 
-cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7.3"
-embassy-executor = { version = "0.5.0", features = ["task-arena-size-8192", "arch-cortex-m", "executor-thread", "defmt", "integrated-timers", "executor-interrupt"] }
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.5"
+embassy-executor = { version = "0.5", features = ["task-arena-size-8192", "arch-cortex-m", "executor-thread", "defmt", "integrated-timers", "executor-interrupt"] }
 embassy-nrf = { version = "0.1.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time", "nfc-pins-as-gpio"] }
-embassy-sync = "0.6.0"
-embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-sync = "0.6.1"
+embassy-time = { version = "0.3.2", features = ["defmt", "defmt-timestamp-uptime"] }
 
 chrono = { workspace = true }
 heapless =  { workspace = true }

@@ -40,8 +40,7 @@ pub struct BG77 {
 
 fn urc_classifier(prefix: &str, rest: &str) -> bool {
     match prefix {
-        "QMTSTAT" => true,
-        "QIURC" => true,
+        "QMTSTAT" | "QIURC" => true,
         "CEREG" => {
             // The CEREG URC is shorter, normal one has 5 values
             let value_count = rest.split(',').count();
