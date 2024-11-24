@@ -1,7 +1,7 @@
 use chrono::{prelude::*, Days};
 use heapless::Vec;
 
-use crate::error::Error;
+use crate::{error::Error, proto::Punch};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
@@ -43,6 +43,13 @@ impl SiPunch {
             time: datetime,
             mode: data[4] & 0b1111,
             raw: bytes,
+        }
+    }
+
+    pub fn to_proto<'a>(&'a self) -> Punch<'a> {
+        Punch {
+            raw: &self.raw,
+            unknown_fields: femtopb::UnknownFields::empty(),
         }
     }
 

@@ -10,5 +10,9 @@ defmt = ["dep:defmt"]
 [dependencies]
 chrono = { workspace = true }
 defmt = { workspace = true, optional = true }
+femtopb = "0.5.0"
 heapless =  { workspace = true }
 thiserror = { workspace = true }
+
+[build-dependencies]
+femtopb-build = "0.5.0"
