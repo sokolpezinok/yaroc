@@ -126,7 +126,18 @@ impl AtUart {
     async fn write_at(&mut self, command: &str) -> Result<(), Error> {
         let command = format!(AT_COMMAND_SIZE; "AT{command}\r").unwrap();
 
-        self.tx.write(command.as_bytes()).await.map_err(|_| Error::UartWriteError)
+        self.write(command.as_bytes()).await
+    }
+
+    async fn write(&mut self, message: &[u8]) -> crate::Result<()> {
+        self.tx.write(message).await.map_err(|_| Error::UartWriteError)
+    }
+
+    pub async fn call(&mut self, message: &[u8], timeout: Duration) -> crate::Result<()> {
+        self.write(message).await?;
+        let lines = self.read(timeout).await?;
+        let _response = AtResponse::new(lines, "");
+        Ok(())
     }
 
     async fn call_at_impl(

@@ -135,6 +135,10 @@ impl BG77 {
 
     pub async fn config(&mut self) -> Result<(), Error> {
         self.simple_call("E0").await?;
+        self.simple_call("+CEREG=2").await?;
+        self.simple_call("+QCFG=\"nwscanseq\",03").await?;
+        self.simple_call("+QCFG=\"iotopmode\",1,1").await?;
+        self.simple_call("+QCFG=\"band\",0,0,80000").await?;
         Ok(())
     }
 
@@ -163,9 +167,6 @@ impl BG77 {
             let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
             self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
         }
-        self.simple_call("+QCFG=\"nwscanseq\",03").await?;
-        self.simple_call("+QCFG=\"band\",0,0,80000").await?;
-        self.simple_call("+CEREG=2").await?;
 
         // TODO: find out why we sometimes don't get accurate time reading
         let now_ms = Instant::now().as_millis();
@@ -305,20 +306,21 @@ impl BG77 {
         Ok(signal_info)
     }
 
-    async fn send_text(&mut self, text: &str) -> Result<(), Error> {
-        let res = self.send_text_impl(text).await;
+    async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
+        let res = self.send_message_impl(msg).await;
         if let Err(err) = res.as_ref() {
             error!("Sending a message failed: {}", err);
             let _ = self.mqtt_connect().await;
         }
         res
     }
-    async fn send_text_impl(&mut self, text: &str) -> Result<(), Error> {
+    async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUBEX={},{},1,0,\"yar\",\"{text}\"", self.client_id, self.msg_id + 1,
+            "+QMTPUB={},{},1,0,\"yar\",{}", self.client_id, self.msg_id + 1, msg.len(),
         )
         .unwrap();
         self.simple_call(&cmd).await?;
+        self.uart1.call(msg, MINIMUM_TIMEOUT).await;
         let idx = usize::from(self.msg_id);
         self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         let result = with_timeout(self.config.pkt_timeout * 2, MQTT_URCS[idx].wait())
@@ -351,8 +353,8 @@ impl BG77 {
                     format!(30; "{}", boot_time.checked_add_signed(delta).unwrap()).unwrap()
                 }
             };
-            let text = format!(50; "{};{}mV;{}dB;{:X}", &time_str, bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
-            let _ = self.send_text(&text).await;
+            let text = format!(60; "{};{}mV;{}dB;{:X}", &time_str, bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
+            let _ = self.send_message(text.as_bytes()).await;
         }
     }
 
