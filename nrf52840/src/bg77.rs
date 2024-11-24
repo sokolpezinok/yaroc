@@ -306,6 +306,13 @@ impl BG77 {
     }
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
+        let res = self.send_text_impl(text).await;
+        if let Err(_) = res.as_ref() {
+            let _ = self.mqtt_connect().await;
+        }
+        res
+    }
+    async fn send_text_impl(&mut self, text: &str) -> Result<(), Error> {
         let cmd = format!(100;
             "+QMTPUBEX={},{},1,0,\"yar\",\"{text}\"", self.client_id, self.msg_id + 1,
         )
@@ -317,7 +324,6 @@ impl BG77 {
             .await
             .map_err(|_| Error::TimeoutError)?;
         if result != 0 {
-            self.mqtt_connect().await?;
             return Err(Error::MqttError(result as i8));
         }
         self.last_successful_send = Instant::now();
