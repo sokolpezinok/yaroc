@@ -139,7 +139,7 @@ impl BG77 {
     }
 
     async fn simple_call(&mut self, cmd: &str) -> crate::Result<AtResponse> {
-        self.uart1.call(cmd, MINIMUM_TIMEOUT).await
+        self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await
     }
 
     async fn call_with_response(
@@ -147,21 +147,21 @@ impl BG77 {
         cmd: &str,
         response_timeout: Duration,
     ) -> crate::Result<AtResponse> {
-        self.uart1.call_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await
+        self.uart1.call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
         if self.last_successful_send + Duration::from_secs(50) < Instant::now() {
-            let _ = self.uart1.call("+CGATT=0", self.config.activation_timeout).await;
-            let _ = self.uart1.call("+CGACT=0,1", self.config.activation_timeout).await;
+            let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
+            let _ = self.uart1.call_at("+CGACT=0,1", self.config.activation_timeout).await;
             Timer::after_secs(10).await; // TODO
         }
-        self.uart1.call("+CGATT=1", self.config.activation_timeout).await?;
+        self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
             let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
-            self.uart1.call("+CGACT=1,1", self.config.activation_timeout).await?;
+            self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
         }
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
@@ -307,7 +307,8 @@ impl BG77 {
 
     async fn send_text(&mut self, text: &str) -> Result<(), Error> {
         let res = self.send_text_impl(text).await;
-        if let Err(_) = res.as_ref() {
+        if let Err(err) = res.as_ref() {
+            error!("Sending a message failed: {}", err);
             let _ = self.mqtt_connect().await;
         }
         res
@@ -367,13 +368,15 @@ impl BG77 {
     async fn turn_on(&mut self) -> crate::Result<()> {
         if self.simple_call("").await.is_err() {
             self._modem_pin.set_low();
-            Timer::after_millis(1000).await;
+            Timer::after_secs(1).await;
             self._modem_pin.set_high();
-            Timer::after_millis(2000).await;
+            Timer::after_secs(2).await;
             self._modem_pin.set_low();
             let res = self.uart1.read(Duration::from_secs(5)).await?;
             info!("Modem response: {=[?]}", res.as_slice());
-            self.uart1.call("+CFUN=1,0", Duration::from_secs(15)).await?;
+            self.uart1.call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
+            let res = self.uart1.read(Duration::from_secs(5)).await?;
+            info!("Modem response: {=[?]}", res.as_slice());
         }
         Ok(())
     }
@@ -391,10 +394,10 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 
     let mut ticker = Ticker::every(Duration::from_secs(20));
     loop {
-        ticker.next().await;
         let mut bg77_unlocked = bg77_mutex.lock().await;
         let bg77 = bg77_unlocked.as_mut().unwrap();
         bg77.send_signal_info().await;
+        ticker.next().await;
     }
     //unwrap!(self.mqtt_disconnect().await);
 }

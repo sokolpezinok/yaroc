@@ -123,18 +123,18 @@ impl AtUart {
         Ok(res)
     }
 
-    async fn write(&mut self, command: &str) -> Result<(), Error> {
+    async fn write_at(&mut self, command: &str) -> Result<(), Error> {
         let command = format!(AT_COMMAND_SIZE; "AT{command}\r").unwrap();
 
         self.tx.write(command.as_bytes()).await.map_err(|_| Error::UartWriteError)
     }
 
-    async fn call_impl(
+    async fn call_at_impl(
         &mut self,
         command: &str,
         timeout: Duration,
     ) -> Result<Vec<FromModem, AT_LINES>, Error> {
-        self.write(command).await?;
+        self.write_at(command).await?;
         let lines = self.read(timeout).await?;
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
@@ -157,9 +157,9 @@ impl AtUart {
         }
     }
 
-    pub async fn call(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
+    pub async fn call_at(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
         let start = Instant::now();
-        let lines = self.call_impl(command, timeout).await?;
+        let lines = self.call_at_impl(command, timeout).await?;
         let response = AtResponse::new(lines, command);
         debug!(
             "{}: {}, took {}ms",
@@ -170,14 +170,14 @@ impl AtUart {
         Ok(response)
     }
 
-    pub async fn call_with_response(
+    pub async fn call_at_with_response(
         &mut self,
         command: &str,
         call_timeout: Duration,
         response_timeout: Duration,
     ) -> Result<AtResponse, Error> {
         let start = Instant::now();
-        let mut lines = self.call_impl(command, call_timeout).await?;
+        let mut lines = self.call_at_impl(command, call_timeout).await?;
         lines.extend(self.read(response_timeout).await?);
         let response = AtResponse::new(lines, command);
         debug!(
