@@ -249,7 +249,7 @@ impl BG77 {
                     Err(Error::MqttError(reason))
                 }
             }
-            _ => Err(Error::AtError),
+            _ => Err(Error::ModemError),
         }
     }
 

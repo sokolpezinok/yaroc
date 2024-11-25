@@ -19,7 +19,7 @@ pub enum Error {
     #[error("AT 'ERROR' response")]
     AtErrorResponse,
     #[error("Inconsistent AT response")]
-    AtError,
+    ModemError,
     #[error("Network registrarion error")]
     NetworkRegistrationError,
     #[error("MQTT error {0}")]
@@ -31,7 +31,7 @@ impl From<common_error::Error> for Error {
         match err {
             common_error::Error::BufferTooSmallError => Self::BufferTooSmallError,
             common_error::Error::ParseError => Self::ParseError,
-            common_error::Error::AtError => Self::AtError,
+            common_error::Error::ModemError => Self::ModemError,
         }
     }
 }

@@ -163,7 +163,7 @@ impl AtUart {
                     command,
                     lines.as_slice()
                 );
-                Err(Error::AtError)
+                Err(Error::ModemError)
             }
         }
     }

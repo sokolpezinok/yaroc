@@ -8,5 +8,5 @@ pub enum Error {
     #[error("Cannot parse string as the given type")]
     ParseError,
     #[error("Inconsistent AT response")]
-    AtError,
+    ModemError,
 }

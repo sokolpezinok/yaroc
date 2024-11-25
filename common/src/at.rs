@@ -111,7 +111,7 @@ impl AtResponse {
                 }
             }
         }
-        Err(Error::AtError)
+        Err(Error::ModemError)
     }
 
     // Pick values from a AT response given by the list of `indices`.
@@ -126,7 +126,7 @@ impl AtResponse {
         let response = self.response(filter.map(|t| (t, indices[0])))?;
         let values = Self::parse_values(&response)?;
         if !indices.iter().all(|idx| *idx < values.len()) {
-            return Err(Error::AtError);
+            return Err(Error::ModemError);
         }
         Ok(indices
             .iter()
@@ -228,7 +228,7 @@ mod test_at_utils {
         assert_eq!(response.unwrap(), "5,\"connected\"");
 
         let response = at_response.response(Some((3u8, 0)));
-        assert_eq!(response.unwrap_err(), Error::AtError);
+        assert_eq!(response.unwrap_err(), Error::ModemError);
 
         let response = at_response.response::<u8>(None);
         assert_eq!(response.unwrap(), "1,\"disconnected\"");
