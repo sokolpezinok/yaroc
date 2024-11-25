@@ -5,7 +5,7 @@ fn main() -> std::io::Result<()> {
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let descriptor_file = out.join("descriptors.bin");
 
-    let protobufs_dir = "src/protobufs/";
+    let protobufs_dir = "../common/protobufs/";
     println!("cargo:rerun-if-changed={}", protobufs_dir);
 
     let protos: Vec<_> = WalkDir::new(protobufs_dir)
