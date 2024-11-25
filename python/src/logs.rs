@@ -45,7 +45,7 @@ impl CellularLogMessage {
                     mac_addr,
                     Self::timestamp(mch.time?),
                     Local::now().into(),
-                    mch.volts,
+                    mch.millivolts,
                 );
                 if mch.cellid > 0 {
                     log_message.cellid = Some(mch.cellid);
@@ -108,7 +108,7 @@ impl MiniCallHome {
         mac_address: &str,
         timestamp: DateTime<FixedOffset>,
         now: DateTime<FixedOffset>,
-        voltage: f32,
+        millivolts: u32,
     ) -> Self {
         Self {
             host_info: HostInfo {
@@ -117,7 +117,7 @@ impl MiniCallHome {
             },
             timestamp,
             latency: now - timestamp,
-            voltage,
+            voltage: millivolts as f32 / 1000.0,
             cpu_frequency: None,
             temperature: None,
             rssi_dbm: None,

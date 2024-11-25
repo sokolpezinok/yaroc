@@ -86,7 +86,7 @@ def create_sys_minicallhome() -> MiniCallHome:
         try:
             result = subprocess.run(shlex.split("vcgencmd measure_volts"), capture_output=True)
             volts_v = result.stdout.decode("utf-8").split("=")[1]
-            mch.volts = float(volts_v.split("V")[0])
+            mch.millivolts = int(1000 * float(volts_v.split("V")[0]))
         except Exception as err:
             logging.error(err)
             logging.error(result.stdout)

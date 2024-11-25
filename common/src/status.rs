@@ -23,7 +23,7 @@ impl MiniCallHome {
         Status {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
                 freq: 32,
-                volts: self.batt_mv.map_or(0.0, |mv| (mv as f32) / 1000.0),
+                millivolts: self.batt_mv.unwrap_or_default(),
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
                 signal_snr: self.snr_db.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),

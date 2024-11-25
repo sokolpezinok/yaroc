@@ -88,7 +88,7 @@ class RocClient(Client):
                 "signaldBm": str(-mch.signal_dbm),
                 "temperature": str(mch.cpu_temperature),
                 "networktype": network_type,
-                "volts": str(mch.volts),
+                "volts": str(mch.millivolts / 1000.0),
                 "freq": str(mch.freq * FREQ_MULTIPLIER),
                 "minFreq": str(mch.min_freq * FREQ_MULTIPLIER),
                 "maxFreq": str(mch.max_freq * FREQ_MULTIPLIER),

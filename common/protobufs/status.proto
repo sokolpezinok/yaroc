@@ -29,7 +29,7 @@ message MiniCallHome {
   uint32 freq = 4;
   uint32 min_freq = 5;
   uint32 max_freq = 6;
-  float volts = 7;
+  uint32 millivolts = 7;
   int32 signal_dbm = 8;
   int32 signal_snr = 15;
   uint32 cellid = 9;
