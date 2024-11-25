@@ -137,6 +137,8 @@ impl BG77 {
     pub async fn config(&mut self) -> Result<(), Error> {
         self.simple_call("E0").await?;
         self.simple_call("+CEREG=2").await?;
+        self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
+        // +QCFG needs +CGATT=1 first
         self.simple_call("+QCFG=\"nwscanseq\",03").await?;
         self.simple_call("+QCFG=\"iotopmode\",1,1").await?;
         self.simple_call("+QCFG=\"band\",0,0,80000").await?;
@@ -356,7 +358,7 @@ impl BG77 {
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let timestamp = self.current_time();
         let mini_call_home = self.mini_call_home().await;
-        info!("MiniCallHome: {}", mini_call_home);
+        info!("{}", mini_call_home);
 
         let message = mini_call_home.to_proto(timestamp);
         let mut buf = [0u8; 200];
