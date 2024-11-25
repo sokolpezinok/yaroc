@@ -2,10 +2,10 @@ use crate::{
     at_utils::{AtUart, URC_CHANNEL},
     error::Error,
 };
-use chrono::{NaiveDateTime, TimeDelta};
+use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
     at::{split_at_response, AtResponse},
-    status::MiniCallHome,
+    status::{parse_cclk, MiniCallHome},
 };
 use core::str::FromStr;
 use defmt::{debug, error, info, unwrap};
@@ -49,7 +49,7 @@ pub struct BG77 {
     temp: Temp<'static>,
     client_id: u8,
     msg_id: u8,
-    boot_time: Option<NaiveDateTime>,
+    boot_time: Option<DateTime<FixedOffset>>,
     config: Config,
     last_successful_send: Instant,
 }
@@ -343,10 +343,9 @@ impl BG77 {
         Ok(())
     }
 
-    async fn get_time(&mut self) -> crate::Result<NaiveDateTime> {
+    async fn get_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = self.simple_call("+CCLK?").await?.parse1::<String<20>>([0], None)?;
-        NaiveDateTime::parse_from_str(&modem_clock, "%y/%m/%d,%H:%M:%S+04")
-            .map_err(|_| Error::ParseError)
+        parse_cclk(&modem_clock).map_err(common::error::Error::into)
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
