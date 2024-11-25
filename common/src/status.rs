@@ -16,6 +16,7 @@ pub struct MiniCallHome {
     pub cellid: Option<u32>,
     pub batt_mv: Option<u32>,
     pub batt_percents: Option<u8>,
+    pub cpu_temperature: Option<i8>,
 }
 
 impl MiniCallHome {
@@ -28,6 +29,7 @@ impl MiniCallHome {
                 signal_snr: self.snr_db.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
                 time: timestamp.map(|t| to_timestamp(t.and_utc().fixed_offset())), // TODO
+                cpu_temperature: self.cpu_temperature.unwrap_or_default() as f32,
                 ..Default::default()
             })),
             ..Default::default()

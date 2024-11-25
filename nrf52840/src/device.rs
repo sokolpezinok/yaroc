@@ -4,15 +4,17 @@ use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P1_03, P1_04, UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config, Saadc};
+use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self};
 use embassy_nrf::{bind_interrupts, saadc};
 
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
+    SAADC => saadc::InterruptHandler;
+    TEMP => temp::InterruptHandler;
     UARTE0_UART0 => uarte::InterruptHandler<UARTE0>;
     UARTE1 => uarte::InterruptHandler<UARTE1>;
-    SAADC => saadc::InterruptHandler;
 });
 
 pub struct Device {
@@ -34,6 +36,7 @@ impl Device {
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
+        let temp = Temp::new(p.TEMP, Irqs);
 
         let config = Config::default();
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
@@ -41,7 +44,7 @@ impl Device {
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(rx1, tx1, modem_pin, &spawner),
+            bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner),
             si_uart: SiUart::new(rx0),
             saadc,
         }

@@ -13,6 +13,7 @@ use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, TIMER0, UARTE1},
+    temp::Temp,
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
@@ -45,6 +46,7 @@ pub struct Config {
 pub struct BG77 {
     uart1: AtUart,
     _modem_pin: Output<'static, P0_17>,
+    temp: Temp<'static>,
     client_id: u8,
     msg_id: u8,
     boot_time: Option<NaiveDateTime>,
@@ -80,6 +82,7 @@ impl BG77 {
         rx1: UarteRxWithIdle<'static, UARTE1, TIMER0>,
         tx1: UarteTx<'static, UARTE1>,
         modem_pin: Output<'static, P0_17>,
+        temp: Temp<'static>,
         spawner: &Spawner,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, urc_classifier, spawner);
@@ -88,6 +91,7 @@ impl BG77 {
         Self {
             uart1,
             _modem_pin: modem_pin,
+            temp,
             client_id: 0,
             msg_id: 0,
             boot_time: None,
@@ -287,6 +291,8 @@ impl BG77 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }
         let bat_mv = self.battery_mv().await.ok();
+        let temp = self.temp.read().await;
+        let temp = temp.to_num::<i8>();
 
         let cellid = self
             .simple_call("+CEREG?")
@@ -302,6 +308,7 @@ impl BG77 {
             cellid,
             batt_mv: bat_mv,
             batt_percents: None,
+            cpu_temperature: Some(temp),
         };
         Ok(mini_call_home)
     }
