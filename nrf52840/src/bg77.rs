@@ -5,7 +5,7 @@ use crate::{
 use chrono::{NaiveDateTime, TimeDelta};
 use common::{
     at::{split_at_response, AtResponse},
-    status::SignalInfo,
+    status::MiniCallHome,
 };
 use core::str::FromStr;
 use defmt::{debug, error, info, unwrap};
@@ -275,7 +275,7 @@ impl BG77 {
         Ok(volt)
     }
 
-    async fn signal_info(&mut self) -> Result<SignalInfo, Error> {
+    async fn mini_call_home(&mut self) -> Result<MiniCallHome, Error> {
         let response = self.simple_call("+QCSQ").await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
@@ -286,6 +286,7 @@ impl BG77 {
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }
+        let bat_mv = self.battery_mv().await.ok();
 
         let cellid = self
             .simple_call("+CEREG?")
@@ -295,12 +296,14 @@ impl BG77 {
             .map_err(Error::from)
             .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
             .ok();
-        let signal_info = SignalInfo {
+        let mini_call_home = MiniCallHome {
             rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
             snr_db: Some(snr_db as f32),
             cellid,
+            batt_mv: bat_mv,
+            batt_percents: None,
         };
-        Ok(signal_info)
+        Ok(mini_call_home)
     }
 
     async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
@@ -336,17 +339,16 @@ impl BG77 {
             .map_err(|_| Error::ParseError)
     }
 
-    pub async fn send_signal_info(&mut self) -> crate::Result<()> {
-        let signal_info = self.signal_info().await;
-        info!("Signal info: {}", signal_info);
+    pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
+        let mini_call_home = self.mini_call_home().await;
+        info!("Mini Call Home : {}", mini_call_home);
 
-        if let Ok(signal_info) = signal_info {
+        if let Ok(mini_call_home) = mini_call_home {
             let timestamp = self.boot_time.map(|boot_time| {
                 let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
                 boot_time.checked_add_signed(delta).unwrap()
             });
-            let message = signal_info.to_proto(timestamp);
-            //let bat_mv = self.battery_mv().await.unwrap_or_default();
+            let message = mini_call_home.to_proto(timestamp);
             let mut buf = [0u8; 200];
             message
                 .encode(&mut buf.as_mut_slice())
@@ -397,10 +399,11 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     loop {
         let mut bg77_unlocked = bg77_mutex.lock().await;
         let bg77 = bg77_unlocked.as_mut().unwrap();
-        bg77.send_signal_info().await;
+        if let Err(err) = bg77.send_mini_call_home().await {
+            error!("Sending of Mini Call Home failed: {}", err);
+        }
         ticker.next().await;
     }
-    //unwrap!(self.mqtt_disconnect().await);
 }
 
 #[embassy_executor::task]
