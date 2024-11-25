@@ -3,7 +3,10 @@ use crate::{
     error::Error,
 };
 use chrono::{NaiveDateTime, TimeDelta};
-use common::at::{split_at_response, AtResponse};
+use common::{
+    at::{split_at_response, AtResponse},
+    status::SignalInfo,
+};
 use core::str::FromStr;
 use defmt::{debug, error, info, unwrap};
 use embassy_executor::Spawner;
@@ -16,6 +19,7 @@ use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMu
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
+use femtopb::Message as _;
 use heapless::{format, String, Vec};
 
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
@@ -69,13 +73,6 @@ fn urc_classifier(prefix: &str, rest: &str) -> bool {
         }
         _ => false,
     }
-}
-
-#[derive(defmt::Format)]
-struct SignalInfo {
-    pub rssi_dbm: Option<i8>,
-    pub snr_db: Option<f32>,
-    pub cellid: Option<u32>,
 }
 
 impl BG77 {
@@ -316,11 +313,11 @@ impl BG77 {
     }
     async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},1,0,\"yar\",{}", self.client_id, self.msg_id + 1, msg.len(),
+            "+QMTPUB={},{},1,0,\"yar/b827eab91544/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
         )
         .unwrap();
         self.simple_call(&cmd).await?;
-        self.uart1.call(msg, MINIMUM_TIMEOUT).await;
+        self.uart1.call(msg, MINIMUM_TIMEOUT).await?;
         let idx = usize::from(self.msg_id);
         self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         let result = with_timeout(self.config.pkt_timeout * 2, MQTT_URCS[idx].wait())
@@ -339,23 +336,25 @@ impl BG77 {
             .map_err(|_| Error::ParseError)
     }
 
-    pub async fn send_signal_info(&mut self) {
+    pub async fn send_signal_info(&mut self) -> crate::Result<()> {
         let signal_info = self.signal_info().await;
         info!("Signal info: {}", signal_info);
 
         if let Ok(signal_info) = signal_info {
-            let bat_mv = self.battery_mv().await.unwrap_or_default();
-
-            let time_str = match self.boot_time {
-                None => String::new(),
-                Some(boot_time) => {
-                    let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
-                    format!(30; "{}", boot_time.checked_add_signed(delta).unwrap()).unwrap()
-                }
-            };
-            let text = format!(60; "{};{}mV;{}dB;{:X}", &time_str, bat_mv, signal_info.snr_db.unwrap_or_default(), signal_info.cellid.unwrap_or_default()).unwrap();
-            let _ = self.send_message(text.as_bytes()).await;
+            let timestamp = self.boot_time.map(|boot_time| {
+                let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
+                boot_time.checked_add_signed(delta).unwrap()
+            });
+            let message = signal_info.to_proto(timestamp);
+            //let bat_mv = self.battery_mv().await.unwrap_or_default();
+            let mut buf = [0u8; 200];
+            message
+                .encode(&mut buf.as_mut_slice())
+                .map_err(|_| Error::StringEncodingError)?;
+            let len = message.encoded_len();
+            let _ = self.send_message(&buf[..len]).await;
         }
+        Ok(())
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {

@@ -26,5 +26,6 @@ embassy-sync = "0.6.1"
 embassy-time = { version = "0.3.2", features = ["defmt", "defmt-timestamp-uptime"] }
 
 chrono = { workspace = true }
+femtopb = { workspace = true }
 heapless =  { workspace = true }
 thiserror = { workspace = true }
