@@ -14,11 +14,11 @@ pub enum Error {
     UartReadError,
     #[error("UART write error")]
     UartWriteError,
-    #[error("Timeout error")]
-    TimeoutError,
     #[error("AT 'ERROR' response")]
     AtErrorResponse,
-    #[error("Inconsistent AT response")]
+    #[error("Timeout error")]
+    TimeoutError,
+    #[error("Unexpected response from the modem")]
     ModemError,
     #[error("Network registrarion error")]
     NetworkRegistrationError,

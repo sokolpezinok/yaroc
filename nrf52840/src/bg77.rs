@@ -156,12 +156,13 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + Duration::from_secs(50) < Instant::now() {
+        if self.last_successful_send + self.config.pkt_timeout * 5 < Instant::now() {
             let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
+            Timer::after_secs(2).await;
             let _ = self.uart1.call_at("+CGACT=0,1", self.config.activation_timeout).await;
-            Timer::after_secs(10).await; // TODO
+            Timer::after_secs(2).await; // TODO
+            self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
         }
-        self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
@@ -169,8 +170,9 @@ impl BG77 {
             self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
         }
 
-        // TODO: find out why we sometimes don't get accurate time reading
         let now_ms = Instant::now().as_millis();
+        // TODO: find out why we sometimes don't get accurate time reading
+        // TODO: can we get notifications when the time has been synchronized?
         let boot_time = self
             .get_time()
             .await
@@ -181,19 +183,6 @@ impl BG77 {
     }
 
     async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
-        let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.config.pkt_timeout.as_secs()
-        )
-        .unwrap();
-        self.simple_call(&cmd).await?;
-        let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.config.pkt_timeout * 3).as_secs()
-        )
-        .unwrap();
-        self.simple_call(&cmd).await?;
-
         let opened =
             self.simple_call("+QMTOPEN?").await?.parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened.as_ref() {
@@ -216,6 +205,20 @@ impl BG77 {
             );
             return Err(Error::MqttError(status));
         }
+
+        let cmd = format!(50;
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
+            self.config.pkt_timeout.as_secs()
+        )
+        .unwrap();
+        self.simple_call(&cmd).await?;
+        let cmd = format!(50;
+            "+QMTCFG=\"keepalive\",{cid},{}",
+            (self.config.pkt_timeout * 3).as_secs()
+        )
+        .unwrap();
+        self.simple_call(&cmd).await?;
+
         Ok(())
     }
 
