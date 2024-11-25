@@ -1,4 +1,3 @@
-//pub mod async_serial;
 pub mod logs;
 #[cfg(feature = "receive")]
 pub mod meshtastic;
