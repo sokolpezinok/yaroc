@@ -46,7 +46,7 @@ impl SiPunch {
         }
     }
 
-    pub fn to_proto<'a>(&'a self) -> Punch<'a> {
+    pub fn to_proto(&self) -> Punch<'_> {
         Punch {
             raw: &self.raw,
             unknown_fields: femtopb::UnknownFields::empty(),
