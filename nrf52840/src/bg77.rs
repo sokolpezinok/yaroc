@@ -174,7 +174,7 @@ impl BG77 {
         // TODO: find out why we sometimes don't get accurate time reading
         // TODO: can we get notifications when the time has been synchronized?
         let boot_time = self
-            .get_time()
+            .get_modem_time()
             .await
             .map(|time| time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64)).unwrap())?;
         info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
@@ -275,45 +275,43 @@ impl BG77 {
         Ok(())
     }
 
-    async fn battery_mv(&mut self) -> Result<u32, Error> {
-        let (_, bcs, volt) =
-            self.simple_call("+CBC").await?.parse3::<i32, i32, u32>([0, 1, 2], None)?;
-        info!("Batt: {}mV, {}%", volt, bcs);
-        Ok(volt)
+    async fn battery_state(&mut self) -> Result<(u16, u8), Error> {
+        let (bcs, volt) = self.simple_call("+CBC").await?.parse2::<u8, u16>([1, 2], None)?;
+        Ok((volt, bcs))
     }
 
-    async fn mini_call_home(&mut self) -> Result<MiniCallHome, Error> {
+    async fn signal_info(&mut self) -> Result<(i8, i8, u8, i8), Error> {
         let response = self.simple_call("+QCSQ").await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
-        let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
-            response.parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?;
-        let snr_db = f64::from(snr_mult) / 5. - 20.;
-        if rssi_dbm == 0 {
-            rssi_dbm = rsrp_dbm - rsrq_dbm;
-        }
-        let bat_mv = self.battery_mv().await.ok();
-        let temp = self.temp.read().await;
-        let temp = temp.to_num::<i8>();
+        Ok(response.parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?)
+    }
 
-        let cellid = self
-            .simple_call("+CEREG?")
+    async fn cellid(&mut self) -> Result<u32, Error> {
+        self.simple_call("+CEREG?")
             .await?
             // TODO: support roaming, that's answer 5
             .parse2::<u32, String<8>>([1, 3], Some(1))
             .map_err(Error::from)
             .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
-            .ok();
-        let mini_call_home = MiniCallHome {
-            rssi_dbm: if rssi_dbm == 0 { None } else { Some(rssi_dbm) },
-            snr_db: Some(snr_db as f32),
-            cellid,
-            batt_mv: bat_mv,
-            batt_percents: None,
-            cpu_temperature: Some(temp),
-        };
-        Ok(mini_call_home)
+    }
+
+    async fn mini_call_home(&mut self) -> MiniCallHome {
+        let temp = self.temp.read().await;
+        let cpu_temperature = temp.to_num::<i8>(); // TODO: Has two fractional bits
+        let mut mini_call_home = MiniCallHome::default().set_cpu_temperature(cpu_temperature);
+        if let Ok((battery_mv, battery_percents)) = self.battery_state().await {
+            mini_call_home.set_battery_info(battery_mv, battery_percents);
+        }
+        if let Ok((rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm)) = self.signal_info().await {
+            mini_call_home.set_signal_info(snr_mult, rssi_dbm, rsrp_dbm, rsrq_dbm);
+        }
+        if let Ok(cellid) = self.cellid().await {
+            mini_call_home.set_cellid(cellid);
+        }
+
+        mini_call_home
     }
 
     async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
@@ -343,29 +341,30 @@ impl BG77 {
         Ok(())
     }
 
-    async fn get_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
+    async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = self.simple_call("+CCLK?").await?.parse1::<String<20>>([0], None)?;
         parse_cclk(&modem_clock).map_err(common::error::Error::into)
     }
 
-    pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mini_call_home = self.mini_call_home().await;
-        info!("Mini Call Home : {}", mini_call_home);
+    fn current_time(&self) -> Option<DateTime<FixedOffset>> {
+        self.boot_time.map(|boot_time| {
+            let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
+            boot_time.checked_add_signed(delta).unwrap()
+        })
+    }
 
-        if let Ok(mini_call_home) = mini_call_home {
-            let timestamp = self.boot_time.map(|boot_time| {
-                let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
-                boot_time.checked_add_signed(delta).unwrap()
-            });
-            let message = mini_call_home.to_proto(timestamp);
-            let mut buf = [0u8; 200];
-            message
-                .encode(&mut buf.as_mut_slice())
-                .map_err(|_| Error::StringEncodingError)?;
-            let len = message.encoded_len();
-            let _ = self.send_message(&buf[..len]).await;
-        }
-        Ok(())
+    pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
+        let timestamp = self.current_time();
+        let mini_call_home = self.mini_call_home().await;
+        info!("MiniCallHome: {}", mini_call_home);
+
+        let message = mini_call_home.to_proto(timestamp);
+        let mut buf = [0u8; 200];
+        message
+            .encode(&mut buf.as_mut_slice())
+            .map_err(|_| Error::BufferTooSmallError)?;
+        let len = message.encoded_len();
+        self.send_message(&buf[..len]).await
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {

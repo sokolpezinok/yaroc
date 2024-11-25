@@ -24,21 +24,45 @@ fn to_timestamp<'a>(time: DateTime<FixedOffset>) -> Timestamp<'a> {
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Default)]
 pub struct MiniCallHome {
     pub rssi_dbm: Option<i8>,
     pub snr_db: Option<f32>,
     pub cellid: Option<u32>,
-    pub batt_mv: Option<u32>,
+    pub batt_mv: Option<u16>,
     pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<i8>,
 }
 
 impl MiniCallHome {
+    pub fn set_signal_info(&mut self, snr_mult: u8, mut rssi_dbm: i8, rsrp_dbm: i8, rsrq_dbm: i8) {
+        let snr_db = f32::from(snr_mult) / 5. - 20.;
+        self.snr_db = Some(snr_db);
+        if rssi_dbm == 0 {
+            rssi_dbm = rsrp_dbm - rsrq_dbm;
+        }
+        self.rssi_dbm = Some(rssi_dbm);
+    }
+
+    pub fn set_battery_info(&mut self, battery_mv: u16, battery_percents: u8) {
+        self.batt_mv = Some(battery_mv);
+        self.batt_percents = Some(battery_percents);
+    }
+
+    pub fn set_cpu_temperature(mut self, cpu_temperature: i8) -> Self {
+        self.cpu_temperature = Some(cpu_temperature);
+        self
+    }
+
+    pub fn set_cellid(&mut self, cellid: u32) {
+        self.cellid = Some(cellid);
+    }
+
     pub fn to_proto(&self, timestamp: Option<DateTime<FixedOffset>>) -> Status {
         Status {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
                 freq: 32,
-                millivolts: self.batt_mv.unwrap_or_default(),
+                millivolts: self.batt_mv.unwrap_or_default() as u32,
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
                 signal_snr: self.snr_db.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
