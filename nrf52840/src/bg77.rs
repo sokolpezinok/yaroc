@@ -232,11 +232,11 @@ impl BG77 {
     }
 
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+        self.network_registration().await?;
         if self.last_reconnect + self.config.pkt_timeout > Instant::now() {
             return Ok(());
         }
         let cid = self.client_id;
-        self.network_registration().await?;
         self.mqtt_open(cid).await?;
 
         let (_, status) =

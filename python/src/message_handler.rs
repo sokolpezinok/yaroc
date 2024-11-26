@@ -79,7 +79,7 @@ impl MessageHandler {
             Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr)).ok_or(
-                PyValueError::new_err("Variants other than MiniCallHome are unimplemented"),
+                PyValueError::new_err("Missing fields in the Status proto"), // TODO: which?
             )?;
         info!("{}", log_message);
 
