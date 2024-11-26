@@ -193,7 +193,7 @@ impl BG77 {
             // TODO: disconnect an old client
         }
 
-        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url).unwrap();
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = self
             .call_with_response(&cmd, self.config.activation_timeout)
             .await?
@@ -209,21 +209,22 @@ impl BG77 {
         let cmd = format!(50;
             "+QMTCFG=\"timeout\",{cid},{},2,1",
             self.config.pkt_timeout.as_secs()
-        )
-        .unwrap();
+        )?;
         self.simple_call(&cmd).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
             (self.config.pkt_timeout * 3).as_secs()
-        )
-        .unwrap();
+        )?;
         self.simple_call(&cmd).await?;
 
         Ok(())
     }
 
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.network_registration().await?;
+        if let Err(err) = self.network_registration().await {
+            error!("Network registration failed: {}", err);
+            return Err(err);
+        }
         if self.last_reconnect.map(|t| t + self.config.pkt_timeout > Instant::now()) == Some(true) {
             return Ok(());
         }
@@ -248,7 +249,7 @@ impl BG77 {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"").unwrap();
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
                 let (_, res, reason) = self
                     .call_with_response(&cmd, self.config.pkt_timeout)
                     .await?
@@ -265,7 +266,7 @@ impl BG77 {
     }
 
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
-        let cmd = format!(50; "+QMTDISC={cid}").unwrap();
+        let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = self
             .call_with_response(&cmd, self.config.pkt_timeout)
             .await?
@@ -274,7 +275,7 @@ impl BG77 {
         if result != MQTT_DISCONNECTED {
             return Err(Error::MqttError(result));
         }
-        let cmd = format!(50; "+QMTCLOSE={cid}").unwrap();
+        let cmd = format!(50; "+QMTCLOSE={cid}")?;
         let _ = self.simple_call(&cmd).await; // TODO: Why does it fail?
         Ok(())
     }
@@ -328,8 +329,7 @@ impl BG77 {
     async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
         let cmd = format!(100;
             "+QMTPUB={},{},1,0,\"yar/b827eab91544/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
-        )
-        .unwrap();
+        )?;
         self.simple_call(&cmd).await?;
         self.uart1.call(msg, MINIMUM_TIMEOUT).await?;
         let idx = usize::from(self.msg_id);
