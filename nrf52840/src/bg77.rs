@@ -51,9 +51,8 @@ pub struct BG77 {
     msg_id: u8,
     boot_time: Option<DateTime<FixedOffset>>,
     config: Config,
-    last_successful_send: Instant,
-    last_reattach: Instant,
-    last_reconnect: Instant,
+    last_successful_send: Option<Instant>,
+    last_reconnect: Option<Instant>,
 }
 
 fn urc_classifier(prefix: &str, rest: &str) -> bool {
@@ -97,9 +96,8 @@ impl BG77 {
             client_id: 0,
             msg_id: 0,
             boot_time: None,
-            last_successful_send: Instant::now(),
-            last_reattach: Instant::now(),
-            last_reconnect: Instant::now(),
+            last_successful_send: Some(Instant::now()),
+            last_reconnect: Some(Instant::now()),
             config: Config {
                 url: String::from_str("broker.emqx.io").unwrap(),
                 pkt_timeout,
@@ -162,15 +160,17 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + self.config.activation_timeout < Instant::now()
-            && self.last_reattach + self.config.activation_timeout < Instant::now()
+        if self
+            .last_successful_send
+            .map(|t| t + self.config.activation_timeout * 2 < Instant::now())
+            == Some(true)
         {
             let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
             Timer::after_secs(2).await;
             let _ = self.uart1.call_at("+CGACT=0,1", self.config.activation_timeout).await;
             Timer::after_secs(2).await; // TODO
             self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
-            self.last_reattach = Instant::now();
+            self.last_successful_send = Some(Instant::now());
         }
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
@@ -224,9 +224,10 @@ impl BG77 {
 
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.network_registration().await?;
-        if self.last_reconnect + self.config.pkt_timeout > Instant::now() {
+        if self.last_reconnect.map(|t| t + self.config.pkt_timeout > Instant::now()) == Some(true) {
             return Ok(());
         }
+        self.last_reconnect = Some(Instant::now());
         let cid = self.client_id;
         self.mqtt_open(cid).await?;
 
@@ -339,7 +340,7 @@ impl BG77 {
         if result != 0 {
             return Err(Error::MqttError(result as i8));
         }
-        self.last_successful_send = Instant::now();
+        self.last_successful_send = Some(Instant::now());
         Ok(())
     }
 
