@@ -5,11 +5,12 @@ use crate::{
     proto::{status, MiniCallHome as MiniCallHomeProto, Status, Timestamp},
 };
 
-pub fn parse_cclk(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
-    let naive_date = NaiveDateTime::parse_from_str(&modem_clock[..17], "%y/%m/%d,%H:%M:%S")
+/// Parses the output of AT+QLTS=2 command into a date+time.
+pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
+    let naive_date = NaiveDateTime::parse_from_str(&modem_clock[..19], "%Y/%m/%d,%H:%M:%S")
         .map_err(|_| Error::ParseError)?;
 
-    let offset = str::parse::<u8>(&modem_clock[18..]).map_err(|_| Error::ParseError)?;
+    let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
     Ok(naive_date
         .and_local_timezone(FixedOffset::east_opt(i32::from(offset) * 900).unwrap())
         .unwrap()
@@ -79,11 +80,11 @@ impl MiniCallHome {
 mod test {
     use chrono::{NaiveDate, NaiveTime};
 
-    use super::parse_cclk;
+    use super::parse_qlts;
 
     #[test]
     fn test_cclk() {
-        let dt = parse_cclk("24/11/25,22:12:11+04").unwrap();
+        let dt = parse_qlts("2024/11/25,22:12:11+04extra").unwrap();
         let naive_dt = dt.naive_local();
         assert_eq!(
             naive_dt.date(),

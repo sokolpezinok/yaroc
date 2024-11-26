@@ -5,7 +5,7 @@ use crate::{
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
     at::{split_at_response, AtResponse},
-    status::{parse_cclk, MiniCallHome},
+    status::{parse_qlts, MiniCallHome},
 };
 use core::str::FromStr;
 use defmt::{debug, error, info, unwrap};
@@ -344,8 +344,8 @@ impl BG77 {
     }
 
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
-        let modem_clock = self.simple_call("+CCLK?").await?.parse1::<String<20>>([0], None)?;
-        parse_cclk(&modem_clock).map_err(common::error::Error::into)
+        let modem_clock = self.simple_call("+QLTS=2").await?.parse1::<String<25>>([0], None)?;
+        parse_qlts(&modem_clock).map_err(common::error::Error::into)
     }
 
     fn current_time(&self) -> Option<DateTime<FixedOffset>> {
