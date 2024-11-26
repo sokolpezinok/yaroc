@@ -8,7 +8,7 @@ use common::{
     status::{parse_qlts, MiniCallHome},
 };
 use core::str::FromStr;
-use defmt::{debug, error, info, unwrap};
+use defmt::{debug, error, info};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -96,8 +96,8 @@ impl BG77 {
             client_id: 0,
             msg_id: 0,
             boot_time: None,
-            last_successful_send: Some(Instant::now()),
-            last_reconnect: Some(Instant::now()),
+            last_successful_send: None,
+            last_reconnect: None,
             config: Config {
                 url: String::from_str("broker.emqx.io").unwrap(),
                 pkt_timeout,
@@ -384,13 +384,12 @@ impl BG77 {
 
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.turn_on().await;
-        unwrap!(self.config().await);
+        self.config().await?;
 
         let _ = self.mqtt_connect().await;
         Ok(())
     }
 
-    #[allow(dead_code)]
     async fn turn_on(&mut self) -> crate::Result<()> {
         if self.simple_call("").await.is_err() {
             self._modem_pin.set_low();
