@@ -179,15 +179,6 @@ impl BG77 {
             self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
         }
 
-        let now_ms = Instant::now().as_millis();
-        // TODO: find out why we sometimes don't get accurate time reading
-        // TODO: can we get notifications when the time has been synchronized?
-        let boot_time = self
-            .get_modem_time()
-            .await
-            .map(|time| time.checked_sub_signed(TimeDelta::milliseconds(now_ms as i64)).unwrap())?;
-        info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
-        self.boot_time = Some(boot_time);
         Ok(())
     }
 
@@ -357,7 +348,19 @@ impl BG77 {
         parse_qlts(&modem_clock).map_err(common::error::Error::into)
     }
 
-    fn current_time(&self) -> Option<DateTime<FixedOffset>> {
+    async fn current_time(&mut self) -> Option<DateTime<FixedOffset>> {
+        if self.boot_time.is_none() {
+            let boot_time = self
+                .get_modem_time()
+                .await
+                .map(|time| {
+                    let booted = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
+                    time.checked_sub_signed(booted).unwrap()
+                })
+                .ok()?;
+            info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
+            self.boot_time = Some(boot_time);
+        }
         self.boot_time.map(|boot_time| {
             let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
             boot_time.checked_add_signed(delta).unwrap()
@@ -365,7 +368,7 @@ impl BG77 {
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let timestamp = self.current_time();
+        let timestamp = self.current_time().await;
         let mini_call_home = self.mini_call_home().await;
         info!("{}", mini_call_home);
 
