@@ -124,8 +124,7 @@ impl AtUart {
     }
 
     async fn write_at(&mut self, command: &str) -> Result<(), Error> {
-        let command = format!(AT_COMMAND_SIZE; "AT{command}\r").unwrap();
-
+        let command = format!(AT_COMMAND_SIZE; "AT{command}\r")?;
         self.write(command.as_bytes()).await
     }
 
@@ -150,7 +149,7 @@ impl AtUart {
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
             Some(&FromModem::Error) => {
-                error!(
+                debug!(
                     "Failed response from modem: {} {=[?]}",
                     command,
                     lines.as_slice()
@@ -158,7 +157,7 @@ impl AtUart {
                 Err(Error::AtErrorResponse)
             }
             _ => {
-                error!(
+                debug!(
                     "Failed response from modem: {} {=[?]}",
                     command,
                     lines.as_slice()

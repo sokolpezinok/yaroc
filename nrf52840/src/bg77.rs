@@ -88,7 +88,7 @@ impl BG77 {
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, urc_classifier, spawner);
         let activation_timeout = Duration::from_secs(150);
-        let pkt_timeout = Duration::from_secs(30);
+        let pkt_timeout = Duration::from_secs(35);
         Self {
             uart1,
             _modem_pin: modem_pin,
