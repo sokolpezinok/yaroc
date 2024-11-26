@@ -52,6 +52,8 @@ pub struct BG77 {
     boot_time: Option<DateTime<FixedOffset>>,
     config: Config,
     last_successful_send: Instant,
+    last_reattach: Instant,
+    last_reconnect: Instant,
 }
 
 fn urc_classifier(prefix: &str, rest: &str) -> bool {
@@ -96,6 +98,8 @@ impl BG77 {
             msg_id: 0,
             boot_time: None,
             last_successful_send: Instant::now(),
+            last_reattach: Instant::now(),
+            last_reconnect: Instant::now(),
             config: Config {
                 url: String::from_str("broker.emqx.io").unwrap(),
                 pkt_timeout,
@@ -158,12 +162,15 @@ impl BG77 {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + self.config.pkt_timeout * 5 < Instant::now() {
+        if self.last_successful_send + self.config.activation_timeout < Instant::now()
+            && self.last_reattach + self.config.activation_timeout < Instant::now()
+        {
             let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
             Timer::after_secs(2).await;
             let _ = self.uart1.call_at("+CGACT=0,1", self.config.activation_timeout).await;
             Timer::after_secs(2).await; // TODO
             self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
+            self.last_reattach = Instant::now();
         }
 
         let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
@@ -225,6 +232,9 @@ impl BG77 {
     }
 
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+        if self.last_reconnect + self.config.pkt_timeout > Instant::now() {
+            return Ok(());
+        }
         let cid = self.client_id;
         self.network_registration().await?;
         self.mqtt_open(cid).await?;
@@ -318,8 +328,7 @@ impl BG77 {
 
     async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
         let res = self.send_message_impl(msg).await;
-        if let Err(err) = res.as_ref() {
-            error!("Sending a message failed: {}", err);
+        if res.is_err() {
             let _ = self.mqtt_connect().await;
         }
         res
