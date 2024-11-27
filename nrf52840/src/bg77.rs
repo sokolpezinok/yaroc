@@ -55,29 +55,6 @@ pub struct BG77 {
     last_reconnect: Option<Instant>,
 }
 
-fn urc_classifier(prefix: &str, rest: &str) -> bool {
-    match prefix {
-        "QMTSTAT" | "QIURC" => true,
-        "CEREG" => {
-            // The CEREG URC is shorter, normal one has 5 values
-            let value_count = rest.split(',').count();
-            value_count == 1 || value_count == 4
-        }
-        "QMTPUB" => {
-            let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
-                .split(',')
-                .map(|val| str::parse(val).map_err(|_| Error::ParseError))
-                .collect();
-            if let Ok(values) = res {
-                values[1] != 0
-            } else {
-                false
-            }
-        }
-        _ => false,
-    }
-}
-
 impl BG77 {
     pub fn new(
         rx1: UarteRxWithIdle<'static, UARTE1, TIMER0>,
@@ -86,7 +63,7 @@ impl BG77 {
         temp: Temp<'static>,
         spawner: &Spawner,
     ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, urc_classifier, spawner);
+        let uart1 = AtUart::new(rx1, tx1, Self::urc_classifier, spawner);
         let activation_timeout = Duration::from_secs(150);
         let pkt_timeout = Duration::from_secs(35);
         Self {
@@ -103,6 +80,29 @@ impl BG77 {
                 pkt_timeout,
                 activation_timeout,
             },
+        }
+    }
+
+    fn urc_classifier(prefix: &str, rest: &str) -> bool {
+        match prefix {
+            "QMTSTAT" | "QIURC" => true,
+            "CEREG" => {
+                // The CEREG URC is shorter, normal one has 5 values
+                let value_count = rest.split(',').count();
+                value_count == 1 || value_count == 4
+            }
+            "QMTPUB" => {
+                let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
+                    .split(',')
+                    .map(|val| str::parse(val).map_err(|_| Error::ParseError))
+                    .collect();
+                if let Ok(values) = res {
+                    values[1] != 0
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
     }
 
