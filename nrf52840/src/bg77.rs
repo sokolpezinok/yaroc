@@ -123,7 +123,6 @@ impl BG77 {
                     // TODO: get client ID
                     if values[1] > 0 && values[0] == 0 {
                         let msg_id = values[1];
-                        info!("Response to message ID {}", msg_id);
                         let idx = usize::from(msg_id) - 1;
                         if idx < MQTT_URCS.len() {
                             MQTT_URCS[idx].signal(values[2]);
@@ -340,6 +339,7 @@ impl BG77 {
         if result != 0 {
             return Err(Error::MqttError(result as i8));
         }
+        debug!("Message ID {} successfully sent", idx);
         self.last_successful_send = Some(Instant::now());
         Ok(())
     }
@@ -421,8 +421,9 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     loop {
         let mut bg77_unlocked = bg77_mutex.lock().await;
         let bg77 = bg77_unlocked.as_mut().unwrap();
-        if let Err(err) = bg77.send_mini_call_home().await {
-            error!("Sending of Mini Call Home failed: {}", err);
+        match bg77.send_mini_call_home().await {
+            Ok(()) => info!("MiniCallHome sent"),
+            Err(err) => error!("Sending of MiniCallHome failed: {}", err),
         }
         ticker.next().await;
     }
