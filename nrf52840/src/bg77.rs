@@ -7,7 +7,6 @@ use common::{
     at::{split_at_response, AtResponse},
     status::{parse_qlts, MiniCallHome},
 };
-use core::str::FromStr;
 use defmt::{debug, error, info};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -38,9 +37,9 @@ static MQTT_URCS: [Signal<CriticalSectionRawMutex, u8>; MQTT_MESSAGES] = [
 ];
 
 pub struct Config {
-    url: String<40>,
-    pkt_timeout: Duration,
-    activation_timeout: Duration,
+    pub url: String<40>,
+    pub pkt_timeout: Duration,
+    pub activation_timeout: Duration,
 }
 
 pub struct BG77 {
@@ -62,10 +61,9 @@ impl BG77 {
         modem_pin: Output<'static, P0_17>,
         temp: Temp<'static>,
         spawner: &Spawner,
+        config: Config,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, Self::urc_classifier, spawner);
-        let activation_timeout = Duration::from_secs(150);
-        let pkt_timeout = Duration::from_secs(35);
         Self {
             uart1,
             _modem_pin: modem_pin,
@@ -75,11 +73,7 @@ impl BG77 {
             boot_time: None,
             last_successful_send: Instant::now(),
             last_reconnect: None,
-            config: Config {
-                url: String::from_str("broker.emqx.io").unwrap(),
-                pkt_timeout,
-                activation_timeout,
-            },
+            config,
         }
     }
 
