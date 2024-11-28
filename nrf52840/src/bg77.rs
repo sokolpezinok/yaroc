@@ -7,7 +7,7 @@ use common::{
     at::{split_at_response, AtResponse},
     status::{parse_qlts, MiniCallHome},
 };
-use defmt::{debug, error, info};
+use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
@@ -28,7 +28,7 @@ const QMTPUB_VALUES: usize = 4;
 const MQTT_MESSAGES: usize = 5;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-static MQTT_URCS: [Signal<CriticalSectionRawMutex, u8>; MQTT_MESSAGES] = [
+static MQTT_URCS: [Signal<CriticalSectionRawMutex, (u8, u8)>; MQTT_MESSAGES] = [
     Signal::new(),
     Signal::new(),
     Signal::new(),
@@ -119,7 +119,7 @@ impl BG77 {
                         let msg_id = values[1];
                         let idx = usize::from(msg_id) - 1;
                         if idx < MQTT_URCS.len() {
-                            MQTT_URCS[idx].signal(values[2]);
+                            MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
                         }
                     }
                 }
@@ -319,15 +319,30 @@ impl BG77 {
         let cmd = format!(100;
             "+QMTPUB={},{},1,0,\"yar/b827eab91544/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
         )?;
+        let idx = usize::from(self.msg_id);
+        MQTT_URCS[idx].reset();
         self.simple_call(&cmd).await?;
         self.uart1.call(msg, MINIMUM_TIMEOUT).await?;
-        let idx = usize::from(self.msg_id);
         self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
-        let result = with_timeout(self.config.pkt_timeout * 2, MQTT_URCS[idx].wait())
+        loop {
+            let (result, retries) = with_timeout(
+                self.config.pkt_timeout + MINIMUM_TIMEOUT,
+                MQTT_URCS[idx].wait(),
+            )
             .await
             .map_err(|_| Error::TimeoutError)?;
-        if result != 0 {
-            return Err(Error::MqttError(result as i8));
+            match result {
+                0 => break,
+                1 => {
+                    warn!("Message ID {} try {} failed", idx + 1, retries);
+                }
+                2 => {
+                    return Err(Error::TimeoutError);
+                }
+                _ => {
+                    return Err(Error::ModemError);
+                }
+            }
         }
         debug!("Message ID {} successfully sent", idx);
         self.last_successful_send = Instant::now();
