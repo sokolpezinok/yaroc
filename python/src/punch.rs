@@ -116,6 +116,7 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use chrono::{prelude::*, Duration};
+    use common::punch::SiPunch as CommonSiPunch;
 
     use crate::{
         logs::HostInfo,
@@ -124,7 +125,7 @@ mod test_punch {
 
     #[test]
     fn test_punches_from_payload() {
-        let date = NaiveDate::from_ymd_opt(2024, 11, 21).unwrap();
+        let date = CommonSiPunch::last_dow(4, Local::now().date_naive());
         let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
         let datetime =
             NaiveDateTime::new(date, time).and_local_timezone(Local).unwrap().fixed_offset();

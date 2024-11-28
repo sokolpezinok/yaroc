@@ -66,7 +66,7 @@ impl SiPunch {
             .collect()
     }
 
-    fn last_dow(dow: u32, today: NaiveDate) -> NaiveDate {
+    pub fn last_dow(dow: u32, today: NaiveDate) -> NaiveDate {
         assert!(dow <= 7);
         let days = (today.weekday().num_days_from_sunday() + 7 - dow) % 7;
         today - Days::new(u64::from(days))
