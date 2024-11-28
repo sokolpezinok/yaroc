@@ -240,7 +240,7 @@ impl BG77 {
                 info!("Will connect to MQTT");
                 let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
                 let (_, res, reason) = self
-                    .call_with_response(&cmd, self.config.pkt_timeout)
+                    .call_with_response(&cmd, self.config.pkt_timeout + MINIMUM_TIMEOUT)
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -257,7 +257,7 @@ impl BG77 {
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = self
-            .call_with_response(&cmd, self.config.pkt_timeout)
+            .call_with_response(&cmd, self.config.pkt_timeout + MINIMUM_TIMEOUT)
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
