@@ -441,9 +441,17 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
         match urc {
             Ok(line) => {
                 debug!("Got URC: {}", line.as_str());
-                let res = BG77::urc_handler(line.as_str(), bg77_mutex).await;
-                if let Err(err) = res {
-                    error!("Error while processing URC: {}", err);
+                let res = with_timeout(
+                    Duration::from_secs(600),
+                    BG77::urc_handler(line.as_str(), bg77_mutex),
+                )
+                .await;
+                if let Ok(res) = res {
+                    if let Err(err) = res {
+                        error!("Error while processing URC: {}", err);
+                    }
+                } else {
+                    error!("Timed out processing of URC");
                 }
             }
             Err(err) => {
