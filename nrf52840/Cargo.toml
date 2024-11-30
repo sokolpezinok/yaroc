@@ -6,6 +6,9 @@ authors = ["Lukáš Poláček <lukas@polacek.email>"]
 resolver = "2"
 rust-version = "1.81"
 
+[features]
+bluetooth-le = ["dep:nrf-softdevice"]
+
 [dependencies]
 common = { path = "../common", features = ["defmt"] }
 
@@ -24,6 +27,7 @@ embassy-executor = { version = "0.5", features = ["task-arena-size-8192", "arch-
 embassy-nrf = { version = "0.1.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time", "nfc-pins-as-gpio"] }
 embassy-sync = "0.6.1"
 embassy-time = { version = "0.3.2", features = ["defmt", "defmt-timestamp-uptime"] }
+nrf-softdevice = { version = "0.1.0", features = ["s140", "ble-peripheral", "critical-section-impl"], optional = true }
 
 chrono = { workspace = true }
 femtopb = { workspace = true }
