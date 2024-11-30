@@ -56,9 +56,11 @@ impl defmt::Format for AtResponse {
 
 impl AtResponse {
     pub fn new(lines: Vec<FromModem, AT_LINES>, command: &str) -> Self {
+        let pos = command.find(['=', '?']).unwrap_or(command.len());
+        let command_prefix = &command[..pos];
         Self {
             lines,
-            command: String::from_str(command).unwrap(),
+            command: String::from_str(command_prefix).unwrap(),
         }
     }
 
@@ -90,12 +92,10 @@ impl AtResponse {
         &self,
         filter: Option<(T, usize)>,
     ) -> Result<String<AT_RESPONSE_SIZE>, Error> {
-        let pos = self.command.find(['=', '?']).unwrap_or(self.command.len());
-        let prefix = &self.command[..pos];
         for line in &self.lines {
             if let FromModem::Line(line) = line {
-                if line.starts_with(prefix) {
-                    let (_, rest) = split_at_response(line).unwrap();
+                if line.starts_with(self.command.as_str()) {
+                    let (_, rest) = split_at_response(line).ok_or(Error::ParseError)?;
                     match filter.as_ref() {
                         Some((t, idx)) => {
                             let values = Self::parse_values(rest)?;
@@ -248,7 +248,9 @@ impl<E: From<Error>> AtBroker<E> {
                 }
                 self.main_channel.send(to_send).await;
             } else {
-                self.urc_channel.send(Ok(String::from_str(line).unwrap())).await;
+                self.urc_channel
+                    .send(String::from_str(line).map_err(|_| Error::BufferTooSmallError))
+                    .await;
             }
         }
         if open_stream {
@@ -306,14 +308,10 @@ mod test_at_utils {
 
     #[test]
     fn test_parsing() {
-        let mut from_modem_vec = Vec::new();
-        from_modem_vec
-            .push(FromModem::Line(
-                String::from_str("+CONN: 1,783,\"disconnected\"").unwrap(),
-            ))
-            .unwrap();
-        //let response = at_response.response::<u8>(None);
-        //assert_eq!(response.unwrap(), "1,disconnected");
+        let from_modem_vec = Vec::from_array([FromModem::Line(
+            String::from_str("+CONN: 1,783,\"disconnected\"").unwrap(),
+        )]);
+
         let at_response = AtResponse::new(from_modem_vec.clone(), "+CONN?");
         let (id, status) = at_response.parse2::<u8, String<20>>([0, 2], None).unwrap();
         assert_eq!(id, 1);
