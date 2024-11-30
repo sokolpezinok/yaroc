@@ -18,7 +18,7 @@ pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FromModem {
     Line(String<AT_COMMAND_SIZE>),
     Ok,
@@ -234,7 +234,7 @@ impl<E: From<Error>> AtBroker<E> {
                 .unwrap_or_default();
 
             let to_send = match line {
-                "OK" | "RDY" => Ok(FromModem::Ok),
+                "OK" | "RDY" | "APP RDY" => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
                 line => String::from_str(line)
                     .map(FromModem::Line)
@@ -319,5 +319,31 @@ mod test_at_utils {
 
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
         assert_eq!(at_response.count_response_values().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_at_broker() {
+        static MAIN_CHANNEL: MainChannelType<Error> = Channel::new();
+        static URC_CHANNEL: UrcChannelType = Channel::new();
+        let broker = AtBroker::new(&MAIN_CHANNEL, &URC_CHANNEL);
+        let handler = |prefix: &str, _: &str| match prefix {
+            "URC" => true,
+            _ => false,
+        };
+
+        embassy_futures::block_on(broker.parse_lines("OK\r\n+URC: 1\nERROR", handler));
+        assert_eq!(MAIN_CHANNEL.try_receive().unwrap().unwrap(), FromModem::Ok);
+        assert_eq!(URC_CHANNEL.try_receive().unwrap().unwrap(), "+URC: 1");
+        assert_eq!(
+            MAIN_CHANNEL.try_receive().unwrap().unwrap(),
+            FromModem::Error
+        );
+
+        let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
+        embassy_futures::block_on(broker.parse_lines(long, handler));
+        assert_eq!(
+            MAIN_CHANNEL.try_receive().unwrap(),
+            Err(Error::BufferTooSmallError)
+        );
     }
 }

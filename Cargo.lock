@@ -181,7 +181,9 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "critical-section",
  "defmt",
+ "embassy-futures",
  "embassy-sync 0.6.1",
  "femtopb",
  "femtopb-build",
