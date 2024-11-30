@@ -259,6 +259,8 @@ impl<E: From<Error>> AtBroker<E> {
 
 #[cfg(test)]
 mod test_at_utils {
+    use embassy_futures::block_on;
+
     use super::*;
 
     #[test]
@@ -331,19 +333,24 @@ mod test_at_utils {
             _ => false,
         };
 
-        embassy_futures::block_on(broker.parse_lines("OK\r\n+URC: 1\nERROR", handler));
-        assert_eq!(MAIN_CHANNEL.try_receive().unwrap().unwrap(), FromModem::Ok);
-        assert_eq!(URC_CHANNEL.try_receive().unwrap().unwrap(), "+URC: 1");
-        assert_eq!(
-            MAIN_CHANNEL.try_receive().unwrap().unwrap(),
-            FromModem::Error
-        );
+        block_on(broker.parse_lines("OK\r\n+URC: 1\nERROR", handler));
+        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Ok);
+        assert_eq!(block_on(URC_CHANNEL.receive()).unwrap(), "+URC: 1");
+        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
-        embassy_futures::block_on(broker.parse_lines(long, handler));
+        block_on(broker.parse_lines(long, handler));
         assert_eq!(
             MAIN_CHANNEL.try_receive().unwrap(),
             Err(Error::BufferTooSmallError)
         );
+
+        block_on(broker.parse_lines("+NONURC: 1\n", handler));
+        assert_eq!(
+            block_on(MAIN_CHANNEL.receive()).unwrap(),
+            FromModem::Line(String::from_str("+NONURC: 1").unwrap())
+        );
+        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Ok);
+        assert_eq!(MAIN_CHANNEL.len(), 0);
     }
 }
