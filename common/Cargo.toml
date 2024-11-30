@@ -10,6 +10,7 @@ defmt = ["dep:defmt"]
 [dependencies]
 chrono = { workspace = true }
 defmt = { workspace = true, optional = true }
+embassy-sync = { workspace = true }
 femtopb = { workspace = true }
 heapless =  { workspace = true }
 thiserror = { workspace = true }

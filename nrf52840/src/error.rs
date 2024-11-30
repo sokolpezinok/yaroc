@@ -32,8 +32,8 @@ impl From<common_error::Error> for Error {
     fn from(err: common_error::Error) -> Self {
         match err {
             common_error::Error::BufferTooSmallError => Self::BufferTooSmallError,
-            common_error::Error::ParseError => Self::ParseError,
             common_error::Error::ModemError => Self::ModemError,
+            common_error::Error::ParseError => Self::ParseError,
         }
     }
 }

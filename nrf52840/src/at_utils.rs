@@ -1,69 +1,17 @@
-use common::at::{split_at_response, AtResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
-use core::str::{from_utf8, FromStr};
+use common::at::{AtBroker, AtResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
+use core::str::from_utf8;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_nrf::peripherals::{TIMER0, UARTE1};
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{with_deadline, Duration, Instant};
-use heapless::{format, String, Vec};
+use heapless::{format, Vec};
 
 use crate::error::Error;
 
-static MAIN_CHANNEL: MainChannelType = Channel::new();
-pub static URC_CHANNEL: UrcChannelType = Channel::new();
-
-type MainChannelType = Channel<ThreadModeRawMutex, Result<FromModem, Error>, 5>;
-type UrcChannelType = Channel<ThreadModeRawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
-
-pub struct AtBroker {
-    main_channel: &'static MainChannelType,
-    urc_channel: &'static UrcChannelType,
-}
-
-impl AtBroker {
-    pub fn new(
-        main_channel: &'static MainChannelType,
-        urc_channel: &'static UrcChannelType,
-    ) -> Self {
-        Self {
-            main_channel,
-            urc_channel,
-        }
-    }
-
-    async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
-        let lines = text.lines().filter(|line| !line.is_empty());
-        let mut open_stream = false;
-        for line in lines {
-            let is_callback = split_at_response(line)
-                .map(|(prefix, rest)| (urc_handler)(prefix, rest))
-                .unwrap_or_default();
-
-            let to_send = match line {
-                "OK" | "RDY" => Ok(FromModem::Ok),
-                "ERROR" => Ok(FromModem::Error),
-                line => String::from_str(line)
-                    .map(FromModem::Line)
-                    .map_err(|_| Error::BufferTooSmallError),
-            };
-            if !is_callback {
-                if let Ok(FromModem::Line(_)) = to_send.as_ref() {
-                    open_stream = true;
-                } else {
-                    open_stream = false;
-                }
-                self.main_channel.send(to_send).await;
-            } else {
-                self.urc_channel.send(Ok(String::from_str(line).unwrap())).await;
-            }
-        }
-        if open_stream {
-            self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
-        }
-    }
-}
+static MAIN_CHANNEL: common::at::MainChannelType<Error> = Channel::new();
+pub static URC_CHANNEL: common::at::UrcChannelType = Channel::new();
 
 #[embassy_executor::task]
 async fn reader(

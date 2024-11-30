@@ -2,6 +2,7 @@ use core::option::{Option, Option::None, Option::Some};
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
 use defmt;
+use embassy_sync::channel::Channel;
 use heapless::{String, Vec};
 
 use crate::error::Error;
@@ -186,6 +187,73 @@ impl AtResponse {
             Self::parse::<V>(&values[2])?,
             Self::parse::<W>(&values[3])?,
         ))
+    }
+}
+
+#[cfg(all(target_abi = "eabihf", target_os = "none"))]
+pub type MainChannelType<E> =
+    Channel<embassy_sync::blocking_mutex::raw::ThreadModeRawMutex, Result<FromModem, E>, 5>;
+#[cfg(all(target_abi = "eabihf", target_os = "none"))]
+pub type UrcChannelType = Channel<
+    embassy_sync::blocking_mutex::raw::ThreadModeRawMutex,
+    Result<String<AT_COMMAND_SIZE>, Error>,
+    2,
+>;
+#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
+pub type MainChannelType<E> =
+    Channel<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Result<FromModem, E>, 5>;
+#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
+pub type UrcChannelType = Channel<
+    embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+    Result<String<AT_COMMAND_SIZE>, Error>,
+    2,
+>;
+
+pub struct AtBroker<E: 'static + From<Error>> {
+    main_channel: &'static MainChannelType<E>,
+    urc_channel: &'static UrcChannelType,
+}
+
+impl<E: From<Error>> AtBroker<E> {
+    pub fn new(
+        main_channel: &'static MainChannelType<E>,
+        urc_channel: &'static UrcChannelType,
+    ) -> Self {
+        Self {
+            main_channel,
+            urc_channel,
+        }
+    }
+
+    pub async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
+        let lines = text.lines().filter(|line| !line.is_empty());
+        let mut open_stream = false;
+        for line in lines {
+            let is_callback = split_at_response(line)
+                .map(|(prefix, rest)| (urc_handler)(prefix, rest))
+                .unwrap_or_default();
+
+            let to_send = match line {
+                "OK" | "RDY" => Ok(FromModem::Ok),
+                "ERROR" => Ok(FromModem::Error),
+                line => String::from_str(line)
+                    .map(FromModem::Line)
+                    .map_err(|_| Error::BufferTooSmallError.into()),
+            };
+            if !is_callback {
+                if let Ok(FromModem::Line(_)) = to_send.as_ref() {
+                    open_stream = true;
+                } else {
+                    open_stream = false;
+                }
+                self.main_channel.send(to_send).await;
+            } else {
+                self.urc_channel.send(Ok(String::from_str(line).unwrap())).await;
+            }
+        }
+        if open_stream {
+            self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
+        }
     }
 }
 
