@@ -1,20 +1,15 @@
 use crate::{
-    at_utils::{AtUart, UarteRxWithIdle, UarteTx, URC_CHANNEL},
+    at_utils::{AtUart, UarteTx, URC_CHANNEL},
     error::Error,
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
-    at::{split_at_response, AtResponse},
+    at::{split_at_response, AtResponse, RxWithIdle, Tx},
     status::{parse_qlts, MiniCallHome},
 };
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
-use embassy_nrf::{
-    gpio::Output,
-    peripherals::{P0_17, TIMER0, UARTE1},
-    temp::Temp,
-    uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as EmbassyUarteTx},
-};
+use embassy_nrf::{gpio::Output, peripherals::P0_17, temp::Temp};
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
@@ -22,7 +17,7 @@ use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
 use femtopb::Message as _;
 use heapless::{format, String, Vec};
 
-pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77>>;
+pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx>>>;
 
 const QMTPUB_VALUES: usize = 4;
 const MQTT_MESSAGES: usize = 5;
@@ -42,8 +37,8 @@ pub struct Config {
     pub activation_timeout: Duration,
 }
 
-pub struct BG77 {
-    uart1: AtUart<UarteTx>,
+pub struct BG77<T: Tx> {
+    uart1: AtUart<T>,
     _modem_pin: Output<'static, P0_17>,
     temp: Temp<'static>,
     client_id: u8,
@@ -54,17 +49,15 @@ pub struct BG77 {
     last_reconnect: Option<Instant>,
 }
 
-impl BG77 {
-    pub fn new(
-        rx1: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
-        tx1: EmbassyUarteTx<'static, UARTE1>,
+impl<T: Tx> BG77<T> {
+    pub fn new<R: RxWithIdle>(
+        rx1: R,
+        tx1: T,
         modem_pin: Output<'static, P0_17>,
         temp: Temp<'static>,
         spawner: &Spawner,
         config: Config,
     ) -> Self {
-        let rx1 = UarteRxWithIdle::new(rx1);
-        let tx1 = UarteTx::new(tx1);
         let uart1 = AtUart::new(rx1, tx1, Self::urc_classifier, spawner);
         Self {
             uart1,
@@ -445,7 +438,7 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
                 debug!("Got URC: {}", line.as_str());
                 let res = with_timeout(
                     Duration::from_secs(600),
-                    BG77::urc_handler(line.as_str(), bg77_mutex),
+                    BG77::<UarteTx>::urc_handler(line.as_str(), bg77_mutex),
                 )
                 .await;
                 if let Ok(res) = res {
