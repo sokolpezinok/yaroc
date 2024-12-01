@@ -1,9 +1,9 @@
-use common::at::{AtBroker, AtResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
+use common::at::{AtBroker, AtResponse, FromModem, RxWithIdle, Tx, AT_COMMAND_SIZE, AT_LINES};
 use core::str::from_utf8;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_nrf::peripherals::{TIMER0, UARTE1};
-use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
+use embassy_nrf::uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as EmbassyUarteTx};
 use embassy_sync::channel::Channel;
 use embassy_time::{with_deadline, Duration, Instant};
 use heapless::{format, Vec};
@@ -15,7 +15,7 @@ pub static URC_CHANNEL: common::at::UrcChannelType = Channel::new();
 
 #[embassy_executor::task]
 async fn reader(
-    mut rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
+    mut rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
     urc_classifier: fn(&str, &str) -> bool,
 ) {
     const AT_BUF_SIZE: usize = 300;
@@ -36,17 +36,55 @@ async fn reader(
     }
 }
 
-pub struct AtUart {
+pub struct UarteRxWithIdle {
     // This struct is fixed to UARTE1 due to a limitation of embassy_executor::task. We cannot make
     // the `reader` method generic and also work for UARTE0. However, for our hardware this is not
     // needed, UARTE0 does not use AT-commands, so it won't use this struct.
-    tx: UarteTx<'static, UARTE1>,
+    rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
 }
 
-impl AtUart {
+impl UarteRxWithIdle {
+    pub fn new(rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>) -> Self {
+        Self { rx }
+    }
+}
+
+impl RxWithIdle for UarteRxWithIdle {
+    async fn read_until_idle(&mut self, buffer: &mut [u8]) -> common::Result<usize> {
+        self.rx
+            .read_until_idle(buffer)
+            .await
+            .map_err(|_| common::error::Error::UartReadError)
+    }
+}
+
+pub struct UarteTx {
+    // This struct is fixed to UARTE1 due to a limitation of embassy_executor::task. We cannot make
+    // the `reader` method generic and also work for UARTE0. However, for our hardware this is not
+    // needed, UARTE0 does not use AT-commands, so it won't use this struct.
+    tx: EmbassyUarteTx<'static, UARTE1>,
+}
+
+impl UarteTx {
+    pub fn new(tx: EmbassyUarteTx<'static, UARTE1>) -> Self {
+        Self { tx }
+    }
+}
+
+impl Tx for UarteTx {
+    async fn write(&mut self, buffer: &[u8]) -> common::Result<()> {
+        self.tx.write(buffer).await.map_err(|_| common::error::Error::UartWriteError)
+    }
+}
+
+pub struct AtUart<T: Tx> {
+    tx: T,
+}
+
+impl<T: Tx> AtUart<T> {
     pub fn new(
-        rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
-        tx: UarteTx<'static, UARTE1>,
+        rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
+        tx: T,
         urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {

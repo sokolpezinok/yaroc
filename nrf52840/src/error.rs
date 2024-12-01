@@ -34,6 +34,8 @@ impl From<common_error::Error> for Error {
             common_error::Error::BufferTooSmallError => Self::BufferTooSmallError,
             common_error::Error::ModemError => Self::ModemError,
             common_error::Error::ParseError => Self::ParseError,
+            common_error::Error::UartReadError => Self::UartReadError,
+            common_error::Error::UartWriteError => Self::UartWriteError,
         }
     }
 }

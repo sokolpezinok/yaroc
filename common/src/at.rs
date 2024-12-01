@@ -259,6 +259,17 @@ impl<E: From<Error>> AtBroker<E> {
     }
 }
 
+pub trait RxWithIdle {
+    fn read_until_idle(
+        &mut self,
+        buffer: &mut [u8],
+    ) -> impl core::future::Future<Output = crate::Result<usize>>;
+}
+
+pub trait Tx {
+    fn write(&mut self, buffer: &[u8]) -> impl core::future::Future<Output = crate::Result<()>>;
+}
+
 #[cfg(test)]
 mod test_at_utils {
     use embassy_futures::block_on;

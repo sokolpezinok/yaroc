@@ -9,4 +9,8 @@ pub enum Error {
     ParseError,
     #[error("Inconsistent AT response")]
     ModemError,
+    #[error("UART read error")]
+    UartReadError,
+    #[error("UART write error")]
+    UartWriteError,
 }
