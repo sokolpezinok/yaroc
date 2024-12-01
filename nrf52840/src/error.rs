@@ -37,6 +37,9 @@ impl From<common_error::Error> for Error {
             common_error::Error::UartReadError => Self::UartReadError,
             common_error::Error::UartWriteError => Self::UartWriteError,
             common_error::Error::StringEncodingError => Self::StringEncodingError,
+            common_error::Error::FormatError => Self::FormatError,
+            common_error::Error::AtErrorResponse => Self::AtErrorResponse,
+            common_error::Error::TimeoutError => Self::TimeoutError,
         }
     }
 }
