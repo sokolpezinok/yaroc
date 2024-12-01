@@ -1,4 +1,6 @@
-use common::at::{AtBroker, AtResponse, FromModem, RxWithIdle, Tx, AT_COMMAND_SIZE, AT_LINES};
+use common::at::{
+    AtBroker, AtResponse, FromModem, MainChannelType, RxWithIdle, Tx, AT_COMMAND_SIZE, AT_LINES,
+};
 use core::str::from_utf8;
 use defmt::*;
 use embassy_executor::Spawner;
@@ -10,25 +12,32 @@ use heapless::{format, Vec};
 
 use crate::error::Error;
 
-static MAIN_CHANNEL: common::at::MainChannelType<Error> = Channel::new();
+static MAIN_CHANNEL: MainChannelType<common::error::Error> = Channel::new();
 pub static URC_CHANNEL: common::at::UrcChannelType = Channel::new();
 
+/// RX reader task implemented for UarteRxWithIdle.
 #[embassy_executor::task]
 async fn reader(
     mut rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
     urc_classifier: fn(&str, &str) -> bool,
+    main_channel: &'static MainChannelType<common::error::Error>,
 ) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
-    let at_broker = AtBroker::new(&MAIN_CHANNEL, &URC_CHANNEL);
+    let at_broker = AtBroker::new(main_channel, &URC_CHANNEL);
     loop {
-        let len = rx.read_until_idle(&mut buf).await.map_err(|_| Error::UartReadError);
+        let len = rx
+            .read_until_idle(&mut buf)
+            .await
+            .map_err(|_| common::error::Error::UartReadError);
         match len {
-            Err(err) => MAIN_CHANNEL.send(Err(err)).await,
+            Err(err) => main_channel.send(Err(err)).await,
             Ok(len) => {
                 let text = from_utf8(&buf[..len]);
                 match text {
-                    Err(_) => MAIN_CHANNEL.send(Err(Error::StringEncodingError)).await,
+                    Err(_) => {
+                        main_channel.send(Err(common::error::Error::StringEncodingError)).await
+                    }
                     Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
                 }
             }
@@ -50,8 +59,13 @@ impl UarteRxWithIdle {
 }
 
 impl RxWithIdle for UarteRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool) {
-        unwrap!(spawner.spawn(reader(self.rx, urc_classifier)));
+    fn spawn(
+        self,
+        spawner: &Spawner,
+        urc_classifier: fn(&str, &str) -> bool,
+        main_channel: &'static MainChannelType<common::error::Error>,
+    ) {
+        unwrap!(spawner.spawn(reader(self.rx, urc_classifier, main_channel)));
     }
 }
 
@@ -76,7 +90,7 @@ impl Tx for UarteTx {
 
 pub struct AtUart<T: Tx> {
     tx: T,
-    main_channel: &'static common::at::MainChannelType<Error>,
+    main_channel: &'static MainChannelType<common::error::Error>,
 }
 
 impl<T: Tx> AtUart<T> {
@@ -86,7 +100,7 @@ impl<T: Tx> AtUart<T> {
         urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        rx.spawn(spawner, urc_classifier);
+        rx.spawn(spawner, urc_classifier, &MAIN_CHANNEL);
         Self {
             tx,
             main_channel: &MAIN_CHANNEL,

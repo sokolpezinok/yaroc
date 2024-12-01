@@ -263,7 +263,12 @@ impl<E: From<Error>> AtBroker<E> {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_classifier`.
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool);
+    fn spawn(
+        self,
+        spawner: &Spawner,
+        urc_classifier: fn(&str, &str) -> bool,
+        main_channel: &'static MainChannelType<Error>,
+    );
 }
 
 pub trait Tx {

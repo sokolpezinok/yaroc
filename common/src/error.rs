@@ -13,4 +13,6 @@ pub enum Error {
     UartReadError,
     #[error("UART write error")]
     UartWriteError,
+    #[error("String encoding error")]
+    StringEncodingError,
 }
