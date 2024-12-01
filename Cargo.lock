@@ -189,6 +189,7 @@ dependencies = [
  "chrono",
  "critical-section",
  "defmt",
+ "embassy-executor",
  "embassy-futures",
  "embassy-sync 0.6.1",
  "femtopb",

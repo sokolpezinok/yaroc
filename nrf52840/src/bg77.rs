@@ -1,5 +1,5 @@
 use crate::{
-    at_utils::{AtUart, UarteTx, URC_CHANNEL},
+    at_utils::{AtUart, UarteRxWithIdle, UarteTx, URC_CHANNEL},
     error::Error,
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
@@ -13,7 +13,7 @@ use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, TIMER0, UARTE1},
     temp::Temp,
-    uarte::{UarteRxWithIdle, UarteTx as EmbassyUarteTx},
+    uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as EmbassyUarteTx},
 };
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
@@ -56,13 +56,14 @@ pub struct BG77 {
 
 impl BG77 {
     pub fn new(
-        rx1: UarteRxWithIdle<'static, UARTE1, TIMER0>,
+        rx1: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
         tx1: EmbassyUarteTx<'static, UARTE1>,
         modem_pin: Output<'static, P0_17>,
         temp: Temp<'static>,
         spawner: &Spawner,
         config: Config,
     ) -> Self {
+        let rx1 = UarteRxWithIdle::new(rx1);
         let tx1 = UarteTx::new(tx1);
         let uart1 = AtUart::new(rx1, tx1, Self::urc_classifier, spawner);
         Self {

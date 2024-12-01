@@ -50,11 +50,8 @@ impl UarteRxWithIdle {
 }
 
 impl RxWithIdle for UarteRxWithIdle {
-    async fn read_until_idle(&mut self, buffer: &mut [u8]) -> common::Result<usize> {
-        self.rx
-            .read_until_idle(buffer)
-            .await
-            .map_err(|_| common::error::Error::UartReadError)
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool) {
+        unwrap!(spawner.spawn(reader(self.rx, urc_classifier)));
     }
 }
 
@@ -79,24 +76,28 @@ impl Tx for UarteTx {
 
 pub struct AtUart<T: Tx> {
     tx: T,
+    main_channel: &'static common::at::MainChannelType<Error>,
 }
 
 impl<T: Tx> AtUart<T> {
-    pub fn new(
-        rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
+    pub fn new<R: RxWithIdle>(
+        rx: R,
         tx: T,
         urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        unwrap!(spawner.spawn(reader(rx, urc_classifier)));
-        Self { tx }
+        rx.spawn(spawner, urc_classifier);
+        Self {
+            tx,
+            main_channel: &MAIN_CHANNEL,
+        }
     }
 
     pub async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
-            let from_modem = with_deadline(deadline, MAIN_CHANNEL.receive())
+            let from_modem = with_deadline(deadline, self.main_channel.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;

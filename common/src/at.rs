@@ -2,6 +2,7 @@ use core::option::{Option, Option::None, Option::Some};
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
 use defmt;
+use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use heapless::{String, Vec};
 
@@ -260,10 +261,9 @@ impl<E: From<Error>> AtBroker<E> {
 }
 
 pub trait RxWithIdle {
-    fn read_until_idle(
-        &mut self,
-        buffer: &mut [u8],
-    ) -> impl core::future::Future<Output = crate::Result<usize>>;
+    /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
+    /// `urc_classifier`.
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool);
 }
 
 pub trait Tx {
