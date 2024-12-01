@@ -7,6 +7,7 @@ use embassy_executor::Spawner;
 use embassy_sync::mutex::Mutex;
 use embassy_time::Duration;
 use heapless::String;
+use yaroc_nrf52840 as _; // global logger + panicking-behavior + memory layout
 use yaroc_nrf52840::{
     bg77::{bg77_main_loop, bg77_urc_handler, BG77Type, Config as BG77Config},
     device::Device,

@@ -11,8 +11,8 @@ type Result<T> = core::result::Result<T, error::Error>;
 
 use cortex_m_semihosting::debug;
 use defmt_rtt as _;
-use panic_probe as _;
 use nrf52840_hal as _; // memory layout
+use panic_probe as _;
 
 #[defmt::panic_handler]
 fn panic() -> ! {
