@@ -18,7 +18,7 @@ common = { path = "../common" }
 
 chrono = { workspace = true, default-features = true }
 geoutils = "0.5.1"
-log = "0.4.20"
+log = { workspace = true }
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20", optional = true }
 prost = "=0.13.2"
 pyo3 = { version = "0.23", features = ["extension-module", "chrono", "abi3-py311"] }

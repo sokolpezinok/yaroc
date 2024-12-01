@@ -1,10 +1,10 @@
 use crate::{
-    at_utils::{AtUart, UarteTx, URC_CHANNEL},
+    at_utils::{UarteTx, URC_CHANNEL},
     error::Error,
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
-    at::{split_at_response, AtResponse, RxWithIdle, Tx},
+    at::{split_at_response, AtResponse, AtUart, RxWithIdle, Tx},
     status::{parse_qlts, MiniCallHome},
 };
 use defmt::{debug, error, info, warn};
@@ -136,7 +136,7 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn simple_call(&mut self, cmd: &str) -> crate::Result<AtResponse> {
-        self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await
+        Ok(self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await?)
     }
 
     async fn call_with_response(
@@ -144,7 +144,7 @@ impl<T: Tx> BG77<T> {
         cmd: &str,
         response_timeout: Duration,
     ) -> crate::Result<AtResponse> {
-        self.uart1.call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await
+        Ok(self.uart1.call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await?)
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
@@ -432,6 +432,7 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 #[embassy_executor::task]
 pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
     loop {
+        debug!("A");
         let urc = URC_CHANNEL.receive().await;
         match urc {
             Ok(line) => {

@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Buffer too small")]
     BufferTooSmallError,
+    #[error("Formatting error, usually buffer too small")]
+    FormatError,
     #[error("Cannot parse string as the given type")]
     ParseError,
     #[error("Inconsistent AT response")]
@@ -13,6 +15,16 @@ pub enum Error {
     UartReadError,
     #[error("UART write error")]
     UartWriteError,
+    #[error("AT 'ERROR' response")]
+    AtErrorResponse,
+    #[error("Timeout error")]
+    TimeoutError,
     #[error("String encoding error")]
     StringEncodingError,
+}
+
+impl From<core::fmt::Error> for Error {
+    fn from(_: core::fmt::Error) -> Self {
+        Error::FormatError
+    }
 }
