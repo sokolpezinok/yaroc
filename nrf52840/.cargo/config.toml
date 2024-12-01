@@ -2,5 +2,10 @@
 runner = "probe-rs run --chip nRF52840_xxAA"
 # runner = ["probe-rs", "run", "--chip", "nRF52840_xxAA", "--log-format", "{t} {L} {s}"]
 
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tdefmt.x",
+]
+
 [build]
 target = "thumbv7em-none-eabihf"

@@ -148,6 +148,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
 
 [[package]]
+name = "cast"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
+
+[[package]]
 name = "cc"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -582,6 +588,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fc247028eae04174b6635104a35b1ed336aabef4654f5e87a8f32327d231970"
 dependencies = [
  "defmt",
+]
+
+[[package]]
+name = "embedded-dma"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "994f7e5b5cb23521c22304927195f236813053eb9c065dd2226a32ba64695446"
+dependencies = [
+ "stable_deref_trait",
 ]
 
 [[package]]
@@ -1228,6 +1243,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "nrf-hal-common"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c134de1f2f0191aed3fc24d3831da8808d1e636b06edf81a5717103095f625d"
+dependencies = [
+ "cast",
+ "cfg-if",
+ "cortex-m",
+ "embedded-dma",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
+ "embedded-io",
+ "embedded-storage",
+ "fixed",
+ "nb 1.1.0",
+ "nrf-usbd",
+ "nrf52840-pac",
+ "rand_core",
+ "void",
+]
+
+[[package]]
 name = "nrf-softdevice"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1267,6 +1304,18 @@ name = "nrf-softdevice-s140"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ea93a1e11efdafcf914ed6b81b5be0cd99ee8ff6c3060102265ea863a355393"
+
+[[package]]
+name = "nrf-usbd"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aedf862f941154442271ae9914777bd1c93f6d2e0dc9db4cafa160e55ffb9085"
+dependencies = [
+ "cortex-m",
+ "critical-section",
+ "usb-device",
+ "vcell",
+]
 
 [[package]]
 name = "nrf52805-pac"
@@ -1332,6 +1381,16 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "vcell",
+]
+
+[[package]]
+name = "nrf52840-hal"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "433cfd866da18dfc58376880bdebd092c130444837debc513f44edcd0d6a6558"
+dependencies = [
+ "nrf-hal-common",
+ "nrf52840-pac",
 ]
 
 [[package]]
@@ -2272,6 +2331,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7de7d73e1754487cb58364ee906a499937a0dfabd86bcb980fa99ec8c8fa2ce"
 
 [[package]]
+name = "usb-device"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98816b1accafbb09085168b90f27e93d790b4bfa19d883466b5e53315b5f06a6"
+dependencies = [
+ "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "portable-atomic",
+]
+
+[[package]]
 name = "uuid"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2577,6 +2646,7 @@ dependencies = [
  "common",
  "cortex-m",
  "cortex-m-rt",
+ "cortex-m-semihosting",
  "defmt",
  "defmt-rtt",
  "defmt-test",
@@ -2591,6 +2661,7 @@ dependencies = [
  "femtopb",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "nrf-softdevice",
+ "nrf52840-hal",
  "panic-probe",
  "thiserror 2.0.3",
 ]
