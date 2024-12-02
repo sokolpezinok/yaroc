@@ -1,4 +1,4 @@
-use common::at::uart::{AtBroker, MainChannelType, RxWithIdle, Tx};
+use common::at::uart::{AtRxBroker, MainRxChannelType, RxWithIdle, Tx};
 use core::str::from_utf8;
 use defmt::*;
 use embassy_executor::Spawner;
@@ -13,23 +13,23 @@ pub static URC_CHANNEL: common::at::uart::UrcChannelType = Channel::new();
 async fn reader(
     mut rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
     urc_classifier: fn(&str, &str) -> bool,
-    main_channel: &'static MainChannelType<common::error::Error>,
+    main_rx_channel: &'static MainRxChannelType<common::error::Error>,
 ) {
     const AT_BUF_SIZE: usize = 300;
     let mut buf = [0; AT_BUF_SIZE];
-    let at_broker = AtBroker::new(main_channel, &URC_CHANNEL);
+    let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
     loop {
         let len = rx
             .read_until_idle(&mut buf)
             .await
             .map_err(|_| common::error::Error::UartReadError);
         match len {
-            Err(err) => main_channel.send(Err(err)).await,
+            Err(err) => main_rx_channel.send(Err(err)).await,
             Ok(len) => {
                 let text = from_utf8(&buf[..len]);
                 match text {
                     Err(_) => {
-                        main_channel.send(Err(common::error::Error::StringEncodingError)).await
+                        main_rx_channel.send(Err(common::error::Error::StringEncodingError)).await
                     }
                     Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
                 }
@@ -56,9 +56,9 @@ impl RxWithIdle for UarteRxWithIdle {
         self,
         spawner: &Spawner,
         urc_classifier: fn(&str, &str) -> bool,
-        main_channel: &'static MainChannelType<common::error::Error>,
+        main_rx_channel: &'static MainRxChannelType<common::error::Error>,
     ) {
-        unwrap!(spawner.spawn(reader(self.rx, urc_classifier, main_channel)));
+        unwrap!(spawner.spawn(reader(self.rx, urc_classifier, main_rx_channel)));
     }
 }
 

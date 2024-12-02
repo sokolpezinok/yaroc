@@ -12,24 +12,24 @@ use log::debug;
 
 use crate::error::Error;
 
-static MAIN_CHANNEL: MainChannelType<Error> = Channel::new();
+static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
 
 #[cfg(all(target_abi = "eabihf", target_os = "none"))]
 type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 #[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
 type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-pub type MainChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
+pub type MainRxChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
 pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
 
-pub struct AtBroker<E: 'static + From<Error>> {
-    main_channel: &'static MainChannelType<E>,
+pub struct AtRxBroker<E: 'static + From<Error>> {
+    main_channel: &'static MainRxChannelType<E>,
     urc_channel: &'static UrcChannelType,
 }
 
-impl<E: From<Error>> AtBroker<E> {
+impl<E: From<Error>> AtRxBroker<E> {
     pub fn new(
-        main_channel: &'static MainChannelType<E>,
+        main_channel: &'static MainRxChannelType<E>,
         urc_channel: &'static UrcChannelType,
     ) -> Self {
         Self {
@@ -79,7 +79,7 @@ pub trait RxWithIdle {
         self,
         spawner: &Spawner,
         urc_classifier: fn(&str, &str) -> bool,
-        main_channel: &'static MainChannelType<Error>,
+        main_channel: &'static MainRxChannelType<Error>,
     );
 }
 
@@ -89,7 +89,7 @@ pub trait Tx {
 
 pub struct AtUart<T: Tx> {
     tx: T,
-    main_channel: &'static MainChannelType<Error>,
+    main_rx_channel: &'static MainRxChannelType<Error>,
 }
 
 impl<T: Tx> AtUart<T> {
@@ -99,10 +99,10 @@ impl<T: Tx> AtUart<T> {
         urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        rx.spawn(spawner, urc_classifier, &MAIN_CHANNEL);
+        rx.spawn(spawner, urc_classifier, &MAIN_RX_CHANNEL);
         Self {
             tx,
-            main_channel: &MAIN_CHANNEL,
+            main_rx_channel: &MAIN_RX_CHANNEL,
         }
     }
 
@@ -110,7 +110,7 @@ impl<T: Tx> AtUart<T> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
-            let from_modem = with_deadline(deadline, self.main_channel.receive())
+            let from_modem = with_deadline(deadline, self.main_rx_channel.receive())
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
@@ -210,32 +210,35 @@ mod test_at {
 
     #[test]
     fn test_at_broker() {
-        static MAIN_CHANNEL: MainChannelType<Error> = Channel::new();
+        static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
         static URC_CHANNEL: UrcChannelType = Channel::new();
-        let broker = AtBroker::new(&MAIN_CHANNEL, &URC_CHANNEL);
+        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, &URC_CHANNEL);
         let handler = |prefix: &str, _: &str| match prefix {
             "URC" => true,
             _ => false,
         };
 
         block_on(broker.parse_lines("OK\r\n+URC: 1\nERROR", handler));
-        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Ok);
+        assert_eq!(block_on(MAIN_RX_CHANNEL.receive()).unwrap(), FromModem::Ok);
         assert_eq!(block_on(URC_CHANNEL.receive()).unwrap(), "+URC: 1");
-        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Error);
+        assert_eq!(
+            block_on(MAIN_RX_CHANNEL.receive()).unwrap(),
+            FromModem::Error
+        );
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
         block_on(broker.parse_lines(long, handler));
         assert_eq!(
-            MAIN_CHANNEL.try_receive().unwrap(),
+            MAIN_RX_CHANNEL.try_receive().unwrap(),
             Err(Error::BufferTooSmallError)
         );
 
         block_on(broker.parse_lines("+NONURC: 1\n", handler));
         assert_eq!(
-            block_on(MAIN_CHANNEL.receive()).unwrap(),
+            block_on(MAIN_RX_CHANNEL.receive()).unwrap(),
             FromModem::Line(String::from_str("+NONURC: 1").unwrap())
         );
-        assert_eq!(block_on(MAIN_CHANNEL.receive()).unwrap(), FromModem::Ok);
-        assert_eq!(MAIN_CHANNEL.len(), 0);
+        assert_eq!(block_on(MAIN_RX_CHANNEL.receive()).unwrap(), FromModem::Ok);
+        assert_eq!(MAIN_RX_CHANNEL.len(), 0);
     }
 }
