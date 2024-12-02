@@ -12,28 +12,17 @@ use response::{split_at_response, AtResponse, FromModem, AT_COMMAND_SIZE, AT_LIN
 
 use crate::error::Error;
 
-mod response;
+pub mod response;
 
 static MAIN_CHANNEL: MainChannelType<Error> = Channel::new();
 
 #[cfg(all(target_abi = "eabihf", target_os = "none"))]
-pub type MainChannelType<E> =
-    Channel<embassy_sync::blocking_mutex::raw::ThreadModeRawMutex, Result<FromModem, E>, 5>;
-#[cfg(all(target_abi = "eabihf", target_os = "none"))]
-pub type UrcChannelType = Channel<
-    embassy_sync::blocking_mutex::raw::ThreadModeRawMutex,
-    Result<String<AT_COMMAND_SIZE>, Error>,
-    2,
->;
+type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 #[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
-pub type MainChannelType<E> =
-    Channel<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, Result<FromModem, E>, 5>;
-#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
-pub type UrcChannelType = Channel<
-    embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
-    Result<String<AT_COMMAND_SIZE>, Error>,
-    2,
->;
+type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+pub type MainChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
+pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
 
 pub struct AtBroker<E: 'static + From<Error>> {
     main_channel: &'static MainChannelType<E>,
