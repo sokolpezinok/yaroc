@@ -10,7 +10,7 @@ rust-version = "1.81"
 bluetooth-le = ["dep:nrf-softdevice"]
 
 [dependencies]
-common = { path = "../common", features = ["at", "defmt"] }
+common = { path = "../common", features = ["defmt"] }
 
 defmt = { workspace = true }
 defmt-rtt = "0.4"
@@ -24,7 +24,7 @@ embedded-io-async = "0.6.1"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
 cortex-m-semihosting = "0.5.0"
-embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt"] }
+embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
 embassy-nrf = { version = "0.1.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time", "nfc-pins-as-gpio"] }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }

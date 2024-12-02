@@ -14,7 +14,7 @@ protoc-bin-vendored = "3.1.0"
 walkdir = "2.3.2"
 
 [dependencies]
-common = { path = "../common" }
+common = { path = "../common", features = ["std"] }
 
 chrono = { workspace = true, default-features = true }
 geoutils = "0.5.1"

@@ -1,6 +1,5 @@
 #![no_std]
 
-#[cfg(feature = "at")]
 pub mod at;
 pub mod error;
 pub mod punch;

@@ -5,13 +5,13 @@ edition = "2021"
 
 [features]
 default = []
-at = ["dep:embassy-executor"]
 defmt = ["dep:defmt"]
+std = ["embassy-executor/arch-std", "embassy-time/std"]
 
 [dependencies]
 chrono = { workspace = true }
 defmt = { workspace = true, optional = true }
-embassy-executor = { workspace = true, optional = true }
+embassy-executor = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
 femtopb = { workspace = true }
