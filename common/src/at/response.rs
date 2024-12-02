@@ -67,6 +67,10 @@ impl AtResponse {
         }
     }
 
+    pub fn lines(&self) -> &[FromModem] {
+        self.lines.as_slice()
+    }
+
     fn parse_values(mut rest: &str) -> Result<Vec<&str, 15>, Error> {
         let mut split = Vec::new();
         while !rest.is_empty() {
