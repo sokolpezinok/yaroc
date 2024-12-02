@@ -1,4 +1,4 @@
-use common::at::{AtBroker, MainChannelType, RxWithIdle, Tx};
+use common::at::uart::{AtBroker, MainChannelType, RxWithIdle, Tx};
 use core::str::from_utf8;
 use defmt::*;
 use embassy_executor::Spawner;
@@ -6,7 +6,7 @@ use embassy_nrf::peripherals::{TIMER0, UARTE1};
 use embassy_nrf::uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as EmbassyUarteTx};
 use embassy_sync::channel::Channel;
 
-pub static URC_CHANNEL: common::at::UrcChannelType = Channel::new();
+pub static URC_CHANNEL: common::at::uart::UrcChannelType = Channel::new();
 
 /// RX reader task implemented for UarteRxWithIdle.
 #[embassy_executor::task]
