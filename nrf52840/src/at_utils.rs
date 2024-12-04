@@ -11,7 +11,7 @@ pub static URC_CHANNEL: common::at::uart::UrcChannelType = Channel::new();
 /// RX reader task implemented for UarteRxWithIdle.
 #[embassy_executor::task]
 async fn reader(
-    mut rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>,
+    mut rx: UarteRxWithIdle,
     urc_classifier: fn(&str, &str) -> bool,
     main_rx_channel: &'static MainRxChannelType<common::error::Error>,
 ) {
@@ -19,10 +19,7 @@ async fn reader(
     let mut buf = [0; AT_BUF_SIZE];
     let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
     loop {
-        let len = rx
-            .read_until_idle(&mut buf)
-            .await
-            .map_err(|_| common::error::Error::UartReadError);
+        let len = rx.read_until_idle(&mut buf).await;
         match len {
             Err(err) => main_rx_channel.send(Err(err)).await,
             Ok(len) => {
@@ -49,6 +46,12 @@ impl UarteRxWithIdle {
     pub fn new(rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>) -> Self {
         Self { rx }
     }
+
+    pub async fn read_until_idle(buf: &mut [u8]) -> crate::Result<usize> {
+        rx.read_until_idle(&mut buf)
+            .await
+            .map_err(|_| common::error::Error::UartReadError);
+    }
 }
 
 impl RxWithIdle for UarteRxWithIdle {
@@ -58,7 +61,7 @@ impl RxWithIdle for UarteRxWithIdle {
         urc_classifier: fn(&str, &str) -> bool,
         main_rx_channel: &'static MainRxChannelType<common::error::Error>,
     ) {
-        unwrap!(spawner.spawn(reader(self.rx, urc_classifier, main_rx_channel)));
+        unwrap!(spawner.spawn(reader(self, urc_classifier, main_rx_channel)));
     }
 }
 
