@@ -20,7 +20,7 @@ type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 pub type MainRxChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
 pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
 
-static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
+pub static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
 pub static URC_CHANNEL: UrcChannelType = Channel::new();
 
 struct AtRxBroker<E: 'static + From<Error>> {
@@ -76,12 +76,7 @@ impl<E: From<Error>> AtRxBroker<E> {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_classifier`.
-    fn spawn(
-        self,
-        spawner: &Spawner,
-        urc_classifier: fn(&str, &str) -> bool,
-        main_channel: &'static MainRxChannelType<Error>,
-    );
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool);
 
     /// Read from UART until it's idle. Return the number of read bytes.
     fn read_until_idle(
@@ -129,7 +124,7 @@ impl<T: Tx> AtUart<T> {
         urc_classifier: fn(&str, &str) -> bool,
         spawner: &Spawner,
     ) -> Self {
-        rx.spawn(spawner, urc_classifier, &MAIN_RX_CHANNEL);
+        rx.spawn(spawner, urc_classifier);
         Self {
             tx,
             main_rx_channel: &MAIN_RX_CHANNEL,

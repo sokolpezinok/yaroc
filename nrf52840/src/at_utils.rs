@@ -1,4 +1,4 @@
-use common::at::uart::{reader_task, MainRxChannelType, RxWithIdle, Tx};
+use common::at::uart::{reader_task, RxWithIdle, Tx, MAIN_RX_CHANNEL};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_nrf::peripherals::{TIMER0, UARTE1};
@@ -6,12 +6,8 @@ use embassy_nrf::uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as E
 
 /// RX reader task implemented for UarteRxWithIdle.
 #[embassy_executor::task]
-async fn reader(
-    rx: UarteRxWithIdle,
-    urc_classifier: fn(&str, &str) -> bool,
-    main_rx_channel: &'static MainRxChannelType<common::error::Error>,
-) {
-    reader_task(rx, urc_classifier, main_rx_channel).await;
+async fn reader(rx: UarteRxWithIdle, urc_classifier: fn(&str, &str) -> bool) {
+    reader_task(rx, urc_classifier, &MAIN_RX_CHANNEL).await;
 }
 
 pub struct UarteRxWithIdle {
@@ -28,13 +24,8 @@ impl UarteRxWithIdle {
 }
 
 impl RxWithIdle for UarteRxWithIdle {
-    fn spawn(
-        self,
-        spawner: &Spawner,
-        urc_classifier: fn(&str, &str) -> bool,
-        main_rx_channel: &'static MainRxChannelType<common::error::Error>,
-    ) {
-        unwrap!(spawner.spawn(reader(self, urc_classifier, main_rx_channel)));
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool) {
+        unwrap!(spawner.spawn(reader(self, urc_classifier)));
     }
 
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> common::Result<usize> {
