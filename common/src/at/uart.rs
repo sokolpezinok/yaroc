@@ -12,8 +12,6 @@ use log::debug;
 
 use crate::error::Error;
 
-static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
-
 #[cfg(all(target_abi = "eabihf", target_os = "none"))]
 type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 #[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
@@ -22,7 +20,10 @@ type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 pub type MainRxChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
 pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
 
-pub struct AtRxBroker<E: 'static + From<Error>> {
+static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
+pub static URC_CHANNEL: UrcChannelType = Channel::new();
+
+struct AtRxBroker<E: 'static + From<Error>> {
     main_channel: &'static MainRxChannelType<E>,
     urc_channel: &'static UrcChannelType,
 }
@@ -81,6 +82,12 @@ pub trait RxWithIdle {
         urc_classifier: fn(&str, &str) -> bool,
         main_channel: &'static MainRxChannelType<Error>,
     );
+
+    /// Read from UART until it's idle. Return the number of read bytes.
+    fn read_until_idle(
+        &mut self,
+        buf: &mut [u8],
+    ) -> impl core::future::Future<Output = crate::Result<usize>>;
 }
 
 pub trait Tx {
@@ -90,6 +97,29 @@ pub trait Tx {
 pub struct AtUart<T: Tx> {
     tx: T,
     main_rx_channel: &'static MainRxChannelType<Error>,
+}
+
+pub async fn reader_task<R: RxWithIdle>(
+    mut rx: R,
+    urc_classifier: fn(&str, &str) -> bool,
+    main_rx_channel: &'static MainRxChannelType<Error>,
+) {
+    const AT_BUF_SIZE: usize = 300;
+    let mut buf = [0; AT_BUF_SIZE];
+    let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
+    loop {
+        let len = rx.read_until_idle(&mut buf).await;
+        match len {
+            Err(err) => main_rx_channel.send(Err(err)).await,
+            Ok(len) => {
+                let text = core::str::from_utf8(&buf[..len]);
+                match text {
+                    Err(_) => main_rx_channel.send(Err(Error::StringEncodingError)).await,
+                    Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
+                }
+            }
+        }
+    }
 }
 
 impl<T: Tx> AtUart<T> {

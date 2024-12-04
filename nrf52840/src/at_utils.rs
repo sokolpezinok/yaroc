@@ -1,38 +1,17 @@
-use common::at::uart::{AtRxBroker, MainRxChannelType, RxWithIdle, Tx};
-use core::str::from_utf8;
+use common::at::uart::{reader_task, MainRxChannelType, RxWithIdle, Tx};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_nrf::peripherals::{TIMER0, UARTE1};
 use embassy_nrf::uarte::{UarteRxWithIdle as EmbassyUarteRxWithIdle, UarteTx as EmbassyUarteTx};
-use embassy_sync::channel::Channel;
-
-pub static URC_CHANNEL: common::at::uart::UrcChannelType = Channel::new();
 
 /// RX reader task implemented for UarteRxWithIdle.
 #[embassy_executor::task]
 async fn reader(
-    mut rx: UarteRxWithIdle,
+    rx: UarteRxWithIdle,
     urc_classifier: fn(&str, &str) -> bool,
     main_rx_channel: &'static MainRxChannelType<common::error::Error>,
 ) {
-    const AT_BUF_SIZE: usize = 300;
-    let mut buf = [0; AT_BUF_SIZE];
-    let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
-    loop {
-        let len = rx.read_until_idle(&mut buf).await;
-        match len {
-            Err(err) => main_rx_channel.send(Err(err)).await,
-            Ok(len) => {
-                let text = from_utf8(&buf[..len]);
-                match text {
-                    Err(_) => {
-                        main_rx_channel.send(Err(common::error::Error::StringEncodingError)).await
-                    }
-                    Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
-                }
-            }
-        }
-    }
+    reader_task(rx, urc_classifier, main_rx_channel).await;
 }
 
 pub struct UarteRxWithIdle {
@@ -46,12 +25,6 @@ impl UarteRxWithIdle {
     pub fn new(rx: EmbassyUarteRxWithIdle<'static, UARTE1, TIMER0>) -> Self {
         Self { rx }
     }
-
-    pub async fn read_until_idle(buf: &mut [u8]) -> crate::Result<usize> {
-        rx.read_until_idle(&mut buf)
-            .await
-            .map_err(|_| common::error::Error::UartReadError);
-    }
 }
 
 impl RxWithIdle for UarteRxWithIdle {
@@ -62,6 +35,13 @@ impl RxWithIdle for UarteRxWithIdle {
         main_rx_channel: &'static MainRxChannelType<common::error::Error>,
     ) {
         unwrap!(spawner.spawn(reader(self, urc_classifier, main_rx_channel)));
+    }
+
+    async fn read_until_idle(&mut self, buf: &mut [u8]) -> common::Result<usize> {
+        self.rx
+            .read_until_idle(buf)
+            .await
+            .map_err(|_| common::error::Error::UartReadError)
     }
 }
 

@@ -1,11 +1,10 @@
-use crate::{
-    at_utils::{UarteTx, URC_CHANNEL},
-    error::Error,
-};
+use crate::{at_utils::UarteTx, error::Error};
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
-    at::response::{split_at_response, AtResponse},
-    at::uart::{AtUart, RxWithIdle, Tx},
+    at::{
+        response::{split_at_response, AtResponse},
+        uart::{AtUart, RxWithIdle, Tx, URC_CHANNEL},
+    },
     status::{parse_qlts, MiniCallHome},
 };
 use defmt::{debug, error, info, warn};
