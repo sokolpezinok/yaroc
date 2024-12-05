@@ -23,6 +23,8 @@ pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Erro
 pub static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
 pub static URC_CHANNEL: UrcChannelType = Channel::new();
 
+/// A broker of AT replies (listening to UART RX) and routing each reply either to the main channel
+/// or channel dedicated to URCs.
 pub struct AtRxBroker {
     main_channel: &'static MainRxChannelType<Error>,
     urc_channel: &'static UrcChannelType,
@@ -39,6 +41,7 @@ impl AtRxBroker {
         }
     }
 
+    /// Parse lines out of a given text and forward each line to the appropriate channel.
     async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
