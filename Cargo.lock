@@ -191,6 +191,7 @@ dependencies = [
  "defmt",
  "embassy-executor",
  "embassy-futures",
+ "embassy-nrf",
  "embassy-sync 0.6.1",
  "embassy-time",
  "femtopb",

@@ -1,4 +1,4 @@
-use crate::{at_utils::UarteTx, error::Error};
+use crate::error::Error;
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use common::{
     at::{
@@ -9,7 +9,12 @@ use common::{
 };
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
-use embassy_nrf::{gpio::Output, peripherals::P0_17, temp::Temp};
+use embassy_nrf::{
+    gpio::Output,
+    peripherals::{P0_17, UARTE1},
+    temp::Temp,
+    uarte::UarteTx,
+};
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
@@ -17,7 +22,7 @@ use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
 use femtopb::Message as _;
 use heapless::{format, String, Vec};
 
-pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx>>>;
+pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx<'static, UARTE1>>>>;
 
 const QMTPUB_VALUES: usize = 4;
 const MQTT_MESSAGES: usize = 5;
@@ -439,7 +444,7 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
                 debug!("Got URC: {}", line.as_str());
                 let res = with_timeout(
                     Duration::from_secs(600),
-                    BG77::<UarteTx>::urc_handler(line.as_str(), bg77_mutex),
+                    BG77::<UarteTx<'static, UARTE1>>::urc_handler(line.as_str(), bg77_mutex),
                 )
                 .await;
                 if let Ok(res) = res {
