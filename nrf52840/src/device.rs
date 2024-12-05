@@ -1,4 +1,3 @@
-use crate::at_utils::UarteRxWithIdle;
 use crate::bg77::{Config as BG77Config, BG77};
 use crate::si_uart::SiUart;
 use embassy_executor::Spawner;
@@ -33,7 +32,6 @@ impl Device {
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
-        let rx1 = UarteRxWithIdle::new(rx1);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
 
