@@ -23,14 +23,14 @@ pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Erro
 pub static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
 pub static URC_CHANNEL: UrcChannelType = Channel::new();
 
-struct AtRxBroker<E: 'static + From<Error>> {
-    main_channel: &'static MainRxChannelType<E>,
+pub struct AtRxBroker {
+    main_channel: &'static MainRxChannelType<Error>,
     urc_channel: &'static UrcChannelType,
 }
 
-impl<E: From<Error>> AtRxBroker<E> {
+impl AtRxBroker {
     pub fn new(
-        main_channel: &'static MainRxChannelType<E>,
+        main_channel: &'static MainRxChannelType<Error>,
         urc_channel: &'static UrcChannelType,
     ) -> Self {
         Self {
@@ -39,7 +39,7 @@ impl<E: From<Error>> AtRxBroker<E> {
         }
     }
 
-    pub async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
+    async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
@@ -52,7 +52,7 @@ impl<E: From<Error>> AtRxBroker<E> {
                 "ERROR" => Ok(FromModem::Error),
                 line => String::from_str(line)
                     .map(FromModem::Line)
-                    .map_err(|_| Error::BufferTooSmallError.into()),
+                    .map_err(|_| Error::BufferTooSmallError),
             };
             if !is_callback {
                 if let Ok(FromModem::Line(_)) = to_send.as_ref() {
@@ -69,6 +69,29 @@ impl<E: From<Error>> AtRxBroker<E> {
         }
         if open_stream {
             self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
+        }
+    }
+
+    pub async fn broker_loop<R: RxWithIdle>(
+        mut rx: R,
+        urc_classifier: fn(&str, &str) -> bool,
+        main_rx_channel: &'static MainRxChannelType<Error>,
+    ) {
+        const AT_BUF_SIZE: usize = 300;
+        let mut buf = [0; AT_BUF_SIZE];
+        let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
+        loop {
+            let len = rx.read_until_idle(&mut buf).await;
+            match len {
+                Err(err) => main_rx_channel.send(Err(err)).await,
+                Ok(len) => {
+                    let text = core::str::from_utf8(&buf[..len]);
+                    match text {
+                        Err(_) => main_rx_channel.send(Err(Error::StringEncodingError)).await,
+                        Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
+                    }
+                }
+            }
         }
     }
 }
@@ -92,29 +115,6 @@ pub trait Tx {
 pub struct AtUart<T: Tx> {
     tx: T,
     main_rx_channel: &'static MainRxChannelType<Error>,
-}
-
-pub async fn reader_task<R: RxWithIdle>(
-    mut rx: R,
-    urc_classifier: fn(&str, &str) -> bool,
-    main_rx_channel: &'static MainRxChannelType<Error>,
-) {
-    const AT_BUF_SIZE: usize = 300;
-    let mut buf = [0; AT_BUF_SIZE];
-    let at_broker = AtRxBroker::new(main_rx_channel, &URC_CHANNEL);
-    loop {
-        let len = rx.read_until_idle(&mut buf).await;
-        match len {
-            Err(err) => main_rx_channel.send(Err(err)).await,
-            Ok(len) => {
-                let text = core::str::from_utf8(&buf[..len]);
-                match text {
-                    Err(_) => main_rx_channel.send(Err(Error::StringEncodingError)).await,
-                    Ok(text) => at_broker.parse_lines(text, urc_classifier).await,
-                }
-            }
-        }
-    }
 }
 
 impl<T: Tx> AtUart<T> {
