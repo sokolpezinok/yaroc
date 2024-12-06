@@ -76,17 +76,37 @@ fn uart_test() {
 
 #[embassy_executor::task]
 async fn main(spawner: Spawner) {
-    let rx = FakeRxWithIdle::new(vec![("ATI\r", "Fake modem\r\nOK")]);
+    let rx = FakeRxWithIdle::new(vec![
+        ("ATI\r", "Fake modem\r\nOK"),
+        ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
+    ]);
     let tx = FakeTx::new(&TX_CHANNEL);
     let handler = |_: &str, _: &str| false;
     let mut at_uart = AtUart::new(rx, tx, handler, &spawner);
 
-    let response = at_uart.call_at("I", Duration::from_millis(100)).await.unwrap();
+    let response = at_uart.call_at("I", Duration::from_millis(10)).await.unwrap();
     assert_eq!(
         response.lines(),
         &[
             FromModem::Line(String::from_str("Fake modem").unwrap()),
             FromModem::Ok
+        ]
+    );
+
+    let response = at_uart
+        .call_at_with_response(
+            "+QMTOPEN=0,\"broker.com\",1883",
+            Duration::from_millis(10),
+            Duration::from_millis(10),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response.lines(),
+        &[
+            FromModem::Ok,
+            FromModem::Line(String::from_str("+QMTOPEN: 0,3").unwrap()),
+            FromModem::Ok,
         ]
     );
     std::process::exit(0); // TODO: this is ugly, is there a better way?
