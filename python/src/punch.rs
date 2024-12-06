@@ -2,8 +2,8 @@ use std::fmt;
 
 use crate::logs::HostInfo;
 use chrono::{prelude::*, Duration};
-use common::punch::SiPunch as CommonSiPunch;
 use pyo3::prelude::*;
+use yaroc_common::punch::SiPunch as CommonSiPunch;
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass]
@@ -116,7 +116,7 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use chrono::{prelude::*, Duration};
-    use common::punch::SiPunch as CommonSiPunch;
+    use yaroc_common::punch::SiPunch as CommonSiPunch;
 
     use crate::{
         logs::HostInfo,

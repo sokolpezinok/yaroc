@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 use chrono::NaiveDate;
-use common::punch::SiPunch;
 use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
+use yaroc_common::punch::SiPunch;
 
 use crate::error::Error;
 

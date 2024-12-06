@@ -1,5 +1,5 @@
 [package]
-name = "yaroc_rs"
+name = "yaroc-python"
 version = "0.1.13"
 edition = "2021"
 rust-version = "1.70"
@@ -14,7 +14,7 @@ protoc-bin-vendored = "3.1.0"
 walkdir = "2.3.2"
 
 [dependencies]
-common = { path = "../common", features = ["std"] }
+yaroc-common = { path = "../common", features = ["std"] }
 
 chrono = { workspace = true, default-features = true }
 geoutils = "0.5.1"

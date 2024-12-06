@@ -281,7 +281,7 @@ mod test_punch {
     fn test_punch() {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
-        let punch = common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
+        let punch = yaroc_common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
         let punches = Punches {
             punches: vec![Punch {
                 raw: punch.to_vec(),
@@ -301,7 +301,7 @@ mod test_punch {
     fn test_meshtastic_serial() {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
-        let punch = common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
+        let punch = yaroc_common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
 
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let envelope = ServiceEnvelope {

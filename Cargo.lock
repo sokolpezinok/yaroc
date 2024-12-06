@@ -183,26 +183,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "critical-section",
- "defmt",
- "embassy-executor",
- "embassy-futures",
- "embassy-nrf",
- "embassy-sync 0.6.1",
- "embassy-time",
- "femtopb",
- "femtopb-build",
- "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
- "log",
- "static_cell",
- "thiserror 2.0.3",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2653,11 +2633,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
+name = "yaroc-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "critical-section",
+ "defmt",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-nrf",
+ "embassy-sync 0.6.1",
+ "embassy-time",
+ "femtopb",
+ "femtopb-build",
+ "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
+ "log",
+ "static_cell",
+ "thiserror 2.0.3",
+]
+
+[[package]]
 name = "yaroc-nrf52840"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "common",
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-semihosting",
@@ -2678,14 +2677,14 @@ dependencies = [
  "nrf52840-hal",
  "panic-probe",
  "thiserror 2.0.3",
+ "yaroc-common",
 ]
 
 [[package]]
-name = "yaroc_rs"
+name = "yaroc-python"
 version = "0.1.13"
 dependencies = [
  "chrono",
- "common",
  "geoutils",
  "log",
  "meshtastic",
@@ -2697,6 +2696,7 @@ dependencies = [
  "regex",
  "thiserror 2.0.3",
  "walkdir",
+ "yaroc-common",
 ]
 
 [[package]]
