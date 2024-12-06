@@ -1,4 +1,4 @@
-use common::error as common_error;
+use yaroc_common::error as common_error;
 use defmt::Format;
 use thiserror::Error;
 

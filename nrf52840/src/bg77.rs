@@ -1,12 +1,5 @@
 use crate::error::Error;
 use chrono::{DateTime, FixedOffset, TimeDelta};
-use common::{
-    at::{
-        response::{split_at_response, AtResponse},
-        uart::{AtUart, RxWithIdle, Tx, URC_CHANNEL},
-    },
-    status::{parse_qlts, MiniCallHome},
-};
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -21,6 +14,13 @@ use embassy_sync::signal::Signal;
 use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
 use femtopb::Message as _;
 use heapless::{format, String, Vec};
+use yaroc_common::{
+    at::{
+        response::{split_at_response, AtResponse},
+        uart::{AtUart, RxWithIdle, Tx, URC_CHANNEL},
+    },
+    status::{parse_qlts, MiniCallHome},
+};
 
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx<'static, UARTE1>>>>;
 
@@ -351,7 +351,7 @@ impl<T: Tx> BG77<T> {
 
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = self.simple_call("+QLTS=2").await?.parse1::<String<25>>([0], None)?;
-        parse_qlts(&modem_clock).map_err(common::error::Error::into)
+        parse_qlts(&modem_clock).map_err(yaroc_common::error::Error::into)
     }
 
     async fn current_time(&mut self) -> Option<DateTime<FixedOffset>> {
@@ -437,7 +437,6 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 #[embassy_executor::task]
 pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
     loop {
-        debug!("A");
         let urc = URC_CHANNEL.receive().await;
         match urc {
             Ok(line) => {

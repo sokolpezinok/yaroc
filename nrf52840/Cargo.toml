@@ -10,7 +10,7 @@ rust-version = "1.81"
 bluetooth-le = ["dep:nrf-softdevice"]
 
 [dependencies]
-common = { path = "../common", features = ["defmt", "nrf"] }
+yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
 
 defmt = { workspace = true }
 defmt-rtt = "0.4"

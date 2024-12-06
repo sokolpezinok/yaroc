@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::logs::HostInfo;
 use chrono::{prelude::*, Duration};
-use common::punch::SiPunch as CommonSiPunch;
+use yaroc_common::punch::SiPunch as CommonSiPunch;
 use pyo3::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
