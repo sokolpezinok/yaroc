@@ -1,6 +1,6 @@
-use yaroc_common::error as common_error;
 use defmt::Format;
 use thiserror::Error;
+use yaroc_common::error as common_error;
 
 #[derive(Debug, Error, Format)]
 pub enum Error {

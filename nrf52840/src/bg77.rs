@@ -317,7 +317,7 @@ impl<T: Tx> BG77<T> {
     }
     async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},1,0,\"yar/b827eab91544/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
+            "+QMTPUB={},{},1,0,\"yar/cee423506cac/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
         )?;
         let idx = usize::from(self.msg_id);
         MQTT_URCS[idx].reset();
