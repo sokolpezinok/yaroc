@@ -5,7 +5,10 @@ use embassy_nrf::{
     uarte::{UarteRxWithIdle, UarteTx},
 };
 
-use super::uart::{AtRxBroker, RxWithIdle, Tx, MAIN_RX_CHANNEL};
+use super::{
+    response::CommandResponse,
+    uart::{AtRxBroker, RxWithIdle, Tx, MAIN_RX_CHANNEL},
+};
 
 impl Tx for UarteTx<'static, UARTE1> {
     async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {
@@ -17,13 +20,13 @@ impl Tx for UarteTx<'static, UARTE1> {
 #[embassy_executor::task]
 async fn reader(
     rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
-    urc_classifier: fn(&str, &str) -> bool,
+    urc_classifier: fn(&CommandResponse) -> bool,
 ) {
     AtRxBroker::broker_loop(rx, urc_classifier, &MAIN_RX_CHANNEL).await;
 }
 
 impl RxWithIdle for UarteRxWithIdle<'static, UARTE1, TIMER0> {
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&CommandResponse) -> bool) {
         spawner.must_spawn(reader(self, urc_classifier));
     }
 

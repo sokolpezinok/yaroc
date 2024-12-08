@@ -23,12 +23,12 @@ type TxChannelType = Channel<CriticalSectionRawMutex, String<AT_COMMAND_SIZE>, 5
 static TX_CHANNEL: TxChannelType = Channel::new();
 
 #[embassy_executor::task]
-async fn reader(rx: FakeRxWithIdle, urc_classifier: fn(&str, &str) -> bool) {
+async fn reader(rx: FakeRxWithIdle, urc_classifier: fn(&CommandResponse) -> bool) {
     AtRxBroker::broker_loop(rx, urc_classifier, &MAIN_RX_CHANNEL).await;
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&CommandResponse) -> bool) {
         spawner.must_spawn(reader(self, urc_classifier))
     }
 
@@ -81,8 +81,8 @@ async fn main(spawner: Spawner) {
         ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
     ]);
     let tx = FakeTx::new(&TX_CHANNEL);
-    let handler = |_: &str, _: &str| false;
-    let mut at_uart = AtUart::new(rx, tx, handler, &spawner);
+    let classifier = |_: &CommandResponse| false;
+    let mut at_uart = AtUart::new(rx, tx, classifier, &spawner);
 
     let response = at_uart.call_at("I", Duration::from_millis(10)).await.unwrap();
     assert_eq!(

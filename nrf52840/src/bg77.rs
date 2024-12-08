@@ -77,24 +77,17 @@ impl<T: Tx> BG77<T> {
         }
     }
 
-    fn urc_classifier(prefix: &str, rest: &str) -> bool {
-        match prefix {
+    fn urc_classifier(response: &CommandResponse) -> bool {
+        match response.command() {
             "QMTSTAT" | "QIURC" => true,
             "CEREG" => {
                 // The CEREG URC is shorter, normal one has 5 values
-                let value_count = rest.split(',').count();
+                let value_count = response.values().len();
                 value_count == 1 || value_count == 4
             }
             "QMTPUB" => {
-                let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
-                    .split(',')
-                    .map(|val| str::parse(val).map_err(|_| Error::ParseError))
-                    .collect();
-                if let Ok(values) = res {
-                    values[1] != 0
-                } else {
-                    false
-                }
+                let values = response.values();
+                values[1] != "0"
             }
             _ => false,
         }

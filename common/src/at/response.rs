@@ -3,17 +3,6 @@ use heapless::{String, Vec};
 
 use crate::error::Error;
 
-pub(crate) fn split_at_response(line: &str) -> Option<(&str, &str)> {
-    if line.starts_with('+') {
-        if let Some(prefix_len) = line.find(": ") {
-            let prefix = &line[1..prefix_len];
-            let rest = &line[prefix_len + 2..];
-            return Some((prefix, rest));
-        }
-    }
-    None
-}
-
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Substring {
@@ -45,7 +34,7 @@ pub struct CommandResponse {
 
 impl CommandResponse {
     pub fn new(line: &str) -> crate::Result<Self> {
-        let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
+        let (prefix, rest) = Self::split_at_response(line).ok_or(Error::ParseError)?;
         Self::parse_values(rest)?; // TODO: store the result
         Ok(Self {
             line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
@@ -59,6 +48,17 @@ impl CommandResponse {
 
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
         Self::parse_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
+    }
+
+    fn split_at_response(line: &str) -> Option<(&str, &str)> {
+        if line.starts_with('+') {
+            if let Some(prefix_len) = line.find(": ") {
+                let prefix = &line[1..prefix_len];
+                let rest = &line[prefix_len + 2..];
+                return Some((prefix, rest));
+            }
+        }
+        None
     }
 
     /// Parse out values out of a AT command response.
@@ -99,8 +99,8 @@ impl Display for CommandResponse {
 #[cfg(feature = "defmt")]
 impl defmt::Format for CommandResponse {
     fn format(&self, fmt: defmt::Formatter) {
-        // TODO: add values
-        defmt::write!(fmt, "{}", self.command())
+        // TODO: should we show parsed content?
+        defmt::write!(fmt, "{}", self.line.as_str())
     }
 }
 
@@ -280,12 +280,15 @@ mod test_at_utils {
     #[test]
     fn test_split_at_response() {
         let res = "+QMTSTAT: 0,2";
-        assert_eq!(split_at_response(res), Some(("QMTSTAT", "0,2")));
+        assert_eq!(
+            CommandResponse::split_at_response(res),
+            Some(("QMTSTAT", "0,2"))
+        );
 
         let res = "QMTSTAT: 0,2";
-        assert_eq!(split_at_response(res), None);
+        assert_eq!(CommandResponse::split_at_response(res), None);
         let res = "+QMTSTAT 0,2";
-        assert_eq!(split_at_response(res), None);
+        assert_eq!(CommandResponse::split_at_response(res), None);
     }
 
     #[test]

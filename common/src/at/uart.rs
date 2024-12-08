@@ -1,6 +1,4 @@
-use super::response::{
-    split_at_response, AtResponse, CommandResponse, FromModem, AT_COMMAND_SIZE, AT_LINES,
-};
+use super::response::{AtResponse, CommandResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
 use core::option::Option::Some;
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
@@ -44,14 +42,10 @@ impl AtRxBroker {
     }
 
     /// Parse lines out of a given text and forward each line to the appropriate channel.
-    async fn parse_lines(&self, text: &str, urc_handler: fn(&str, &str) -> bool) {
+    async fn parse_lines(&self, text: &str, urc_classifier: fn(&CommandResponse) -> bool) {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
-            let is_callback = split_at_response(line)
-                .map(|(prefix, rest)| (urc_handler)(prefix, rest))
-                .unwrap_or_default();
-
             let to_send = match line {
                 "OK" | "RDY" | "APP RDY" => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
@@ -65,16 +59,20 @@ impl AtRxBroker {
                     }
                 }
             };
-            if !is_callback {
-                if let Ok(from_modem) = to_send.as_ref() {
-                    open_stream = !from_modem.terminal();
-                } else {
-                    open_stream = false;
+
+            if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
+                if urc_classifier(command_response) {
+                    self.urc_channel.send(CommandResponse::new(line)).await;
+                    continue;
                 }
-                self.main_channel.send(to_send).await;
-            } else {
-                self.urc_channel.send(CommandResponse::new(line)).await;
             }
+
+            if let Ok(from_modem) = to_send.as_ref() {
+                open_stream = !from_modem.terminal();
+            } else {
+                open_stream = false;
+            }
+            self.main_channel.send(to_send).await;
         }
         if open_stream {
             self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
@@ -83,7 +81,7 @@ impl AtRxBroker {
 
     pub async fn broker_loop<R: RxWithIdle>(
         mut rx: R,
-        urc_classifier: fn(&str, &str) -> bool,
+        urc_classifier: fn(&CommandResponse) -> bool,
         main_rx_channel: &'static MainRxChannelType<Error>,
     ) {
         const AT_BUF_SIZE: usize = 300;
@@ -108,7 +106,7 @@ impl AtRxBroker {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_classifier`.
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&str, &str) -> bool);
+    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&CommandResponse) -> bool);
 
     /// Read from UART until it's idle. Return the number of read bytes.
     fn read_until_idle(
@@ -130,7 +128,7 @@ impl<T: Tx> AtUart<T> {
     pub fn new<R: RxWithIdle>(
         rx: R,
         tx: T,
-        urc_classifier: fn(&str, &str) -> bool,
+        urc_classifier: fn(&CommandResponse) -> bool,
         spawner: &Spawner,
     ) -> Self {
         rx.spawn(spawner, urc_classifier);
@@ -247,12 +245,12 @@ mod test_at {
         static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
         static URC_CHANNEL: UrcChannelType = Channel::new();
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, &URC_CHANNEL);
-        let handler = |prefix: &str, _: &str| match prefix {
+        let classifier = |response: &CommandResponse| match response.command() {
             "URC" => true,
             _ => false,
         };
 
-        block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR", handler));
+        block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR", classifier));
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
         let urc = URC_CHANNEL.try_receive().unwrap()?;
         assert_eq!(urc.command(), "URC");
@@ -260,13 +258,13 @@ mod test_at {
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
-        block_on(broker.parse_lines(long, handler));
+        block_on(broker.parse_lines(long, classifier));
         assert_eq!(
             MAIN_RX_CHANNEL.try_receive().unwrap(),
             Err(Error::BufferTooSmallError)
         );
 
-        block_on(broker.parse_lines("+NONURC: 1\n", handler));
+        block_on(broker.parse_lines("+NONURC: 1\n", classifier));
         assert_eq!(
             MAIN_RX_CHANNEL.try_receive().unwrap()?,
             FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
