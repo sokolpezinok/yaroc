@@ -1,5 +1,4 @@
 use core::{fmt::Display, str::FromStr};
-
 use heapless::{String, Vec};
 
 use crate::error::Error;
@@ -15,9 +14,37 @@ pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Substring {
+    start: usize,
+    end: usize,
+}
+
+impl Display for Substring {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "({},{})", self.start, self.end)
+    }
+}
+
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommandResponse {
+    line: String<AT_COMMAND_SIZE>,
+    prefix: Substring,
+    values: Vec<Substring, AT_VALUE_COUNT>,
+}
+
+impl Display for CommandResponse {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.line.as_str())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum FromModem {
     Line(String<AT_COMMAND_SIZE>),
+    CommandResponse(CommandResponse),
     Ok,
     Error,
 }
@@ -27,6 +54,9 @@ impl defmt::Format for FromModem {
     fn format(&self, fmt: defmt::Formatter) {
         match self {
             FromModem::Line(line) => defmt::write!(fmt, "{}", line.as_str()),
+            FromModem::CommandResponse(command_response) => {
+                defmt::write!(fmt, "{}", command_response)
+            }
             FromModem::Ok => defmt::write!(fmt, "Ok"),
             FromModem::Error => defmt::write!(fmt, "Error"),
         }
@@ -95,6 +125,11 @@ impl AtResponse {
         Ok(split)
     }
 
+    /// Returns a response to the command.
+    ///
+    /// If `filter` is None, it returns the first one.
+    /// If `filter` is `(x, idx)`, returns the response with value `x` on position `idx`. If there
+    /// is no such value, returns `ModemError`.
     fn response<T: FromStr + Eq>(
         &self,
         filter: Option<(T, usize)>,
