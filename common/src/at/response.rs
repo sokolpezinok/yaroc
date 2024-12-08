@@ -71,7 +71,10 @@ impl CommandResponse {
             let pos = match values.chars().next() {
                 Some('"') => {
                     let pos = values.find("\",").unwrap_or(values.len() - 1);
-                    // TODO: this should fail if rest[pos - 1] is not '"'
+                    if pos == values.len() - 1 && !values.ends_with("\"") {
+                        // This can happen in the `unwrap_or` branch.
+                        return Err(Error::ParseError);
+                    }
                     split.push(&values[1..pos]).unwrap();
                     pos + 1
                 }
@@ -300,9 +303,21 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_reponse_parse_values() {
-        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
+    fn test_response_parse_values() -> crate::Result<()> {
+        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid\"")?;
         assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
+
+        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid");
+        assert_eq!(ans.unwrap_err(), Error::ParseError);
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_pick_values() -> crate::Result<()> {
+        let response = CommandResponse::new("+CMD: 1,\"item1,item2\",12")?;
+        let vals = response.pick_values([1, 2])?;
+        assert_eq!(&vals.as_slice(), &["item1,item2", "12"]);
+        Ok(())
     }
 
     #[test]
