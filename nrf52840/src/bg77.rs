@@ -101,8 +101,8 @@ impl<T: Tx> BG77<T> {
     }
 
     fn qmtpub_handler(urc: CommandResponse) -> crate::Result<()> {
-        let values = urc.values()?;
-        let values: Vec<u8, QMTPUB_VALUES> = values
+        let values: Vec<u8, QMTPUB_VALUES> = urc
+            .values()
             .iter()
             // TODO: parsing should be moved into response.rs
             .map(|val| str::parse::<u8>(val).map_err(|_| Error::ModemError))

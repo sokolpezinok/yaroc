@@ -74,7 +74,8 @@ pub struct CommandResponse {
 
 impl CommandResponse {
     pub fn new(line: &str) -> crate::Result<Self> {
-        let (prefix, _) = split_at_response(line).ok_or(Error::ParseError)?;
+        let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
+        parse_values(rest)?; // TODO: store the result
         Ok(Self {
             line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
             prefix: Substring::new(1, 1 + prefix.len()),
@@ -85,8 +86,8 @@ impl CommandResponse {
         &self.line[1..self.prefix.end()]
     }
 
-    pub fn values(&self) -> crate::Result<Vec<&str, AT_VALUE_COUNT>> {
-        parse_values(&self.line.as_str()[self.prefix.end() + 2..])
+    pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
+        parse_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
     }
 }
 
@@ -182,7 +183,7 @@ impl AtResponse {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line {
                 if command_response.command() == &self.command.as_str()[1..] {
-                    let values = command_response.values().unwrap(); // TODO: unwrap
+                    let values = command_response.values();
                     match filter.as_ref() {
                         Some((t, idx)) => {
                             let val: Option<T> = str::parse(values[*idx]).ok();

@@ -256,7 +256,7 @@ mod test_at {
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
         let urc = URC_CHANNEL.try_receive().unwrap()?;
         assert_eq!(urc.command(), "URC");
-        assert_eq!(urc.values()?.as_slice(), ["1", "string"]);
+        assert_eq!(urc.values().as_slice(), ["1", "string"]);
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
