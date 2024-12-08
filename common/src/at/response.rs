@@ -14,35 +14,6 @@ pub(crate) fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
-/// Parse out values out of a AT command response.
-///
-/// Double quotes for strings are ignored. Numbers are returned as strings. For example,
-/// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
-// TODO: this method should go under CommandResponse in the future
-fn parse_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
-    let mut split = Vec::new();
-    while !values.is_empty() {
-        let pos = match values.chars().next() {
-            Some('"') => {
-                let pos = values.find("\",").unwrap_or(values.len() - 1);
-                // TODO: this should fail if rest[pos - 1] is not '"'
-                split.push(&values[1..pos]).unwrap();
-                pos + 1
-            }
-            _ => {
-                let pos = values.find(",").unwrap_or(values.len());
-                split.push(&values[..pos]).unwrap();
-                pos
-            }
-        };
-        if pos >= values.len() {
-            break;
-        }
-        values = &values[pos + 1..];
-    }
-    Ok(split)
-}
-
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Substring {
@@ -75,7 +46,7 @@ pub struct CommandResponse {
 impl CommandResponse {
     pub fn new(line: &str) -> crate::Result<Self> {
         let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
-        parse_values(rest)?; // TODO: store the result
+        Self::parse_values(rest)?; // TODO: store the result
         Ok(Self {
             line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
             prefix: Substring::new(1, 1 + prefix.len()),
@@ -87,7 +58,35 @@ impl CommandResponse {
     }
 
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
-        parse_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
+        Self::parse_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
+    }
+
+    /// Parse out values out of a AT command response.
+    ///
+    /// Double quotes for strings are ignored. Numbers are returned as strings. For example,
+    /// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
+    fn parse_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
+        let mut split = Vec::new();
+        while !values.is_empty() {
+            let pos = match values.chars().next() {
+                Some('"') => {
+                    let pos = values.find("\",").unwrap_or(values.len() - 1);
+                    // TODO: this should fail if rest[pos - 1] is not '"'
+                    split.push(&values[1..pos]).unwrap();
+                    pos + 1
+                }
+                _ => {
+                    let pos = values.find(",").unwrap_or(values.len());
+                    split.push(&values[..pos]).unwrap();
+                    pos
+                }
+            };
+            if pos >= values.len() {
+                break;
+            }
+            values = &values[pos + 1..];
+        }
+        Ok(split)
     }
 }
 
@@ -290,8 +289,8 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_parse_values() {
-        let ans = parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
+    fn test_reponse_parse_values() {
+        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
         assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
     }
 
