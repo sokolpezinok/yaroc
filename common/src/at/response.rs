@@ -35,7 +35,7 @@ pub struct CommandResponse {
 impl CommandResponse {
     pub fn new(line: &str) -> crate::Result<Self> {
         let (prefix, rest) = Self::split_at_response(line).ok_or(Error::ParseError)?;
-        Self::parse_values(rest)?; // TODO: store the result
+        Self::split_values(rest)?; // TODO: store the result
         Ok(Self {
             line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
             prefix: Substring::new(1, 1 + prefix.len()),
@@ -47,7 +47,7 @@ impl CommandResponse {
     }
 
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
-        Self::parse_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
+        Self::split_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
     }
 
     fn split_at_response(line: &str) -> Option<(&str, &str)> {
@@ -65,7 +65,7 @@ impl CommandResponse {
     ///
     /// Double quotes for strings are ignored. Numbers are returned as strings. For example,
     /// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
-    fn parse_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
+    fn split_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
         let mut split = Vec::new();
         while !values.is_empty() {
             let pos = match values.chars().next() {
@@ -105,6 +105,13 @@ impl CommandResponse {
             .iter()
             .map(|idx| String::from_str(values[*idx]).unwrap()) //TODO
             .collect())
+    }
+
+    pub fn parse_values<T: FromStr>(&self) -> Result<Vec<T, AT_VALUE_COUNT>, Error> {
+        self.values()
+            .iter()
+            .map(|val| str::parse::<T>(val).map_err(|_| Error::ParseError))
+            .collect::<Result<Vec<_, AT_VALUE_COUNT>, _>>()
     }
 }
 
@@ -303,11 +310,11 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_response_parse_values() -> crate::Result<()> {
-        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid\"")?;
+    fn test_response_split_values() -> crate::Result<()> {
+        let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid\"")?;
         assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
 
-        let ans = CommandResponse::parse_values("1,\"item1,item2\",\"cellid");
+        let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid");
         assert_eq!(ans.unwrap_err(), Error::ParseError);
         Ok(())
     }
@@ -317,6 +324,13 @@ mod test_at_utils {
         let response = CommandResponse::new("+CMD: 1,\"item1,item2\",12")?;
         let vals = response.pick_values([1, 2])?;
         assert_eq!(&vals.as_slice(), &["item1,item2", "12"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_response_parse_values() -> crate::Result<()> {
+        let response = CommandResponse::new("+CMD: 8,13,21")?;
+        assert_eq!(response.parse_values::<u8>()?.as_slice(), &[8, 13, 21]);
         Ok(())
     }
 

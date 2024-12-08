@@ -13,7 +13,7 @@ use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
 use femtopb::Message as _;
-use heapless::{format, String, Vec};
+use heapless::{format, String};
 use yaroc_common::{
     at::{
         response::{AtResponse, CommandResponse},
@@ -24,7 +24,6 @@ use yaroc_common::{
 
 pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx<'static, UARTE1>>>>;
 
-const QMTPUB_VALUES: usize = 4;
 const MQTT_MESSAGES: usize = 5;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -94,12 +93,7 @@ impl<T: Tx> BG77<T> {
     }
 
     fn qmtpub_handler(urc: CommandResponse) -> crate::Result<()> {
-        let values: Vec<u8, QMTPUB_VALUES> = urc
-            .values()
-            .iter()
-            // TODO: parsing should be moved into response.rs
-            .map(|val| str::parse::<u8>(val).map_err(|_| Error::ModemError))
-            .collect::<Result<Vec<_, QMTPUB_VALUES>, _>>()?;
+        let values = urc.parse_values::<u8>()?;
         // TODO: get client ID
         if values[1] > 0 && values[0] == 0 {
             let msg_id = values[1];
