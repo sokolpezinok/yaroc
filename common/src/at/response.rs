@@ -3,7 +3,7 @@ use heapless::{String, Vec};
 
 use crate::error::Error;
 
-pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
+pub(crate) fn split_at_response(line: &str) -> Option<(&str, &str)> {
     if line.starts_with('+') {
         if let Some(prefix_len) = line.find(": ") {
             let prefix = &line[1..prefix_len];
@@ -14,11 +14,50 @@ pub fn split_at_response(line: &str) -> Option<(&str, &str)> {
     None
 }
 
+/// Parse out values out of a AT command response.
+///
+/// Double quotes for strings are ignored. Numbers are returned as strings. For example,
+/// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
+// TODO: this method should go under CommandResponse in the future
+fn parse_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
+    let mut split = Vec::new();
+    while !values.is_empty() {
+        let pos = match values.chars().next() {
+            Some('"') => {
+                let pos = values.find("\",").unwrap_or(values.len() - 1);
+                // TODO: this should fail if rest[pos - 1] is not '"'
+                split.push(&values[1..pos]).unwrap();
+                pos + 1
+            }
+            _ => {
+                let pos = values.find(",").unwrap_or(values.len());
+                split.push(&values[..pos]).unwrap();
+                pos
+            }
+        };
+        if pos >= values.len() {
+            break;
+        }
+        values = &values[pos + 1..];
+    }
+    Ok(split)
+}
+
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Substring {
     start: usize,
     end: usize,
+}
+
+impl Substring {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub fn end(&self) -> usize {
+        self.end
+    }
 }
 
 impl Display for Substring {
@@ -27,17 +66,41 @@ impl Display for Substring {
     }
 }
 
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommandResponse {
     line: String<AT_COMMAND_SIZE>,
     prefix: Substring,
-    values: Vec<Substring, AT_VALUE_COUNT>,
+}
+
+impl CommandResponse {
+    pub fn new(line: &str) -> crate::Result<Self> {
+        let (prefix, _) = split_at_response(line).ok_or(Error::ParseError)?;
+        Ok(Self {
+            line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
+            prefix: Substring::new(1, 1 + prefix.len()),
+        })
+    }
+
+    pub fn command(&self) -> &str {
+        &self.line[1..self.prefix.end()]
+    }
+
+    pub fn values(&self) -> crate::Result<Vec<&str, AT_VALUE_COUNT>> {
+        parse_values(&self.line.as_str()[self.prefix.end() + 2..])
+    }
 }
 
 impl Display for CommandResponse {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.line.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for CommandResponse {
+    fn format(&self, fmt: defmt::Formatter) {
+        // TODO: add values
+        defmt::write!(fmt, "{}", self.command())
     }
 }
 
@@ -51,10 +114,7 @@ pub enum FromModem {
 
 impl FromModem {
     pub fn terminal(&self) -> bool {
-        match self {
-            FromModem::Ok | FromModem::Error => true,
-            _ => false
-        }
+        matches!(self, FromModem::Ok | FromModem::Error)
     }
 }
 
@@ -110,30 +170,6 @@ impl AtResponse {
         self.lines.as_slice()
     }
 
-    fn parse_values(mut rest: &str) -> Result<Vec<&str, 15>, Error> {
-        let mut split = Vec::new();
-        while !rest.is_empty() {
-            let pos = match rest.chars().next() {
-                Some('"') => {
-                    let pos = rest.find("\",").unwrap_or(rest.len() - 1);
-                    // TODO: this should fail if rest[pos - 1] is not '"'
-                    split.push(&rest[1..pos]).unwrap();
-                    pos + 1
-                }
-                _ => {
-                    let pos = rest.find(",").unwrap_or(rest.len());
-                    split.push(&rest[..pos]).unwrap();
-                    pos
-                }
-            };
-            if pos >= rest.len() {
-                break;
-            }
-            rest = &rest[pos + 1..];
-        }
-        Ok(split)
-    }
-
     /// Returns a response to the command.
     ///
     /// If `filter` is None, it returns the first one.
@@ -149,7 +185,7 @@ impl AtResponse {
                     let (_, rest) = split_at_response(line).ok_or(Error::ParseError)?;
                     match filter.as_ref() {
                         Some((t, idx)) => {
-                            let values = Self::parse_values(rest)?;
+                            let values = parse_values(rest)?;
                             let val: Option<T> = str::parse(values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
                                 return String::from_str(rest)
@@ -176,7 +212,7 @@ impl AtResponse {
         filter: Option<T>,
     ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
         let response = self.response(filter.map(|t| (t, indices[0])))?;
-        let values = Self::parse_values(&response)?;
+        let values = parse_values(&response)?;
         if !indices.iter().all(|idx| *idx < values.len()) {
             return Err(Error::ModemError);
         }
@@ -188,7 +224,7 @@ impl AtResponse {
 
     pub fn count_response_values(&self) -> Result<usize, Error> {
         let response = self.response::<u8>(None)?;
-        let values = Self::parse_values(&response)?;
+        let values = parse_values(&response)?;
         Ok(values.len())
     }
 
@@ -258,7 +294,7 @@ mod test_at_utils {
 
     #[test]
     fn test_parse_values() {
-        let ans = AtResponse::parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
+        let ans = parse_values("1,\"item1,item2\",\"cellid\"").unwrap();
         assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
     }
 

@@ -1,4 +1,6 @@
-use super::response::{split_at_response, AtResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
+use super::response::{
+    split_at_response, AtResponse, CommandResponse, FromModem, AT_COMMAND_SIZE, AT_LINES,
+};
 use core::option::Option::Some;
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
@@ -18,7 +20,7 @@ type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 pub type MainRxChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
-pub type UrcChannelType = Channel<RawMutex, Result<String<AT_COMMAND_SIZE>, Error>, 2>;
+pub type UrcChannelType = Channel<RawMutex, Result<CommandResponse, Error>, 2>;
 
 pub static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
 pub static URC_CHANNEL: UrcChannelType = Channel::new();
@@ -59,19 +61,13 @@ impl AtRxBroker {
             };
             if !is_callback {
                 if let Ok(from_modem) = to_send.as_ref() {
-                    if !from_modem.terminal() {
-                        open_stream = true;
-                    } else {
-                        open_stream = false;
-                    }
+                    open_stream = !from_modem.terminal();
                 } else {
                     open_stream = false;
                 }
                 self.main_channel.send(to_send).await;
             } else {
-                self.urc_channel
-                    .send(String::from_str(line).map_err(|_| Error::BufferTooSmallError))
-                    .await;
+                self.urc_channel.send(CommandResponse::new(line)).await;
             }
         }
         if open_stream {
@@ -250,9 +246,11 @@ mod test_at {
             _ => false,
         };
 
-        block_on(broker.parse_lines("OK\r\n+URC: 1\nERROR", handler));
+        block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR", handler));
         assert_eq!(block_on(MAIN_RX_CHANNEL.receive()).unwrap(), FromModem::Ok);
-        assert_eq!(block_on(URC_CHANNEL.receive()).unwrap(), "+URC: 1");
+        let urc = URC_CHANNEL.try_receive().unwrap().unwrap();
+        assert_eq!(urc.command(), "URC");
+        assert_eq!(urc.values().unwrap().as_slice(), ["1", "string"]);
         assert_eq!(
             block_on(MAIN_RX_CHANNEL.receive()).unwrap(),
             FromModem::Error

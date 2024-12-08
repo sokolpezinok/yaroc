@@ -16,7 +16,7 @@ use femtopb::Message as _;
 use heapless::{format, String, Vec};
 use yaroc_common::{
     at::{
-        response::{split_at_response, AtResponse},
+        response::{AtResponse, CommandResponse},
         uart::{AtUart, RxWithIdle, Tx, URC_CHANNEL},
     },
     status::{parse_qlts, MiniCallHome},
@@ -100,29 +100,36 @@ impl<T: Tx> BG77<T> {
         }
     }
 
-    pub async fn urc_handler(line: &str, bg77_mutex: &'static BG77Type) -> crate::Result<()> {
-        let (prefix, rest) = split_at_response(line).ok_or(Error::ParseError)?;
-        match prefix {
+    fn qmtpub_handler(urc: CommandResponse) -> crate::Result<()> {
+        let values = urc.values()?;
+        let values: Vec<u8, QMTPUB_VALUES> = values
+            .iter()
+            // TODO: parsing should be moved into response.rs
+            .map(|val| str::parse::<u8>(val).map_err(|_| Error::ModemError))
+            .collect::<Result<Vec<_, QMTPUB_VALUES>, _>>()?;
+        // TODO: get client ID
+        if values[1] > 0 && values[0] == 0 {
+            let msg_id = values[1];
+            let idx = usize::from(msg_id) - 1;
+            if idx < MQTT_URCS.len() {
+                MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn urc_handler(
+        urc: CommandResponse,
+        bg77_mutex: &'static BG77Type,
+    ) -> crate::Result<()> {
+        match urc.command() {
             "QMTSTAT" | "CEREG" => {
                 let mut bg77_unlocked = bg77_mutex.lock().await;
                 let bg77 = bg77_unlocked.as_mut().unwrap();
                 bg77.mqtt_connect().await?;
             }
             "QMTPUB" => {
-                let res: Result<Vec<u8, QMTPUB_VALUES>, _> = rest
-                    .split(',')
-                    .map(|val| str::parse(val).map_err(|_| Error::ParseError))
-                    .collect();
-                if let Ok(values) = res {
-                    // TODO: get client ID
-                    if values[1] > 0 && values[0] == 0 {
-                        let msg_id = values[1];
-                        let idx = usize::from(msg_id) - 1;
-                        if idx < MQTT_URCS.len() {
-                            MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
-                        }
-                    }
-                }
+                Self::qmtpub_handler(urc)?;
             }
             _ => {}
         }
@@ -439,11 +446,11 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
     loop {
         let urc = URC_CHANNEL.receive().await;
         match urc {
-            Ok(line) => {
-                debug!("Got URC: {}", line.as_str());
+            Ok(response) => {
+                debug!("Got URC: {}", response);
                 let res = with_timeout(
                     Duration::from_secs(600),
-                    BG77::<UarteTx<'static, UARTE1>>::urc_handler(line.as_str(), bg77_mutex),
+                    BG77::<UarteTx<'static, UARTE1>>::urc_handler(response, bg77_mutex),
                 )
                 .await;
                 if let Ok(res) = res {
