@@ -204,7 +204,7 @@ impl AtResponse {
                     match filter.as_ref() {
                         Some((t, idx)) => {
                             let val: Option<T> = str::parse(values[*idx]).ok();
-                            if val.is_some() && val.unwrap() == *t {
+                            if val.as_ref() == Some(t) {
                                 return Ok(command_response);
                             }
                         }

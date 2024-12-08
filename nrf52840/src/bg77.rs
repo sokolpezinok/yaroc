@@ -130,26 +130,28 @@ impl<T: Tx> BG77<T> {
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
-        self.simple_call("E0").await?;
-        self.simple_call("+CEREG=2").await?;
+        self.simple_call("E0", None).await?;
+        self.simple_call("+CEREG=2", None).await?;
         self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
         // +QCFG needs +CGATT=1 first
-        self.simple_call("+QCFG=\"nwscanseq\",03").await?;
-        self.simple_call("+QCFG=\"iotopmode\",1,1").await?;
-        self.simple_call("+QCFG=\"band\",0,0,80000").await?;
+        self.simple_call("+QCFG=\"nwscanseq\",03", None).await?;
+        self.simple_call("+QCFG=\"iotopmode\",1,1", None).await?;
+        self.simple_call("+QCFG=\"band\",0,0,80000", None).await?;
         Ok(())
     }
 
-    async fn simple_call(&mut self, cmd: &str) -> crate::Result<AtResponse> {
-        Ok(self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await?)
-    }
-
-    async fn call_with_response(
+    async fn simple_call(
         &mut self,
         cmd: &str,
-        response_timeout: Duration,
+        response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        Ok(self.uart1.call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout).await?)
+        match response_timeout {
+            None => Ok(self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await?),
+            Some(response_timeout) => Ok(self
+                .uart1
+                .call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout)
+                .await?),
+        }
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
@@ -162,9 +164,10 @@ impl<T: Tx> BG77<T> {
             self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
         }
 
-        let (_, state) = self.simple_call("+CGACT?").await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        let (_, state) =
+            self.simple_call("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
-            let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp").await;
+            let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp", None).await;
             self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
         }
 
@@ -172,8 +175,10 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
-        let opened =
-            self.simple_call("+QMTOPEN?").await?.parse2::<u8, String<40>>([0, 1], Some(cid));
+        let opened = self
+            .simple_call("+QMTOPEN?", None)
+            .await?
+            .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened.as_ref() {
             if *client_id == cid && *url == self.config.url {
                 info!("TCP connection already opened to {}", url.as_str());
@@ -184,7 +189,7 @@ impl<T: Tx> BG77<T> {
 
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = self
-            .call_with_response(&cmd, self.config.activation_timeout)
+            .simple_call(&cmd, Some(self.config.activation_timeout))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
@@ -199,12 +204,12 @@ impl<T: Tx> BG77<T> {
             "+QMTCFG=\"timeout\",{cid},{},2,1",
             self.config.pkt_timeout.as_secs()
         )?;
-        self.simple_call(&cmd).await?;
+        self.simple_call(&cmd, None).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
             (self.config.pkt_timeout * 3).as_secs()
         )?;
-        self.simple_call(&cmd).await?;
+        self.simple_call(&cmd, None).await?;
 
         Ok(())
     }
@@ -222,7 +227,7 @@ impl<T: Tx> BG77<T> {
         self.mqtt_open(cid).await?;
 
         let (_, status) =
-            self.simple_call("+QMTCONN?").await?.parse2::<u8, u8>([0, 1], Some(cid))?;
+            self.simple_call("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
@@ -240,7 +245,7 @@ impl<T: Tx> BG77<T> {
                 info!("Will connect to MQTT");
                 let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
                 let (_, res, reason) = self
-                    .call_with_response(&cmd, self.config.pkt_timeout + MINIMUM_TIMEOUT)
+                    .simple_call(&cmd, Some(self.config.pkt_timeout + MINIMUM_TIMEOUT))
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -257,7 +262,7 @@ impl<T: Tx> BG77<T> {
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = self
-            .call_with_response(&cmd, self.config.pkt_timeout + MINIMUM_TIMEOUT)
+            .simple_call(&cmd, Some(self.config.pkt_timeout + MINIMUM_TIMEOUT))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
@@ -265,17 +270,17 @@ impl<T: Tx> BG77<T> {
             return Err(Error::MqttError(result));
         }
         let cmd = format!(50; "+QMTCLOSE={cid}")?;
-        let _ = self.simple_call(&cmd).await; // TODO: Why does it fail?
+        let _ = self.simple_call(&cmd, None).await; // TODO: Why does it fail?
         Ok(())
     }
 
     async fn battery_state(&mut self) -> Result<(u16, u8), Error> {
-        let (bcs, volt) = self.simple_call("+CBC").await?.parse2::<u8, u16>([1, 2], None)?;
+        let (bcs, volt) = self.simple_call("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
         Ok((volt, bcs))
     }
 
     async fn signal_info(&mut self) -> Result<(i8, i8, u8, i8), Error> {
-        let response = self.simple_call("+QCSQ").await?;
+        let response = self.simple_call("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
@@ -283,7 +288,7 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn cellid(&mut self) -> Result<u32, Error> {
-        self.simple_call("+CEREG?")
+        self.simple_call("+CEREG?", None)
             .await?
             // TODO: support roaming, that's answer 5
             .parse2::<u32, String<8>>([1, 3], Some(1))
@@ -321,7 +326,7 @@ impl<T: Tx> BG77<T> {
         )?;
         let idx = usize::from(self.msg_id);
         MQTT_URCS[idx].reset();
-        self.simple_call(&cmd).await?;
+        self.simple_call(&cmd, None).await?;
         self.uart1.call(msg, MINIMUM_TIMEOUT).await?;
         self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         loop {
@@ -350,7 +355,8 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
-        let modem_clock = self.simple_call("+QLTS=2").await?.parse1::<String<25>>([0], None)?;
+        let modem_clock =
+            self.simple_call("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
         parse_qlts(&modem_clock).map_err(yaroc_common::error::Error::into)
     }
 
@@ -396,7 +402,7 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {
-        if self.simple_call("").await.is_err() {
+        if self.simple_call("", None).await.is_err() {
             self._modem_pin.set_low();
             Timer::after_secs(1).await;
             self._modem_pin.set_high();
