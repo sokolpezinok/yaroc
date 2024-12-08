@@ -88,6 +88,21 @@ impl CommandResponse {
         }
         Ok(split)
     }
+
+    /// Pick values from a command response given by the list of `indices`.
+    fn pick_values<const N: usize>(
+        &self,
+        indices: [usize; N],
+    ) -> Result<Vec<String<AT_VALUE_LEN>, N>, Error> {
+        let values = self.values();
+        if !indices.iter().all(|idx| *idx < values.len()) {
+            return Err(Error::ModemError);
+        }
+        Ok(indices
+            .iter()
+            .map(|idx| String::from_str(values[*idx]).unwrap()) //TODO
+            .collect())
+    }
 }
 
 impl Display for CommandResponse {
@@ -178,7 +193,7 @@ impl AtResponse {
     fn response<T: FromStr + Eq>(
         &self,
         filter: Option<(T, usize)>,
-    ) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
+    ) -> Result<&CommandResponse, Error> {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line {
                 if command_response.command() == &self.command.as_str()[1..] {
@@ -187,11 +202,11 @@ impl AtResponse {
                         Some((t, idx)) => {
                             let val: Option<T> = str::parse(values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
-                                return Ok(values);
+                                return Ok(command_response);
                             }
                         }
                         None => {
-                            return Ok(values);
+                            return Ok(command_response);
                         }
                     }
                 }
@@ -200,28 +215,21 @@ impl AtResponse {
         Err(Error::ModemError)
     }
 
-    /// Pick values from a AT response given by the list of `indices`.
+    pub fn count_response_values(&self) -> Result<usize, Error> {
+        let response = self.response::<u8>(None)?;
+        Ok(response.values().len())
+    }
+
+    /// Pick values from an AT response given by the list of `indices`.
     ///
     /// If filter is None, the first at response is chosen. If `filter` is provided, only the response
     /// for which the first chosen value (at position `indices[0]`) matches `filter`.
     fn pick_values<T: FromStr + Eq, const N: usize>(
-        self,
+        &self,
         indices: [usize; N],
         filter: Option<T>,
-    ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
-        let values = self.response(filter.map(|t| (t, indices[0])))?;
-        if !indices.iter().all(|idx| *idx < values.len()) {
-            return Err(Error::ModemError);
-        }
-        Ok(indices
-            .iter()
-            .map(|idx| String::from_str(values[*idx]).unwrap()) //TODO
-            .collect())
-    }
-
-    pub fn count_response_values(&self) -> Result<usize, Error> {
-        let values = self.response::<u8>(None)?;
-        Ok(values.len())
+    ) -> Result<Vec<String<AT_VALUE_LEN>, N>, Error> {
+        self.response(filter.map(|t| (t, indices[0])))?.pick_values(indices)
     }
 
     fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
@@ -251,7 +259,7 @@ impl AtResponse {
         indices: [usize; 3],
         filter: Option<T>,
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values::<T, 3>(indices, filter)?;
+        let values = self.pick_values(indices, filter)?;
         Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
@@ -312,13 +320,13 @@ mod test_at_utils {
             .unwrap();
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
         let response = at_response.response(Some((5u8, 0)))?;
-        assert_eq!(response.as_slice(), &["5", "connected"]);
+        assert_eq!(response.values().as_slice(), &["5", "connected"]);
 
         let response = at_response.response(Some((3u8, 0)));
         assert_eq!(response.unwrap_err(), Error::ModemError);
 
         let response = at_response.response::<u8>(None)?;
-        assert_eq!(response.as_slice(), &["1", "disconnected"]);
+        assert_eq!(response.values().as_slice(), &["1", "disconnected"]);
         Ok(())
     }
 
