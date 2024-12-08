@@ -5,7 +5,7 @@ use embassy_time::Duration;
 use heapless::String;
 use static_cell::StaticCell;
 use std::str::FromStr;
-use yaroc_common::at::response::{FromModem, AT_COMMAND_SIZE};
+use yaroc_common::at::response::{CommandResponse, FromModem, AT_COMMAND_SIZE};
 use yaroc_common::at::uart::{AtRxBroker, RxWithIdle, Tx, MAIN_RX_CHANNEL};
 use yaroc_common::{at::uart::AtUart, error::Error};
 
@@ -105,7 +105,7 @@ async fn main(spawner: Spawner) {
         response.lines(),
         &[
             FromModem::Ok,
-            FromModem::Line(String::from_str("+QMTOPEN: 0,3").unwrap()),
+            FromModem::CommandResponse(CommandResponse::new("+QMTOPEN: 0,3").unwrap()),
             FromModem::Ok,
         ]
     );

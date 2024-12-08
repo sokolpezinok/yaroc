@@ -55,9 +55,15 @@ impl AtRxBroker {
             let to_send = match line {
                 "OK" | "RDY" | "APP RDY" => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
-                line => String::from_str(line)
-                    .map(FromModem::Line)
-                    .map_err(|_| Error::BufferTooSmallError),
+                line => {
+                    if let Ok(command_response) = CommandResponse::new(line) {
+                        Ok(FromModem::CommandResponse(command_response))
+                    } else {
+                        String::from_str(line)
+                            .map(FromModem::Line)
+                            .map_err(|_| Error::BufferTooSmallError)
+                    }
+                }
             };
             if !is_callback {
                 if let Ok(from_modem) = to_send.as_ref() {
@@ -237,7 +243,7 @@ mod test_at {
     use embassy_futures::block_on;
 
     #[test]
-    fn test_at_broker() {
+    fn test_at_broker() -> crate::Result<()> {
         static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
         static URC_CHANNEL: UrcChannelType = Channel::new();
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, &URC_CHANNEL);
@@ -247,14 +253,11 @@ mod test_at {
         };
 
         block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR", handler));
-        assert_eq!(block_on(MAIN_RX_CHANNEL.receive()).unwrap(), FromModem::Ok);
-        let urc = URC_CHANNEL.try_receive().unwrap().unwrap();
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
+        let urc = URC_CHANNEL.try_receive().unwrap()?;
         assert_eq!(urc.command(), "URC");
-        assert_eq!(urc.values().unwrap().as_slice(), ["1", "string"]);
-        assert_eq!(
-            block_on(MAIN_RX_CHANNEL.receive()).unwrap(),
-            FromModem::Error
-        );
+        assert_eq!(urc.values()?.as_slice(), ["1", "string"]);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
         block_on(broker.parse_lines(long, handler));
@@ -265,10 +268,11 @@ mod test_at {
 
         block_on(broker.parse_lines("+NONURC: 1\n", handler));
         assert_eq!(
-            block_on(MAIN_RX_CHANNEL.receive()).unwrap(),
-            FromModem::Line(String::from_str("+NONURC: 1").unwrap())
+            MAIN_RX_CHANNEL.try_receive().unwrap()?,
+            FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
         );
-        assert_eq!(block_on(MAIN_RX_CHANNEL.receive()).unwrap(), FromModem::Ok);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
         assert_eq!(MAIN_RX_CHANNEL.len(), 0);
+        Ok(())
     }
 }

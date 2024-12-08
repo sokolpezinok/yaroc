@@ -178,22 +178,20 @@ impl AtResponse {
     fn response<T: FromStr + Eq>(
         &self,
         filter: Option<(T, usize)>,
-    ) -> Result<String<AT_RESPONSE_SIZE>, Error> {
+    ) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
         for line in &self.lines {
-            if let FromModem::Line(line) = line {
-                if line.starts_with(self.command.as_str()) {
-                    let (_, rest) = split_at_response(line).ok_or(Error::ParseError)?;
+            if let FromModem::CommandResponse(command_response) = line {
+                if command_response.command() == &self.command.as_str()[1..] {
+                    let values = command_response.values().unwrap(); // TODO: unwrap
                     match filter.as_ref() {
                         Some((t, idx)) => {
-                            let values = parse_values(rest)?;
                             let val: Option<T> = str::parse(values[*idx]).ok();
                             if val.is_some() && val.unwrap() == *t {
-                                return String::from_str(rest)
-                                    .map_err(|_| Error::BufferTooSmallError);
+                                return Ok(values);
                             }
                         }
                         None => {
-                            return String::from_str(rest).map_err(|_| Error::BufferTooSmallError)
+                            return Ok(values);
                         }
                     }
                 }
@@ -211,8 +209,7 @@ impl AtResponse {
         indices: [usize; N],
         filter: Option<T>,
     ) -> Result<Vec<String<AT_VALUE_LEN>, AT_VALUE_COUNT>, Error> {
-        let response = self.response(filter.map(|t| (t, indices[0])))?;
-        let values = parse_values(&response)?;
+        let values = self.response(filter.map(|t| (t, indices[0])))?;
         if !indices.iter().all(|idx| *idx < values.len()) {
             return Err(Error::ModemError);
         }
@@ -223,8 +220,7 @@ impl AtResponse {
     }
 
     pub fn count_response_values(&self) -> Result<usize, Error> {
-        let response = self.response::<u8>(None)?;
-        let values = parse_values(&response)?;
+        let values = self.response::<u8>(None)?;
         Ok(values.len())
     }
 
@@ -299,34 +295,35 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_response() {
+    fn test_response() -> crate::Result<()> {
         let mut from_modem_vec = Vec::new();
         from_modem_vec
-            .push(FromModem::Line(
-                String::from_str("+CONN: 1,\"disconnected\"").unwrap(),
-            ))
+            .push(FromModem::CommandResponse(CommandResponse::new(
+                "+CONN: 1,\"disconnected\"",
+            )?))
             .unwrap();
         from_modem_vec
-            .push(FromModem::Line(
-                String::from_str("+CONN: 5,\"connected\"").unwrap(),
-            ))
+            .push(FromModem::CommandResponse(CommandResponse::new(
+                "+CONN: 5,\"connected\"",
+            )?))
             .unwrap();
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
-        let response = at_response.response(Some((5u8, 0)));
-        assert_eq!(response.unwrap(), "5,\"connected\"");
+        let response = at_response.response(Some((5u8, 0)))?;
+        assert_eq!(response.as_slice(), &["5", "connected"]);
 
         let response = at_response.response(Some((3u8, 0)));
         assert_eq!(response.unwrap_err(), Error::ModemError);
 
-        let response = at_response.response::<u8>(None);
-        assert_eq!(response.unwrap(), "1,\"disconnected\"");
+        let response = at_response.response::<u8>(None)?;
+        assert_eq!(response.as_slice(), &["1", "disconnected"]);
+        Ok(())
     }
 
     #[test]
-    fn test_parsing() {
-        let from_modem_vec = Vec::from_array([FromModem::Line(
-            String::from_str("+CONN: 1,783,\"disconnected\"").unwrap(),
-        )]);
+    fn test_parsing() -> crate::Result<()> {
+        let from_modem_vec = Vec::from_array([FromModem::CommandResponse(CommandResponse::new(
+            "+CONN: 1,783,\"disconnected\"",
+        )?)]);
 
         let at_response = AtResponse::new(from_modem_vec.clone(), "+CONN?");
         let (id, status) = at_response.parse2::<u8, String<20>>([0, 2], None).unwrap();
@@ -335,5 +332,6 @@ mod test_at_utils {
 
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
         assert_eq!(at_response.count_response_values().unwrap(), 3);
+        Ok(())
     }
 }
