@@ -109,5 +109,6 @@ async fn main(spawner: Spawner) {
             FromModem::Ok,
         ]
     );
+    assert_eq!(MAIN_RX_CHANNEL.len(), 0);
     std::process::exit(0); // TODO: this is ugly, is there a better way?
 }
