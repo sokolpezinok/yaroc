@@ -58,8 +58,12 @@ impl AtRxBroker {
                     .map_err(|_| Error::BufferTooSmallError),
             };
             if !is_callback {
-                if let Ok(FromModem::Line(_)) = to_send.as_ref() {
-                    open_stream = true;
+                if let Ok(from_modem) = to_send.as_ref() {
+                    if !from_modem.terminal() {
+                        open_stream = true;
+                    } else {
+                        open_stream = false;
+                    }
                 } else {
                     open_stream = false;
                 }

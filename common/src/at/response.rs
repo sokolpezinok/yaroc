@@ -49,6 +49,15 @@ pub enum FromModem {
     Error,
 }
 
+impl FromModem {
+    pub fn terminal(&self) -> bool {
+        match self {
+            FromModem::Ok | FromModem::Error => true,
+            _ => false
+        }
+    }
+}
+
 #[cfg(feature = "defmt")]
 impl defmt::Format for FromModem {
     fn format(&self, fmt: defmt::Formatter) {
@@ -157,10 +166,10 @@ impl AtResponse {
         Err(Error::ModemError)
     }
 
-    // Pick values from a AT response given by the list of `indices`.
-    //
-    // If filter is None, the first at response is chosen. If `filter` is provided, only the response
-    // for which the first chosen value (at position `indices[0]`) matches `filter`.
+    /// Pick values from a AT response given by the list of `indices`.
+    ///
+    /// If filter is None, the first at response is chosen. If `filter` is provided, only the response
+    /// for which the first chosen value (at position `indices[0]`) matches `filter`.
     fn pick_values<T: FromStr + Eq, const N: usize>(
         self,
         indices: [usize; N],
