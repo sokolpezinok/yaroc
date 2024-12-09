@@ -1,5 +1,6 @@
 use crate::error::Error;
 use chrono::{DateTime, FixedOffset, TimeDelta};
+use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_nrf::{
@@ -39,6 +40,16 @@ pub struct Config {
     pub url: String<40>,
     pub pkt_timeout: Duration,
     pub activation_timeout: Duration,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            url: String::from_str("broker.emqx.io").unwrap(),
+            activation_timeout: Duration::from_secs(150),
+            pkt_timeout: Duration::from_secs(35),
+        }
+    }
 }
 
 pub struct BG77<T: Tx> {
