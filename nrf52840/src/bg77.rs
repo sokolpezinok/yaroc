@@ -15,7 +15,7 @@ use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMu
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
-use femtopb::Message as _;
+use femtopb::Message;
 use heapless::{format, String};
 use yaroc_common::{
     at::{
@@ -319,8 +319,11 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         mini_call_home
     }
 
-    async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
-        let res = self.send_message_impl(msg).await;
+    async fn send_message<const N: usize>(&mut self, msg: impl Message<'_>) -> Result<(), Error> {
+        let mut buf = [0u8; N];
+        msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
+        let len = msg.encoded_len();
+        let res = self.send_message_impl(&buf[..len]).await;
         if res.is_err() {
             let _ = self.mqtt_connect().await;
         }
@@ -391,12 +394,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         info!("{}", mini_call_home);
 
         let message = mini_call_home.to_proto(timestamp);
-        let mut buf = [0u8; 200];
-        message
-            .encode(&mut buf.as_mut_slice())
-            .map_err(|_| Error::BufferTooSmallError)?;
-        let len = message.encoded_len();
-        self.send_message(&buf[..len]).await
+        self.send_message::<250>(message).await
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {
