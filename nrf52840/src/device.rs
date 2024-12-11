@@ -1,5 +1,6 @@
 use crate::bg77::{Config as BG77Config, BG77};
 use crate::si_uart::SiUart;
+use crate::status::NrfTemp;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P1_03, P1_04, UARTE0, UARTE1};
@@ -20,7 +21,7 @@ bind_interrupts!(struct Irqs {
 pub struct Device {
     _blue_led: Output<'static, P1_04>,
     _green_led: Output<'static, P1_03>,
-    pub bg77: BG77<UarteTx<'static, UARTE1>>,
+    pub bg77: BG77<NrfTemp, UarteTx<'static, UARTE1>>,
     pub si_uart: SiUart,
     pub saadc: Saadc<'static, 1>,
 }
@@ -38,6 +39,7 @@ impl Device {
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
         let temp = Temp::new(p.TEMP, Irqs);
+        let temp = NrfTemp::new(temp);
 
         let config = Config::default();
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);

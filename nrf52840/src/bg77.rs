@@ -1,4 +1,7 @@
-use crate::error::Error;
+use crate::{
+    error::Error,
+    status::{NrfTemp, Temp},
+};
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
@@ -6,7 +9,6 @@ use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
-    temp::Temp,
     uarte::UarteTx,
 };
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
@@ -23,7 +25,7 @@ use yaroc_common::{
     status::{parse_qlts, MiniCallHome},
 };
 
-pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<UarteTx<'static, UARTE1>>>>;
+pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
 
 const MQTT_MESSAGES: usize = 5;
 
@@ -52,10 +54,10 @@ impl Default for Config {
     }
 }
 
-pub struct BG77<T: Tx> {
+pub struct BG77<S: Temp, T: Tx> {
     uart1: AtUart<T>,
     _modem_pin: Output<'static, P0_17>,
-    temp: Temp<'static>,
+    temp: S,
     client_id: u8,
     msg_id: u8,
     boot_time: Option<DateTime<FixedOffset>>,
@@ -64,12 +66,12 @@ pub struct BG77<T: Tx> {
     last_reconnect: Option<Instant>,
 }
 
-impl<T: Tx> BG77<T> {
-    pub fn new<R: RxWithIdle>(
-        rx1: R,
+impl<S: Temp, T: Tx> BG77<S, T> {
+    pub fn new(
+        rx1: impl RxWithIdle,
         tx1: T,
         modem_pin: Output<'static, P0_17>,
-        temp: Temp<'static>,
+        temp: S,
         spawner: &Spawner,
         config: Config,
     ) -> Self {
@@ -302,8 +304,7 @@ impl<T: Tx> BG77<T> {
     }
 
     async fn mini_call_home(&mut self) -> MiniCallHome {
-        let temp = self.temp.read().await;
-        let cpu_temperature = temp.to_num::<i8>(); // TODO: Has two fractional bits
+        let cpu_temperature = self.temp.cpu_temperature().await;
         let mut mini_call_home = MiniCallHome::default().set_cpu_temperature(cpu_temperature);
         if let Ok((battery_mv, battery_percents)) = self.battery_state().await {
             mini_call_home.set_battery_info(battery_mv, battery_percents);
@@ -454,7 +455,7 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
                 debug!("Got URC: {}", response);
                 let res = with_timeout(
                     Duration::from_secs(600),
-                    BG77::<UarteTx<'static, UARTE1>>::urc_handler(response, bg77_mutex),
+                    BG77::<NrfTemp, UarteTx<'static, UARTE1>>::urc_handler(response, bg77_mutex),
                 )
                 .await;
                 if let Ok(res) = res {
