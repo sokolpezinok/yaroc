@@ -154,6 +154,7 @@ impl defmt::Format for FromModem {
             }
             FromModem::Ok => defmt::write!(fmt, "Ok"),
             FromModem::Error => defmt::write!(fmt, "Error"),
+            FromModem::Eof => defmt::write!(fmt, "Eof"),
         }
     }
 }
