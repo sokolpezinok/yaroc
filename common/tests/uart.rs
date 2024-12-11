@@ -79,6 +79,8 @@ async fn main(spawner: Spawner) {
     let rx = FakeRxWithIdle::new(vec![
         ("ATI\r", "Fake modem\r\nOK"),
         ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
+        ("AT+CBC\r", "ERROR"),
+        ("AT+QCSQ\r", "Text"),
     ]);
     let tx = FakeTx::new(&TX_CHANNEL);
     let classifier = |_: &CommandResponse| false;
@@ -109,6 +111,13 @@ async fn main(spawner: Spawner) {
             FromModem::Eof,
         ]
     );
+
+    let error = at_uart.call_at("+CBC", Duration::from_millis(10)).await.err();
+    assert_eq!(error, Some(Error::AtErrorResponse));
+
+    let error = at_uart.call_at("+QCSQ", Duration::from_millis(10)).await.err();
+    assert_eq!(error, Some(Error::ModemError));
+
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);
     std::process::exit(0); // TODO: this is ugly, is there a better way?
 }
