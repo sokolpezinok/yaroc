@@ -106,7 +106,7 @@ async fn main(spawner: Spawner) {
         &[
             FromModem::Ok,
             FromModem::CommandResponse(CommandResponse::new("+QMTOPEN: 0,3").unwrap()),
-            FromModem::Ok,
+            FromModem::Eof,
         ]
     );
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);

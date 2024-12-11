@@ -75,7 +75,7 @@ impl AtRxBroker {
             self.main_channel.send(to_send).await;
         }
         if open_stream {
-            self.main_channel.send(Ok(FromModem::Ok)).await; // Stop transmission
+            self.main_channel.send(Ok(FromModem::Eof)).await; // Stop transmission
         }
     }
 
@@ -146,9 +146,8 @@ impl<T: Tx> AtUart<T> {
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
-            match from_modem {
-                FromModem::Ok | FromModem::Error => break,
-                _ => {}
+            if from_modem.terminal() {
+                break;
             }
         }
 
@@ -269,7 +268,7 @@ mod test_at {
             MAIN_RX_CHANNEL.try_receive().unwrap()?,
             FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
         );
-        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Eof);
         assert_eq!(MAIN_RX_CHANNEL.len(), 0);
         Ok(())
     }

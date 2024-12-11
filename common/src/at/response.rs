@@ -135,11 +135,12 @@ pub enum FromModem {
     CommandResponse(CommandResponse),
     Ok,
     Error,
+    Eof,
 }
 
 impl FromModem {
     pub fn terminal(&self) -> bool {
-        matches!(self, FromModem::Ok | FromModem::Error)
+        matches!(self, FromModem::Ok | FromModem::Error | FromModem::Eof)
     }
 }
 
