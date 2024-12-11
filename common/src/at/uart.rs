@@ -182,21 +182,21 @@ impl<T: Tx> AtUart<T> {
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
             Some(&FromModem::Error) => {
-                // TODO: fix for no defmt
-                //debug!(
-                //    "Failed response from modem: {} {=[?]}",
-                //    command,
-                //    lines.as_slice()
-                //);
+                #[cfg(feature = "defmt")]
+                debug!(
+                    "Failed response from modem: {} {=[?]}",
+                    command,
+                    lines.as_slice()
+                );
                 Err(Error::AtErrorResponse)
             }
             _ => {
-                // TODO: fix for no defmt
-                //debug!(
-                //    "Failed response from modem: {} {=[?]}",
-                //    command,
-                //    lines.as_slice()
-                //);
+                #[cfg(feature = "defmt")]
+                debug!(
+                    "Failed response from modem: {} {=[?]}",
+                    command,
+                    lines.as_slice()
+                );
                 Err(Error::ModemError)
             }
         }
