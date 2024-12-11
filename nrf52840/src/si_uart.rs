@@ -6,11 +6,6 @@ use yaroc_common::punch::SiPunch;
 
 use crate::error::Error;
 
-/// SportIdent UART. Reads chunks of 20 bytes.
-pub struct SiUart {
-    rx: UarteRx<'static, UARTE0>,
-}
-
 #[cfg(all(target_abi = "eabihf", target_os = "none"))]
 type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 #[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
@@ -20,11 +15,20 @@ pub type SiUartType = Mutex<RawMutex, Option<SiUart>>;
 const LEN: usize = 20;
 pub type SiUartChannelType = Channel<RawMutex, Result<SiPunch, Error>, 5>;
 
+/// SportIdent UART. Reads chunks of 20 bytes.
+pub struct SiUart {
+    rx: UarteRx<'static, UARTE0>,
+}
+
 impl SiUart {
+    /// Creates new SiUart from an UART RX.
     pub fn new(rx: UarteRx<'static, UARTE0>) -> Self {
         Self { rx }
     }
 
+    /// Read 20 bytes of data and convert it into SiPunch.
+    ///
+    /// Return error if reading from RX or conversion is unsuccessful.
     async fn read(&mut self, today: NaiveDate) -> crate::Result<SiPunch> {
         let mut buf = [0u8; LEN];
         self.rx.read(&mut buf).await.map_err(|_| Error::UartReadError)?;
