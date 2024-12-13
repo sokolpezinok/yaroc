@@ -118,7 +118,18 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         Ok(())
     }
 
-    pub async fn urc_handler(
+    pub async fn urc_handler(bg77_mutex: &'static BG77Type) -> crate::Result<()> {
+        let urc = URC_CHANNEL.receive().await?;
+        debug!("Got URC: {}", urc);
+        with_timeout(
+            Duration::from_secs(600),
+            Self::urc_handler_impl(urc, bg77_mutex),
+        )
+        .await
+        .map_err(|_| Error::TimeoutError)?
+    }
+
+    pub async fn urc_handler_impl(
         urc: CommandResponse,
         bg77_mutex: &'static BG77Type,
     ) -> crate::Result<()> {
@@ -126,14 +137,11 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             "QMTSTAT" | "CEREG" => {
                 let mut bg77_unlocked = bg77_mutex.lock().await;
                 let bg77 = bg77_unlocked.as_mut().unwrap();
-                bg77.mqtt_connect().await?;
+                bg77.mqtt_connect().await
             }
-            "QMTPUB" => {
-                Self::qmtpub_handler(urc)?;
-            }
-            _ => {}
+            "QMTPUB" => Self::qmtpub_handler(urc),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     pub async fn config(&mut self) -> Result<(), Error> {
@@ -447,28 +455,9 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 #[embassy_executor::task]
 pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
     loop {
-        let urc = URC_CHANNEL.receive().await;
-        match urc {
-            Ok(response) => {
-                debug!("Got URC: {}", response);
-                let res = with_timeout(
-                    Duration::from_secs(600),
-                    BG77::<NrfTemp, UarteTx<'static, UARTE1>>::urc_handler(response, bg77_mutex),
-                )
-                .await;
-                if let Ok(res) = res {
-                    if let Err(err) = res {
-                        error!("Error while processing URC: {}", err);
-                    } else {
-                        debug!("URC processed");
-                    }
-                } else {
-                    error!("Timed out processing of URC");
-                }
-            }
-            Err(err) => {
-                error!("Error received over URC channel: {}", err);
-            }
+        let res = BG77::<NrfTemp, UarteTx<UARTE1>>::urc_handler(bg77_mutex).await;
+        if let Err(err) = res {
+            error!("Error while processing URC: {}", err);
         }
     }
 }
