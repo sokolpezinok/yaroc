@@ -459,6 +459,8 @@ pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
                 if let Ok(res) = res {
                     if let Err(err) = res {
                         error!("Error while processing URC: {}", err);
+                    } else {
+                        debug!("URC processed");
                     }
                 } else {
                     error!("Timed out processing of URC");
