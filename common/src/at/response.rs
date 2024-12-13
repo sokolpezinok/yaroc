@@ -26,6 +26,12 @@ impl Display for Substring {
     }
 }
 
+pub const AT_COMMAND_SIZE: usize = 90;
+pub const AT_RESPONSE_SIZE: usize = 50;
+pub const AT_LINES: usize = 4;
+const AT_VALUE_LEN: usize = 40;
+const AT_VALUE_COUNT: usize = 8;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommandResponse {
     line: String<AT_COMMAND_SIZE>,
@@ -158,12 +164,6 @@ impl defmt::Format for FromModem {
         }
     }
 }
-
-pub const AT_COMMAND_SIZE: usize = 90;
-pub const AT_RESPONSE_SIZE: usize = 50;
-pub const AT_LINES: usize = 4;
-const AT_VALUE_LEN: usize = 40;
-const AT_VALUE_COUNT: usize = 4;
 
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
@@ -312,9 +312,9 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_response_split_values() -> crate::Result<()> {
-        let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid\"")?;
-        assert_eq!(&ans, &["1", "item1,item2", "cellid"]);
+    fn test_cmd_response_split_values() -> crate::Result<()> {
+        let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid\",-7,20")?;
+        assert_eq!(&ans, &["1", "item1,item2", "cellid", "-7", "20"]);
 
         let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid");
         assert_eq!(ans.unwrap_err(), Error::ParseError);
@@ -322,7 +322,7 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_response_pick_values() -> crate::Result<()> {
+    fn test_cmd_response_pick_values() -> crate::Result<()> {
         let response = CommandResponse::new("+CMD: 1,\"item1,item2\",12")?;
         let vals = response.pick_values([1, 2])?;
         assert_eq!(&vals.as_slice(), &["item1,item2", "12"]);
@@ -330,14 +330,14 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_response_parse_values() -> crate::Result<()> {
+    fn test_cmd_response_parse_values() -> crate::Result<()> {
         let response = CommandResponse::new("+CMD: 8,13,21")?;
         assert_eq!(response.parse_values::<u8>()?.as_slice(), &[8, 13, 21]);
         Ok(())
     }
 
     #[test]
-    fn test_response() -> crate::Result<()> {
+    fn test_at_response() -> crate::Result<()> {
         let mut from_modem_vec = Vec::new();
         from_modem_vec
             .push(FromModem::CommandResponse(CommandResponse::new(
@@ -362,7 +362,7 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_parsing() -> crate::Result<()> {
+    fn test_at_response_parse2() -> crate::Result<()> {
         let from_modem_vec = Vec::from_array([FromModem::CommandResponse(CommandResponse::new(
             "+CONN: 1,783,\"disconnected\"",
         )?)]);
