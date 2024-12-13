@@ -86,7 +86,7 @@ impl CommandResponse {
                 }
                 _ => {
                     let pos = values.find(",").unwrap_or(values.len());
-                    split.push(&values[..pos]).unwrap();
+                    split.push(&values[..pos]).map_err(|_| Error::BufferTooSmallError)?;
                     pos
                 }
             };
@@ -123,7 +123,7 @@ impl CommandResponse {
 
 impl Display for CommandResponse {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.line.as_str())
+        write!(f, "{}", self.line.as_str().trim())
     }
 }
 

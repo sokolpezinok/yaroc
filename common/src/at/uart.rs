@@ -47,7 +47,7 @@ impl AtRxBroker {
         let mut open_stream = false;
         for line in lines {
             let to_send = match line {
-                "OK" | "RDY" | "APP RDY" => Ok(FromModem::Ok),
+                "OK" | "RDY" | "APP RDY" | "> " => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
                 line => {
                     if let Ok(command_response) = CommandResponse::new(line) {
