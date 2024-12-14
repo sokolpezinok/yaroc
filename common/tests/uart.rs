@@ -81,6 +81,7 @@ async fn main(spawner: Spawner) {
         ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
         ("AT+CBC\r", "ERROR"),
         ("AT+QCSQ\r", "Text"),
+        ("AT+CEREG?\r", ""),
     ]);
     let tx = FakeTx::new(&TX_CHANNEL);
     let classifier = |_: &CommandResponse| false;
@@ -117,6 +118,9 @@ async fn main(spawner: Spawner) {
 
     let error = at_uart.call_at("+QCSQ", Duration::from_millis(10)).await.err();
     assert_eq!(error, Some(Error::ModemError));
+
+    let error = at_uart.call_at("+CEREG?", Duration::from_millis(10)).await.err();
+    assert_eq!(error, Some(Error::TimeoutError));
 
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);
     std::process::exit(0); // TODO: this is ugly, is there a better way?
