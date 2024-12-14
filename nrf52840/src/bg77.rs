@@ -14,7 +14,7 @@ use embassy_nrf::{
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
-use embassy_time::{with_timeout, Duration, Instant, Ticker, Timer};
+use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
 use femtopb::Message;
 use heapless::{format, String};
 use yaroc_common::{
@@ -123,12 +123,10 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     pub async fn urc_handler(bg77_mutex: &'static BG77Type) -> crate::Result<()> {
         let urc = URC_CHANNEL.receive().await?;
         debug!("Got URC: {}", urc);
-        with_timeout(
-            Duration::from_secs(600),
-            Self::urc_handler_impl(urc, bg77_mutex),
-        )
-        .await
-        .map_err(|_| Error::TimeoutError)?
+        Self::urc_handler_impl(urc, bg77_mutex)
+            .with_timeout(Duration::from_secs(600))
+            .await
+            .map_err(|_| Error::TimeoutError)?
     }
 
     pub async fn urc_handler_impl(
@@ -349,12 +347,11 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         self.uart1.call(msg, MINIMUM_TIMEOUT).await?;
         self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         loop {
-            let (result, retries) = with_timeout(
-                self.config.pkt_timeout + MINIMUM_TIMEOUT,
-                MQTT_URCS[idx].wait(),
-            )
-            .await
-            .map_err(|_| Error::TimeoutError)?;
+            let (result, retries) = MQTT_URCS[idx]
+                .wait()
+                .with_timeout(self.config.pkt_timeout + MINIMUM_TIMEOUT)
+                .await
+                .map_err(|_| Error::TimeoutError)?;
             match result {
                 0 => break,
                 1 => {
