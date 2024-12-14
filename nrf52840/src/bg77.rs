@@ -442,11 +442,13 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 
     let mut ticker = Ticker::every(Duration::from_secs(20));
     loop {
-        let mut bg77_unlocked = bg77_mutex.lock().await;
-        let bg77 = bg77_unlocked.as_mut().unwrap();
-        match bg77.send_mini_call_home().await {
-            Ok(()) => info!("MiniCallHome sent"),
-            Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+        {
+            let mut bg77_unlocked = bg77_mutex.lock().await;
+            let bg77 = bg77_unlocked.as_mut().unwrap();
+            match bg77.send_mini_call_home().await {
+                Ok(()) => info!("MiniCallHome sent"),
+                Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+            }
         }
         ticker.next().await;
     }
