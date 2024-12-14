@@ -39,6 +39,7 @@ static MQTT_URCS: [Signal<CriticalSectionRawMutex, (u8, u8)>; MQTT_MESSAGES] = [
 ];
 
 pub struct Config {
+    // TODO: this is only MQTT-related, could it be renamed to MqttConfig?
     pub url: String<40>,
     pub pkt_timeout: Duration,
     pub activation_timeout: Duration,
@@ -58,10 +59,11 @@ pub struct BG77<S: Temp, T: Tx> {
     uart1: AtUart<T>,
     _modem_pin: Output<'static, P0_17>,
     temp: S,
-    client_id: u8,
-    msg_id: u8,
     boot_time: Option<DateTime<FixedOffset>>,
     config: Config,
+    // TODO: refactor out MQTT-related stuff
+    client_id: u8,
+    msg_id: u8,
     last_successful_send: Instant,
     last_reconnect: Option<Instant>,
 }
