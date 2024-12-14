@@ -1,7 +1,7 @@
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
 
 pub trait Temp {
-    fn cpu_temperature(&mut self) -> impl core::future::Future<Output = i8>;
+    fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
 }
 
 pub struct NrfTemp {
@@ -15,8 +15,8 @@ impl NrfTemp {
 }
 
 impl Temp for NrfTemp {
-    async fn cpu_temperature(&mut self) -> i8 {
+    async fn cpu_temperature(&mut self) -> f32 {
         let temp = self.temp.read().await;
-        temp.to_num::<i8>() // TODO: Has two fractional bits
+        temp.to_num::<f32>()
     }
 }

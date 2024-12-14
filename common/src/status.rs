@@ -32,7 +32,7 @@ pub struct MiniCallHome {
     pub cellid: Option<u32>,
     pub batt_mv: Option<u16>,
     pub batt_percents: Option<u8>,
-    pub cpu_temperature: Option<i8>,
+    pub cpu_temperature: Option<f32>,
 }
 
 impl MiniCallHome {
@@ -50,7 +50,7 @@ impl MiniCallHome {
         self.batt_percents = Some(battery_percents);
     }
 
-    pub fn set_cpu_temperature(mut self, cpu_temperature: i8) -> Self {
+    pub fn set_cpu_temperature(mut self, cpu_temperature: f32) -> Self {
         self.cpu_temperature = Some(cpu_temperature);
         self
     }
@@ -68,7 +68,7 @@ impl MiniCallHome {
                 signal_snr: self.snr_db.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
                 time: timestamp.map(to_timestamp),
-                cpu_temperature: self.cpu_temperature.unwrap_or_default() as f32,
+                cpu_temperature: self.cpu_temperature.unwrap_or_default(),
                 ..Default::default()
             })),
             ..Default::default()
