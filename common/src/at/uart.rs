@@ -5,7 +5,7 @@ use core::str::FromStr;
 use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
-use embassy_time::{with_deadline, Duration, Instant};
+use embassy_time::{Duration, Instant, WithTimeout};
 use heapless::{format, String, Vec};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
@@ -142,7 +142,10 @@ impl<T: Tx> AtUart<T> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
-            let from_modem = with_deadline(deadline, self.main_rx_channel.receive())
+            let from_modem = self
+                .main_rx_channel
+                .receive()
+                .with_deadline(deadline)
                 .await
                 .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
