@@ -20,7 +20,7 @@ use heapless::{format, String};
 use yaroc_common::{
     at::{
         response::{AtResponse, CommandResponse},
-        uart::{AtUart, RxWithIdle, Tx, URC_CHANNEL},
+        uart::{AtUart, RxWithIdle, Tx},
     },
     status::{parse_qlts, MiniCallHome},
 };
@@ -85,7 +85,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         spawner: &Spawner,
         config: Config,
     ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, Self::urc_classifier, spawner);
+        let uart1 = AtUart::new(rx1, tx1, Self::urc_handler, spawner);
         Self {
             uart1,
             _modem_pin: modem_pin,
@@ -99,24 +99,25 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         }
     }
 
-    fn urc_classifier(response: &CommandResponse) -> bool {
+    fn urc_handler(response: &CommandResponse) -> bool {
         match response.command() {
-            "QMTSTAT" | "QIURC" => true,
-            "CEREG" => {
-                // The CEREG URC is shorter, normal one has 5 values
-                let value_count = response.values().len();
-                value_count == 1 || value_count == 4
+            "QMTSTAT" | "QIURC" => {
+                MQTT_CONNECT_SIGNAL.signal(Instant::now());
+                true
             }
-            "QMTPUB" => {
-                let values = response.values();
-                values[1] != "0"
-            }
+            "QMTPUB" => Self::qmtpub_handler(response),
             _ => false,
         }
     }
 
-    fn qmtpub_handler(urc: CommandResponse) -> crate::Result<()> {
-        let values = urc.parse_values::<u8>()?;
+    fn qmtpub_handler(urc: &CommandResponse) -> bool {
+        let values = match urc.parse_values::<u8>() {
+            Ok(values) => values,
+            Err(_) => {
+                return false;
+            }
+        };
+
         // TODO: get client ID
         if values[1] > 0 && values[0] == 0 {
             let msg_id = values[1];
@@ -124,20 +125,9 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             if idx < MQTT_URCS.len() {
                 MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
             }
-        }
-        Ok(())
-    }
-
-    pub async fn urc_handler() -> crate::Result<()> {
-        let urc = URC_CHANNEL.receive().await?;
-        debug!("Got URC: {}", urc);
-        match urc.command() {
-            "QMTSTAT" | "CEREG" => {
-                MQTT_CONNECT_SIGNAL.signal(Instant::now());
-                Ok(())
-            }
-            "QMTPUB" => Self::qmtpub_handler(urc),
-            _ => Ok(()),
+            true
+        } else {
+            false
         }
     }
 
@@ -461,16 +451,6 @@ pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
                     }
                 }
             }
-        }
-    }
-}
-
-#[embassy_executor::task]
-pub async fn bg77_urc_handler() {
-    loop {
-        let res = BG77::<NrfTemp, UarteTx<UARTE1>>::urc_handler().await;
-        if let Err(err) = res {
-            error!("Error while processing URC: {}", err);
         }
     }
 }

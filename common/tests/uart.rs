@@ -23,13 +23,13 @@ type TxChannelType = Channel<CriticalSectionRawMutex, String<AT_COMMAND_SIZE>, 5
 static TX_CHANNEL: TxChannelType = Channel::new();
 
 #[embassy_executor::task]
-async fn reader(rx: FakeRxWithIdle, urc_classifier: fn(&CommandResponse) -> bool) {
-    AtRxBroker::broker_loop(rx, urc_classifier, &MAIN_RX_CHANNEL).await;
+async fn reader(rx: FakeRxWithIdle, urc_handler: fn(&CommandResponse) -> bool) {
+    AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_classifier: fn(&CommandResponse) -> bool) {
-        spawner.must_spawn(reader(self, urc_classifier))
+    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool) {
+        spawner.must_spawn(reader(self, urc_handler))
     }
 
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> yaroc_common::Result<usize> {
@@ -84,8 +84,8 @@ async fn main(spawner: Spawner) {
         ("AT+CEREG?\r", ""),
     ]);
     let tx = FakeTx::new(&TX_CHANNEL);
-    let classifier = |_: &CommandResponse| false;
-    let mut at_uart = AtUart::new(rx, tx, classifier, &spawner);
+    let handler = |_: &CommandResponse| false;
+    let mut at_uart = AtUart::new(rx, tx, handler, &spawner);
 
     let response = at_uart.call_at("I", Duration::from_millis(10)).await.unwrap();
     assert_eq!(
