@@ -10,25 +10,19 @@ use heapless::{format, String, Vec};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
 
-use crate::error::Error;
+use crate::{error::Error, RawMutex};
 
-#[cfg(all(target_abi = "eabihf", target_os = "none"))]
-type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
-type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-pub type MainRxChannelType<E> = Channel<RawMutex, Result<FromModem, E>, 5>;
-
-pub static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
+pub type MainRxChannelType = Channel<RawMutex, Result<FromModem, Error>, 5>;
+pub static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
 
 /// A broker of AT replies (listening to UART RX) and routing each reply either to the main channel
 /// or channel dedicated to URCs.
 pub struct AtRxBroker {
-    main_channel: &'static MainRxChannelType<Error>,
+    main_channel: &'static MainRxChannelType,
 }
 
 impl AtRxBroker {
-    pub fn new(main_channel: &'static MainRxChannelType<Error>) -> Self {
+    pub fn new(main_channel: &'static MainRxChannelType) -> Self {
         Self { main_channel }
     }
 
@@ -77,7 +71,7 @@ impl AtRxBroker {
     pub async fn broker_loop<R: RxWithIdle>(
         mut rx: R,
         urc_handler: fn(&CommandResponse) -> bool,
-        main_rx_channel: &'static MainRxChannelType<Error>,
+        main_rx_channel: &'static MainRxChannelType,
     ) {
         const AT_BUF_SIZE: usize = 300;
         let mut buf = [0; AT_BUF_SIZE];
@@ -116,7 +110,7 @@ pub trait Tx {
 
 pub struct AtUart<T: Tx> {
     tx: T,
-    main_rx_channel: &'static MainRxChannelType<Error>,
+    main_rx_channel: &'static MainRxChannelType,
 }
 
 impl<T: Tx> AtUart<T> {
@@ -239,7 +233,7 @@ mod test_at {
 
     #[test]
     fn test_at_broker() -> crate::Result<()> {
-        static MAIN_RX_CHANNEL: MainRxChannelType<Error> = Channel::new();
+        static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL);
         let handler = |response: &CommandResponse| match response.command() {

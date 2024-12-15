@@ -9,3 +9,8 @@ pub mod proto {
 pub mod status;
 
 pub type Result<T> = core::result::Result<T, error::Error>;
+
+#[cfg(all(target_abi = "eabihf", target_os = "none"))]
+pub type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
+pub type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;

@@ -2,14 +2,10 @@
 use chrono::NaiveDate;
 use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::{channel::Channel, mutex::Mutex};
-use yaroc_common::punch::SiPunch;
+use yaroc_common::{punch::SiPunch, RawMutex};
 
 use crate::error::Error;
 
-#[cfg(all(target_abi = "eabihf", target_os = "none"))]
-type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
-type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 pub type SiUartType = Mutex<RawMutex, Option<SiUart>>;
 
 const LEN: usize = 20;

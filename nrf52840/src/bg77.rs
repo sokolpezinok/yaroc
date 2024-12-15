@@ -23,12 +23,8 @@ use yaroc_common::{
         uart::{AtUart, RxWithIdle, Tx},
     },
     status::{parse_qlts, MiniCallHome},
+    RawMutex,
 };
-
-#[cfg(all(target_abi = "eabihf", target_os = "none"))]
-type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
-type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 pub type BG77Type = Mutex<RawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
 
