@@ -31,6 +31,7 @@ pub type BG77Type = Mutex<RawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1
 const MQTT_MESSAGES: usize = 5;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
     Signal::new(),
     Signal::new(),
@@ -46,14 +47,12 @@ static MQTT_CONNECT_SIGNAL: Signal<RawMutex, (bool, Instant)> = Signal::new();
 pub struct MqttConfig {
     pub url: String<40>,
     pub pkt_timeout: Duration,
-    pub activation_timeout: Duration,
 }
 
 impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
-            activation_timeout: Duration::from_secs(150),
             pkt_timeout: Duration::from_secs(35),
         }
     }
@@ -128,7 +127,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     pub async fn config(&mut self) -> Result<(), Error> {
         self.simple_call("E0", None).await?;
         self.simple_call("+CEREG=2", None).await?;
-        self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
+        self.uart1.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         // +QCFG needs +CGATT=1 first
         self.simple_call("+QCFG=\"nwscanseq\",03", None).await?;
         self.simple_call("+QCFG=\"iotopmode\",1,1", None).await?;
@@ -151,20 +150,20 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + self.config.activation_timeout * 3 < Instant::now() {
+        if self.last_successful_send + ACTIVATION_TIMEOUT * 3 < Instant::now() {
             self.last_successful_send = Instant::now();
-            let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
+            let _ = self.uart1.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
-            let _ = self.uart1.call_at("+CGACT=0,1", self.config.activation_timeout).await;
+            let _ = self.uart1.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await; // TODO
-            self.uart1.call_at("+CGATT=1", self.config.activation_timeout).await?;
+            self.uart1.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         }
 
         let (_, state) =
             self.simple_call("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
             let _ = self.simple_call("+CGDCONT=1,\"IP\",trial-nbiot.corp", None).await;
-            self.uart1.call_at("+CGACT=1,1", self.config.activation_timeout).await?;
+            self.uart1.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
         }
 
         Ok(())
@@ -185,7 +184,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
 
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = self
-            .simple_call(&cmd, Some(self.config.activation_timeout))
+            .simple_call(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
