@@ -11,7 +11,6 @@ use embassy_nrf::{
     peripherals::{P0_17, UARTE1},
     uarte::UarteTx,
 };
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, ThreadModeRawMutex};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
@@ -25,18 +24,25 @@ use yaroc_common::{
     status::{parse_qlts, MiniCallHome},
 };
 
-pub type BG77Type = Mutex<ThreadModeRawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
+#[cfg(all(target_abi = "eabihf", target_os = "none"))]
+type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+#[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
+type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+pub type BG77Type = Mutex<RawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
 
 const MQTT_MESSAGES: usize = 5;
 
 static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
-static MQTT_URCS: [Signal<CriticalSectionRawMutex, (u8, u8)>; MQTT_MESSAGES] = [
+static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
     Signal::new(),
     Signal::new(),
     Signal::new(),
     Signal::new(),
     Signal::new(),
 ];
+// MiniCallHome signal
+static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
 pub struct Config {
     // TODO: this is only MQTT-related, could it be renamed to MqttConfig?
@@ -441,6 +447,15 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 
     let mut ticker = Ticker::every(Duration::from_secs(20));
     loop {
+        MCH_SIGNAL.signal(Instant::now());
+        ticker.next().await;
+    }
+}
+
+#[embassy_executor::task]
+pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
+    loop {
+        MCH_SIGNAL.wait().await;
         {
             let mut bg77_unlocked = bg77_mutex.lock().await;
             let bg77 = bg77_unlocked.as_mut().unwrap();
@@ -449,7 +464,6 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
                 Err(err) => error!("Sending of MiniCallHome failed: {}", err),
             }
         }
-        ticker.next().await;
     }
 }
 
