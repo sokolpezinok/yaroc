@@ -46,14 +46,14 @@ static MQTT_CONNECT_SIGNAL: Signal<RawMutex, (bool, Instant)> = Signal::new();
 
 pub struct MqttConfig {
     pub url: String<40>,
-    pub pkt_timeout: Duration,
+    pub packet_timeout: Duration,
 }
 
 impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
-            pkt_timeout: Duration::from_secs(35),
+            packet_timeout: Duration::from_secs(35),
         }
     }
 }
@@ -197,12 +197,12 @@ impl<S: Temp, T: Tx> BG77<S, T> {
 
         let cmd = format!(50;
             "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.config.pkt_timeout.as_secs()
+            self.config.packet_timeout.as_secs()
         )?;
         self.simple_call(&cmd, None).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.config.pkt_timeout * 3).as_secs()
+            (self.config.packet_timeout * 3).as_secs()
         )?;
         self.simple_call(&cmd, None).await?;
 
@@ -236,7 +236,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
                 info!("Will connect to MQTT");
                 let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
                 let (_, res, reason) = self
-                    .simple_call(&cmd, Some(self.config.pkt_timeout + MINIMUM_TIMEOUT))
+                    .simple_call(&cmd, Some(self.config.packet_timeout + MINIMUM_TIMEOUT * 2))
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -253,7 +253,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = self
-            .simple_call(&cmd, Some(self.config.pkt_timeout + MINIMUM_TIMEOUT))
+            .simple_call(&cmd, Some(self.config.packet_timeout + MINIMUM_TIMEOUT * 2))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
@@ -325,7 +325,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         loop {
             let (result, retries) = MQTT_URCS[idx]
                 .wait()
-                .with_timeout(self.config.pkt_timeout + MINIMUM_TIMEOUT)
+                .with_timeout(self.config.packet_timeout + MINIMUM_TIMEOUT * 2)
                 .await
                 .map_err(|_| Error::TimeoutError)?;
             match result {
