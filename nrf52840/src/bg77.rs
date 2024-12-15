@@ -6,6 +6,7 @@ use chrono::{DateTime, FixedOffset, TimeDelta};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
+use embassy_futures::select::{select, Either};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
@@ -43,6 +44,7 @@ static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
 ];
 // MiniCallHome signal
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
+static MQTT_CONNECT_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
 pub struct Config {
     // TODO: this is only MQTT-related, could it be renamed to MqttConfig?
@@ -126,24 +128,13 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         Ok(())
     }
 
-    pub async fn urc_handler(bg77_mutex: &'static BG77Type) -> crate::Result<()> {
+    pub async fn urc_handler() -> crate::Result<()> {
         let urc = URC_CHANNEL.receive().await?;
         debug!("Got URC: {}", urc);
-        Self::urc_handler_impl(urc, bg77_mutex)
-            .with_timeout(Duration::from_secs(600))
-            .await
-            .map_err(|_| Error::TimeoutError)?
-    }
-
-    pub async fn urc_handler_impl(
-        urc: CommandResponse,
-        bg77_mutex: &'static BG77Type,
-    ) -> crate::Result<()> {
         match urc.command() {
             "QMTSTAT" | "CEREG" => {
-                let mut bg77_unlocked = bg77_mutex.lock().await;
-                let bg77 = bg77_unlocked.as_mut().unwrap();
-                bg77.mqtt_connect().await
+                MQTT_CONNECT_SIGNAL.signal(Instant::now());
+                Ok(())
             }
             "QMTPUB" => Self::qmtpub_handler(urc),
             _ => Ok(()),
@@ -339,7 +330,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         let len = msg.encoded_len();
         let res = self.send_message_impl(&buf[..len]).await;
         if res.is_err() {
-            let _ = self.mqtt_connect().await;
+            MQTT_CONNECT_SIGNAL.signal(Instant::now());
         }
         res
     }
@@ -455,22 +446,29 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 #[embassy_executor::task]
 pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
     loop {
-        MCH_SIGNAL.wait().await;
+        let signal = select(MCH_SIGNAL.wait(), MQTT_CONNECT_SIGNAL.wait()).await;
         {
             let mut bg77_unlocked = bg77_mutex.lock().await;
             let bg77 = bg77_unlocked.as_mut().unwrap();
-            match bg77.send_mini_call_home().await {
-                Ok(()) => info!("MiniCallHome sent"),
-                Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+            match signal {
+                Either::First(_) => match bg77.send_mini_call_home().await {
+                    Ok(()) => info!("MiniCallHome sent"),
+                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+                },
+                Either::Second(_) => {
+                    if let Err(err) = bg77.mqtt_connect().await {
+                        error!("Error connecting to MQTT: {}", err);
+                    }
+                }
             }
         }
     }
 }
 
 #[embassy_executor::task]
-pub async fn bg77_urc_handler(bg77_mutex: &'static BG77Type) {
+pub async fn bg77_urc_handler() {
     loop {
-        let res = BG77::<NrfTemp, UarteTx<UARTE1>>::urc_handler(bg77_mutex).await;
+        let res = BG77::<NrfTemp, UarteTx<UARTE1>>::urc_handler().await;
         if let Err(err) = res {
             error!("Error while processing URC: {}", err);
         }

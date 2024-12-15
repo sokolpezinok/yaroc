@@ -25,6 +25,7 @@ cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
 cortex-m-semihosting = "0.5.0"
 embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
+embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }

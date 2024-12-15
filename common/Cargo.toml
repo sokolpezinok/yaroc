@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 critical-section = { version = "1", features = ["std"]}
 embassy-executor = { workspace = true }
-embassy-futures = "0.1.1"
+embassy-futures = { workspace = true }
 static_cell = "2.1.0"
 
 [build-dependencies]
