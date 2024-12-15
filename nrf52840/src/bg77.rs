@@ -45,7 +45,7 @@ static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
 // MiniCallHome signal
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 static GET_TIME_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
-static MQTT_CONNECT_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
+static MQTT_CONNECT_SIGNAL: Signal<RawMutex, (bool, Instant)> = Signal::new();
 
 pub struct Config {
     // TODO: this is only MQTT-related, could it be renamed to MqttConfig?
@@ -74,7 +74,6 @@ pub struct BG77<S: Temp, T: Tx> {
     client_id: u8,
     msg_id: u8,
     last_successful_send: Instant,
-    last_reconnect: Option<Instant>,
 }
 
 impl<S: Temp, T: Tx> BG77<S, T> {
@@ -95,7 +94,6 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             msg_id: 0,
             boot_time: None,
             last_successful_send: Instant::now(),
-            last_reconnect: None,
             config,
         }
     }
@@ -103,7 +101,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     fn urc_handler(response: &CommandResponse) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
-                MQTT_CONNECT_SIGNAL.signal(Instant::now());
+                MQTT_CONNECT_SIGNAL.signal((true, Instant::now()));
                 true
             }
             "QMTPUB" => Self::qmtpub_handler(response),
@@ -222,10 +220,6 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             error!("Network registration failed: {}", err);
             return Err(err);
         }
-        if self.last_reconnect.map(|t| t + self.config.pkt_timeout > Instant::now()) == Some(true) {
-            return Ok(());
-        }
-        self.last_reconnect = Some(Instant::now());
         let cid = self.client_id;
         self.mqtt_open(cid).await?;
 
@@ -321,7 +315,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         let len = msg.encoded_len();
         let res = self.send_message_impl(&buf[..len]).await;
         if res.is_err() {
-            MQTT_CONNECT_SIGNAL.signal(Instant::now());
+            MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
         }
         res
     }
@@ -428,7 +422,7 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
     }
 
     let mut mch_ticker = Ticker::every(Duration::from_secs(20));
-    let mut get_time_ticker = Ticker::every(Duration::from_secs(600));
+    let mut get_time_ticker = Ticker::every(Duration::from_secs(300));
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
             Either::First(_) => MCH_SIGNAL.signal(Instant::now()),
@@ -439,6 +433,7 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 
 #[embassy_executor::task]
 pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
+    let mut last_reconnect: Option<Instant> = None;
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),
@@ -454,10 +449,18 @@ pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
-                Either3::Second(_) => {
+                Either3::Second((force, _)) => {
+                    if !force
+                        && last_reconnect.map(|t| t + Duration::from_secs(60) > Instant::now())
+                            == Some(true)
+                    {
+                        continue;
+                    }
+
                     if let Err(err) = bg77.mqtt_connect().await {
                         error!("Error connecting to MQTT: {}", err);
                     }
+                    last_reconnect = Some(Instant::now());
                 }
                 Either3::Third(_) => {
                     let time = bg77.current_time(false).await;
