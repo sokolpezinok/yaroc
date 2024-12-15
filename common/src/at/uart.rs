@@ -28,6 +28,7 @@ impl AtRxBroker {
 
     /// Parse lines out of a given text and forward each line to the appropriate channel.
     ///
+    /// `text`: the text to be parsed.
     /// `urc_handler`: returns true if the command response is a URC and has been handled by the
     /// handler.
     async fn parse_lines(&self, text: &str, urc_handler: fn(&CommandResponse) -> bool) {
@@ -68,8 +69,14 @@ impl AtRxBroker {
         }
     }
 
-    pub async fn broker_loop<R: RxWithIdle>(
-        mut rx: R,
+    /// A loop running AtRxBroker forever.
+    ///
+    /// Reads all bytes from `rx` until it's idle and parses the bytes into lines ('\r\n` or `\n`
+    /// are both accepted).
+    ///
+    /// Used mainly to plug into a `embassy_executor::task`.
+    pub async fn broker_loop(
+        mut rx: impl RxWithIdle,
         urc_handler: fn(&CommandResponse) -> bool,
         main_rx_channel: &'static MainRxChannelType,
     ) {
@@ -105,17 +112,22 @@ pub trait RxWithIdle {
 }
 
 pub trait Tx {
+    /// Write bytes to the TX part of UART.
     fn write(&mut self, buffer: &[u8]) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
+/// AT UART struct.
+///
+/// The TX part is represented by Tx trait, the RX part is represented by a channel of
+/// type `MainRxChannelType`.
 pub struct AtUart<T: Tx> {
     tx: T,
     main_rx_channel: &'static MainRxChannelType,
 }
 
 impl<T: Tx> AtUart<T> {
-    pub fn new<R: RxWithIdle>(
-        rx: R,
+    pub fn new(
+        rx: impl RxWithIdle,
         tx: T,
         urc_handler: fn(&CommandResponse) -> bool,
         spawner: &Spawner,
@@ -157,8 +169,7 @@ impl<T: Tx> AtUart<T> {
 
     pub async fn call(&mut self, message: &[u8], timeout: Duration) -> crate::Result<()> {
         self.write(message).await?;
-        let lines = self.read(timeout).await?;
-        let _response = AtResponse::new(lines, "");
+        let _lines = self.read(timeout).await?;
         Ok(())
     }
 
@@ -167,7 +178,7 @@ impl<T: Tx> AtUart<T> {
         command: &str,
         timeout: Duration,
     ) -> Result<Vec<FromModem, AT_LINES>, Error> {
-        debug!("Calling: {}", command);
+        //debug!("Calling: {}", command);
         self.write_at(command).await?;
         let lines = self.read(timeout).await?;
         match lines.last() {
