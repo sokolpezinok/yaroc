@@ -173,7 +173,7 @@ impl<T: Tx> AtUart<T> {
         command: &str,
         timeout: Duration,
     ) -> Result<Vec<FromModem, AT_LINES>, Error> {
-        //debug!("Calling: {}", command);
+        debug!("Calling: {}", command);
         self.write_at(command).await?;
         let lines = self.read(timeout).await?;
         match lines.last() {

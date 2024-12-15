@@ -1,10 +1,10 @@
-use crate::bg77::{Config as BG77Config, BG77};
+use crate::bg77::{MqttConfig, BG77};
 use crate::si_uart::SiUart;
 use crate::status::NrfTemp;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::peripherals::{P1_03, P1_04, UARTE0, UARTE1};
-use embassy_nrf::saadc::{ChannelConfig, Config, Saadc};
+use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
@@ -27,7 +27,7 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(spawner: Spawner, bg77_config: BG77Config) -> Self {
+    pub fn new(spawner: Spawner, mqtt_config: MqttConfig) -> Self {
         let mut p = embassy_nrf::init(Default::default());
         let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_19, p.P0_20, Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
@@ -41,13 +41,13 @@ impl Device {
         let temp = Temp::new(p.TEMP, Irqs);
         let temp = NrfTemp::new(temp);
 
-        let config = Config::default();
+        let saadc_config = SaadcConfig::default();
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
-        let saadc = Saadc::new(p.SAADC, Irqs, config, [channel_config]);
+        let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner, bg77_config),
+            bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
             si_uart: SiUart::new(rx0),
             saadc,
         }

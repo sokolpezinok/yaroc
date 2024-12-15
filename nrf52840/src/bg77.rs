@@ -47,14 +47,13 @@ static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 static GET_TIME_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 static MQTT_CONNECT_SIGNAL: Signal<RawMutex, (bool, Instant)> = Signal::new();
 
-pub struct Config {
-    // TODO: this is only MQTT-related, could it be renamed to MqttConfig?
+pub struct MqttConfig {
     pub url: String<40>,
     pub pkt_timeout: Duration,
     pub activation_timeout: Duration,
 }
 
-impl Default for Config {
+impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
@@ -69,7 +68,7 @@ pub struct BG77<S: Temp, T: Tx> {
     _modem_pin: Output<'static, P0_17>,
     temp: S,
     boot_time: Option<DateTime<FixedOffset>>,
-    config: Config,
+    config: MqttConfig,
     // TODO: refactor out MQTT-related stuff
     client_id: u8,
     msg_id: u8,
@@ -83,7 +82,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         modem_pin: Output<'static, P0_17>,
         temp: S,
         spawner: &Spawner,
-        config: Config,
+        config: MqttConfig,
     ) -> Self {
         let uart1 = AtUart::new(rx1, tx1, Self::urc_handler, spawner);
         Self {
@@ -156,7 +155,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     }
 
     async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + self.config.activation_timeout * 5 < Instant::now() {
+        if self.last_successful_send + self.config.activation_timeout * 3 < Instant::now() {
             self.last_successful_send = Instant::now();
             let _ = self.uart1.call_at("+CGATT=0", self.config.activation_timeout).await;
             Timer::after_secs(2).await;

@@ -6,7 +6,7 @@ use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use yaroc_nrf52840::{
     self as _, // global logger + panicking-behavior + memory layout
-    bg77::{bg77_event_handler, bg77_main_loop, BG77Type, Config as BG77Config},
+    bg77::{bg77_event_handler, bg77_main_loop, BG77Type, MqttConfig},
     device::Device,
     si_uart::{si_uart_reader, SiUartChannelType, SiUartType},
 };
@@ -17,8 +17,8 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let bg77_config = BG77Config::default();
-    let device = Device::new(spawner, bg77_config);
+    let mqtt_config = MqttConfig::default();
+    let device = Device::new(spawner, mqtt_config);
     info!("Device initialized!");
 
     let Device { bg77, si_uart, .. } = device;
