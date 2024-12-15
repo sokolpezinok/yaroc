@@ -6,7 +6,7 @@ use chrono::{DateTime, FixedOffset, TimeDelta};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{P0_17, UARTE1},
@@ -44,6 +44,7 @@ static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
 ];
 // MiniCallHome signal
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
+static GET_TIME_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 static MQTT_CONNECT_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
 pub struct Config {
@@ -110,8 +111,8 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         }
     }
 
-    fn qmtpub_handler(urc: &CommandResponse) -> bool {
-        let values = match urc.parse_values::<u8>() {
+    fn qmtpub_handler(response: &CommandResponse) -> bool {
+        let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {
                 return false;
@@ -363,8 +364,8 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         parse_qlts(&modem_clock).map_err(yaroc_common::error::Error::into)
     }
 
-    async fn current_time(&mut self) -> Option<DateTime<FixedOffset>> {
-        if self.boot_time.is_none() {
+    pub async fn current_time(&mut self, cached: bool) -> Option<DateTime<FixedOffset>> {
+        if self.boot_time.is_none() || !cached {
             let boot_time = self
                 .get_modem_time()
                 .await
@@ -383,7 +384,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let timestamp = self.current_time().await;
+        let timestamp = self.current_time(true).await;
         let mini_call_home = self.mini_call_home().await;
         info!("{}", mini_call_home);
 
@@ -426,28 +427,45 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
         }
     }
 
-    let mut ticker = Ticker::every(Duration::from_secs(20));
+    let mut mch_ticker = Ticker::every(Duration::from_secs(20));
+    let mut get_time_ticker = Ticker::every(Duration::from_secs(600));
     loop {
-        MCH_SIGNAL.signal(Instant::now());
-        ticker.next().await;
+        match select(mch_ticker.next(), get_time_ticker.next()).await {
+            Either::First(_) => MCH_SIGNAL.signal(Instant::now()),
+            Either::Second(_) => GET_TIME_SIGNAL.signal(Instant::now()),
+        }
     }
 }
 
 #[embassy_executor::task]
 pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
     loop {
-        let signal = select(MCH_SIGNAL.wait(), MQTT_CONNECT_SIGNAL.wait()).await;
+        let signal = select3(
+            MCH_SIGNAL.wait(),
+            MQTT_CONNECT_SIGNAL.wait(),
+            GET_TIME_SIGNAL.wait(),
+        )
+        .await;
         {
             let mut bg77_unlocked = bg77_mutex.lock().await;
             let bg77 = bg77_unlocked.as_mut().unwrap();
             match signal {
-                Either::First(_) => match bg77.send_mini_call_home().await {
+                Either3::First(_) => match bg77.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
-                Either::Second(_) => {
+                Either3::Second(_) => {
                     if let Err(err) = bg77.mqtt_connect().await {
                         error!("Error connecting to MQTT: {}", err);
+                    }
+                }
+                Either3::Third(_) => {
+                    let time = bg77.current_time(false).await;
+                    match time {
+                        None => warn!("Cannot get modem time"),
+                        Some(time) => {
+                            info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
+                        }
                     }
                 }
             }
