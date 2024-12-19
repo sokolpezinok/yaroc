@@ -182,6 +182,17 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             // TODO: disconnect an old client
         }
 
+        let cmd = format!(50;
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
+            self.config.packet_timeout.as_secs()
+        )?;
+        self.simple_call(&cmd, None).await?;
+        let cmd = format!(50;
+            "+QMTCFG=\"keepalive\",{cid},{}",
+            (self.config.packet_timeout * 3).as_secs()
+        )?;
+        self.simple_call(&cmd, None).await?;
+
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = self
             .simple_call(&cmd, Some(ACTIVATION_TIMEOUT))
@@ -194,17 +205,6 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             );
             return Err(Error::MqttError(status));
         }
-
-        let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.config.packet_timeout.as_secs()
-        )?;
-        self.simple_call(&cmd, None).await?;
-        let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.config.packet_timeout * 3).as_secs()
-        )?;
-        self.simple_call(&cmd, None).await?;
 
         Ok(())
     }
