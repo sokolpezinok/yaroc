@@ -2691,8 +2691,6 @@ dependencies = [
  "log",
  "meshtastic",
  "prost 0.13.2",
- "prost-build 0.13.2",
- "protoc-bin-vendored",
  "pyo3",
  "pyo3-log",
  "regex",

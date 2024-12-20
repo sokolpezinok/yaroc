@@ -119,6 +119,7 @@ impl MshLogMessage {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
             }) => Err(
+                // TODO: drop prost
                 prost::DecodeError::new("Encrypted message, disable encryption in MQTT!").into(),
             ),
             _ => Ok(None),
