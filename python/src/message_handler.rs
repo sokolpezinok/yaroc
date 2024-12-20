@@ -258,28 +258,33 @@ mod test_punch {
     use std::collections::HashMap;
 
     use chrono::{Local, NaiveDateTime};
+    use femtopb::Message as _;
+    use femtopb::Repeated;
     use meshtastic::protobufs::mesh_packet::PayloadVariant;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope, Telemetry};
     use meshtastic::Message as MeshtasticMessage;
-    use prost::Message;
-
-    use crate::protobufs::{Punch, Punches};
+    use yaroc_common::proto::{Punch, Punches};
 
     use super::MessageHandler;
 
     #[test]
     fn test_wrong_punch() {
+        let punches_slice = &[Punch {
+            raw: b"\x12\x43",
+            ..Default::default()
+        }];
         let punches = Punches {
-            punches: vec![Punch {
-                raw: b"\x12\x43".to_vec(),
-            }],
-            sending_timestamp: None,
+            punches: Repeated::from_slice(punches_slice),
+            ..Default::default()
         };
-        let message = punches.encode_to_vec();
+        let mut buf = [0u8; 30];
+        let len = punches.encoded_len();
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punches = handler.punches(&message, "").unwrap();
+        // TODO: should propagate errors
+        let punches = handler.punches(&buf[..len], "").unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -288,16 +293,20 @@ mod test_punch {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
         let punch = yaroc_common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
+        let punches_slice = &[Punch {
+            raw: &punch,
+            ..Default::default()
+        }];
         let punches = Punches {
-            punches: vec![Punch {
-                raw: punch.to_vec(),
-            }],
-            sending_timestamp: None,
+            punches: Repeated::from_slice(punches_slice),
+            ..Default::default()
         };
-        let message = punches.encode_to_vec();
+        let mut buf = [0u8; 30];
+        let len = punches.encoded_len();
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punch_logs = handler.punches(&message, "").unwrap();
+        let punch_logs = handler.punches(&buf[..len], "").unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
