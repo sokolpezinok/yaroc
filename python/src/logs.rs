@@ -7,7 +7,6 @@ use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
 
 use crate::status::Position;
-use crate::time;
 
 pub enum CellularLogMessage {
     Disconnected(String, String),
@@ -40,7 +39,7 @@ impl CellularLogMessage {
                 let mut log_message = MiniCallHome::new(
                     hostname,
                     mac_addr,
-                    time::datetime_from_timestamp(mch.time?, &Local),
+                    yaroc_common::time::datetime_from_timestamp(mch.time?, &Local),
                     Local::now().into(),
                     mch.millivolts,
                 );

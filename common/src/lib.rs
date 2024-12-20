@@ -7,6 +7,7 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));
 }
 pub mod status;
+pub mod time;
 
 pub type Result<T> = core::result::Result<T, error::Error>;
 

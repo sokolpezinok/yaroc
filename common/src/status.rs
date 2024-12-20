@@ -17,13 +17,6 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
         .fixed_offset())
 }
 
-fn to_timestamp<'a>(time: DateTime<FixedOffset>) -> Timestamp<'a> {
-    Timestamp {
-        millis_epoch: time.timestamp_millis() as u64,
-        ..Default::default()
-    }
-}
-
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Default)]
 pub struct MiniCallHome {
@@ -67,7 +60,10 @@ impl MiniCallHome {
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
                 signal_snr: self.snr_db.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
-                time: timestamp.map(to_timestamp),
+                time: timestamp.map(|t| Timestamp {
+                    millis_epoch: t.timestamp_millis() as u64,
+                    ..Default::default()
+                }),
                 cpu_temperature: self.cpu_temperature.unwrap_or_default(),
                 ..Default::default()
             })),
