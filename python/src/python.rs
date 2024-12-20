@@ -1,6 +1,5 @@
+use chrono::Local;
 use pyo3::prelude::*;
-
-use crate::time::current_timestamp;
 
 #[pyclass(eq, eq_int)]
 #[derive(PartialEq)]
@@ -52,8 +51,8 @@ impl RaspberryModel {
 }
 
 #[pyfunction]
-pub fn current_timestamp_millis() -> u64 {
-    current_timestamp().millis_epoch
+pub fn current_timestamp_millis() -> i64 {
+    Local::now().fixed_offset().timestamp_millis()
 }
 
 #[pymodule]

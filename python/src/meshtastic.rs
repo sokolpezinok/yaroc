@@ -10,7 +10,7 @@ use std::fmt;
 
 use crate::logs::{HostInfo, PositionName, RssiSnr};
 use crate::status::Position;
-use crate::time::datetime_from_timestamp;
+use crate::time::datetime_from_millis;
 
 #[pyclass]
 #[derive(Default)]
@@ -25,7 +25,7 @@ pub struct MshLogMessage {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        datetime_from_timestamp(u64::from(posix_time) * 1000, &Local)
+        datetime_from_millis(i64::from(posix_time) * 1000, &Local)
     }
 
     fn parse_inner(

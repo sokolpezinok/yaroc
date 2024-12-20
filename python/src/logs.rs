@@ -31,10 +31,6 @@ impl fmt::Display for CellularLogMessage {
 }
 
 impl CellularLogMessage {
-    fn timestamp(time: yaroc_common::proto::Timestamp) -> DateTime<FixedOffset> {
-        time::datetime_from_timestamp(time.millis_epoch, &Local)
-    }
-
     pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => Some(
@@ -44,7 +40,7 @@ impl CellularLogMessage {
                 let mut log_message = MiniCallHome::new(
                     hostname,
                     mac_addr,
-                    Self::timestamp(mch.time?),
+                    time::datetime_from_timestamp(mch.time?, &Local),
                     Local::now().into(),
                     mch.millivolts,
                 );
