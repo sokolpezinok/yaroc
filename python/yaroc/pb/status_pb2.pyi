@@ -1,8 +1,9 @@
 import timestamp_pb2 as _timestamp_pb2
+from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
 
 Added: EventType
 DESCRIPTOR: _descriptor.FileDescriptor
@@ -52,7 +53,7 @@ class MiniCallHome(_message.Message):
     TOTALDATARX_FIELD_NUMBER: _ClassVar[int]
     TOTALDATATX_FIELD_NUMBER: _ClassVar[int]
     cellid: int
-    codes: str
+    codes: _containers.RepeatedScalarFieldContainer[int]
     cpu_temperature: float
     freq: int
     local_ip: int
@@ -65,7 +66,7 @@ class MiniCallHome(_message.Message):
     time: _timestamp_pb2.Timestamp
     totaldatarx: int
     totaldatatx: int
-    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[int] = ..., codes: _Optional[str] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[int] = ..., codes: _Optional[_Iterable[int]] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Status(_message.Message):
     __slots__ = ["dev_event", "disconnected", "mini_call_home"]

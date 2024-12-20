@@ -43,9 +43,9 @@ class SiWorker:
         await queue.put(punch)
         self._codes.add(punch.code)
 
-    def __str__(self):
-        codes_str = ",".join(map(str, self._codes)) if len(self._codes) >= 1 else "0"
-        return f"{codes_str}-{self.name}"
+    @property
+    def codes(self) -> set[int]:
+        return self._codes
 
 
 class SerialSiWorker(SiWorker):
@@ -219,11 +219,10 @@ class UdevSiFactory(SiWorker):
             self._device_queue.put(("remove", device_info)), self._loop
         )
 
-    def __str__(self):
-        res = []
-        for worker, _, _ in self._udev_workers.values():
-            res.append(str(worker))
-        return ",".join(res)
+    @property
+    def codes(self) -> set[int]:
+        worker_codes = [worker.codes for worker, _, _ in self._udev_workers.values()]
+        return set.union(*worker_codes)
 
 
 class FakeSiWorker(SiWorker):
@@ -264,9 +263,6 @@ class SiPunchManager:
         self._queue: Queue[SiPunch] = Queue()
         self._status_queue: Queue[DeviceEvent] = Queue()
 
-    def __str__(self) -> str:
-        return ",".join(str(worker) for worker in self._si_workers)
-
     async def loop(self):
         loops = []
         for worker in self._si_workers:
@@ -282,3 +278,8 @@ class SiPunchManager:
     async def device_events(self) -> AsyncIterator[DeviceEvent]:
         while True:
             yield await self._status_queue.get()
+
+    @property
+    def codes(self) -> set[int]:
+        worker_codes = [worker.codes for worker in self._si_workers]
+        return set.union(*worker_codes)

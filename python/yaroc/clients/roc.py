@@ -82,7 +82,7 @@ class RocClient(Client):
                 "macaddr": mac_addr,
                 "failedcallhomes": "0",
                 "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
-                "codes": mch.codes,
+                "codes": ",".join(str(code) for code in mch.codes),
                 "totaldatatx": str(mch.totaldatarx),
                 "totaldatarx": str(mch.totaldatatx),
                 "signaldBm": str(-mch.signal_dbm),

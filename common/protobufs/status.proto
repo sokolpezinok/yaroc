@@ -24,17 +24,17 @@ message Coordinates {
 }
 
 message MiniCallHome {
-  uint32 local_ip = 2;
-  float cpu_temperature = 3;
-  uint32 freq = 4;
-  uint32 min_freq = 5;
-  uint32 max_freq = 6;
-  uint32 millivolts = 7;
-  int32 signal_dbm = 8;
-  int32 signal_snr = 15;
+  uint32 local_ip = 1;
+  float cpu_temperature = 2;
+  uint32 freq = 3;
+  uint32 min_freq = 4;
+  uint32 max_freq = 5;
+  uint32 millivolts = 6;
+  int32 signal_dbm = 7;
+  int32 signal_snr = 8;
   uint32 cellid = 9;
   uint32 network_type = 10;
-  string codes = 11;
+  repeated uint32 codes = 11;
   uint64 totaldatarx = 12;
   uint64 totaldatatx = 13;
   Timestamp time = 14;

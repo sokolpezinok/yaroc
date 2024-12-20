@@ -39,7 +39,8 @@ class PunchSender:
         while True:
             time_start = time.time()
             mini_call_home = create_sys_minicallhome()
-            mini_call_home.codes = str(self.si_manager)
+            for code in self.si_manager.codes:
+                mini_call_home.codes.append(code)
             status = Status()
             status.mini_call_home.CopyFrom(mini_call_home)
             await self.client_group.send_status(status, self.host_info.mac_address)
