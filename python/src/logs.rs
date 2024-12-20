@@ -223,7 +223,7 @@ mod test_logs {
     }
 
     #[test]
-    fn test_cellular_logmessage() {
+    fn test_cellular_logmessage_disconnected() {
         let log_message_disconnected =
             CellularLogMessage::Disconnected("spe01".to_owned(), "SIM7020-spe01".to_owned());
         assert_eq!(

@@ -2686,6 +2686,7 @@ name = "yaroc-python"
 version = "0.1.13"
 dependencies = [
  "chrono",
+ "femtopb",
  "geoutils",
  "log",
  "meshtastic",

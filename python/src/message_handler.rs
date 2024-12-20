@@ -1,3 +1,4 @@
+use femtopb::Message as _;
 use log::error;
 use log::info;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
@@ -7,13 +8,15 @@ use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
+use yaroc_common::error::Error;
+use yaroc_common::proto::Punches;
 
 use chrono::prelude::*;
 use chrono::DateTime;
 
 use crate::logs::{CellularLogMessage, HostInfo, PositionName};
 use crate::meshtastic::MshLogMessage;
-use crate::protobufs::{Punches, Status};
+use crate::protobufs::Status;
 use crate::punch::SiPunch;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
@@ -71,7 +74,8 @@ impl MessageHandler {
 
     #[pyo3(name = "punches")]
     pub fn punches_py(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunchLog>> {
-        self.punches(payload, mac_addr).map_err(|err| err.into())
+        self.punches(payload, mac_addr)
+            .map_err(|err| PyValueError::new_err(format!("{err}")))
     }
 
     pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
@@ -101,8 +105,8 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> std::io::Result<Vec<SiPunchLog>> {
-        let punches = Punches::decode(payload)?;
+    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> Result<Vec<SiPunchLog>, Error> {
+        let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
         let host_info: HostInfo = HostInfo {
             name: self.resolve(mac_addr).to_owned(),
             mac_address: mac_addr.to_owned(),
@@ -111,13 +115,15 @@ impl MessageHandler {
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches {
-            match Self::construct_punch(&punch.raw, &host_info, now) {
-                Ok(si_punch) => {
-                    status.punch(&si_punch.punch);
-                    result.push(si_punch);
-                }
-                Err(err) => {
-                    error!("{}", err);
+            if let Ok(punch) = punch {
+                match Self::construct_punch(&punch.raw, &host_info, now) {
+                    Ok(si_punch) => {
+                        status.punch(&si_punch.punch);
+                        result.push(si_punch);
+                    }
+                    Err(err) => {
+                        error!("{}", err);
+                    }
                 }
             }
         }
