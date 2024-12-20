@@ -1,10 +1,11 @@
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
+use femtopb::EnumValue;
 use pyo3::prelude::*;
 use std::fmt;
+use yaroc_common::proto::status::Msg;
+use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
 
-use crate::protobufs::{status::Msg, DeviceEvent, Disconnected, Status};
-use crate::protobufs::{EventType, Timestamp};
 use crate::status::Position;
 use crate::time;
 
@@ -30,14 +31,14 @@ impl fmt::Display for CellularLogMessage {
 }
 
 impl CellularLogMessage {
-    fn timestamp(time: Timestamp) -> DateTime<FixedOffset> {
+    fn timestamp(time: yaroc_common::proto::Timestamp) -> DateTime<FixedOffset> {
         time::datetime_from_timestamp(time.millis_epoch, &Local)
     }
 
     pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
         match status.msg {
-            Some(Msg::Disconnected(Disconnected { client_name })) => Some(
-                CellularLogMessage::Disconnected(hostname.to_owned(), client_name),
+            Some(Msg::Disconnected(Disconnected { client_name, .. })) => Some(
+                CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
                 let mut log_message = MiniCallHome::new(
@@ -55,14 +56,14 @@ impl CellularLogMessage {
                 log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
             }
-            Some(Msg::DevEvent(DeviceEvent { port, r#type })) => {
+            Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
                 Some(CellularLogMessage::DeviceEvent(
                     hostname.to_owned(),
-                    port,
-                    r#type == EventType::Added as i32,
+                    port.to_owned(),
+                    r#type == EnumValue::Known(EventType::Added),
                 ))
             }
-            None => None,
+            _ => None,
         }
     }
 }

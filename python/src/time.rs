@@ -11,7 +11,7 @@ pub fn current_timestamp() -> Timestamp {
     timestamp_from_datetime(Local::now().fixed_offset())
 }
 
-pub(crate) fn timestamp_from_datetime(now: DateTime<FixedOffset>) -> Timestamp {
+fn timestamp_from_datetime(now: DateTime<FixedOffset>) -> Timestamp {
     Timestamp {
         millis_epoch: now.timestamp_millis().try_into().unwrap(),
     }

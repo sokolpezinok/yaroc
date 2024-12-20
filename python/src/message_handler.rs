@@ -4,19 +4,18 @@ use log::info;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, PortNum, ServiceEnvelope};
 use meshtastic::Message as MeshtasticMessage;
-use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use yaroc_common::error::Error;
 use yaroc_common::proto::Punches;
+use yaroc_common::proto::Status;
 
 use chrono::prelude::*;
 use chrono::DateTime;
 
 use crate::logs::{CellularLogMessage, HostInfo, PositionName};
 use crate::meshtastic::MshLogMessage;
-use crate::protobufs::Status;
 use crate::punch::SiPunch;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
@@ -79,8 +78,8 @@ impl MessageHandler {
     }
 
     pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
-        let status_proto =
-            Status::decode(payload).map_err(|e| PyValueError::new_err(format!("{e}")))?;
+        let status_proto = Status::decode(payload)
+            .map_err(|_| PyValueError::new_err("Status proto decoding error"))?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr)).ok_or(
                 PyValueError::new_err("Missing fields in the Status proto"), // TODO: which?
@@ -114,16 +113,14 @@ impl MessageHandler {
         let status = self.get_cellular_status(mac_addr);
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
-        for punch in punches.punches {
-            if let Ok(punch) = punch {
-                match Self::construct_punch(&punch.raw, &host_info, now) {
-                    Ok(si_punch) => {
-                        status.punch(&si_punch.punch);
-                        result.push(si_punch);
-                    }
-                    Err(err) => {
-                        error!("{}", err);
-                    }
+        for punch in punches.punches.into_iter().flatten() {
+            match Self::construct_punch(punch.raw, &host_info, now) {
+                Ok(si_punch) => {
+                    status.punch(&si_punch.punch);
+                    result.push(si_punch);
+                }
+                Err(err) => {
+                    error!("{}", err);
                 }
             }
         }
