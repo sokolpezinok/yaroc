@@ -31,9 +31,8 @@ pub struct MiniCallHome {
 }
 
 impl MiniCallHome {
-    pub fn set_signal_info(&mut self, snr_mult: u8, mut rssi_dbm: i8, rsrp_dbm: i8, rsrq_dbm: i8) {
-        // TODO: this is BG77-specific logic
-        self.snr_cb = Some(i16::from(snr_mult) * 2 - 200);
+    pub fn set_signal_info(&mut self, snr_cb: i16, mut rssi_dbm: i8, rsrp_dbm: i8, rsrq_dbm: i8) {
+        self.snr_cb = Some(snr_cb);
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }

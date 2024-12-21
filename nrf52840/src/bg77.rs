@@ -294,7 +294,8 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             mini_call_home.set_battery_info(battery_mv, battery_percents);
         }
         if let Ok((rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm)) = self.signal_info().await {
-            mini_call_home.set_signal_info(snr_mult, rssi_dbm, rsrp_dbm, rsrq_dbm);
+            let snr_cb = i16::from(snr_mult) * 2 - 200;
+            mini_call_home.set_signal_info(snr_cb, rssi_dbm, rsrp_dbm, rsrq_dbm);
         }
         if let Ok(cellid) = self.cellid().await {
             mini_call_home.set_cellid(cellid);
