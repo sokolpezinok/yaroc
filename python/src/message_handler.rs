@@ -20,7 +20,7 @@ use crate::punch::SiPunch;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 
-#[pyclass()]
+#[pyclass]
 pub struct MessageHandler {
     dns: HashMap<String, String>,
     cellular_statuses: HashMap<String, CellularRocStatus>,

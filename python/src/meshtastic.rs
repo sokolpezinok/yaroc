@@ -4,14 +4,12 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
-use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
 
 use crate::logs::{HostInfo, PositionName, RssiSnr};
 use crate::status::Position;
 
-#[pyclass]
 #[derive(Default)]
 pub struct MshLogMessage {
     pub host_info: HostInfo,
@@ -128,13 +126,6 @@ impl MshLogMessage {
 
 const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
 const POSITION_APP: i32 = PortNum::PositionApp as i32;
-
-#[pymethods]
-impl MshLogMessage {
-    pub fn __repr__(&self) -> String {
-        format!("{}", self)
-    }
-}
 
 impl fmt::Display for MshLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

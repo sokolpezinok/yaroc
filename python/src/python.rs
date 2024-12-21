@@ -60,12 +60,9 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
     m.add_class::<crate::punch::SiPunchLog>()?;
     m.add_class::<crate::logs::HostInfo>()?;
-    m.add_class::<crate::logs::MiniCallHomeLog>()?;
     m.add_class::<RaspberryModel>()?;
     m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
 
-    #[cfg(feature = "receive")]
-    m.add_class::<crate::meshtastic::MshLogMessage>()?;
     #[cfg(feature = "receive")]
     m.add_class::<crate::message_handler::MessageHandler>()?;
 

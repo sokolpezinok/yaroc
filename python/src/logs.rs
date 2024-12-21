@@ -84,7 +84,6 @@ impl HostInfo {
     }
 }
 
-#[pyclass(name = "MiniCallHomeLog")]
 pub struct MiniCallHomeLog {
     pub mini_call_home: MiniCallHome,
     pub host_info: HostInfo,
@@ -122,13 +121,6 @@ impl MiniCallHomeLog {
             timestamp,
             latency: now - timestamp,
         }
-    }
-}
-
-#[pymethods]
-impl MiniCallHomeLog {
-    pub fn __repr__(&self) -> String {
-        format!("{self}")
     }
 }
 
