@@ -289,8 +289,8 @@ impl<S: Temp, T: Tx> BG77<S, T> {
 
     async fn mini_call_home(&mut self) -> Option<MiniCallHome> {
         let timestamp = self.current_time(true).await?;
-        let mut mini_call_home = MiniCallHome::new(timestamp).set_cpu_temperature(cpu_temperature);
         let cpu_temperature = self.temp.cpu_temperature().await;
+        let mut mini_call_home = MiniCallHome::new(timestamp).set_cpu_temperature(cpu_temperature);
         if let Ok((battery_mv, battery_percents)) = self.battery_state().await {
             mini_call_home.set_battery_info(battery_mv, battery_percents);
         }
@@ -302,7 +302,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             mini_call_home.set_cellid(cellid);
         }
 
-        mini_call_home
+        Some(mini_call_home)
     }
 
     async fn send_message<const N: usize>(&mut self, msg: impl Message<'_>) -> Result<(), Error> {
@@ -374,7 +374,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mini_call_home = self.mini_call_home().await;
+        let mini_call_home = self.mini_call_home().await.ok_or(Error::ModemError)?;
         self.send_message::<250>(mini_call_home.to_proto()).await
     }
 
