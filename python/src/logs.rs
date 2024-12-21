@@ -10,7 +10,7 @@ use crate::status::Position;
 
 pub enum CellularLogMessage {
     Disconnected(String, String),
-    MCH(MiniCallHome),
+    MCH(PyMiniCallHome),
     DeviceEvent(String, String, bool),
 }
 
@@ -41,7 +41,7 @@ impl CellularLogMessage {
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
-                let mut log_message = MiniCallHome::new(
+                let mut log_message = PyMiniCallHome::new(
                     hostname,
                     mac_addr,
                     // TODO: is missing timestamp such a big problem? Could we remove the question
@@ -89,8 +89,8 @@ impl HostInfo {
     }
 }
 
-#[pyclass]
-pub struct MiniCallHome {
+#[pyclass(name = "MiniCallHome")]
+pub struct PyMiniCallHome {
     host_info: HostInfo,
     pub voltage: f32,
     pub rssi_dbm: Option<i16>,
@@ -104,7 +104,7 @@ pub struct MiniCallHome {
 }
 
 #[pymethods]
-impl MiniCallHome {
+impl PyMiniCallHome {
     #[new]
     pub fn new(
         name: &str,
@@ -134,7 +134,7 @@ impl MiniCallHome {
     }
 }
 
-impl fmt::Display for MiniCallHome {
+impl fmt::Display for PyMiniCallHome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
@@ -197,12 +197,12 @@ impl PositionName {
 #[cfg(test)]
 mod test_logs {
     use super::*;
-    use yaroc_common::proto::Timestamp;
+    use yaroc_common::proto::{MiniCallHome, Timestamp};
 
     #[test]
     fn test_cellular_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
-        let log_message = MiniCallHome {
+        let log_message = PyMiniCallHome {
             host_info: HostInfo {
                 name: "spe01".to_owned(),
                 mac_address: String::new(),
@@ -245,7 +245,7 @@ mod test_logs {
         let tz = FixedOffset::east_opt(3600).unwrap();
 
         let status = Status {
-            msg: Some(Msg::MiniCallHome(yaroc_common::proto::MiniCallHome {
+            msg: Some(Msg::MiniCallHome(MiniCallHome {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
                 signal_dbm: -80,
@@ -261,7 +261,7 @@ mod test_logs {
         assert!(formatted_log_msg.starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12, 3.85V"));
 
         let status = Status {
-            msg: Some(Msg::MiniCallHome(yaroc_common::proto::MiniCallHome {
+            msg: Some(Msg::MiniCallHome(MiniCallHome {
                 time: None,
                 ..Default::default()
             })),
