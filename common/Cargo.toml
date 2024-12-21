@@ -7,7 +7,7 @@ edition = "2021"
 default = []
 defmt = ["dep:defmt"]
 nrf = ["dep:embassy-nrf"]
-std = ["embassy-executor/arch-std", "embassy-time/std"]
+std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
 
 [dependencies]
 chrono = { workspace = true }

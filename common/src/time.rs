@@ -1,5 +1,5 @@
-use chrono::prelude::*;
 use crate::proto::Timestamp;
+use chrono::prelude::*;
 
 pub fn datetime_from_timestamp<T: TimeZone>(timestamp: Timestamp, tz: &T) -> DateTime<FixedOffset> {
     tz.timestamp_millis_opt(timestamp.millis_epoch as i64).unwrap().fixed_offset()
@@ -11,10 +11,10 @@ pub fn datetime_from_millis<T: TimeZone>(timestamp: i64, tz: &T) -> DateTime<Fix
 
 #[cfg(test)]
 mod test_time {
-    use chrono::{FixedOffset, Local};
-    use crate::proto::Timestamp;
+    use super::*;
 
-    use super::datetime_from_timestamp;
+    extern crate alloc;
+    use alloc::string::ToString;
 
     #[test]
     fn test_timestamp() {
