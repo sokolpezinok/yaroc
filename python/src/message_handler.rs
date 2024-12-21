@@ -95,7 +95,7 @@ impl MessageHandler {
                     status.mqtt_connect_update(
                         rssi_dbm,
                         mch.cellid.unwrap_or_default(),
-                        mch.snr_db,
+                        mch.snr_cb,
                     );
                 }
                 if let Some(batt_mv) = mch.batt_mv {

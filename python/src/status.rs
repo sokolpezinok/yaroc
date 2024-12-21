@@ -36,7 +36,7 @@ impl Position {
 enum CellularConnectionState {
     #[default]
     Unknown,
-    MqttConnected(i8, u32, Option<i8>),
+    MqttConnected(i8, u32, Option<i16>),
 }
 
 #[pyclass]
@@ -46,7 +46,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub rssi_dbm: Option<i8>,
     #[pyo3(get)]
-    snr: Option<f32>,
+    snr_db: Option<f32>,
     #[pyo3(get)]
     cellid: Option<u32>,
     #[pyo3(get)]
@@ -84,8 +84,8 @@ impl CellularRocStatus {
         self.voltage = Some(voltage);
     }
 
-    pub fn mqtt_connect_update(&mut self, rssi_dbm: i8, cellid: u32, snr_db: Option<i8>) {
-        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr_db);
+    pub fn mqtt_connect_update(&mut self, rssi_dbm: i8, cellid: u32, snr_cb: Option<i16>) {
+        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr_cb);
         self.last_update = Some(Local::now().into());
     }
 
@@ -101,8 +101,10 @@ impl CellularRocStatus {
                 CellularConnectionState::MqttConnected(rssi_dbm, _, _) => Some(rssi_dbm),
                 _ => None,
             },
-            snr: match self.state {
-                CellularConnectionState::MqttConnected(_, _, snr) => snr.map(f32::from),
+            snr_db: match self.state {
+                CellularConnectionState::MqttConnected(_, _, snr_cb) => {
+                    snr_cb.map(|v| f32::from(v) / 10.0)
+                }
                 _ => None,
             },
             cellid: match self.state {
@@ -159,7 +161,7 @@ impl MeshtasticRocStatus {
         NodeInfo {
             name: self.name.clone(),
             rssi_dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
-            snr: self.rssi_snr.as_ref().map(|x| x.snr),
+            snr_db: self.rssi_snr.as_ref().map(|x| x.snr),
             cellid: None, // TODO: not supported yet
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,

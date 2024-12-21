@@ -106,7 +106,7 @@ class MqttClient(Client):
                     if network_state.rssi is not None:
                         status.mini_call_home.signal_dbm = round(network_state.rssi)
                     if network_state.snr is not None:
-                        status.mini_call_home.signal_snr = round(network_state.snr)
+                        status.mini_call_home.signal_snr_cb = round(network_state.snr * 10)
                     status.mini_call_home.network_type = network_state.type.value
                     cellid = await self.mm.get_cellid(modems[0])
                     if cellid is not None:
@@ -214,7 +214,7 @@ class SIM7020MqttClient(Client):
                     (rssi_dbm, cellid, snr) = res
                     mch = status.mini_call_home
                     mch.signal_dbm = rssi_dbm
-                    mch.signal_snr = snr
+                    mch.signal_snr_cb = snr * 10
                     mch.cellid = cellid
                     mch.network_type = NetworkType.NbIot.value
 

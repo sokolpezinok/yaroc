@@ -21,7 +21,7 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
 #[derive(Default)]
 pub struct MiniCallHome {
     pub rssi_dbm: Option<i8>,
-    pub snr_db: Option<i8>,
+    pub snr_cb: Option<i16>, // centibells, 1/10th of decibell
     pub cellid: Option<u32>,
     pub batt_mv: Option<u16>,
     pub batt_percents: Option<u8>,
@@ -32,9 +32,8 @@ pub struct MiniCallHome {
 
 impl MiniCallHome {
     pub fn set_signal_info(&mut self, snr_mult: u8, mut rssi_dbm: i8, rsrp_dbm: i8, rsrq_dbm: i8) {
-        //let snr_db = f32::from(snr_mult) / 5. - 20.;
-        let snr_db = i8::try_from(snr_mult / 5).unwrap() - 20;
-        self.snr_db = Some(snr_db);
+        // TODO: this is BG77-specific logic
+        self.snr_cb = Some(i16::from(snr_mult) * 2 - 200);
         if rssi_dbm == 0 {
             rssi_dbm = rsrp_dbm - rsrq_dbm;
         }
@@ -61,7 +60,7 @@ impl MiniCallHome {
                 freq: 32,
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
-                signal_snr: self.snr_db.unwrap_or_default() as i32,
+                signal_snr_cb: self.snr_cb.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
                 time: timestamp.map(|t| Timestamp {
                     millis_epoch: t.timestamp_millis() as u64,

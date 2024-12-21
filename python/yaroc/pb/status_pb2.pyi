@@ -37,7 +37,7 @@ class Disconnected(_message.Message):
     def __init__(self, client_name: _Optional[str] = ...) -> None: ...
 
 class MiniCallHome(_message.Message):
-    __slots__ = ["cellid", "codes", "cpu_temperature", "freq", "local_ip", "max_freq", "millivolts", "min_freq", "network_type", "signal_dbm", "signal_snr", "time", "totaldatarx", "totaldatatx"]
+    __slots__ = ["cellid", "codes", "cpu_temperature", "freq", "local_ip", "max_freq", "millivolts", "min_freq", "network_type", "signal_dbm", "signal_snr_cb", "time", "totaldatarx", "totaldatatx"]
     CELLID_FIELD_NUMBER: _ClassVar[int]
     CODES_FIELD_NUMBER: _ClassVar[int]
     CPU_TEMPERATURE_FIELD_NUMBER: _ClassVar[int]
@@ -48,7 +48,7 @@ class MiniCallHome(_message.Message):
     MIN_FREQ_FIELD_NUMBER: _ClassVar[int]
     NETWORK_TYPE_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_DBM_FIELD_NUMBER: _ClassVar[int]
-    SIGNAL_SNR_FIELD_NUMBER: _ClassVar[int]
+    SIGNAL_SNR_CB_FIELD_NUMBER: _ClassVar[int]
     TIME_FIELD_NUMBER: _ClassVar[int]
     TOTALDATARX_FIELD_NUMBER: _ClassVar[int]
     TOTALDATATX_FIELD_NUMBER: _ClassVar[int]
@@ -62,11 +62,11 @@ class MiniCallHome(_message.Message):
     min_freq: int
     network_type: int
     signal_dbm: int
-    signal_snr: int
+    signal_snr_cb: int
     time: _timestamp_pb2.Timestamp
     totaldatarx: int
     totaldatatx: int
-    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[int] = ..., codes: _Optional[_Iterable[int]] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr_cb: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[int] = ..., codes: _Optional[_Iterable[int]] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Status(_message.Message):
     __slots__ = ["dev_event", "disconnected", "mini_call_home"]
