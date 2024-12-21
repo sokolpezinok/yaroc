@@ -89,11 +89,14 @@ impl MessageHandler {
 
         let status = self.get_cellular_status(mac_addr);
         match log_message {
-            CellularLogMessage::MCH(mch) => {
+            CellularLogMessage::MCH(mch_log) => {
+                let mch = mch_log.mini_call_home;
                 if let Some(rssi_dbm) = mch.rssi_dbm {
-                    status.mqtt_connect_update(rssi_dbm, mch.cellid.unwrap_or_default(), mch.snr);
+                    status.mqtt_connect_update(rssi_dbm, mch.cellid.unwrap_or_default(), mch.snr_db);
                 }
-                status.update_voltage(f64::from(mch.voltage));
+                if let Some(batt_mv) = mch.batt_mv {
+                    status.update_voltage(f64::from(batt_mv) / 1000.);
+                }
             }
             CellularLogMessage::Disconnected(..) => {
                 status.disconnect();

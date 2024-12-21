@@ -5,12 +5,13 @@ use pyo3::prelude::*;
 use std::fmt;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
+use yaroc_common::status::MiniCallHome;
 
 use crate::status::Position;
 
 pub enum CellularLogMessage {
     Disconnected(String, String),
-    MCH(PyMiniCallHome),
+    MCH(MiniCallHomeLog),
     DeviceEvent(String, String, bool),
 }
 
@@ -41,21 +42,15 @@ impl CellularLogMessage {
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
-                let mut log_message = PyMiniCallHome::new(
+                let log_message = MiniCallHomeLog::new(
                     hostname,
                     mac_addr,
                     // TODO: is missing timestamp such a big problem? Could we remove the question
                     // mark after `mch.time`?
                     yaroc_common::time::datetime_from_timestamp(mch.time?, tz),
                     Local::now().into(),
-                    mch.millivolts,
+                    mch,
                 );
-                if mch.cellid > 0 {
-                    log_message.cellid = Some(mch.cellid);
-                }
-                log_message.rssi_dbm = Some(i16::try_from(mch.signal_dbm).ok()?);
-                log_message.snr = Some(i16::try_from(mch.signal_snr).ok()?);
-                log_message.temperature = Some(mch.cpu_temperature);
                 Some(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
@@ -89,68 +84,73 @@ impl HostInfo {
     }
 }
 
-#[pyclass(name = "MiniCallHome")]
-pub struct PyMiniCallHome {
-    host_info: HostInfo,
-    pub voltage: f32,
-    pub rssi_dbm: Option<i16>,
-    pub snr: Option<i16>,
-    pub cellid: Option<u32>,
-    temperature: Option<f32>,
-    #[allow(dead_code)]
-    cpu_frequency: Option<u32>,
-    timestamp: DateTime<FixedOffset>,
-    latency: Duration,
+#[pyclass(name = "MiniCallHomeLog")]
+pub struct MiniCallHomeLog {
+    pub mini_call_home: MiniCallHome,
+    pub host_info: HostInfo,
+    pub timestamp: DateTime<FixedOffset>, // TODO: move into MiniCallHome
+    pub latency: Duration,
 }
 
-#[pymethods]
-impl PyMiniCallHome {
-    #[new]
+impl MiniCallHomeLog {
     pub fn new(
         name: &str,
         mac_address: &str,
         timestamp: DateTime<FixedOffset>,
         now: DateTime<FixedOffset>,
-        millivolts: u32,
+        mch_proto: yaroc_common::proto::MiniCallHome,
     ) -> Self {
+        let mch = MiniCallHome {
+            batt_mv: Some(mch_proto.millivolts as u16),
+            batt_percents: None,                                         // TODO
+            rssi_dbm: Some(i8::try_from(mch_proto.signal_dbm).unwrap()), // TODO: unwrap
+            snr_db: Some(i8::try_from(mch_proto.signal_snr).unwrap()),
+            cellid: if mch_proto.cellid > 0 {
+                Some(mch_proto.cellid)
+            } else {
+                None
+            },
+            cpu_temperature: Some(mch_proto.cpu_temperature),
+            ..Default::default()
+        };
         Self {
+            mini_call_home: mch,
             host_info: HostInfo {
                 name: name.to_owned(),
                 mac_address: mac_address.to_owned(),
             },
             timestamp,
             latency: now - timestamp,
-            voltage: millivolts as f32 / 1000.0,
-            cpu_frequency: None,
-            temperature: None,
-            rssi_dbm: None,
-            snr: None,
-            cellid: None,
         }
     }
+}
 
+#[pymethods]
+impl MiniCallHomeLog {
     pub fn __repr__(&self) -> String {
         format!("{self}")
     }
 }
 
-impl fmt::Display for PyMiniCallHome {
+impl fmt::Display for MiniCallHomeLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
-        if let Some(temperature) = &self.temperature {
+        if let Some(temperature) = &self.mini_call_home.cpu_temperature {
             write!(f, " {temperature:.1}°C")?;
         }
-        if let Some(rssi_dbm) = &self.rssi_dbm {
+        if let Some(rssi_dbm) = &self.mini_call_home.rssi_dbm {
             write!(f, ", RSSI{rssi_dbm:5}")?;
-            if let Some(snr) = &self.snr {
+            if let Some(snr) = &self.mini_call_home.snr_db {
                 write!(f, " SNR{snr:3}")?;
             }
         }
-        if let Some(cellid) = &self.cellid {
+        if let Some(cellid) = &self.mini_call_home.cellid {
             write!(f, ", cell {cellid:X}")?;
         }
-        write!(f, ", {:.2}V", self.voltage)?;
+        if let Some(batt_mv) = self.mini_call_home.batt_mv {
+            write!(f, ", {:.2}V", f32::from(batt_mv) / 1000.0)?;
+        }
         let secs = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", lat. {:4.2}s", secs)
     }
@@ -158,7 +158,7 @@ impl fmt::Display for PyMiniCallHome {
 
 #[derive(Clone)]
 pub struct RssiSnr {
-    pub rssi_dbm: i16,
+    pub rssi_dbm: i8,
     pub snr: f32,
     pub distance: Option<(f32, String)>,
 }
@@ -168,7 +168,7 @@ impl RssiSnr {
         match rssi_dbm {
             0 => None,
             rx_rssi => Some(RssiSnr {
-                rssi_dbm: rx_rssi as i16,
+                rssi_dbm: rx_rssi as i8,
                 snr,
                 distance: None,
             }),
@@ -202,19 +202,21 @@ mod test_logs {
     #[test]
     fn test_cellular_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
-        let log_message = PyMiniCallHome {
+        let log_message = MiniCallHomeLog {
+            mini_call_home: yaroc_common::status::MiniCallHome {
+                batt_mv: Some(1260),
+                rssi_dbm: Some(-87),
+                snr_db: Some(7),
+                cellid: Some(2580590),
+                cpu_temperature: Some(51.54),
+                ..Default::default()
+            },
             host_info: HostInfo {
                 name: "spe01".to_owned(),
                 mac_address: String::new(),
             },
             timestamp,
             latency: Duration::milliseconds(1390),
-            voltage: 1.26,
-            rssi_dbm: Some(-87),
-            snr: Some(7),
-            cellid: Some(2580590),
-            cpu_frequency: None,
-            temperature: Some(51.54),
         };
         assert_eq!(
             format!("{log_message}"),

@@ -36,7 +36,7 @@ impl Position {
 enum CellularConnectionState {
     #[default]
     Unknown,
-    MqttConnected(i16, u32, Option<i16>),
+    MqttConnected(i8, u32, Option<i8>),
 }
 
 #[pyclass]
@@ -44,7 +44,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
-    pub rssi_dbm: Option<i16>,
+    pub rssi_dbm: Option<i8>,
     #[pyo3(get)]
     snr: Option<f32>,
     #[pyo3(get)]
@@ -84,8 +84,8 @@ impl CellularRocStatus {
         self.voltage = Some(voltage);
     }
 
-    pub fn mqtt_connect_update(&mut self, rssi_dbm: i16, cellid: u32, snr: Option<i16>) {
-        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr);
+    pub fn mqtt_connect_update(&mut self, rssi_dbm: i8, cellid: u32, snr_db: Option<i8>) {
+        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr_db);
         self.last_update = Some(Local::now().into());
     }
 
