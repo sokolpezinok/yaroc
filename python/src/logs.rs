@@ -39,6 +39,8 @@ impl CellularLogMessage {
                 let mut log_message = MiniCallHome::new(
                     hostname,
                     mac_addr,
+                    // TODO: is missing timestamp such a big problem? Could we remove the question
+                    // mark after `mch.time`?
                     yaroc_common::time::datetime_from_timestamp(mch.time?, &Local),
                     Local::now().into(),
                     mch.millivolts,
@@ -189,11 +191,8 @@ impl PositionName {
 
 #[cfg(test)]
 mod test_logs {
-    use chrono::{DateTime, Duration};
-
-    use crate::logs::{CellularLogMessage, HostInfo};
-
-    use super::MiniCallHome;
+    use super::*;
+    use yaroc_common::proto::Timestamp;
 
     #[test]
     fn test_cellular_dbm() {
@@ -230,5 +229,39 @@ mod test_logs {
         let log_message_event =
             CellularLogMessage::DeviceEvent("spe01".to_owned(), "/dev/ttyUSB0".to_owned(), true);
         assert_eq!(format!("{log_message_event}"), "spe01 /dev/ttyUSB0 added");
+    }
+
+    #[test]
+    fn test_cellular_logmessage_fromproto() {
+        let timestamp = Timestamp {
+            millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+            ..Default::default()
+        };
+
+        let status = Status {
+            msg: Some(Msg::MiniCallHome(yaroc_common::proto::MiniCallHome {
+                cpu_temperature: 47.0,
+                millivolts: 3847,
+                signal_dbm: -80,
+                signal_snr: 12,
+                time: Some(timestamp),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01")
+            .expect("MiniCallHome proto should be valid");
+        let formatted_log_msg = format!("{cell_log_msg}");
+        assert!(formatted_log_msg.starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12, 3.85V"));
+
+        let status = Status {
+            msg: Some(Msg::MiniCallHome(yaroc_common::proto::MiniCallHome {
+                time: None,
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01");
+        assert!(cell_log_msg.is_none());
     }
 }
