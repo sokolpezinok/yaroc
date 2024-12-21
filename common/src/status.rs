@@ -17,8 +17,7 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
         .fixed_offset())
 }
 
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MiniCallHome {
     pub rssi_dbm: Option<i8>,
     pub snr_cb: Option<i16>, // centibells, 1/10th of decibell
@@ -27,10 +26,17 @@ pub struct MiniCallHome {
     pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<f32>,
     pub cpu_freq: Option<u32>,
-    //pub timestamp: DateTime<FixedOffset>,
+    pub timestamp: DateTime<FixedOffset>,
 }
 
 impl MiniCallHome {
+    pub fn new(timestamp: DateTime<FixedOffset>) -> Self {
+        Self {
+            timestamp,
+            ..Default::default()
+        }
+    }
+
     pub fn set_signal_info(&mut self, snr_cb: i16, mut rssi_dbm: i8, rsrp_dbm: i8, rsrq_dbm: i8) {
         self.snr_cb = Some(snr_cb);
         if rssi_dbm == 0 {
@@ -53,7 +59,7 @@ impl MiniCallHome {
         self.cellid = Some(cellid);
     }
 
-    pub fn to_proto(&self, timestamp: Option<DateTime<FixedOffset>>) -> Status {
+    pub fn to_proto(&self) -> Status {
         Status {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
                 freq: 32,
@@ -61,8 +67,8 @@ impl MiniCallHome {
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
                 signal_snr_cb: self.snr_cb.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
-                time: timestamp.map(|t| Timestamp {
-                    millis_epoch: t.timestamp_millis() as u64,
+                time: Some(Timestamp {
+                    millis_epoch: self.timestamp.timestamp_millis() as u64,
                     ..Default::default()
                 }),
                 cpu_temperature: self.cpu_temperature.unwrap_or_default(),

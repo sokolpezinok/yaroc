@@ -87,7 +87,6 @@ impl HostInfo {
 pub struct MiniCallHomeLog {
     pub mini_call_home: MiniCallHome,
     pub host_info: HostInfo,
-    pub timestamp: DateTime<FixedOffset>, // TODO: move into MiniCallHome
     pub latency: Duration,
 }
 
@@ -110,6 +109,7 @@ impl MiniCallHomeLog {
                 None
             },
             cpu_temperature: Some(mch_proto.cpu_temperature),
+            timestamp,
             ..Default::default()
         };
         Self {
@@ -118,7 +118,6 @@ impl MiniCallHomeLog {
                 name: name.to_owned(),
                 mac_address: mac_address.to_owned(),
             },
-            timestamp,
             latency: now - timestamp,
         }
     }
@@ -126,7 +125,7 @@ impl MiniCallHomeLog {
 
 impl fmt::Display for MiniCallHomeLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let timestamp = self.timestamp.format("%H:%M:%S");
+        let timestamp = self.mini_call_home.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
         if let Some(temperature) = &self.mini_call_home.cpu_temperature {
             write!(f, " {temperature:.1}°C")?;
@@ -201,13 +200,13 @@ mod test_logs {
                 snr_cb: Some(70),
                 cellid: Some(2580590),
                 cpu_temperature: Some(51.54),
+                timestamp,
                 ..Default::default()
             },
             host_info: HostInfo {
                 name: "spe01".to_owned(),
                 mac_address: String::new(),
             },
-            timestamp,
             latency: Duration::milliseconds(1390),
         };
         assert_eq!(
