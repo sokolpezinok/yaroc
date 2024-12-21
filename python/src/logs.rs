@@ -30,7 +30,12 @@ impl fmt::Display for CellularLogMessage {
 }
 
 impl CellularLogMessage {
-    pub fn from_proto(status: Status, mac_addr: &str, hostname: &str) -> Option<Self> {
+    pub fn from_proto(
+        status: Status,
+        mac_addr: &str,
+        hostname: &str,
+        tz: &impl TimeZone,
+    ) -> Option<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => Some(
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
@@ -41,7 +46,7 @@ impl CellularLogMessage {
                     mac_addr,
                     // TODO: is missing timestamp such a big problem? Could we remove the question
                     // mark after `mch.time`?
-                    yaroc_common::time::datetime_from_timestamp(mch.time?, &Local),
+                    yaroc_common::time::datetime_from_timestamp(mch.time?, tz),
                     Local::now().into(),
                     mch.millivolts,
                 );
@@ -237,6 +242,7 @@ mod test_logs {
             millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
             ..Default::default()
         };
+        let tz = FixedOffset::east_opt(3600).unwrap();
 
         let status = Status {
             msg: Some(Msg::MiniCallHome(yaroc_common::proto::MiniCallHome {
@@ -249,7 +255,7 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01")
+        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01", &tz)
             .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
         assert!(formatted_log_msg.starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12, 3.85V"));
@@ -261,7 +267,7 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01");
+        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01", &tz);
         assert!(cell_log_msg.is_none());
     }
 }
