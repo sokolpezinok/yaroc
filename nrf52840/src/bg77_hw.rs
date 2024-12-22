@@ -1,52 +1,72 @@
 use defmt::info;
-use embassy_nrf::{gpio::Output, peripherals::P0_17};
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
-use yaroc_common::at::uart::AtUart;
 use yaroc_common::at::{
     response::{AtResponse, FromModem},
     uart::Tx,
 };
 
-static MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+use crate::bg77::BG77;
+use crate::status::Temp;
 
-pub struct Bg77Hw<T: Tx> {
-    uart1: AtUart<T>,
-    modem_pin: Output<'static, P0_17>,
+static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+
+pub trait ModemHw {
+    /// Performs an AT call to the modem, optionally also waiting longer for a response.
+    ///
+    /// The command send is `cmd` prefixed with `AT`. We wait a short time for an OK/ERROR and then
+    /// if `response_timeout` is set, we wait `response_timeout` for a response that is prefixed by
+    /// `cmd`.
+    fn simple_call_at(
+        &mut self,
+        cmd: &str,
+        response_timeout: Option<Duration>,
+    ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
+
+    /// Performs an AT call to the modem and waits for an OK/ERROR response.
+    ///
+    /// The maximum waiting time is specified by `timeout`.
+    fn call_at(
+        &mut self,
+        cmd: &str,
+        timeout: Duration,
+    ) -> impl core::future::Future<Output = yaroc_common::Result<AtResponse>>;
+
+    /// Sends a raw message to the modem.
+    ///
+    /// Waits only a short time for a response (non-configurable).
+    fn call(
+        &mut self,
+        msg: &[u8],
+    ) -> impl core::future::Future<Output = yaroc_common::Result<Vec<FromModem, 4>>>;
+
+    fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
-impl<T: Tx> Bg77Hw<T> {
-    pub fn new(uart1: AtUart<T>, modem_pin: Output<'static, P0_17>) -> Self {
-        Self { uart1, modem_pin }
-    }
-
-    pub async fn simple_call_at(
+impl<S: Temp, T: Tx> ModemHw for BG77<S, T> {
+    async fn simple_call_at(
         &mut self,
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         match response_timeout {
-            None => Ok(self.uart1.call_at(cmd, MINIMUM_TIMEOUT).await?),
+            None => Ok(self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT).await?),
             Some(response_timeout) => Ok(self
                 .uart1
-                .call_at_with_response(cmd, MINIMUM_TIMEOUT, response_timeout)
+                .call_at_with_response(cmd, BG77_MINIMUM_TIMEOUT, response_timeout)
                 .await?),
         }
     }
 
-    pub async fn call_at(
-        &mut self,
-        cmd: &str,
-        timeout: Duration,
-    ) -> yaroc_common::Result<AtResponse> {
+    async fn call_at(&mut self, cmd: &str, timeout: Duration) -> yaroc_common::Result<AtResponse> {
         self.uart1.call_at(cmd, timeout).await
     }
 
-    pub async fn call(&mut self, msg: &[u8]) -> yaroc_common::Result<Vec<FromModem, 4>> {
-        self.uart1.call(msg, MINIMUM_TIMEOUT).await
+    async fn call(&mut self, msg: &[u8]) -> yaroc_common::Result<Vec<FromModem, 4>> {
+        self.uart1.call(msg, BG77_MINIMUM_TIMEOUT).await
     }
 
-    pub async fn turn_on(&mut self) -> crate::Result<()> {
+    async fn turn_on(&mut self) -> crate::Result<()> {
         if self.simple_call_at("", None).await.is_err() {
             self.modem_pin.set_low();
             Timer::after_secs(1).await;
