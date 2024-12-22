@@ -139,7 +139,7 @@ impl<T: Tx> AtUart<T> {
         }
     }
 
-    pub async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, 4>, Error> {
+    pub async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
@@ -167,10 +167,13 @@ impl<T: Tx> AtUart<T> {
         self.tx.write(message).await.map_err(|_| Error::UartWriteError)
     }
 
-    pub async fn call(&mut self, message: &[u8], timeout: Duration) -> crate::Result<()> {
-        self.write(message).await?;
-        let _lines = self.read(timeout).await?;
-        Ok(())
+    pub async fn call(
+        &mut self,
+        msg: &[u8],
+        timeout: Duration,
+    ) -> crate::Result<Vec<FromModem, AT_LINES>> {
+        self.write(msg).await?;
+        self.read(timeout).await
     }
 
     async fn call_at_impl(

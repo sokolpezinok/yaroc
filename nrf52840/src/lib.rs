@@ -2,6 +2,7 @@
 #![no_main]
 
 pub mod bg77;
+pub mod bg77_hw;
 pub mod device;
 pub mod error;
 pub mod si_uart;

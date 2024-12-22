@@ -44,6 +44,7 @@ impl Device {
         let saadc_config = SaadcConfig::default();
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
+
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
