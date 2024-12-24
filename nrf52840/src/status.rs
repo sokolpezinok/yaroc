@@ -57,13 +57,13 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         })
     }
 
-    pub async fn battery_state(&mut self) -> Result<(u16, u8), Error> {
+    async fn battery_state(&mut self) -> Result<(u16, u8), Error> {
         let (bcs, volt) =
             self.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
         Ok((volt, bcs))
     }
 
-    pub async fn signal_info(&mut self) -> Result<(i8, i8, u8, i8), Error> {
+    async fn signal_info(&mut self) -> Result<(i8, i8, u8, i8), Error> {
         let response = self.simple_call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
@@ -71,7 +71,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
         Ok(response.parse4::<i8, i8, u8, i8>([1, 2, 3, 4])?)
     }
 
-    pub async fn cellid(&mut self) -> Result<u32, Error> {
+    async fn cellid(&mut self) -> Result<u32, Error> {
         self.simple_call_at("+CEREG?", None)
             .await?
             // TODO: support roaming, that's answer 5
