@@ -367,13 +367,29 @@ mod test_at_utils {
             "+CONN: 1,783,\"disconnected\"",
         )?)]);
 
-        let at_response = AtResponse::new(from_modem_vec.clone(), "+CONN?");
+        let at_response = AtResponse::new(from_modem_vec, "+CONN?");
+        assert_eq!(at_response.count_response_values().unwrap(), 3);
         let (id, status) = at_response.parse2::<u8, String<20>>([0, 2], None).unwrap();
         assert_eq!(id, 1);
         assert_eq!(status, "disconnected");
 
-        let at_response = AtResponse::new(from_modem_vec, "+CONN?");
-        assert_eq!(at_response.count_response_values().unwrap(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn test_at_response_parse4() -> crate::Result<()> {
+        let from_modem_vec = Vec::from_array([FromModem::CommandResponse(CommandResponse::new(
+            "+QCSQ: \"NBIoT\",0,-131,55,-20",
+        )?)]);
+
+        let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
+        let (rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
+            at_response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4]).unwrap();
+        assert_eq!(rssi_dbm, 0);
+        assert_eq!(rsrp_dbm, -131);
+        assert_eq!(snr_mult, 55);
+        assert_eq!(rsrq_dbm, -20);
+
         Ok(())
     }
 }
