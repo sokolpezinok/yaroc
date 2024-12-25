@@ -6,8 +6,8 @@ use yaroc_common::at::{
     uart::Tx,
 };
 
-use crate::bg77::BG77;
 use crate::status::Temp;
+use crate::{bg77::BG77, error::Error};
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
@@ -49,7 +49,10 @@ impl<S: Temp, T: Tx> ModemHw for BG77<S, T> {
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout).await
+        self.uart1
+            .call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout)
+            .await
+            .map_err(Error::from)
     }
 
     async fn call_at(&mut self, cmd: &str, timeout: Duration) -> yaroc_common::Result<AtResponse> {
