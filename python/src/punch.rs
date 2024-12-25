@@ -39,7 +39,7 @@ impl SiPunch {
             code,
             time,
             mode,
-            raw: CommonSiPunch::punch_to_bytes(card, code, time.naive_local(), mode),
+            raw: CommonSiPunch::new(card, code, time.naive_local(), mode).raw,
         }
     }
 

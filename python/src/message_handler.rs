@@ -270,6 +270,7 @@ mod test_punch {
     use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope, Telemetry};
     use meshtastic::Message as MeshtasticMessage;
     use yaroc_common::proto::{Punch, Punches};
+    use yaroc_common::punch::SiPunch;
 
     use super::MessageHandler;
 
@@ -297,7 +298,7 @@ mod test_punch {
     fn test_punch() {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
-        let punch = yaroc_common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
+        let punch = SiPunch::new(1715004, 47, time, 2).raw;
         let punches_slice = &[Punch {
             raw: &punch,
             ..Default::default()
@@ -321,7 +322,7 @@ mod test_punch {
     fn test_meshtastic_serial() {
         let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
             .unwrap();
-        let punch = yaroc_common::punch::SiPunch::punch_to_bytes(1715004, 47, time, 2);
+        let punch = SiPunch::new(1715004, 47, time, 2).raw;
 
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let envelope = ServiceEnvelope {
