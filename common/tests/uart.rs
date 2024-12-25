@@ -1,9 +1,9 @@
+use core::str::FromStr;
 use embassy_executor::{Executor, Spawner};
 use embassy_sync::channel::Channel;
 use embassy_time::Duration;
 use heapless::{String, Vec};
 use static_cell::StaticCell;
-use std::str::FromStr;
 use yaroc_common::at::response::{CommandResponse, FromModem};
 use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType, MAIN_RX_CHANNEL};
 use yaroc_common::{at::uart::AtUart, error::Error};

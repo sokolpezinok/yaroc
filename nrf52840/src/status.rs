@@ -35,6 +35,16 @@ impl Temp for NrfTemp {
     }
 }
 
+pub struct FakeTemp {
+    pub t: f32,
+}
+
+impl Temp for FakeTemp {
+    async fn cpu_temperature(&mut self) -> f32 {
+        self.t
+    }
+}
+
 impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock =
@@ -95,8 +105,9 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
             let snr_cb = i16::from(snr_mult) * 2 - 200;
             mini_call_home.set_signal_info(snr_cb, rssi_dbm, rsrp_dbm, rsrq_dbm);
         }
-        if let Ok(cellid) = self.cellid().await {
-            mini_call_home.set_cellid(cellid);
+        match self.cellid().await {
+            Ok(cellid) => mini_call_home.set_cellid(cellid),
+            Err(err) => defmt::error!("Error while getting cell ID: {}", err),
         }
 
         Some(mini_call_home)

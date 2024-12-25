@@ -2677,6 +2677,7 @@ dependencies = [
  "nrf-softdevice",
  "nrf52840-hal",
  "panic-probe",
+ "static_cell",
  "thiserror 2.0.3",
  "yaroc-common",
 ]
