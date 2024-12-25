@@ -99,7 +99,7 @@ impl MshLogMessage {
                 rx_snr,
                 ..
             }) => {
-                let mac_address = format!("{:8x}", from);
+                let mac_address = format!("{:08x}", from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
                 Self::parse_inner(
                     data,
@@ -258,8 +258,9 @@ mod test_meshtastic {
             payload: telemetry.encode_to_vec(),
             ..Default::default()
         };
-        let envelope1 = ServiceEnvelope {
+        let envelope = ServiceEnvelope {
             packet: Some(MeshPacket {
+                from: 0x123456,
                 payload_variant: Some(PayloadVariant::Decoded(data.clone())),
                 rx_rssi: -98,
                 rx_snr: 4.0,
@@ -267,11 +268,11 @@ mod test_meshtastic {
             }),
             ..Default::default()
         };
-        let message1 = envelope1.encode_to_vec();
+        let message = envelope.encode_to_vec();
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
-        let log_message = MshLogMessage::from_mesh_packet(&message1, now, &HashMap::new(), None)
-            .unwrap()
-            .unwrap();
+        let dns = HashMap::from([("00123456".to_owned(), "yaroc1".to_owned())]);
+        let log_message =
+            MshLogMessage::from_mesh_packet(&message, now, &dns, None).unwrap().unwrap();
 
         assert_eq!(
             log_message.rssi_snr,
@@ -281,6 +282,8 @@ mod test_meshtastic {
                 distance: None
             })
         );
+        assert_eq!(log_message.host_info.name, "yaroc1");
+        assert_eq!(log_message.host_info.mac_address, "00123456");
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
         assert_eq!(log_message.voltage_battery, Some((3.87, 76)));

@@ -321,7 +321,6 @@ mod test_punch {
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let envelope = ServiceEnvelope {
             packet: Some(MeshPacket {
-                from: 0x1234,
                 payload_variant: Some(PayloadVariant::Decoded(Data {
                     portnum: SERIAL_APP,
                     payload: punch.to_vec(),
