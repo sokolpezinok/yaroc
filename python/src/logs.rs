@@ -150,7 +150,7 @@ impl fmt::Display for MiniCallHomeLog {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {
     pub rssi_dbm: i16,
     pub snr: f32,

@@ -151,7 +151,7 @@ impl MessageHandler {
         let recv_position =
             recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
         let msh_log_message =
-            MshLogMessage::from_msh_status(payload, now, &self.dns, recv_position);
+            MshLogMessage::from_mesh_packet(payload, now, &self.dns, recv_position);
         match msh_log_message {
             Err(err) => {
                 error!("Failed to parse msh status proto: {}", err);
@@ -260,19 +260,13 @@ impl MessageHandler {
 
 #[cfg(test)]
 mod test_punch {
-    use std::collections::HashMap;
-
+    use super::*;
     use chrono::{Local, NaiveDateTime};
-    use femtopb::Message as _;
     use femtopb::Repeated;
-    use meshtastic::protobufs::mesh_packet::PayloadVariant;
     use meshtastic::protobufs::telemetry::Variant;
-    use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope, Telemetry};
-    use meshtastic::Message as MeshtasticMessage;
-    use yaroc_common::proto::{Punch, Punches};
+    use meshtastic::protobufs::{MeshPacket, ServiceEnvelope, Telemetry};
+    use yaroc_common::proto::Punch;
     use yaroc_common::punch::SiPunch;
-
-    use super::MessageHandler;
 
     #[test]
     fn test_wrong_punch() {
@@ -327,7 +321,6 @@ mod test_punch {
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let envelope = ServiceEnvelope {
             packet: Some(MeshPacket {
-                to: 0xabcd,
                 from: 0x1234,
                 payload_variant: Some(PayloadVariant::Decoded(Data {
                     portnum: SERIAL_APP,
@@ -350,7 +343,7 @@ mod test_punch {
     #[test]
     fn test_meshtastic_status() {
         let telemetry = Telemetry {
-            time: 3,
+            time: 1735157442,
             variant: Some(Variant::DeviceMetrics(Default::default())),
         };
         let data = Data {

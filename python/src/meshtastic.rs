@@ -16,7 +16,7 @@ pub struct MshLogMessage {
     pub voltage_battery: Option<(f32, u32)>,
     pub position: Option<Position>,
     pub rssi_snr: Option<RssiSnr>,
-    timestamp: DateTime<FixedOffset>,
+    pub timestamp: DateTime<FixedOffset>,
     latency: Duration,
 }
 
@@ -84,7 +84,7 @@ impl MshLogMessage {
         }
     }
 
-    pub fn from_msh_status(
+    pub fn from_mesh_packet(
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<String, String>,
@@ -100,7 +100,7 @@ impl MshLogMessage {
                 ..
             }) => {
                 let mac_address = format!("{:8x}", from);
-                let name = dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
+                let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
                 Self::parse_inner(
                     data,
                     HostInfo {
@@ -166,13 +166,8 @@ impl fmt::Display for MshLogMessage {
 
 #[cfg(test)]
 mod test_meshtastic {
-    use chrono::{DateTime, Duration};
-
-    use crate::{
-        logs::{HostInfo, RssiSnr},
-        meshtastic::MshLogMessage,
-        status::Position,
-    };
+    use super::*;
+    use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics};
 
     #[test]
     fn test_volt_batt() {
@@ -194,7 +189,7 @@ mod test_meshtastic {
     }
 
     #[test]
-    fn test_position() {
+    fn test_position_format() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
             host_info: HostInfo {
@@ -218,7 +213,7 @@ mod test_meshtastic {
     }
 
     #[test]
-    fn test_position_dbm() {
+    fn test_position_dbm_format() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
             host_info: HostInfo {
@@ -245,5 +240,50 @@ mod test_meshtastic {
             "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR, 0.81km \
             from spr02"
         );
+    }
+
+    #[test]
+    fn test_proto_parsing() {
+        let device_metrics = DeviceMetrics {
+            voltage: 3.87,
+            battery_level: 76,
+            ..Default::default()
+        };
+        let telemetry = Telemetry {
+            time: 1735157442,
+            variant: Some(Variant::DeviceMetrics(device_metrics)),
+        };
+        let data = Data {
+            portnum: PortNum::TelemetryApp as i32,
+            payload: telemetry.encode_to_vec(),
+            ..Default::default()
+        };
+        let envelope1 = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(data.clone())),
+                rx_rssi: -98,
+                rx_snr: 4.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let message1 = envelope1.encode_to_vec();
+        let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
+        let log_message = MshLogMessage::from_mesh_packet(&message1, now, &HashMap::new(), None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            log_message.rssi_snr,
+            Some(RssiSnr {
+                rssi_dbm: -98,
+                snr: 4.0,
+                distance: None
+            })
+        );
+        let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
+        assert_eq!(log_message.timestamp, timestamp);
+        assert_eq!(log_message.voltage_battery, Some((3.87, 76)));
+        assert_eq!(log_message.latency, Duration::seconds(5));
     }
 }
