@@ -44,9 +44,9 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
-    pub rssi_dbm: Option<i8>,
+    pub rssi_dbm: Option<i16>,
     #[pyo3(get)]
-    snr_db: Option<f32>,
+    pub snr_db: Option<f32>,
     #[pyo3(get)]
     cellid: Option<u32>,
     #[pyo3(get)]
@@ -98,7 +98,7 @@ impl CellularRocStatus {
         NodeInfo {
             name: self.name.clone(),
             rssi_dbm: match self.state {
-                CellularConnectionState::MqttConnected(rssi_dbm, _, _) => Some(rssi_dbm),
+                CellularConnectionState::MqttConnected(rssi_dbm, _, _) => Some(i16::from(rssi_dbm)),
                 _ => None,
             },
             snr_db: match self.state {

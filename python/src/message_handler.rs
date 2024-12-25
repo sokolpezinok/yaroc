@@ -373,6 +373,7 @@ mod test_punch {
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, Some(-98));
+        assert_eq!(node_infos[0].snr_db, Some(4.0));
 
         let envelope2 = ServiceEnvelope {
             packet: Some(MeshPacket {

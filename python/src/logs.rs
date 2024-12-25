@@ -152,7 +152,7 @@ impl fmt::Display for MiniCallHomeLog {
 
 #[derive(Clone)]
 pub struct RssiSnr {
-    pub rssi_dbm: i8,
+    pub rssi_dbm: i16,
     pub snr: f32,
     pub distance: Option<(f32, String)>,
 }
@@ -162,7 +162,7 @@ impl RssiSnr {
         match rssi_dbm {
             0 => None,
             rx_rssi => Some(RssiSnr {
-                rssi_dbm: rx_rssi as i8,
+                rssi_dbm: rx_rssi as i16,
                 snr,
                 distance: None,
             }),
