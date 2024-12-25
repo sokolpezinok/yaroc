@@ -82,8 +82,8 @@ impl MessageHandler {
             .map_err(|_| PyValueError::new_err("Status proto decoding error"))?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)
-                .ok_or(
-                    PyValueError::new_err("Missing fields in the Status proto"), // TODO: which?
+                .map_err(
+                    |err| PyValueError::new_err(format!("{}", err)), // TODO: which?
                 )?;
         info!("{}", log_message);
 

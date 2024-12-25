@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
 use pyo3::prelude::*;
 use std::fmt;
+use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
 use yaroc_common::status::MiniCallHome;
@@ -36,31 +37,27 @@ impl CellularLogMessage {
         mac_addr: &str,
         hostname: &str,
         tz: &impl TimeZone,
-    ) -> Option<Self> {
+    ) -> yaroc_common::Result<Self> {
         match status.msg {
-            Some(Msg::Disconnected(Disconnected { client_name, .. })) => Some(
+            Some(Msg::Disconnected(Disconnected { client_name, .. })) => Ok(
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
-                let log_message = MiniCallHomeLog::new(
-                    hostname,
-                    mac_addr,
-                    // TODO: is missing timestamp such a big problem? Could we remove the question
-                    // mark after `mch.time`?
-                    yaroc_common::time::datetime_from_timestamp(mch.time?, tz),
-                    Local::now().into(),
-                    mch,
-                );
-                Some(CellularLogMessage::MCH(log_message))
+                let log_message =
+                    MiniCallHomeLog::new(hostname, mac_addr, Local::now().into(), tz, mch)?;
+                Ok(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
-                Some(CellularLogMessage::DeviceEvent(
+                if let EnumValue::Unknown(_) = r#type {
+                    return Err(Error::FormatError);
+                }
+                Ok(CellularLogMessage::DeviceEvent(
                     hostname.to_owned(),
                     port.to_owned(),
                     r#type == EnumValue::Known(EventType::Added),
                 ))
             }
-            _ => None,
+            _ => Err(Error::FormatError),
         }
     }
 }
@@ -94,32 +91,38 @@ impl MiniCallHomeLog {
     pub fn new(
         name: &str,
         mac_address: &str,
-        timestamp: DateTime<FixedOffset>,
         now: DateTime<FixedOffset>,
+        tz: &impl TimeZone,
         mch_proto: yaroc_common::proto::MiniCallHome,
-    ) -> Self {
+    ) -> yaroc_common::Result<Self> {
+        let timestamp = yaroc_common::time::datetime_from_timestamp(
+            mch_proto.time.ok_or(Error::FormatError)?,
+            tz,
+        );
         let mch = MiniCallHome {
             batt_mv: Some(mch_proto.millivolts as u16),
-            batt_percents: None,                                         // TODO
-            rssi_dbm: Some(i8::try_from(mch_proto.signal_dbm).unwrap()), // TODO: unwrap
-            snr_cb: Some(i16::try_from(mch_proto.signal_snr_cb).unwrap()),
+            batt_percents: None, // TODO
+            rssi_dbm: Some(i8::try_from(mch_proto.signal_dbm).map_err(|_| Error::FormatError)?),
+            snr_cb: Some(i16::try_from(mch_proto.signal_snr_cb).map_err(|_| Error::FormatError)?),
             cellid: if mch_proto.cellid > 0 {
                 Some(mch_proto.cellid)
             } else {
                 None
             },
             cpu_temperature: Some(mch_proto.cpu_temperature),
+            // TODO: is missing timestamp such a big problem? Could we remove the question
+            // mark after `mch.time`?
             timestamp,
             ..Default::default()
         };
-        Self {
+        Ok(Self {
             mini_call_home: mch,
             host_info: HostInfo {
                 name: name.to_owned(),
                 mac_address: mac_address.to_owned(),
             },
             latency: now - timestamp,
-        }
+        })
     }
 }
 
@@ -261,6 +264,6 @@ mod test_logs {
             ..Default::default()
         };
         let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01", &tz);
-        assert!(cell_log_msg.is_none());
+        assert!(cell_log_msg.is_err());
     }
 }
