@@ -12,9 +12,11 @@ use crate::status::Position;
 
 #[derive(Default)]
 pub struct MshLogMessage {
-    pub host_info: HostInfo,
+    // TODO: voltage, position and environment metrics should be variants
     pub voltage_battery: Option<(f32, u32)>,
     pub position: Option<Position>,
+    pub environment_metrics: Option<(f32, f32)>,
+    pub host_info: HostInfo,
     pub rssi_snr: Option<RssiSnr>,
     pub timestamp: DateTime<FixedOffset>,
     latency: Duration,
@@ -38,12 +40,20 @@ impl MshLogMessage {
                 let timestamp = Self::timestamp(telemetry.time);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
+                        voltage_battery: Some((metrics.voltage, metrics.battery_level)),
                         host_info,
+                        rssi_snr,
                         timestamp,
                         latency: now - timestamp,
-                        voltage_battery: Some((metrics.voltage, metrics.battery_level)),
-                        position: None,
+                        ..Default::default()
+                    })),
+                    Some(telemetry::Variant::EnvironmentMetrics(metrics)) => Ok(Some(Self {
+                        environment_metrics: Some((metrics.temperature, metrics.relative_humidity)),
+                        host_info,
                         rssi_snr,
+                        timestamp,
+                        latency: now - timestamp,
+                        ..Default::default()
                     })),
                     _ => Ok(None),
                 }
@@ -75,9 +85,9 @@ impl MshLogMessage {
                     host_info,
                     timestamp,
                     latency: now - timestamp,
-                    voltage_battery: None,
                     position: Some(position),
                     rssi_snr,
+                    ..Default::default()
                 }))
             }
             _ => Ok(None),
@@ -167,7 +177,36 @@ impl fmt::Display for MshLogMessage {
 #[cfg(test)]
 mod test_meshtastic {
     use super::*;
-    use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics};
+    use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
+
+    fn telemetry_service_envelope(
+        from: u32,
+        telemetry_variant: telemetry::Variant,
+        timetamp_ms: u32,
+        rx_rssi: i32,
+        rx_snr: f32,
+    ) -> Vec<u8> {
+        let telemetry = Telemetry {
+            time: timetamp_ms,
+            variant: Some(telemetry_variant),
+        };
+        let data = Data {
+            portnum: PortNum::TelemetryApp as i32,
+            payload: telemetry.encode_to_vec(),
+            ..Default::default()
+        };
+        let envelope = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                from,
+                payload_variant: Some(PayloadVariant::Decoded(data.clone())),
+                rx_rssi,
+                rx_snr,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        envelope.encode_to_vec()
+    }
 
     #[test]
     fn test_volt_batt() {
@@ -228,12 +267,12 @@ mod test_meshtastic {
                 elevation: 170,
                 timestamp,
             }),
-            voltage_battery: None,
             rssi_snr: Some(RssiSnr {
                 rssi_dbm: -80,
                 snr: 4.25,
                 distance: Some((813., "spr02".to_string())),
             }),
+            ..Default::default()
         };
         assert_eq!(
             format!("{log_message}"),
@@ -243,32 +282,19 @@ mod test_meshtastic {
     }
 
     #[test]
-    fn test_proto_parsing() {
+    fn test_device_metrics_parsing() {
         let device_metrics = DeviceMetrics {
             voltage: 3.87,
             battery_level: 76,
             ..Default::default()
         };
-        let telemetry = Telemetry {
-            time: 1735157442,
-            variant: Some(Variant::DeviceMetrics(device_metrics)),
-        };
-        let data = Data {
-            portnum: PortNum::TelemetryApp as i32,
-            payload: telemetry.encode_to_vec(),
-            ..Default::default()
-        };
-        let envelope = ServiceEnvelope {
-            packet: Some(MeshPacket {
-                from: 0x123456,
-                payload_variant: Some(PayloadVariant::Decoded(data.clone())),
-                rx_rssi: -98,
-                rx_snr: 4.0,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let message = envelope.encode_to_vec();
+        let message = telemetry_service_envelope(
+            0x123456,
+            Variant::DeviceMetrics(device_metrics),
+            1735157442,
+            -98,
+            4.0,
+        );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
         let dns = HashMap::from([("00123456".to_owned(), "yaroc1".to_owned())]);
         let log_message =
@@ -288,5 +314,39 @@ mod test_meshtastic {
         assert_eq!(log_message.timestamp, timestamp);
         assert_eq!(log_message.voltage_battery, Some((3.87, 76)));
         assert_eq!(log_message.latency, Duration::seconds(5));
+    }
+
+    #[test]
+    fn test_environment_metrics_parsing() {
+        let environment_metrics = EnvironmentMetrics {
+            temperature: 47.0,
+            relative_humidity: 84.0,
+            ..Default::default()
+        };
+        let message = telemetry_service_envelope(
+            0x123456,
+            Variant::EnvironmentMetrics(environment_metrics),
+            1735157442,
+            -98,
+            4.0,
+        );
+        let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
+        let log_message = MshLogMessage::from_mesh_packet(&message, now, &HashMap::new(), None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            log_message.rssi_snr,
+            Some(RssiSnr {
+                rssi_dbm: -98,
+                snr: 4.0,
+                distance: None
+            })
+        );
+        assert_eq!(log_message.host_info.mac_address, "00123456");
+        let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
+        assert_eq!(log_message.timestamp, timestamp);
+        assert_eq!(log_message.latency, Duration::seconds(5));
+        assert_eq!(log_message.environment_metrics, Some((47.0, 84.0)));
     }
 }
