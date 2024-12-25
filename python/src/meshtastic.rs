@@ -115,10 +115,10 @@ impl MshLogMessage {
             Some(MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            }) => Err(
-                // TODO: drop prost
-                prost::DecodeError::new("Encrypted message, disable encryption in MQTT!").into(),
-            ),
+            }) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Encrypted message, disable encryption in MQTT!",
+            )),
             _ => Ok(None),
         }
     }

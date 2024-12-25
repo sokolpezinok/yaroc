@@ -2690,7 +2690,6 @@ dependencies = [
  "geoutils",
  "log",
  "meshtastic",
- "prost 0.13.2",
  "pyo3",
  "pyo3-log",
  "regex",
