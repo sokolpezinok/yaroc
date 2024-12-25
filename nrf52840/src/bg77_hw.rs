@@ -49,17 +49,11 @@ impl<S: Temp, T: Tx> ModemHw for BG77<S, T> {
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        match response_timeout {
-            None => Ok(self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT).await?),
-            Some(response_timeout) => Ok(self
-                .uart1
-                .call_at_with_response(cmd, BG77_MINIMUM_TIMEOUT, response_timeout)
-                .await?),
-        }
+        self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout).await
     }
 
     async fn call_at(&mut self, cmd: &str, timeout: Duration) -> yaroc_common::Result<AtResponse> {
-        self.uart1.call_at(cmd, timeout).await
+        self.uart1.call_at(cmd, timeout, None).await
     }
 
     async fn call(&mut self, msg: &[u8]) -> yaroc_common::Result<Vec<FromModem, 4>> {

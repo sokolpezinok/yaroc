@@ -207,28 +207,17 @@ impl<T: Tx> AtUart<T> {
         }
     }
 
-    pub async fn call_at(&mut self, command: &str, timeout: Duration) -> Result<AtResponse, Error> {
-        let start = Instant::now();
-        let lines = self.call_at_impl(command, timeout).await?;
-        let response = AtResponse::new(lines, command);
-        debug!(
-            "{}: {}, took {}ms",
-            command,
-            response,
-            (Instant::now() - start).as_millis()
-        );
-        Ok(response)
-    }
-
-    pub async fn call_at_with_response(
+    pub async fn call_at(
         &mut self,
         command: &str,
         call_timeout: Duration,
-        response_timeout: Duration,
+        response_timeout: Option<Duration>,
     ) -> Result<AtResponse, Error> {
         let start = Instant::now();
         let mut lines = self.call_at_impl(command, call_timeout).await?;
-        lines.extend(self.read(response_timeout).await?);
+        if let Some(response_timeout) = response_timeout {
+            lines.extend(self.read(response_timeout).await?);
+        }
         let response = AtResponse::new(lines, command);
         debug!(
             "{}: {}, took {}ms",
