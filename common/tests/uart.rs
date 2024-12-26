@@ -1,68 +1,12 @@
 use embassy_executor::{Executor, Spawner};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::Duration;
-use heapless::String;
+use heapless::{String, Vec};
 use static_cell::StaticCell;
 use std::str::FromStr;
-use yaroc_common::at::response::{CommandResponse, FromModem, AT_COMMAND_SIZE};
-use yaroc_common::at::uart::{AtRxBroker, RxWithIdle, Tx, MAIN_RX_CHANNEL};
+use yaroc_common::at::response::{CommandResponse, FromModem};
+use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType, MAIN_RX_CHANNEL};
 use yaroc_common::{at::uart::AtUart, error::Error};
-
-struct FakeRxWithIdle {
-    responses: Vec<(&'static str, &'static str)>,
-}
-
-impl FakeRxWithIdle {
-    fn new(responses: Vec<(&'static str, &'static str)>) -> Self {
-        Self { responses }
-    }
-}
-
-type TxChannelType = Channel<CriticalSectionRawMutex, String<AT_COMMAND_SIZE>, 5>;
-static TX_CHANNEL: TxChannelType = Channel::new();
-
-#[embassy_executor::task]
-async fn reader(rx: FakeRxWithIdle, urc_handler: fn(&CommandResponse) -> bool) {
-    AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
-}
-
-impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool) {
-        spawner.must_spawn(reader(self, urc_handler))
-    }
-
-    async fn read_until_idle(&mut self, buf: &mut [u8]) -> yaroc_common::Result<usize> {
-        let recv_command = TX_CHANNEL.receive().await;
-        if let Some((command, response)) = self.responses.first() {
-            assert_eq!(command, &recv_command);
-            let bytes = response.as_bytes();
-            buf[..bytes.len()].clone_from_slice(bytes);
-            self.responses.remove(0);
-            Ok(bytes.len())
-        } else {
-            Err(yaroc_common::error::Error::TimeoutError)
-        }
-    }
-}
-
-struct FakeTx {
-    channel: &'static TxChannelType,
-}
-
-impl FakeTx {
-    fn new(channel: &'static TxChannelType) -> FakeTx {
-        Self { channel }
-    }
-}
-
-impl Tx for FakeTx {
-    async fn write(&mut self, buffer: &[u8]) -> yaroc_common::Result<()> {
-        let s = core::str::from_utf8(buffer).map_err(|_| Error::StringEncodingError)?;
-        let s = String::from_str(s).map_err(|_| Error::BufferTooSmallError)?;
-        Ok(self.channel.send(s).await)
-    }
-}
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
@@ -76,13 +20,17 @@ fn uart_test() {
 
 #[embassy_executor::task]
 async fn main(spawner: Spawner) {
-    let rx = FakeRxWithIdle::new(vec![
-        ("ATI\r", "Fake modem\r\nOK"),
-        ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
-        ("AT+CBC\r", "ERROR"),
-        ("AT+QCSQ\r", "Text"),
-        ("AT+CEREG?\r", ""),
-    ]);
+    static TX_CHANNEL: TxChannelType = Channel::new();
+    let rx = FakeRxWithIdle::new(
+        Vec::from_array([
+            ("ATI\r", "Fake modem\r\nOK"),
+            ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
+            ("AT+CBC\r", "ERROR"),
+            ("AT+QCSQ\r", "Text"),
+            ("AT+CEREG?\r", ""),
+        ]),
+        &TX_CHANNEL,
+    );
     let tx = FakeTx::new(&TX_CHANNEL);
     let handler = |_: &CommandResponse| false;
     let mut at_uart = AtUart::new(rx, tx, handler, &spawner);

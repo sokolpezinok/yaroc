@@ -116,6 +116,70 @@ pub trait Tx {
     fn write(&mut self, buffer: &[u8]) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
+pub type TxChannelType = Channel<RawMutex, String<AT_COMMAND_SIZE>, 5>;
+
+/// Fake RxWithIdle, to be used in tests.
+pub struct FakeRxWithIdle {
+    responses: Vec<(&'static str, &'static str), 10>,
+    tx_channel: &'static TxChannelType,
+}
+
+impl FakeRxWithIdle {
+    pub fn new(
+        responses: Vec<(&'static str, &'static str), 10>,
+        tx_channel: &'static TxChannelType,
+    ) -> Self {
+        Self {
+            responses,
+            tx_channel,
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn reader(rx: FakeRxWithIdle, urc_handler: fn(&CommandResponse) -> bool) {
+    AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
+}
+
+impl RxWithIdle for FakeRxWithIdle {
+    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool) {
+        spawner.must_spawn(reader(self, urc_handler))
+    }
+
+    async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
+        let recv_command = self.tx_channel.receive().await;
+        if let Some((command, response)) = self.responses.first() {
+            assert_eq!(command, &recv_command);
+            let bytes = response.as_bytes();
+            buf[..bytes.len()].clone_from_slice(bytes);
+            self.responses.remove(0);
+            Ok(bytes.len())
+        } else {
+            Err(Error::TimeoutError)
+        }
+    }
+}
+
+/// Fake `Tx` struct, to be used in tests
+pub struct FakeTx {
+    channel: &'static TxChannelType,
+}
+
+impl FakeTx {
+    pub fn new(channel: &'static TxChannelType) -> FakeTx {
+        Self { channel }
+    }
+}
+
+impl Tx for FakeTx {
+    async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {
+        let s = core::str::from_utf8(buffer).map_err(|_| Error::StringEncodingError)?;
+        let s = String::from_str(s).map_err(|_| Error::BufferTooSmallError)?;
+        self.channel.send(s).await;
+        Ok(())
+    }
+}
+
 /// AT UART struct.
 ///
 /// The TX part is represented by Tx trait, the RX part is represented by a channel of
