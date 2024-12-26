@@ -7,7 +7,7 @@ use geoutils::Location;
 
 use crate::{logs::RssiSnr, punch::SiPunch};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Position {
     pub lat: f32,
     pub lon: f32,

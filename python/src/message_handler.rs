@@ -16,6 +16,7 @@ use chrono::DateTime;
 
 use crate::logs::{CellularLogMessage, HostInfo, PositionName};
 use crate::meshtastic::MshLogMessage;
+use crate::meshtastic::MshMetrics;
 use crate::punch::SiPunch;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
@@ -159,16 +160,18 @@ impl MessageHandler {
             Ok(Some(log_message)) => {
                 info!("{}", log_message);
                 let status = self.msh_roc_status(log_message.host_info);
-                if let Some(position) = log_message.position.as_ref() {
-                    status.position = Some(position.clone())
+                match log_message.metrics {
+                    MshMetrics::VoltageBattery(_, battery) => {
+                        status.update_battery(battery);
+                    }
+                    MshMetrics::Position(position) => status.position = Some(position),
+                    // TODO: handle temperature
+                    _ => {}
                 }
                 if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
                     status.update_rssi_snr(rssi_snr.clone());
                 } else {
                     status.clear_rssi_snr();
-                }
-                if let Some((_, battery)) = log_message.voltage_battery.as_ref() {
-                    status.update_battery(*battery);
                 }
             }
             _ => {}

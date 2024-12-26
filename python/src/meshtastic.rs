@@ -10,12 +10,15 @@ use std::fmt;
 use crate::logs::{HostInfo, PositionName, RssiSnr};
 use crate::status::Position;
 
-#[derive(Default)]
+#[derive(Debug, PartialEq)]
+pub enum MshMetrics {
+    Position(Position),
+    VoltageBattery(f32, u32),
+    EnvironmentMetrics(f32, f32),
+}
+
 pub struct MshLogMessage {
-    // TODO: voltage, position and environment metrics should be variants
-    pub voltage_battery: Option<(f32, u32)>,
-    pub position: Option<Position>,
-    pub environment_metrics: Option<(f32, f32)>,
+    pub metrics: MshMetrics,
     pub host_info: HostInfo,
     pub rssi_snr: Option<RssiSnr>,
     pub timestamp: DateTime<FixedOffset>,
@@ -40,20 +43,21 @@ impl MshLogMessage {
                 let timestamp = Self::timestamp(telemetry.time);
                 match telemetry.variant {
                     Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
-                        voltage_battery: Some((metrics.voltage, metrics.battery_level)),
+                        metrics: MshMetrics::VoltageBattery(metrics.voltage, metrics.battery_level),
                         host_info,
                         rssi_snr,
                         timestamp,
                         latency: now - timestamp,
-                        ..Default::default()
                     })),
                     Some(telemetry::Variant::EnvironmentMetrics(metrics)) => Ok(Some(Self {
-                        environment_metrics: Some((metrics.temperature, metrics.relative_humidity)),
+                        metrics: MshMetrics::EnvironmentMetrics(
+                            metrics.temperature,
+                            metrics.relative_humidity,
+                        ),
                         host_info,
                         rssi_snr,
                         timestamp,
                         latency: now - timestamp,
-                        ..Default::default()
                     })),
                     _ => Ok(None),
                 }
@@ -76,18 +80,17 @@ impl MshLogMessage {
                     if let Some(rssi_snr) = rssi_snr.as_mut() {
                         rssi_snr.add_distance(
                             distance as f32,
-                            recv_position.map(|x| x.name).unwrap_or_default(),
+                            recv_position.map_or(String::new(), |x| x.name),
                         );
                     }
                 }
 
                 Ok(Some(Self {
+                    metrics: MshMetrics::Position(position),
                     host_info,
                     timestamp,
                     latency: now - timestamp,
-                    position: Some(position),
                     rssi_snr,
-                    ..Default::default()
                 }))
             }
             _ => Ok(None),
@@ -141,17 +144,21 @@ impl fmt::Display for MshLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
-        if let Some((voltage, battery)) = self.voltage_battery {
-            write!(f, " batt {:.3}V {}%", voltage, battery)?;
-        }
-        if let Some(Position {
-            lat,
-            lon,
-            elevation,
-            ..
-        }) = self.position
-        {
-            write!(f, " coords {:.5} {:.5} {}m", lat, lon, elevation)?;
+        match self.metrics {
+            MshMetrics::VoltageBattery(voltage, battery) => {
+                write!(f, " batt {:.3}V {}%", voltage, battery)?;
+            }
+            MshMetrics::EnvironmentMetrics(temperature, relative_humidity) => {
+                write!(f, " {temperature}°C {relative_humidity}% humid.")?;
+            }
+            MshMetrics::Position(Position {
+                lat,
+                lon,
+                elevation,
+                ..
+            }) => {
+                write!(f, " coords {:.5} {:.5} {}m", lat, lon, elevation)?;
+            }
         }
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", latency {:4.2}s", millis)?;
@@ -218,8 +225,8 @@ mod test_meshtastic {
             },
             timestamp,
             latency: Duration::milliseconds(1230),
-            voltage_battery: Some((4.012, 82)),
-            ..Default::default()
+            metrics: MshMetrics::VoltageBattery(4.012, 82),
+            rssi_snr: None,
         };
         assert_eq!(
             format!("{log_message}"),
@@ -237,13 +244,13 @@ mod test_meshtastic {
             },
             timestamp,
             latency: Duration::milliseconds(1230),
-            position: Some(Position {
+            metrics: MshMetrics::Position(Position {
                 lat: 48.29633,
                 lon: 17.26675,
                 elevation: 170,
                 timestamp,
             }),
-            ..Default::default()
+            rssi_snr: None,
         };
         assert_eq!(
             format!("{log_message}"),
@@ -261,7 +268,7 @@ mod test_meshtastic {
             },
             timestamp,
             latency: Duration::milliseconds(1230),
-            position: Some(Position {
+            metrics: MshMetrics::Position(Position {
                 lat: 48.29633,
                 lon: 17.26675,
                 elevation: 170,
@@ -272,7 +279,6 @@ mod test_meshtastic {
                 snr: 4.25,
                 distance: Some((813., "spr02".to_string())),
             }),
-            ..Default::default()
         };
         assert_eq!(
             format!("{log_message}"),
@@ -312,7 +318,7 @@ mod test_meshtastic {
         assert_eq!(log_message.host_info.mac_address, "00123456");
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
-        assert_eq!(log_message.voltage_battery, Some((3.87, 76)));
+        assert_eq!(log_message.metrics, MshMetrics::VoltageBattery(3.87, 76));
         assert_eq!(log_message.latency, Duration::seconds(5));
     }
 
@@ -347,6 +353,9 @@ mod test_meshtastic {
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
         assert_eq!(log_message.latency, Duration::seconds(5));
-        assert_eq!(log_message.environment_metrics, Some((47.0, 84.0)));
+        assert_eq!(
+            log_message.metrics,
+            MshMetrics::EnvironmentMetrics(47.0, 84.0)
+        );
     }
 }
