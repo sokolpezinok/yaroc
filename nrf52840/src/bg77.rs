@@ -29,6 +29,7 @@ use yaroc_common::{
 pub type BG77Type = Mutex<RawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
 
 const MQTT_MESSAGES: usize = 5;
+const MQTT_CLIENT_ID: u8 = 0;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(500);
 static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
@@ -64,7 +65,6 @@ pub struct BG77<S: Temp, T: Tx> {
     pub temp: S,
     pub boot_time: Option<DateTime<FixedOffset>>,
     config: MqttConfig,
-    client_id: u8,
     msg_id: u8,
     last_successful_send: Instant,
 }
@@ -83,7 +83,6 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             uart1,
             modem_pin,
             temp,
-            client_id: 0,
             msg_id: 0,
             boot_time: None,
             last_successful_send: Instant::now(),
@@ -159,12 +158,17 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             .simple_call_at("+QMTOPEN?", None)
             .await?
             .parse2::<u8, String<40>>([0, 1], Some(cid));
-        if let Ok((client_id, url)) = opened.as_ref() {
-            if *client_id == cid && *url == self.config.url {
+        if let Ok((MQTT_CLIENT_ID, url)) = opened {
+            if *url == self.config.url {
                 info!("TCP connection already opened to {}", url.as_str());
                 return Ok(());
             }
-            // TODO: disconnect an old client
+            warn!(
+                "Connected to the wrong broker {}, will disconnect",
+                url.as_str()
+            );
+            let cmd = format!(50; "+QMTCLOSE={cid}")?;
+            self.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
         }
 
         let cmd = format!(50;
@@ -199,7 +203,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
             error!("Network registration failed: {}", err);
             return Err(err);
         }
-        let cid = self.client_id;
+        let cid = MQTT_CLIENT_ID;
         self.mqtt_open(cid).await?;
 
         let (_, status) = self
@@ -264,7 +268,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
     }
     async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},1,0,\"yar/cee423506cac/status\",{}", self.client_id, self.msg_id + 1, msg.len(),
+            "+QMTPUB={},{},1,0,\"yar/cee423506cac/status\",{}", MQTT_CLIENT_ID, self.msg_id + 1, msg.len(),
         )?;
         let idx = usize::from(self.msg_id);
         MQTT_URCS[idx].reset();
