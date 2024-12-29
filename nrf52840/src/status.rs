@@ -8,7 +8,11 @@ use yaroc_common::{
     status::{parse_qlts, MiniCallHome},
 };
 
-use crate::{bg77::BG77, bg77_hw::ModemHw, error::Error};
+use crate::{
+    bg77::BG77,
+    bg77_hw::{ModemHw, ModemPin},
+    error::Error,
+};
 
 pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
@@ -31,7 +35,7 @@ impl Temp for NrfTemp {
     }
 }
 
-impl<S: Temp, T: Tx> BG77<S, T> {
+impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock =
             self.simple_call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;

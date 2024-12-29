@@ -1,5 +1,5 @@
 use crate::{
-    bg77_hw::ModemHw,
+    bg77_hw::{ModemHw, ModemPin},
     error::Error,
     status::{NrfTemp, Temp},
 };
@@ -26,7 +26,8 @@ use yaroc_common::{
     RawMutex,
 };
 
-pub type BG77Type = Mutex<RawMutex, Option<BG77<NrfTemp, UarteTx<'static, UARTE1>>>>;
+pub type BG77Type = BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static, P0_17>>;
+pub type BG77MutexType = Mutex<RawMutex, Option<BG77Type>>;
 
 const MQTT_MESSAGES: usize = 5;
 const MQTT_CLIENT_ID: u8 = 0;
@@ -59,9 +60,9 @@ impl Default for MqttConfig {
     }
 }
 
-pub struct BG77<S: Temp, T: Tx> {
+pub struct BG77<S: Temp, T: Tx, P: ModemPin> {
     pub uart1: AtUart<T>,
-    pub modem_pin: Output<'static, P0_17>,
+    pub modem_pin: P,
     pub temp: S,
     pub boot_time: Option<DateTime<FixedOffset>>,
     config: MqttConfig,
@@ -69,11 +70,11 @@ pub struct BG77<S: Temp, T: Tx> {
     last_successful_send: Instant,
 }
 
-impl<S: Temp, T: Tx> BG77<S, T> {
+impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
     pub fn new(
         rx1: impl RxWithIdle,
         tx1: T,
-        modem_pin: Output<'static, P0_17>,
+        modem_pin: P,
         temp: S,
         spawner: &Spawner,
         config: MqttConfig,
@@ -314,7 +315,7 @@ impl<S: Temp, T: Tx> BG77<S, T> {
 }
 
 #[embassy_executor::task]
-pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
+pub async fn bg77_main_loop(bg77_mutex: &'static BG77MutexType) {
     {
         let mut bg77_unlocked = bg77_mutex.lock().await;
         let bg77 = bg77_unlocked.as_mut().unwrap();
@@ -334,7 +335,7 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77Type) {
 }
 
 #[embassy_executor::task]
-pub async fn bg77_event_handler(bg77_mutex: &'static BG77Type) {
+pub async fn bg77_event_handler(bg77_mutex: &'static BG77MutexType) {
     let mut last_reconnect: Option<Instant> = None;
     loop {
         let signal = select3(

@@ -1,4 +1,5 @@
 use defmt::info;
+use embassy_nrf::{gpio::Output, peripherals::P0_17};
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
 use yaroc_common::at::{
@@ -10,6 +11,21 @@ use crate::status::Temp;
 use crate::{bg77::BG77, error::Error};
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+
+pub trait ModemPin {
+    fn set_low(&mut self);
+    fn set_high(&mut self);
+}
+
+impl ModemPin for Output<'static, P0_17> {
+    fn set_low(&mut self) {
+        self.set_low();
+    }
+
+    fn set_high(&mut self) {
+        self.set_high();
+    }
+}
 
 pub trait ModemHw {
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
@@ -43,7 +59,7 @@ pub trait ModemHw {
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
-impl<S: Temp, T: Tx> ModemHw for BG77<S, T> {
+impl<S: Temp, T: Tx, P: ModemPin> ModemHw for BG77<S, T, P> {
     async fn simple_call_at(
         &mut self,
         cmd: &str,
