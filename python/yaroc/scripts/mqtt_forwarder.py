@@ -27,6 +27,8 @@ async def main():
     forwarder = MqttForwader(
         client_group,
         dns,
+        config.get("broker_url", None),
+        config.get("broker_port", None),
         meshtastic_conf.get("main_channel", None),
         meshtastic_conf.get("mac_override", None),
         config.get("display", None),

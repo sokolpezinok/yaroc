@@ -22,12 +22,16 @@ class MqttForwader:
         self,
         client_group: ClientGroup,
         dns: Dict[str, str],
+        broker_url: str | None,
+        broker_port: int | None,
         meshtastic_channel: str | None,
         meshtastic_mac_addr: str | None = None,
         display_model: str | None = None,
     ):
         self.client_group = client_group
         self.dns = dns
+        self.broker_url = BROKER_URL if broker_url is None else broker_url
+        self.broker_port = BROKER_PORT if broker_port is None else broker_port
         self.meshtastic_channel = meshtastic_channel
         self.handler = MessageHandler.new(dns, meshtastic_mac_addr)
         self.drawer = StatusDrawer(self.handler, display_model)
@@ -138,12 +142,12 @@ class MqttForwader:
         while True:
             try:
                 async with MqttClient(
-                    BROKER_URL,
-                    BROKER_PORT,
+                    self.broker_url,
+                    self.broker_port,
                     timeout=15,
                     logger=logging.getLogger(),
                 ) as client:
-                    logging.info(f"Connected to mqtt://{BROKER_URL}")
+                    logging.info(f"Connected to mqtt://{self.broker_url}")
                     for mac_addr in online_macs:
                         await client.subscribe(f"yar/{mac_addr}/#", qos=1)
                     for mac_addr in radio_macs:
@@ -155,7 +159,7 @@ class MqttForwader:
                     async for message in client.messages:
                         asyncio.create_task(self._on_message(message))
             except MqttError:
-                logging.error(f"Connection lost to mqtt://{BROKER_URL}")
+                logging.error(f"Connection lost to mqtt://{self.broker_url}")
                 await asyncio.sleep(5.0)
             except asyncio.exceptions.CancelledError:
                 logging.error("Interrupted, exiting")
