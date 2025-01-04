@@ -222,7 +222,7 @@ class UdevSiFactory(SiWorker):
     @property
     def codes(self) -> set[int]:
         worker_codes = [worker.codes for worker, _, _ in self._udev_workers.values()]
-        return set.union(*worker_codes)
+        return set().union(*worker_codes)
 
 
 class FakeSiWorker(SiWorker):
@@ -282,4 +282,4 @@ class SiPunchManager:
     @property
     def codes(self) -> set[int]:
         worker_codes = [worker.codes for worker in self._si_workers]
-        return set.union(*worker_codes)
+        return set().union(*worker_codes)
