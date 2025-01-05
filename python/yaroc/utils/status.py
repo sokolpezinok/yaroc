@@ -43,12 +43,13 @@ class StatusDrawer:
 
         table = []
         for node_info in self.message_handler.node_infos():
+            node_info.codes.sort()
             table.append(
                 [
                     node_info.name,
                     str(node_info.rssi_dbm) if node_info.rssi_dbm is not None else "",
-                    f"{node_info.snr:.0f}" if node_info.snr is not None else "",
-                    ",".join(str(code) for code in node_info.codes),  # TODO: sort
+                    f"{node_info.snr_db:.0f}" if node_info.snr_db is not None else "",
+                    ",".join(str(code) for code in node_info.codes),
                     human_time(node_info.last_update),
                     human_time(node_info.last_punch),
                 ]
