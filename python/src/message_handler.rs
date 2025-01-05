@@ -315,31 +315,43 @@ mod test_punch {
         assert_eq!(punch_logs[0].punch.card, 1715004);
     }
 
-    #[test]
-    fn test_meshtastic_serial() {
-        let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
-            .unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2).raw;
-
-        const SERIAL_APP: i32 = PortNum::SerialApp as i32;
-        let envelope = ServiceEnvelope {
+    fn envelope(from: u32, data: Data) -> ServiceEnvelope {
+        ServiceEnvelope {
             packet: Some(MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(Data {
-                    portnum: SERIAL_APP,
-                    payload: punch.to_vec(),
-                    ..Default::default()
-                })),
+                payload_variant: Some(PayloadVariant::Decoded(data)),
+                from,
                 ..Default::default()
             }),
             ..Default::default()
-        };
+        }
+    }
 
-        let message = envelope.encode_to_vec();
+    #[test]
+    fn test_meshtastic_serial() {
+        let time =
+            NaiveDateTime::parse_from_str("2023-11-23 10:00:03", "%Y-%m-%d %H:%M:%S").unwrap();
+        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+
+        let message = envelope(
+            0xdeadbeef,
+            Data {
+                portnum: PortNum::SerialApp as i32,
+                payload: punch.to_vec(),
+                ..Default::default()
+            },
+        )
+        .encode_to_vec();
         let mut handler = MessageHandler::new(HashMap::new(), None);
         let punch_logs = handler.msh_serial_msg(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
+        let node_infos = handler.node_infos();
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(
+            node_infos[0].last_punch.unwrap().time(),
+            NaiveTime::from_hms_opt(10, 0, 3).unwrap()
+        );
     }
 
     #[test]
@@ -362,28 +374,58 @@ mod test_punch {
             }),
             ..Default::default()
         };
-        let message1 = envelope1.encode_to_vec();
+        let message = envelope1.encode_to_vec();
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        handler.msh_status_update(&message1, Local::now().fixed_offset(), None);
+        handler.msh_status_update(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, Some(-98));
         assert_eq!(node_infos[0].snr_db, Some(4.0));
 
-        let envelope2 = ServiceEnvelope {
+        let envelope = ServiceEnvelope {
             packet: Some(MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
                 ..Default::default()
             }),
             ..Default::default()
         };
-        handler.msh_status_update(
-            &envelope2.encode_to_vec(),
-            Local::now().fixed_offset(),
-            None,
-        );
+        handler.msh_status_update(&envelope.encode_to_vec(), Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, None);
+    }
+
+    #[test]
+    fn test_meshtastic_serial_and_status() {
+        let time =
+            NaiveDateTime::parse_from_str("2023-11-23 10:00:03", "%Y-%m-%d %H:%M:%S").unwrap();
+        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+
+        let message = envelope(
+            0xdeadbeef,
+            Data {
+                portnum: PortNum::SerialApp as i32,
+                payload: punch.to_vec(),
+                ..Default::default()
+            },
+        )
+        .encode_to_vec();
+
+        let mut handler = MessageHandler::new(HashMap::new(), None);
+        handler.msh_serial_msg(&message).unwrap();
+
+        let telemetry = Telemetry {
+            time: 1735157442,
+            variant: Some(Variant::DeviceMetrics(Default::default())),
+        };
+        let data = Data {
+            portnum: PortNum::TelemetryApp as i32,
+            payload: telemetry.encode_to_vec(),
+            ..Default::default()
+        };
+        let message = envelope(0xdeadbeef, data).encode_to_vec();
+        handler.msh_status_update(&message, Local::now().fixed_offset(), None);
+        let node_infos = handler.node_infos();
+        assert_eq!(node_infos.len(), 1);
     }
 }

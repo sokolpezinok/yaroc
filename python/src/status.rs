@@ -54,7 +54,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     last_update: Option<DateTime<FixedOffset>>,
     #[pyo3(get)]
-    last_punch: Option<DateTime<FixedOffset>>,
+    pub last_punch: Option<DateTime<FixedOffset>>,
 }
 
 #[derive(Default, Clone)]
