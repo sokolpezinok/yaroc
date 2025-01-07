@@ -137,10 +137,10 @@ impl MessageHandler {
         Ok(result)
     }
 
-    fn msh_roc_status(&mut self, host_info: HostInfo) -> &mut MeshtasticRocStatus {
+    fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
         self.meshtastic_statuses
-            .entry(host_info.mac_address)
-            .or_insert(MeshtasticRocStatus::new(host_info.name))
+            .entry(host_info.mac_address.clone())
+            .or_insert(MeshtasticRocStatus::new(host_info.name.clone()))
     }
 
     pub fn msh_status_update(
@@ -159,7 +159,7 @@ impl MessageHandler {
             }
             Ok(Some(log_message)) => {
                 info!("{}", log_message);
-                let status = self.msh_roc_status(log_message.host_info);
+                let status = self.msh_roc_status(&log_message.host_info);
                 match log_message.metrics {
                     MshMetrics::VoltageBattery(_, battery) => {
                         status.update_battery(battery);
@@ -203,11 +203,13 @@ impl MessageHandler {
             )),
         }?;
 
-        let mut result = Vec::with_capacity(punches.len());
-        if let Some(mac_addr) = self.meshtastic_override_mac.as_ref() {
-            host_info.mac_address = mac_addr.clone();
+        let meshtastic_override_mac = self.meshtastic_override_mac.clone();
+        let status = self.msh_roc_status(&host_info);
+        // TODO: this override should move into the ROC client
+        if let Some(mac_addr) = meshtastic_override_mac {
+            host_info.mac_address = mac_addr;
         }
-        let status = self.msh_roc_status(host_info.clone());
+        let mut result = Vec::with_capacity(punches.len());
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
@@ -411,7 +413,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let mut handler = MessageHandler::new(HashMap::new(), Some("mac".to_owned()));
         handler.msh_serial_msg(&message).unwrap();
 
         let telemetry = Telemetry {
