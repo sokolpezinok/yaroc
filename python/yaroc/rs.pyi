@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from enum import IntEnum
 from typing import ClassVar as _ClassVar
-from typing import Dict
+from typing import List, Tuple
 
 class HostInfo(object):
     mac_address: str
@@ -71,7 +71,7 @@ class NodeInfo(object):
 
 class MessageHandler(object):
     @staticmethod
-    def new(dns: list[(str, str)], meshtastic_override_mac: str | None): ...
+    def new(dns: List[Tuple[str, str]], meshtastic_override_mac: str | None): ...
     def meshtastic_serial_msg(self, payload: bytes) -> list[SiPunch]: ...
     def meshtastic_status_update(self, payload: bytes, now: datetime, recv_mac_address: int): ...
     def punches(self, payload: bytes, mac_address: int) -> list[SiPunch]: ...

@@ -4,6 +4,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from typing import List, Tuple
 
 from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
@@ -20,7 +21,7 @@ class MqttForwader:
     def __init__(
         self,
         client_group: ClientGroup,
-        dns: list[(str, str)],
+        dns: List[Tuple[str, str]],
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
