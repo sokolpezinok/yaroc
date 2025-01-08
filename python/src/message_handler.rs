@@ -151,7 +151,7 @@ impl MessageHandler {
 
     fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
         self.meshtastic_statuses
-            .entry(host_info.mac_address.clone())
+            .entry(host_info.mac_address)
             .or_insert(MeshtasticRocStatus::new(host_info.name.clone()))
     }
 

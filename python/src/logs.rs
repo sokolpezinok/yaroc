@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
 use pyo3::prelude::*;
-use std::fmt;
+use std::fmt::{self, Display};
 use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
@@ -74,11 +74,11 @@ impl Default for MacAddress {
     }
 }
 
-impl ToString for MacAddress {
-    fn to_string(&self) -> String {
+impl Display for MacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MacAddress::Meshtastic(mac) => format!("{:08x}", mac),
-            MacAddress::Full(mac) => format!("{:012x}", mac),
+            MacAddress::Meshtastic(mac) => write!(f, "{:08x}", mac),
+            MacAddress::Full(mac) => write!(f, "{:012x}", mac),
         }
     }
 }
