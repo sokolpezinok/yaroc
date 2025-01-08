@@ -4,7 +4,6 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Dict
 
 from aiomqtt import Client as MqttClient
 from aiomqtt import Message, MqttError
@@ -21,7 +20,7 @@ class MqttForwader:
     def __init__(
         self,
         client_group: ClientGroup,
-        dns: Dict[str, str],
+        dns: list[(str, str)],
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
@@ -134,7 +133,7 @@ class MqttForwader:
         asyncio.create_task(self.draw_table())
 
         online_macs, radio_macs = [], []
-        for mac in self.dns.keys():
+        for mac, _ in self.dns:
             if len(mac) == 12:
                 online_macs.append(mac)
             elif len(mac) == 8:

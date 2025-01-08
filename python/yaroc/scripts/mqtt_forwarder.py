@@ -22,7 +22,7 @@ async def main():
     if client_group.len() == 0:
         logging.info("Listening without forwarding")
 
-    dns = {mac_address: name for name, mac_address in config["mac-addresses"].items()}
+    dns = [(mac_address, name) for name, mac_address in config["mac-addresses"].items()]
     meshtastic_conf = config.get("meshtastic", {})
     mac_override = meshtastic_conf.get("mac_override", None)
     mac_override_int = int(mac_override, 16) if mac_override else None

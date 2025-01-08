@@ -24,7 +24,7 @@ use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 
 #[pyclass]
 pub struct MessageHandler {
-    dns: HashMap<String, String>,
+    dns: HashMap<MacAddress, String>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
     meshtastic_override_mac: Option<u64>,
@@ -34,7 +34,22 @@ pub struct MessageHandler {
 impl MessageHandler {
     #[staticmethod]
     #[pyo3(signature = (dns, meshtastic_override_mac=None))]
-    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: Option<u64>) -> Self {
+    pub fn new(dns: Vec<(String, String)>, meshtastic_override_mac: Option<u64>) -> Self {
+        let dns = dns
+            .into_iter()
+            .map(|(mac, name)| match mac.len() {
+                8 => (
+                    // TODO: remove unwrap
+                    MacAddress::Meshtastic(u32::from_str_radix(&mac, 16).unwrap()),
+                    name,
+                ),
+                12 => (
+                    MacAddress::Full(u64::from_str_radix(&mac, 16).unwrap()),
+                    name,
+                ),
+                _ => (MacAddress::default(), name), // TODO: error
+            })
+            .collect();
         Self {
             dns,
             meshtastic_statuses: HashMap::new(),
@@ -141,7 +156,7 @@ impl MessageHandler {
     }
 
     fn resolve(&self, mac_addr: MacAddress) -> &str {
-        self.dns.get(&mac_addr.to_string()).map(|x| x.as_str()).unwrap_or("Unknown")
+        self.dns.get(&mac_addr).map(|x| x.as_str()).unwrap_or("Unknown")
     }
 
     pub fn msh_status_update(
@@ -286,7 +301,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let mut handler = MessageHandler::new(Vec::new(), None);
         // TODO: should propagate errors
         let punches = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punches.len(), 0);
@@ -309,7 +324,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let mut handler = MessageHandler::new(Vec::new(), None);
         let punch_logs = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -342,7 +357,7 @@ mod test_punch {
             },
         )
         .encode_to_vec();
-        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let mut handler = MessageHandler::new(Vec::new(), None);
         let punch_logs = handler.msh_serial_msg(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -376,7 +391,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = MessageHandler::new(HashMap::new(), None);
+        let mut handler = MessageHandler::new(Vec::new(), None);
         handler.msh_status_update(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -412,7 +427,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(HashMap::new(), Some(0x1234));
+        let mut handler = MessageHandler::new(Vec::new(), Some(0x1234));
         handler.msh_serial_msg(&message).unwrap();
 
         let telemetry = Telemetry {

@@ -7,7 +7,7 @@ use meshtastic::Message as MeshtaticMessage;
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::logs::{HostInfo, PositionName, RssiSnr};
+use crate::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
 use crate::status::Position;
 
 #[derive(Debug, PartialEq)]
@@ -100,7 +100,7 @@ impl MshLogMessage {
     pub fn from_mesh_packet(
         payload: &[u8],
         now: DateTime<FixedOffset>,
-        dns: &HashMap<String, String>,
+        dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
     ) -> Result<Option<Self>, std::io::Error> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
@@ -112,13 +112,13 @@ impl MshLogMessage {
                 rx_snr,
                 ..
             }) => {
-                let mac_address = format!("{:08x}", from);
+                let mac_address = MacAddress::Meshtastic(from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
                 Self::parse_inner(
                     data,
                     HostInfo {
                         name: name.to_owned(),
-                        mac_address: crate::logs::MacAddress::Meshtastic(from),
+                        mac_address,
                     },
                     now,
                     RssiSnr::new(rx_rssi, rx_snr),
@@ -304,7 +304,7 @@ mod test_meshtastic {
             4.0,
         );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
-        let dns = HashMap::from([("00123456".to_owned(), "yaroc1".to_owned())]);
+        let dns = HashMap::from([(MacAddress::Meshtastic(0x123456), "yaroc1".to_owned())]);
         let log_message =
             MshLogMessage::from_mesh_packet(&message, now, &dns, None).unwrap().unwrap();
 
