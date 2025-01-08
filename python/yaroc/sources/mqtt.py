@@ -50,7 +50,7 @@ class MqttForwader:
         logging.info(punch)
         await self.client_group.send_punch(punch)
 
-    async def _handle_punches(self, mac_addr: str, payload: PayloadType):
+    async def _handle_punches(self, mac_addr: int, payload: PayloadType):
         try:
             punches = self.handler.punches(MqttForwader._payload_to_bytes(payload), mac_addr)
         except Exception as err:
@@ -70,7 +70,7 @@ class MqttForwader:
         tasks = [self._process_punch(punch) for punch in punches]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _handle_status(self, mac_addr: str, payload: PayloadType, now: datetime):
+    async def _handle_status(self, mac_addr: int, payload: PayloadType, now: datetime):
         try:
             # We cannot return union types from Rust, so we have to parse the proto to detect the
             # type
@@ -83,19 +83,19 @@ class MqttForwader:
         try:
             self.handler.status_update(MqttForwader._payload_to_bytes(payload), mac_addr)
             if oneof != "disconnected":
-                await self.client_group.send_status(status, mac_addr)
+                await self.client_group.send_status(status, f"{mac_addr:0x}")
         except Exception as err:
             logging.error(f"Failed to construct proto: {err}")
 
     @staticmethod
-    def extract_mac(topic: str) -> str:
+    def extract_mac(topic: str) -> int:
         match = re.match("yar/([0-9a-f]{12})/.*", topic)
         if match is None or len(match.groups()) == 0:
             logging.error(f"Invalid topic: {topic}")
             raise Exception(f"Invalid topic {topic}")
 
         groups = match.groups()
-        return groups[0]
+        return int(groups[0], 16)
 
     async def _on_message(self, msg: Message):
         now = datetime.now().astimezone()
@@ -112,8 +112,9 @@ class MqttForwader:
                 f"yar/2/e/{self.meshtastic_channel}/"
             ):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
+                recv_mac_addr_int = int(recv_mac_addr, 16)
                 self.handler.meshtastic_status_update(
-                    MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr
+                    MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr_int
                 )
 
             elif topic.startswith("yar/2/e/serial/"):

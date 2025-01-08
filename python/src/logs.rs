@@ -34,7 +34,7 @@ impl fmt::Display for CellularLogMessage {
 impl CellularLogMessage {
     pub fn from_proto(
         status: Status,
-        mac_addr: &str,
+        mac_addr: MacAddress,
         hostname: &str,
         tz: &impl TimeZone,
     ) -> yaroc_common::Result<Self> {
@@ -62,22 +62,47 @@ impl CellularLogMessage {
     }
 }
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub enum MacAddress {
+    Meshtastic(u32),
+    Full(u64),
+}
+
+impl Default for MacAddress {
+    fn default() -> Self {
+        Self::Full(0x1234)
+    }
+}
+
+impl ToString for MacAddress {
+    fn to_string(&self) -> String {
+        match self {
+            MacAddress::Meshtastic(mac) => format!("{:08x}", mac),
+            MacAddress::Full(mac) => format!("{:012x}", mac),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 #[pyclass]
 pub struct HostInfo {
     pub name: String,
-    #[pyo3(get)]
-    pub mac_address: String,
+    pub mac_address: MacAddress,
 }
 
 #[pymethods]
 impl HostInfo {
     #[staticmethod]
-    fn new(name: String, mac_addr: String) -> Self {
+    pub fn new(name: String, mac_addr: u64) -> Self {
         Self {
             name,
-            mac_address: mac_addr,
+            mac_address: MacAddress::Full(mac_addr),
         }
+    }
+
+    #[getter]
+    fn mac_address(&self) -> String {
+        self.mac_address.to_string()
     }
 }
 
@@ -90,7 +115,7 @@ pub struct MiniCallHomeLog {
 impl MiniCallHomeLog {
     pub fn new(
         name: &str,
-        mac_address: &str,
+        mac_address: MacAddress,
         now: DateTime<FixedOffset>,
         tz: &impl TimeZone,
         mch_proto: yaroc_common::proto::MiniCallHome,
@@ -119,7 +144,7 @@ impl MiniCallHomeLog {
             mini_call_home: mch,
             host_info: HostInfo {
                 name: name.to_owned(),
-                mac_address: mac_address.to_owned(),
+                mac_address,
             },
             latency: now - timestamp,
         })
@@ -208,7 +233,7 @@ mod test_logs {
             },
             host_info: HostInfo {
                 name: "spe01".to_owned(),
-                mac_address: String::new(),
+                mac_address: MacAddress::Full(0x1234),
             },
             latency: Duration::milliseconds(1390),
         };
@@ -251,8 +276,9 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01", &tz)
-            .expect("MiniCallHome proto should be valid");
+        let cell_log_msg =
+            CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
+                .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
         assert!(formatted_log_msg.starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0, 3.85V"));
 
@@ -263,7 +289,8 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, "", "spe01", &tz);
+        let cell_log_msg =
+            CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz);
         assert!(cell_log_msg.is_err());
     }
 }

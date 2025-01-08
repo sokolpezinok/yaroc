@@ -118,7 +118,7 @@ impl MshLogMessage {
                     data,
                     HostInfo {
                         name: name.to_owned(),
-                        mac_address,
+                        mac_address: crate::logs::MacAddress::Meshtastic(from),
                     },
                     now,
                     RssiSnr::new(rx_rssi, rx_snr),
@@ -183,6 +183,8 @@ impl fmt::Display for MshLogMessage {
 
 #[cfg(test)]
 mod test_meshtastic {
+    use crate::logs::MacAddress;
+
     use super::*;
     use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
 
@@ -221,7 +223,7 @@ mod test_meshtastic {
         let log_message = MshLogMessage {
             host_info: HostInfo {
                 name: "spr01".to_owned(),
-                mac_address: String::new(),
+                mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
             latency: Duration::milliseconds(1230),
@@ -240,7 +242,7 @@ mod test_meshtastic {
         let log_message = MshLogMessage {
             host_info: HostInfo {
                 name: "spr01".to_owned(),
-                mac_address: String::new(),
+                mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
             latency: Duration::milliseconds(1230),
@@ -264,7 +266,7 @@ mod test_meshtastic {
         let log_message = MshLogMessage {
             host_info: HostInfo {
                 name: "spr01".to_owned(),
-                mac_address: String::new(),
+                mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
             latency: Duration::milliseconds(1230),
@@ -315,7 +317,10 @@ mod test_meshtastic {
             })
         );
         assert_eq!(log_message.host_info.name, "yaroc1");
-        assert_eq!(log_message.host_info.mac_address, "00123456");
+        assert_eq!(
+            log_message.host_info.mac_address,
+            MacAddress::Meshtastic(0x123456)
+        );
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
         assert_eq!(log_message.metrics, MshMetrics::VoltageBattery(3.87, 76));
@@ -349,7 +354,10 @@ mod test_meshtastic {
                 distance: None
             })
         );
-        assert_eq!(log_message.host_info.mac_address, "00123456");
+        assert_eq!(
+            log_message.host_info.mac_address,
+            MacAddress::Meshtastic(0x123456)
+        );
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
         assert_eq!(log_message.latency, Duration::seconds(5));

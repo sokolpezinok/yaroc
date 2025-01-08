@@ -14,6 +14,7 @@ use yaroc_common::proto::Status;
 use chrono::prelude::*;
 use chrono::DateTime;
 
+use crate::logs::MacAddress;
 use crate::logs::{CellularLogMessage, HostInfo, PositionName};
 use crate::meshtastic::MshLogMessage;
 use crate::meshtastic::MshMetrics;
@@ -24,26 +25,22 @@ use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 #[pyclass]
 pub struct MessageHandler {
     dns: HashMap<String, String>,
-    cellular_statuses: HashMap<String, CellularRocStatus>,
-    meshtastic_statuses: HashMap<String, MeshtasticRocStatus>,
-    meshtastic_override_mac: Option<String>,
+    cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
+    meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
+    meshtastic_override_mac: Option<u64>,
 }
 
 #[pymethods]
 impl MessageHandler {
     #[staticmethod]
     #[pyo3(signature = (dns, meshtastic_override_mac=None))]
-    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: Option<String>) -> Self {
+    pub fn new(dns: HashMap<String, String>, meshtastic_override_mac: Option<u64>) -> Self {
         Self {
             dns,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
             meshtastic_override_mac,
         }
-    }
-
-    fn resolve(&self, mac_addr: &str) -> &str {
-        self.dns.get(mac_addr).map(|x| x.as_str()).unwrap_or("Unknown")
     }
 
     #[pyo3(name = "meshtastic_serial_msg")]
@@ -56,7 +53,7 @@ impl MessageHandler {
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
-        recv_mac_address: Option<String>,
+        recv_mac_address: Option<u32>,
     ) {
         self.msh_status_update(payload, now, recv_mac_address);
     }
@@ -73,14 +70,15 @@ impl MessageHandler {
     }
 
     #[pyo3(name = "punches")]
-    pub fn punches_py(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<Vec<SiPunchLog>> {
+    pub fn punches_py(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<Vec<SiPunchLog>> {
         self.punches(payload, mac_addr)
             .map_err(|err| PyValueError::new_err(format!("{err}")))
     }
 
-    pub fn status_update(&mut self, payload: &[u8], mac_addr: &str) -> PyResult<()> {
+    pub fn status_update(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
         let status_proto = Status::decode(payload)
             .map_err(|_| PyValueError::new_err("Status proto decoding error"))?;
+        let mac_addr = MacAddress::Full(mac_addr);
         let log_message =
             CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)
                 .map_err(
@@ -113,13 +111,12 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    pub fn punches(&mut self, payload: &[u8], mac_addr: &str) -> Result<Vec<SiPunchLog>, Error> {
+    pub fn punches(&mut self, payload: &[u8], mac_address: u64) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
-        let host_info: HostInfo = HostInfo {
-            name: self.resolve(mac_addr).to_owned(),
-            mac_address: mac_addr.to_owned(),
-        };
-        let status = self.get_cellular_status(mac_addr);
+        let mac_address_full = MacAddress::Full(mac_address);
+        let host_info: HostInfo =
+            HostInfo::new(self.resolve(mac_address_full).to_owned(), mac_address);
+        let status = self.get_cellular_status(mac_address_full);
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
@@ -143,14 +140,18 @@ impl MessageHandler {
             .or_insert(MeshtasticRocStatus::new(host_info.name.clone()))
     }
 
+    fn resolve(&self, mac_addr: MacAddress) -> &str {
+        self.dns.get(&mac_addr.to_string()).map(|x| x.as_str()).unwrap_or("Unknown")
+    }
+
     pub fn msh_status_update(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
-        recv_mac_address: Option<String>,
+        recv_mac_address: Option<u32>,
     ) {
-        let recv_position =
-            recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr.as_ref()));
+        let recv_position = recv_mac_address
+            .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
         let msh_log_message =
             MshLogMessage::from_mesh_packet(payload, now, &self.dns, recv_position);
         match msh_log_message {
@@ -184,12 +185,12 @@ impl MessageHandler {
             std::io::ErrorKind::InvalidInput,
             "Missing packet in ServiceEnvelope",
         ))?;
-        let mac_addr = format!("{:8x}", packet.from);
+        let mac_addr = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
         let mut host_info = HostInfo {
-            name: self.resolve(&mac_addr).to_owned(),
-            mac_address: mac_addr.clone(),
+            name: self.resolve(mac_addr).to_owned(),
+            mac_address: mac_addr,
         };
         let punches = match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
@@ -203,11 +204,11 @@ impl MessageHandler {
             )),
         }?;
 
-        let meshtastic_override_mac = self.meshtastic_override_mac.clone();
+        let meshtastic_override_mac = self.meshtastic_override_mac;
         let status = self.msh_roc_status(&host_info);
         // TODO: this override should move into the ROC client
         if let Some(mac_addr) = meshtastic_override_mac {
-            host_info.mac_address = mac_addr;
+            host_info.mac_address = MacAddress::Full(mac_addr);
         }
         let mut result = Vec::with_capacity(punches.len());
         for punch in punches.into_iter() {
@@ -247,19 +248,17 @@ impl MessageHandler {
         ))
     }
 
-    fn get_position_name(&self, mac_address: &str) -> Option<PositionName> {
-        let status = self.meshtastic_statuses.get(mac_address)?;
+    fn get_position_name(&self, mac_address: MacAddress) -> Option<PositionName> {
+        let status = self.meshtastic_statuses.get(&mac_address)?;
         status
             .position
             .as_ref()
             .map(|position| PositionName::new(position, &status.name))
     }
 
-    fn get_cellular_status(&mut self, mac_addr: &str) -> &mut CellularRocStatus {
+    fn get_cellular_status(&mut self, mac_addr: MacAddress) -> &mut CellularRocStatus {
         let name = self.resolve(mac_addr).to_owned();
-        self.cellular_statuses
-            .entry(mac_addr.to_owned())
-            .or_insert(CellularRocStatus::new(name))
+        self.cellular_statuses.entry(mac_addr).or_insert(CellularRocStatus::new(name))
     }
 }
 
@@ -289,7 +288,7 @@ mod test_punch {
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
         // TODO: should propagate errors
-        let punches = handler.punches(&buf[..len], "").unwrap();
+        let punches = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -311,7 +310,7 @@ mod test_punch {
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(HashMap::new(), None);
-        let punch_logs = handler.punches(&buf[..len], "").unwrap();
+        let punch_logs = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -413,7 +412,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(HashMap::new(), Some("mac".to_owned()));
+        let mut handler = MessageHandler::new(HashMap::new(), Some(0x1234));
         handler.msh_serial_msg(&message).unwrap();
 
         let telemetry = Telemetry {
