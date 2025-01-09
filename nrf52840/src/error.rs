@@ -9,6 +9,8 @@ pub enum Error {
     #[error("Formatting error")]
     FormatError,
     #[error("Cannot parse string as the given type")]
+    ValueError,
+    #[error("Supplied wrong function argument")]
     ParseError,
     #[error("String encoding error")]
     StringEncodingError,
@@ -33,6 +35,7 @@ impl From<common_error::Error> for Error {
         match err {
             common_error::Error::BufferTooSmallError => Self::BufferTooSmallError,
             common_error::Error::ModemError => Self::ModemError,
+            common_error::Error::ValueError => Self::ValueError,
             common_error::Error::ParseError => Self::ParseError,
             common_error::Error::UartReadError => Self::UartReadError,
             common_error::Error::UartWriteError => Self::UartWriteError,

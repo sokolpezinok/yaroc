@@ -121,9 +121,7 @@ impl MessageHandler {
                     name,
                 )),
                 12 => Ok((
-                    MacAddress::Full(
-                        u64::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?,
-                    ),
+                    MacAddress::Full(u64::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?),
                     name,
                 )),
                 _ => Err(Error::ValueError),
