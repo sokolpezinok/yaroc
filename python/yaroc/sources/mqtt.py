@@ -32,7 +32,7 @@ class MqttForwader:
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
         self.meshtastic_channel = meshtastic_channel
-        self.handler = MessageHandler.new(dns, None)
+        self.handler = MessageHandler(dns)
         self.drawer = StatusDrawer(self.handler, display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 

@@ -4,7 +4,7 @@ use log::info;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, PortNum, ServiceEnvelope};
 use meshtastic::Message as MeshtasticMessage;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use yaroc_common::error::Error;
@@ -31,28 +31,14 @@ pub struct MessageHandler {
 
 #[pymethods]
 impl MessageHandler {
-    #[staticmethod]
-    pub fn new(dns: Vec<(String, String)>) -> Self {
-        let dns = dns
-            .into_iter()
-            .map(|(mac, name)| match mac.len() {
-                8 => (
-                    // TODO: remove unwrap
-                    MacAddress::Meshtastic(u32::from_str_radix(&mac, 16).unwrap()),
-                    name,
-                ),
-                12 => (
-                    MacAddress::Full(u64::from_str_radix(&mac, 16).unwrap()),
-                    name,
-                ),
-                _ => (MacAddress::default(), name), // TODO: error
-            })
-            .collect();
-        Self {
-            dns,
-            meshtastic_statuses: HashMap::new(),
-            cellular_statuses: HashMap::new(),
-        }
+    #[new]
+    pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
+        Self::new(dns).map_err(|err| match err {
+            Error::ParseError | Error::ValueError => {
+                PyValueError::new_err("Wrong MAC address format")
+            }
+            _ => PyRuntimeError::new_err("Unknown error"),
+        })
     }
 
     #[pyo3(name = "meshtastic_serial_msg")]
@@ -123,6 +109,33 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
+    pub fn new(dns: Vec<(String, String)>) -> Result<Self, Error> {
+        let dns = dns
+            .into_iter()
+            .map(|(mac, name)| match mac.len() {
+                8 => Ok((
+                    // TODO: remove unwrap
+                    MacAddress::Meshtastic(
+                        u32::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?,
+                    ),
+                    name,
+                )),
+                12 => Ok((
+                    MacAddress::Full(
+                        u64::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?,
+                    ),
+                    name,
+                )),
+                _ => Err(Error::ValueError),
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            dns,
+            meshtastic_statuses: HashMap::new(),
+            cellular_statuses: HashMap::new(),
+        })
+    }
+
     pub fn punches(&mut self, payload: &[u8], mac_address: u64) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
         let mac_address_full = MacAddress::Full(mac_address);
@@ -293,7 +306,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new());
+        let mut handler = MessageHandler::new(Vec::new()).unwrap();
         // TODO: should propagate errors
         let punches = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punches.len(), 0);
@@ -316,7 +329,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new());
+        let mut handler = MessageHandler::new(Vec::new()).unwrap();
         let punch_logs = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -349,7 +362,7 @@ mod test_punch {
             },
         )
         .encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new());
+        let mut handler = MessageHandler::new(Vec::new()).unwrap();
         let punch_logs = handler.msh_serial_msg(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -383,7 +396,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new());
+        let mut handler = MessageHandler::new(Vec::new()).unwrap();
         handler.msh_status_update(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -419,7 +432,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(Vec::new());
+        let mut handler = MessageHandler::new(Vec::new()).unwrap();
         handler.msh_serial_msg(&message).unwrap();
 
         let telemetry = Telemetry {

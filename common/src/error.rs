@@ -8,6 +8,8 @@ pub enum Error {
     #[error("Formatting error, usually buffer too small")]
     FormatError,
     #[error("Cannot parse string as the given type")]
+    ValueError,
+    #[error("Supplied wrong function argument")]
     ParseError,
     #[error("Inconsistent AT response")]
     ModemError,
