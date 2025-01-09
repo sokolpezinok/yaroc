@@ -27,14 +27,12 @@ pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
-    meshtastic_override_mac: Option<u64>,
 }
 
 #[pymethods]
 impl MessageHandler {
     #[staticmethod]
-    #[pyo3(signature = (dns, meshtastic_override_mac=None))]
-    pub fn new(dns: Vec<(String, String)>, meshtastic_override_mac: Option<u64>) -> Self {
+    pub fn new(dns: Vec<(String, String)>) -> Self {
         let dns = dns
             .into_iter()
             .map(|(mac, name)| match mac.len() {
@@ -54,7 +52,6 @@ impl MessageHandler {
             dns,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
-            meshtastic_override_mac,
         }
     }
 
@@ -200,12 +197,12 @@ impl MessageHandler {
             std::io::ErrorKind::InvalidInput,
             "Missing packet in ServiceEnvelope",
         ))?;
-        let mac_addr = MacAddress::Meshtastic(packet.from);
+        let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let mut host_info = HostInfo {
-            name: self.resolve(mac_addr).to_owned(),
-            mac_address: mac_addr,
+        let host_info = HostInfo {
+            name: self.resolve(mac_address).to_owned(),
+            mac_address,
         };
         let punches = match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
@@ -219,12 +216,7 @@ impl MessageHandler {
             )),
         }?;
 
-        let meshtastic_override_mac = self.meshtastic_override_mac;
         let status = self.msh_roc_status(&host_info);
-        // TODO: this override should move into the ROC client
-        if let Some(mac_addr) = meshtastic_override_mac {
-            host_info.mac_address = MacAddress::Full(mac_addr);
-        }
         let mut result = Vec::with_capacity(punches.len());
         for punch in punches.into_iter() {
             match punch {
@@ -301,7 +293,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new(), None);
+        let mut handler = MessageHandler::new(Vec::new());
         // TODO: should propagate errors
         let punches = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punches.len(), 0);
@@ -324,7 +316,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new(), None);
+        let mut handler = MessageHandler::new(Vec::new());
         let punch_logs = handler.punches(&buf[..len], 0x1234).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -357,7 +349,7 @@ mod test_punch {
             },
         )
         .encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new(), None);
+        let mut handler = MessageHandler::new(Vec::new());
         let punch_logs = handler.msh_serial_msg(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -391,7 +383,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new(), None);
+        let mut handler = MessageHandler::new(Vec::new());
         handler.msh_status_update(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -427,7 +419,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(Vec::new(), Some(0x1234));
+        let mut handler = MessageHandler::new(Vec::new());
         handler.msh_serial_msg(&message).unwrap();
 
         let telemetry = Telemetry {
