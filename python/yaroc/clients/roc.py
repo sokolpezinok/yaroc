@@ -18,6 +18,9 @@ ROC_RECEIVEDATA = "https://roc.olresultat.se/ver7.1/receivedata.php"
 class RocClient(Client):
     """Class for sending punches to ROC"""
 
+    def __init__(self, meshtastic_override_mac: str | None = None):
+        self.meshtastic_override_mac = meshtastic_override_mac
+
     async def loop(self):
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=50))
         retry_options = ExponentialRetry(attempts=5, start_timeout=3)
@@ -41,6 +44,10 @@ class RocClient(Client):
 
         punch = punch_log.punch
         now = datetime.now()
+        if punch_log.is_meshtastic() and self.meshtastic_override_mac is not None:
+            mac_address = self.meshtastic_override_mac
+        else:
+            mac_address = punch_log.host_info.mac_address
         data = {
             "control1": str(punch.code),
             "sinumber1": str(punch.card),
@@ -49,7 +56,7 @@ class RocClient(Client):
             "sitime1": punch.time.strftime("%H:%M:%S"),
             "ms1": punch.time.strftime("%f")[:3],
             "roctime1": str(now)[:19],
-            "macaddr": punch_log.host_info.mac_address,
+            "macaddr": mac_address,
             "1": "f",
             "length": str(118 + sum(map(length, [punch.code, punch.card, punch.mode]))),
         }

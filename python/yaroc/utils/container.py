@@ -95,6 +95,7 @@ class Container(containers.DeclarativeContainer):
 async def create_clients(
     client_factories: providers.FactoryAggregate,
     config: Dict[str, Any] | None = Provide[Container.config.client],
+    meshtastic_mac_override: str | None = None,
 ) -> ClientGroup:
     clients: list[Client] = []
     if config is not None:
@@ -112,7 +113,7 @@ async def create_clients(
             clients.append(client_factories.mqtt())
         if config.get("roc", {}).get("enable", False):
             logging.info("Enabled ROC client")
-            clients.append(client_factories.roc())
+            clients.append(client_factories.roc(meshtastic_mac_override))
         if config.get("mop", {}).get("enable", False):
             clients.append(client_factories.mop())
             logging.info("Enabled MOP client")

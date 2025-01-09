@@ -25,7 +25,6 @@ class MqttForwader:
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
-        meshtastic_mac_addr: str | None = None,
         display_model: str | None = None,
     ):
         self.client_group = client_group
@@ -33,7 +32,7 @@ class MqttForwader:
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
         self.meshtastic_channel = meshtastic_channel
-        self.handler = MessageHandler.new(dns, meshtastic_mac_addr)
+        self.handler = MessageHandler.new(dns, None)
         self.drawer = StatusDrawer(self.handler, display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 

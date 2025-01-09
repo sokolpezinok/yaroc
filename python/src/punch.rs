@@ -95,6 +95,13 @@ impl SiPunchLog {
         }
     }
 
+    pub fn is_meshtastic(&self) -> bool {
+        matches!(
+            self.host_info.mac_address,
+            crate::logs::MacAddress::Meshtastic(_)
+        )
+    }
+
     pub fn __repr__(&self) -> String {
         format!("{}", self)
     }
