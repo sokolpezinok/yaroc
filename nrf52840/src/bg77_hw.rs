@@ -1,5 +1,5 @@
 use defmt::info;
-use embassy_nrf::{gpio::Output, peripherals::P0_17};
+use embassy_nrf::gpio::Output;
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
 use yaroc_common::at::{
@@ -17,7 +17,7 @@ pub trait ModemPin {
     fn set_high(&mut self);
 }
 
-impl ModemPin for Output<'static, P0_17> {
+impl ModemPin for Output<'static> {
     fn set_low(&mut self) {
         self.set_low();
     }

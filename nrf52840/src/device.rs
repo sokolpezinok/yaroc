@@ -3,7 +3,7 @@ use crate::si_uart::SiUart;
 use crate::status::NrfTemp;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::peripherals::{P0_17, P1_03, P1_04, UARTE0, UARTE1};
+use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self, UarteTx};
@@ -19,9 +19,9 @@ bind_interrupts!(struct Irqs {
 });
 
 pub struct Device {
-    _blue_led: Output<'static, P1_04>,
-    _green_led: Output<'static, P1_03>,
-    pub bg77: BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static, P0_17>>,
+    _blue_led: Output<'static>,
+    _green_led: Output<'static>,
+    pub bg77: BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>,
     pub si_uart: SiUart,
     pub saadc: Saadc<'static, 1>,
 }

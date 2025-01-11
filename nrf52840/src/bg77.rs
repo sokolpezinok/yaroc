@@ -8,11 +8,7 @@ use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
-use embassy_nrf::{
-    gpio::Output,
-    peripherals::{P0_17, UARTE1},
-    uarte::UarteTx,
-};
+use embassy_nrf::{gpio::Output, peripherals::UARTE1, uarte::UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
@@ -26,7 +22,7 @@ use yaroc_common::{
     RawMutex,
 };
 
-pub type BG77Type = BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static, P0_17>>;
+pub type BG77Type = BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>;
 pub type BG77MutexType = Mutex<RawMutex, Option<BG77Type>>;
 
 const MQTT_MESSAGES: usize = 5;
