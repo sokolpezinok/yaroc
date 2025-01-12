@@ -1,15 +1,47 @@
 #![allow(dead_code)]
 use chrono::NaiveDate;
-use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
+use defmt::info;
+use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::{channel::Channel, mutex::Mutex};
+use embassy_time::Instant;
 use yaroc_common::{punch::SiPunch, RawMutex};
 
 use crate::error::Error;
 
-pub type SiUartType = Mutex<RawMutex, Option<SiUart>>;
+pub type SiUartMutexType = Mutex<RawMutex, Option<SiUart>>;
 
 const LEN: usize = 20;
 pub type SiUartChannelType = Channel<RawMutex, Result<SiPunch, Error>, 5>;
+
+pub struct SoftwareSerial {
+    io: Input<'static>,
+}
+
+impl SoftwareSerial {
+    /// Creates new SoftwareSerial instance from a GPIO pin
+    pub fn new(io: Input<'static>) -> Self {
+        Self { io }
+    }
+
+    async fn read(&mut self, buffer: &mut [u8]) {
+        // TODO: this only works if it's the only task and there are no interrupts! Needs to be
+        // executed using the highest priority.
+        for byte in buffer.iter_mut() {
+            self.io.wait_for_low().await;
+            let time = Instant::now();
+            for i in 0..8 {
+                cortex_m::asm::delay(1000);
+                if self.io.is_high() {
+                    *byte |= 1 << i;
+                }
+            }
+            let t1 = time.elapsed();
+            self.io.wait_for_high().await;
+            info!("Val={}, {}, elapsed={}", byte, t1, time.elapsed());
+        }
+        info!("Got {} bytes: {}", buffer.len(), buffer);
+    }
+}
 
 /// SportIdent UART. Reads chunks of 20 bytes.
 pub struct SiUart {
@@ -34,7 +66,7 @@ impl SiUart {
 
 #[embassy_executor::task]
 pub async fn si_uart_reader(
-    si_uart_mutex: &'static SiUartType,
+    si_uart_mutex: &'static SiUartMutexType,
     si_uart_channel: &'static SiUartChannelType,
 ) {
     let mut si_uart = si_uart_mutex.lock().await;

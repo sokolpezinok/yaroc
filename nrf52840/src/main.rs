@@ -8,11 +8,11 @@ use yaroc_nrf52840::{
     self as _, // global logger + panicking-behavior + memory layout
     bg77::{bg77_event_handler, bg77_main_loop, BG77MutexType, MqttConfig},
     device::Device,
-    si_uart::{si_uart_reader, SiUartChannelType, SiUartType},
+    si_uart::{si_uart_reader, SiUartChannelType, SiUartMutexType},
 };
 
 static BG77_MUTEX: BG77MutexType = Mutex::new(None);
-static SI_UART_MUTEX: SiUartType = Mutex::new(None);
+static SI_UART_MUTEX: SiUartMutexType = Mutex::new(None);
 static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
