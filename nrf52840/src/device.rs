@@ -14,7 +14,7 @@ use {defmt_rtt as _, panic_probe as _};
 bind_interrupts!(struct Irqs {
     SAADC => saadc::InterruptHandler;
     TEMP => temp::InterruptHandler;
-    UARTE0_UART0 => uarte::InterruptHandler<UARTE0>;
+    UARTE0 => uarte::InterruptHandler<UARTE0>;
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 

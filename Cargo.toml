@@ -10,11 +10,11 @@ resolver = "2"
 [workspace.dependencies]
 chrono = { version = "0.4.38", default-features = false }
 defmt = "0.3"
-embassy-executor = { version = "0.6", features = ["task-arena-size-8192", "executor-thread", "integrated-timers"] }
+embassy-executor = { version = "0.7", features = ["task-arena-size-8192", "executor-thread"] }
 embassy-futures = "0.1.1"
-embassy-nrf = { version = "0.2", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time", "nfc-pins-as-gpio"] }
+embassy-nrf = { version = "0.3", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "time", "nfc-pins-as-gpio"] }
 embassy-sync = "0.6.1"
-embassy-time = { version = "0.3" }
+embassy-time = { version = "0.4" }
 femtopb = "0.5.0"
 heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebca23" }
 log = "0.4"
