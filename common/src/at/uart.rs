@@ -303,7 +303,7 @@ mod test_at {
         static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL);
-        let handler = |response: &CommandResponse| match response.command() {
+        let handler = |response: CommandResponse| match response.command() {
             "URC" => {
                 URC_CHANNEL.try_send(response.clone()).unwrap();
                 true
