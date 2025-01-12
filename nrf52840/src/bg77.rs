@@ -87,7 +87,7 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         }
     }
 
-    pub fn urc_handler(response: &CommandResponse) -> bool {
+    pub fn urc_handler(response: CommandResponse) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
                 MQTT_CONNECT_SIGNAL.signal((true, Instant::now()));
@@ -98,7 +98,7 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         }
     }
 
-    fn qmtpub_handler(response: &CommandResponse) -> bool {
+    fn qmtpub_handler(response: CommandResponse) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {

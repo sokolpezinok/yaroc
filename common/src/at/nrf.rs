@@ -20,13 +20,13 @@ impl Tx for UarteTx<'static, UARTE1> {
 #[embassy_executor::task]
 async fn reader(
     rx: UarteRxWithIdle<'static, UARTE1, TIMER0>,
-    urc_handler: fn(&CommandResponse) -> bool,
+    urc_handler: fn(CommandResponse) -> bool,
 ) {
     AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
 }
 
 impl RxWithIdle for UarteRxWithIdle<'static, UARTE1, TIMER0> {
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool) {
         spawner.must_spawn(reader(self, urc_handler));
     }
 

@@ -31,7 +31,7 @@ impl AtRxBroker {
     /// `text`: the text to be parsed.
     /// `urc_handler`: returns true if the command response is a URC and has been handled by the
     /// handler.
-    async fn parse_lines(&self, text: &str, urc_handler: fn(&CommandResponse) -> bool) {
+    async fn parse_lines(&self, text: &str, urc_handler: fn(CommandResponse) -> bool) {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
@@ -50,7 +50,7 @@ impl AtRxBroker {
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
-                if urc_handler(command_response) {
+                if urc_handler(command_response.clone()) {
                     #[cfg(feature = "defmt")]
                     info!("Got URC {}", line);
                     continue;
@@ -77,7 +77,7 @@ impl AtRxBroker {
     /// Used mainly to plug into a `embassy_executor::task`.
     pub async fn broker_loop(
         mut rx: impl RxWithIdle,
-        urc_handler: fn(&CommandResponse) -> bool,
+        urc_handler: fn(CommandResponse) -> bool,
         main_rx_channel: &'static MainRxChannelType,
     ) {
         const AT_BUF_SIZE: usize = 300;
@@ -102,7 +102,7 @@ impl AtRxBroker {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_handler`.
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool);
+    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool);
 
     /// Read from UART until it's idle. Return the number of read bytes.
     fn read_until_idle(
@@ -137,12 +137,12 @@ impl FakeRxWithIdle {
 }
 
 #[embassy_executor::task]
-async fn reader(rx: FakeRxWithIdle, urc_handler: fn(&CommandResponse) -> bool) {
+async fn reader(rx: FakeRxWithIdle, urc_handler: fn(CommandResponse) -> bool) {
     AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(&CommandResponse) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool) {
         spawner.must_spawn(reader(self, urc_handler))
     }
 
@@ -193,7 +193,7 @@ impl<T: Tx> AtUart<T> {
     pub fn new(
         rx: impl RxWithIdle,
         tx: T,
-        urc_handler: fn(&CommandResponse) -> bool,
+        urc_handler: fn(CommandResponse) -> bool,
         spawner: &Spawner,
     ) -> Self {
         rx.spawn(spawner, urc_handler);
