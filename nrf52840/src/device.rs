@@ -2,7 +2,7 @@ use crate::bg77::{MqttConfig, BG77};
 use crate::si_uart::SiUart;
 use crate::status::NrfTemp;
 use embassy_executor::Spawner;
-use embassy_nrf::gpio::{Level, Output, OutputDrive};
+use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
@@ -24,11 +24,13 @@ pub struct Device {
     pub bg77: BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>,
     pub si_uart: SiUart,
     pub saadc: Saadc<'static, 1>,
+    pub io2: Input<'static>, // TODO: use for software serial
 }
 
 impl Device {
     pub fn new(spawner: Spawner, mqtt_config: MqttConfig) -> Self {
         let mut p = embassy_nrf::init(Default::default());
+        let io2 = Input::new(p.P1_02, Pull::Up);
         let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_19, p.P0_20, Default::default());
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (_tx0, rx0) = uart0.split();
@@ -51,6 +53,7 @@ impl Device {
             bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
             si_uart: SiUart::new(rx0),
             saadc,
+            io2,
         }
     }
 }
