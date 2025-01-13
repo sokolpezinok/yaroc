@@ -1,6 +1,7 @@
 use crate::bg77::{MqttConfig, BG77};
 use crate::si_uart::{SiUart, SoftwareSerial};
 use crate::status::NrfTemp;
+use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
@@ -29,6 +30,11 @@ pub struct Device {
 
 impl Device {
     pub fn new(spawner: Spawner, mqtt_config: MqttConfig) -> Self {
+        let mut cortex_peripherals = CortexMPeripherals::take().unwrap();
+        cortex_peripherals.DCB.enable_trace();
+        cortex_peripherals.DWT.enable_cycle_counter();
+        cortex_peripherals.DWT.set_cycle_count(0);
+
         let mut p = embassy_nrf::init(Default::default());
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::BAUD38400;
@@ -37,8 +43,8 @@ impl Device {
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
 
-        let _io2 = Input::new(p.P1_02, Pull::Up);
-        let io3 = Input::new(p.P0_21, Pull::Up);
+        let io2 = Input::new(p.P1_02, Pull::Up);
+        let _io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
 
@@ -56,7 +62,7 @@ impl Device {
             _green_led: green_led,
             bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
             si_uart: SiUart::new(rx0),
-            software_serial: SoftwareSerial::new(io3),
+            software_serial: SoftwareSerial::new(io2),
             saadc,
         }
     }

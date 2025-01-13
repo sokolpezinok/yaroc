@@ -8,7 +8,7 @@ use yaroc_nrf52840::{
     self as _, // global logger + panicking-behavior + memory layout
     bg77::{bg77_event_handler, bg77_main_loop, BG77MutexType, MqttConfig},
     device::Device,
-    si_uart::{si_uart_reader, SiUartChannelType},
+    si_uart::{si_uart_reader, software_serial_loop, SiUartChannelType},
 };
 
 static BG77_MUTEX: BG77MutexType = Mutex::new(None);
@@ -20,11 +20,17 @@ async fn main(spawner: Spawner) {
     let device = Device::new(spawner, mqtt_config);
     info!("Device initialized!");
 
-    let Device { bg77, si_uart, .. } = device;
+    let Device {
+        bg77,
+        si_uart,
+        software_serial,
+        ..
+    } = device;
     {
         *(BG77_MUTEX.lock().await) = Some(bg77);
     }
 
+    spawner.must_spawn(software_serial_loop(software_serial));
     spawner.must_spawn(bg77_main_loop(&BG77_MUTEX));
     spawner.must_spawn(bg77_event_handler(&BG77_MUTEX, &SI_UART_CHANNEL));
     spawner.must_spawn(si_uart_reader(si_uart, &SI_UART_CHANNEL));

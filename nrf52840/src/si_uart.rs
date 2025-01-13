@@ -3,8 +3,8 @@ use chrono::NaiveDate;
 use defmt::info;
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::Channel;
-use embassy_time::Instant;
 use heapless::format;
+use nrf52840_hal::pac::DWT;
 use yaroc_common::{punch::SiPunch, RawMutex};
 
 use crate::error::Error;
@@ -22,23 +22,47 @@ impl SoftwareSerial {
         Self { io }
     }
 
+    // TODO: this only works if it's the only task and there are no interrupts! Needs to be
+    // executed using the highest priority.
     async fn read(&mut self, buffer: &mut [u8]) {
-        // TODO: this only works if it's the only task and there are no interrupts! Needs to be
-        // executed using the highest priority.
+        // CPU frequency: 32768 MHz, baud rate 38400, the number of cycles per bit should be
+        // 32768000 / 38400 = 853. But it's a different number, almost twice as high.
+        const CYCLES_PER_BIT: u32 = 1664;
+
+        buffer.fill(0);
         for byte in buffer.iter_mut() {
             self.io.wait_for_low().await;
-            let time = Instant::now();
+            let start_cycles = DWT::cycle_count();
             for i in 0..8 {
-                cortex_m::asm::delay(1000);
+                let discrepancy =
+                    start_cycles + 200 + (i + 1) * CYCLES_PER_BIT - DWT::cycle_count();
+                if discrepancy < CYCLES_PER_BIT * 2 {
+                    // The delay function executes actually 50% more cycles, but this is fine, as
+                    // we go by discrepancy.
+                    cortex_m::asm::delay(discrepancy * 2 / 3);
+                }
                 if self.io.is_high() {
                     *byte |= 1 << i;
                 }
             }
-            let t1 = time.elapsed();
             self.io.wait_for_high().await;
-            info!("Val={}, {}, elapsed={}", byte, t1, time.elapsed());
         }
-        info!("Got {} bytes: {}", buffer.len(), buffer);
+    }
+}
+
+#[embassy_executor::task]
+pub async fn software_serial_loop(mut software_serial: SoftwareSerial) {
+    let mut buffer = [0u8; 20];
+    loop {
+        software_serial.read(&mut buffer).await;
+        let date = NaiveDate::from_ymd_opt(2025, 1, 17).unwrap();
+        let si_punch = SiPunch::from_raw(buffer, date);
+        info!(
+            "{} punched {} at {}",
+            si_punch.card,
+            si_punch.code,
+            format!(30; "{}", si_punch.time).unwrap().as_str(),
+        );
     }
 }
 
