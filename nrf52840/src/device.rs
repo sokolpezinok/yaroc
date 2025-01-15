@@ -30,7 +30,9 @@ pub struct Device {
 impl Device {
     pub fn new(spawner: Spawner, mqtt_config: MqttConfig) -> Self {
         let mut p = embassy_nrf::init(Default::default());
-        let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_19, p.P0_20, Default::default());
+        let mut config = uarte::Config::default();
+        config.baudrate = uarte::Baudrate::BAUD38400;
+        let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_19, p.P0_20, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);

@@ -73,7 +73,7 @@ pub async fn si_uart_reader(
     let si_uart = si_uart.as_mut().unwrap();
     loop {
         // TODO: get current date
-        let date = NaiveDate::from_ymd_opt(2024, 12, 9).unwrap();
+        let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
         let si_punch = si_uart.read(date).await;
         si_uart_channel.send(si_punch).await;
     }
