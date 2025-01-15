@@ -82,23 +82,18 @@ impl AtRxBroker {
     /// are both accepted).
     ///
     /// Used mainly to plug into a `embassy_executor::task`.
-    pub async fn broker_loop(
-        mut rx: impl RxWithIdle,
-        urc_handler: fn(CommandResponse) -> bool,
-        main_rx_channel: &'static MainRxChannelType,
-    ) {
+    pub async fn broker_loop(&self, mut rx: impl RxWithIdle) {
         const AT_BUF_SIZE: usize = 300;
         let mut buf = [0; AT_BUF_SIZE];
-        let at_broker = AtRxBroker::new(main_rx_channel, urc_handler);
         loop {
             let len = rx.read_until_idle(&mut buf).await;
             match len {
-                Err(err) => main_rx_channel.send(Err(err)).await,
+                Err(err) => self.main_channel.send(Err(err)).await,
                 Ok(len) => {
                     let text = core::str::from_utf8(&buf[..len]);
                     match text {
-                        Err(_) => main_rx_channel.send(Err(Error::StringEncodingError)).await,
-                        Ok(text) => at_broker.parse_lines(text).await,
+                        Err(_) => self.main_channel.send(Err(Error::StringEncodingError)).await,
+                        Ok(text) => self.parse_lines(text).await,
                     }
                 }
             }
@@ -144,13 +139,14 @@ impl FakeRxWithIdle {
 }
 
 #[embassy_executor::task]
-async fn reader(rx: FakeRxWithIdle, urc_handler: fn(CommandResponse) -> bool) {
-    AtRxBroker::broker_loop(rx, urc_handler, &MAIN_RX_CHANNEL).await;
+async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
+    at_broker.broker_loop(rx).await;
 }
 
 impl RxWithIdle for FakeRxWithIdle {
     fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool) {
-        spawner.must_spawn(reader(self, urc_handler))
+        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
+        spawner.must_spawn(reader(self, at_broker));
     }
 
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
