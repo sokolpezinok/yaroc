@@ -1,13 +1,14 @@
 use crate::{
     bg77_hw::{ModemHw, ModemPin},
     error::Error,
+    si_uart::SiUartChannelType,
     status::{NrfTemp, Temp},
 };
 use chrono::{DateTime, FixedOffset};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_futures::select::{select, select4, Either, Either4};
 use embassy_nrf::{gpio::Output, peripherals::UARTE1, uarte::UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
@@ -19,6 +20,7 @@ use yaroc_common::{
         response::CommandResponse,
         uart::{AtUart, RxWithIdle, Tx},
     },
+    punch::SiPunch,
     RawMutex,
 };
 
@@ -257,21 +259,26 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.send_message_impl(&buf[..len]).await;
+        let res = self.send_message_impl(&buf[..len], 0).await;
         if res.is_err() {
             MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
         }
         res
     }
-    async fn send_message_impl(&mut self, msg: &[u8]) -> Result<(), Error> {
+
+    async fn send_message_impl(&mut self, msg: &[u8], qos: u8) -> Result<(), Error> {
+        let msg_id = if qos == 0 { 0 } else { self.msg_id + 1 };
+        if qos != 1 {
+            self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
+        }
+
         let cmd = format!(100;
-            "+QMTPUB={},{},1,0,\"yar/cee423506cac/status\",{}", MQTT_CLIENT_ID, self.msg_id + 1, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/status\",{}", MQTT_CLIENT_ID, msg_id, qos, msg.len(),
         )?;
         let idx = usize::from(self.msg_id);
         MQTT_URCS[idx].reset();
         self.simple_call_at(&cmd, None).await?;
         self.call(msg).await?;
-        self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         loop {
             let (result, retries) = MQTT_URCS[idx]
                 .wait()
@@ -299,6 +306,10 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home = self.mini_call_home().await.ok_or(Error::ModemError)?;
         self.send_message::<250>(mini_call_home.to_proto()).await
+    }
+
+    pub async fn send_punch(&mut self, punch: SiPunch) -> crate::Result<()> {
+        self.send_message_impl(&punch.raw, 1).await
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {
@@ -331,24 +342,28 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77MutexType) {
 }
 
 #[embassy_executor::task]
-pub async fn bg77_event_handler(bg77_mutex: &'static BG77MutexType) {
+pub async fn bg77_event_handler(
+    bg77_mutex: &'static BG77MutexType,
+    si_uart_channel: &'static SiUartChannelType,
+) {
     let mut last_reconnect: Option<Instant> = None;
     loop {
-        let signal = select3(
+        let signal = select4(
             MCH_SIGNAL.wait(),
             MQTT_CONNECT_SIGNAL.wait(),
             GET_TIME_SIGNAL.wait(),
+            si_uart_channel.receive(),
         )
         .await;
         {
             let mut bg77_unlocked = bg77_mutex.lock().await;
             let bg77 = bg77_unlocked.as_mut().unwrap();
             match signal {
-                Either3::First(_) => match bg77.send_mini_call_home().await {
+                Either4::First(_) => match bg77.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
-                Either3::Second((force, _)) => {
+                Either4::Second((force, _)) => {
                     if !force
                         && last_reconnect.map(|t| t + Duration::from_secs(60) > Instant::now())
                             == Some(true)
@@ -361,7 +376,7 @@ pub async fn bg77_event_handler(bg77_mutex: &'static BG77MutexType) {
                     }
                     last_reconnect = Some(Instant::now());
                 }
-                Either3::Third(_) => {
+                Either4::Third(_) => {
                     let time = bg77.current_time(false).await;
                     match time {
                         None => warn!("Cannot get modem time"),
@@ -370,6 +385,19 @@ pub async fn bg77_event_handler(bg77_mutex: &'static BG77MutexType) {
                         }
                     }
                 }
+                Either4::Fourth(punch) => match punch {
+                    Ok(punch) => match bg77.send_punch(punch).await {
+                        Ok(()) => {
+                            info!("Sent punch");
+                        }
+                        Err(err) => {
+                            error!("Error while sending punch: {}", err);
+                        }
+                    },
+                    Err(err) => {
+                        error!("Wrong punch: {}", err);
+                    }
+                },
             }
         }
     }

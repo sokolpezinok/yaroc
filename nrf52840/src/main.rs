@@ -26,6 +26,6 @@ async fn main(spawner: Spawner) {
     }
 
     spawner.must_spawn(bg77_main_loop(&BG77_MUTEX));
-    spawner.must_spawn(bg77_event_handler(&BG77_MUTEX));
+    spawner.must_spawn(bg77_event_handler(&BG77_MUTEX, &SI_UART_CHANNEL));
     spawner.must_spawn(si_uart_reader(si_uart, &SI_UART_CHANNEL));
 }
