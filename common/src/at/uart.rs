@@ -13,20 +13,18 @@ use log::debug;
 use crate::{error::Error, RawMutex};
 
 pub type MainRxChannelType = Channel<RawMutex, Result<FromModem, Error>, 5>;
+pub type UrcHandlerType = fn(&CommandResponse) -> bool;
 pub static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
 
 /// A broker of AT replies (listening to UART RX) and routing each reply either to the main channel
 /// or channel dedicated to URCs.
 pub struct AtRxBroker {
     main_channel: &'static MainRxChannelType,
-    urc_handler: fn(CommandResponse) -> bool,
+    urc_handler: UrcHandlerType,
 }
 
 impl AtRxBroker {
-    pub fn new(
-        main_channel: &'static MainRxChannelType,
-        urc_handler: fn(CommandResponse) -> bool,
-    ) -> Self {
+    pub fn new(main_channel: &'static MainRxChannelType, urc_handler: UrcHandlerType) -> Self {
         Self {
             main_channel,
             urc_handler,
@@ -57,7 +55,7 @@ impl AtRxBroker {
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
-                if (self.urc_handler)(command_response.clone()) {
+                if (self.urc_handler)(command_response) {
                     #[cfg(feature = "defmt")]
                     info!("Got URC {}", line);
                     continue;
@@ -104,7 +102,7 @@ impl AtRxBroker {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_handler`.
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool);
+    fn spawn(self, spawner: &Spawner, urc_handler: UrcHandlerType);
 
     /// Read from UART until it's idle. Return the number of read bytes.
     fn read_until_idle(
@@ -144,7 +142,7 @@ async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_handler: UrcHandlerType) {
         let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
         spawner.must_spawn(reader(self, at_broker));
     }
@@ -196,7 +194,7 @@ impl<T: Tx> AtUart<T> {
     pub fn new(
         rx: impl RxWithIdle,
         tx: T,
-        urc_handler: fn(CommandResponse) -> bool,
+        urc_handler: fn(&CommandResponse) -> bool,
         spawner: &Spawner,
     ) -> Self {
         rx.spawn(spawner, urc_handler);
@@ -305,7 +303,7 @@ mod test_at {
     fn test_at_broker() -> crate::Result<()> {
         static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
-        let handler = |response: CommandResponse| match response.command() {
+        let handler = |response: &CommandResponse| match response.command() {
             "URC" => {
                 URC_CHANNEL.try_send(response.clone()).unwrap();
                 true

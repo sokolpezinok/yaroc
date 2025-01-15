@@ -7,7 +7,7 @@ use embassy_nrf::{
 
 use super::{
     response::CommandResponse,
-    uart::{AtRxBroker, RxWithIdle, Tx, MAIN_RX_CHANNEL},
+    uart::{AtRxBroker, RxWithIdle, Tx, UrcHandlerType, MAIN_RX_CHANNEL},
 };
 
 impl Tx for UarteTx<'static, UARTE1> {
@@ -23,7 +23,7 @@ async fn reader(rx: UarteRxWithIdle<'static, UARTE1, TIMER0>, at_broker: AtRxBro
 }
 
 impl RxWithIdle for UarteRxWithIdle<'static, UARTE1, TIMER0> {
-    fn spawn(self, spawner: &Spawner, urc_handler: fn(CommandResponse) -> bool) {
+    fn spawn(self, spawner: &Spawner, urc_handler: UrcHandlerType) {
         let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
         spawner.must_spawn(reader(self, at_broker));
     }

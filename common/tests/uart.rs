@@ -32,7 +32,7 @@ async fn main(spawner: Spawner) {
         &TX_CHANNEL,
     );
     let tx = FakeTx::new(&TX_CHANNEL);
-    let handler = |_: CommandResponse| false;
+    let handler = |_: &CommandResponse| false;
     let mut at_uart = AtUart::new(rx, tx, handler, &spawner);
 
     let response = at_uart.call_at("I", Duration::from_millis(10), None).await.unwrap();
