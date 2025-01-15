@@ -2,13 +2,11 @@
 use chrono::NaiveDate;
 use defmt::info;
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
-use embassy_sync::{channel::Channel, mutex::Mutex};
+use embassy_sync::channel::Channel;
 use embassy_time::Instant;
 use yaroc_common::{punch::SiPunch, RawMutex};
 
 use crate::error::Error;
-
-pub type SiUartMutexType = Mutex<RawMutex, Option<SiUart>>;
 
 const LEN: usize = 20;
 pub type SiUartChannelType = Channel<RawMutex, Result<SiPunch, Error>, 5>;
@@ -65,12 +63,7 @@ impl SiUart {
 }
 
 #[embassy_executor::task]
-pub async fn si_uart_reader(
-    si_uart_mutex: &'static SiUartMutexType,
-    si_uart_channel: &'static SiUartChannelType,
-) {
-    let mut si_uart = si_uart_mutex.lock().await;
-    let si_uart = si_uart.as_mut().unwrap();
+pub async fn si_uart_reader(mut si_uart: SiUart, si_uart_channel: &'static SiUartChannelType) {
     loop {
         // TODO: get current date
         let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
