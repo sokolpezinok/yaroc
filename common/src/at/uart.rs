@@ -19,11 +19,18 @@ pub static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
 /// or channel dedicated to URCs.
 pub struct AtRxBroker {
     main_channel: &'static MainRxChannelType,
+    urc_handler: fn(CommandResponse) -> bool,
 }
 
 impl AtRxBroker {
-    pub fn new(main_channel: &'static MainRxChannelType) -> Self {
-        Self { main_channel }
+    pub fn new(
+        main_channel: &'static MainRxChannelType,
+        urc_handler: fn(CommandResponse) -> bool,
+    ) -> Self {
+        Self {
+            main_channel,
+            urc_handler,
+        }
     }
 
     /// Parse lines out of a given text and forward each line to the appropriate channel.
@@ -31,7 +38,7 @@ impl AtRxBroker {
     /// `text`: the text to be parsed.
     /// `urc_handler`: returns true if the command response is a URC and has been handled by the
     /// handler.
-    async fn parse_lines(&self, text: &str, urc_handler: fn(CommandResponse) -> bool) {
+    async fn parse_lines(&self, text: &str) {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
@@ -50,7 +57,7 @@ impl AtRxBroker {
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
-                if urc_handler(command_response.clone()) {
+                if (self.urc_handler)(command_response.clone()) {
                     #[cfg(feature = "defmt")]
                     info!("Got URC {}", line);
                     continue;
@@ -82,7 +89,7 @@ impl AtRxBroker {
     ) {
         const AT_BUF_SIZE: usize = 300;
         let mut buf = [0; AT_BUF_SIZE];
-        let at_broker = AtRxBroker::new(main_rx_channel);
+        let at_broker = AtRxBroker::new(main_rx_channel, urc_handler);
         loop {
             let len = rx.read_until_idle(&mut buf).await;
             match len {
@@ -91,7 +98,7 @@ impl AtRxBroker {
                     let text = core::str::from_utf8(&buf[..len]);
                     match text {
                         Err(_) => main_rx_channel.send(Err(Error::StringEncodingError)).await,
-                        Ok(text) => at_broker.parse_lines(text, urc_handler).await,
+                        Ok(text) => at_broker.parse_lines(text).await,
                     }
                 }
             }
@@ -302,7 +309,6 @@ mod test_at {
     fn test_at_broker() -> crate::Result<()> {
         static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
-        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL);
         let handler = |response: CommandResponse| match response.command() {
             "URC" => {
                 URC_CHANNEL.try_send(response.clone()).unwrap();
@@ -310,8 +316,9 @@ mod test_at {
             }
             _ => false,
         };
+        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handler);
 
-        block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR", handler));
+        block_on(broker.parse_lines("OK\r\n+URC: 1,\"string\"\nERROR"));
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
         let urc = URC_CHANNEL.try_receive().unwrap();
         assert_eq!(urc.command(), "URC");
@@ -319,13 +326,13 @@ mod test_at {
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
-        block_on(broker.parse_lines(long, handler));
+        block_on(broker.parse_lines(long));
         assert_eq!(
             MAIN_RX_CHANNEL.try_receive().unwrap(),
             Err(Error::BufferTooSmallError)
         );
 
-        block_on(broker.parse_lines("+NONURC: 1\n", handler));
+        block_on(broker.parse_lines("+NONURC: 1\n"));
         assert_eq!(
             MAIN_RX_CHANNEL.try_receive().unwrap()?,
             FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
