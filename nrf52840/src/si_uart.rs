@@ -4,6 +4,7 @@ use defmt::info;
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
+use heapless::format;
 use yaroc_common::{punch::SiPunch, RawMutex};
 
 use crate::error::Error;
@@ -66,9 +67,16 @@ impl SiUart {
 pub async fn si_uart_reader(mut si_uart: SiUart, si_uart_channel: &'static SiUartChannelType) {
     loop {
         // TODO: get current date
-        let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-        let si_punch = si_uart.read(date).await.unwrap();
-        info!("{} punched {} at ...", si_punch.card, si_punch.code);
-        si_uart_channel.send(Ok(si_punch)).await;
+        let date = NaiveDate::from_ymd_opt(2025, 1, 16).unwrap();
+        let si_punch = si_uart.read(date).await;
+        if let Ok(punch) = si_punch.as_ref() {
+            info!(
+                "{} punched {} at {}",
+                punch.card,
+                punch.code,
+                format!(30; "{}", punch.time).unwrap().as_str(),
+            );
+        }
+        si_uart_channel.send(si_punch).await;
     }
 }
