@@ -67,7 +67,8 @@ pub async fn si_uart_reader(mut si_uart: SiUart, si_uart_channel: &'static SiUar
     loop {
         // TODO: get current date
         let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-        let si_punch = si_uart.read(date).await;
-        si_uart_channel.send(si_punch).await;
+        let si_punch = si_uart.read(date).await.unwrap();
+        info!("{} punched {} at ...", si_punch.card, si_punch.code);
+        si_uart_channel.send(Ok(si_punch)).await;
     }
 }

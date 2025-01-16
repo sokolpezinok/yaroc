@@ -13,13 +13,14 @@ use embassy_nrf::{gpio::Output, peripherals::UARTE1, uarte::UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
-use femtopb::Message;
+use femtopb::{repeated, Message};
 use heapless::{format, String};
 use yaroc_common::{
     at::{
         response::CommandResponse,
         uart::{AtUart, RxWithIdle, Tx},
     },
+    proto::{Punch, Punches},
     punch::SiPunch,
     RawMutex,
 };
@@ -110,15 +111,14 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         };
 
         // TODO: get client ID
-        if values[1] > 0 && values[0] == 0 {
-            let msg_id = values[1];
-            let idx = usize::from(msg_id) - 1;
+        if values[0] == 0 {
+            let idx = usize::from(values[1]);
             if idx < MQTT_URCS.len() {
                 MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
             }
             true
         } else {
-            values[0] == 0
+            false
         }
     }
 
@@ -260,11 +260,12 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         &mut self,
         topic: &str,
         msg: impl Message<'_>,
+        qos: u8,
     ) -> Result<(), Error> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.send_message_impl(topic, &buf[..len], 0).await;
+        let res = self.send_message_impl(topic, &buf[..len], qos).await;
         if res.is_err() {
             MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
         }
@@ -311,11 +312,19 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home = self.mini_call_home().await.ok_or(Error::ModemError)?;
-        self.send_message::<250>("status", mini_call_home.to_proto()).await
+        self.send_message::<250>("status", mini_call_home.to_proto(), 0).await
     }
 
     pub async fn send_punch(&mut self, punch: SiPunch) -> crate::Result<()> {
-        self.send_message_impl("p", &punch.raw, 1).await
+        let punch = [Punch {
+            raw: &punch.raw,
+            ..Default::default()
+        }];
+        let punches = Punches {
+            punches: repeated::Repeated::from_slice(&punch),
+            ..Default::default()
+        };
+        self.send_message::<40>("p", punches, 1).await
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {
