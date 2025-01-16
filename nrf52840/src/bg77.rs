@@ -32,7 +32,8 @@ const MQTT_CLIENT_ID: u8 = 0;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(500);
 static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
-static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES] = [
+static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES + 1] = [
+    Signal::new(),
     Signal::new(),
     Signal::new(),
     Signal::new(),
@@ -117,7 +118,7 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
             }
             true
         } else {
-            false
+            values[0] == 0
         }
     }
 
@@ -255,28 +256,32 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
         Ok(())
     }
 
-    async fn send_message<const N: usize>(&mut self, msg: impl Message<'_>) -> Result<(), Error> {
+    async fn send_message<const N: usize>(
+        &mut self,
+        topic: &str,
+        msg: impl Message<'_>,
+    ) -> Result<(), Error> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.send_message_impl(&buf[..len], 0).await;
+        let res = self.send_message_impl(topic, &buf[..len], 0).await;
         if res.is_err() {
             MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
         }
         res
     }
 
-    async fn send_message_impl(&mut self, msg: &[u8], qos: u8) -> Result<(), Error> {
+    async fn send_message_impl(&mut self, topic: &str, msg: &[u8], qos: u8) -> Result<(), Error> {
         let msg_id = if qos == 0 { 0 } else { self.msg_id + 1 };
-        if qos != 1 {
+        let idx = usize::from(msg_id);
+        MQTT_URCS[idx].reset();
+        if qos == 1 {
             self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
         }
 
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/status\",{}", MQTT_CLIENT_ID, msg_id, qos, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos, topic, msg.len(),
         )?;
-        let idx = usize::from(self.msg_id);
-        MQTT_URCS[idx].reset();
         self.simple_call_at(&cmd, None).await?;
         self.call(msg).await?;
         loop {
@@ -285,6 +290,7 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
                 .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
                 .await
                 .map_err(|_| Error::TimeoutError)?;
+            // Retries should go into an async loop/queue
             match result {
                 0 => break,
                 1 => {
@@ -305,11 +311,11 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home = self.mini_call_home().await.ok_or(Error::ModemError)?;
-        self.send_message::<250>(mini_call_home.to_proto()).await
+        self.send_message::<250>("status", mini_call_home.to_proto()).await
     }
 
     pub async fn send_punch(&mut self, punch: SiPunch) -> crate::Result<()> {
-        self.send_message_impl(&punch.raw, 1).await
+        self.send_message_impl("p", &punch.raw, 1).await
     }
 
     pub async fn setup(&mut self) -> crate::Result<()> {
