@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 use chrono::NaiveDate;
-use defmt::info;
+use embassy_futures::select::{select, Either};
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::Channel;
-use heapless::format;
 use nrf52840_hal::pac::DWT;
 use yaroc_common::{punch::SiPunch, RawMutex};
 
@@ -24,12 +23,12 @@ impl SoftwareSerial {
 
     // TODO: this only works if it's the only task and there are no interrupts! Needs to be
     // executed using the highest priority.
-    async fn read(&mut self, buffer: &mut [u8]) {
+    async fn read(&mut self) -> [u8; LEN] {
         // CPU frequency: 32768 MHz, baud rate 38400, the number of cycles per bit should be
         // 32768000 / 38400 = 853. But it's a different number, almost twice as high.
         const CYCLES_PER_BIT: u32 = 1664;
 
-        buffer.fill(0);
+        let mut buffer = [0u8; LEN];
         for byte in buffer.iter_mut() {
             self.io.wait_for_low().await;
             let start_cycles = DWT::cycle_count();
@@ -47,22 +46,7 @@ impl SoftwareSerial {
             }
             self.io.wait_for_high().await;
         }
-    }
-}
-
-#[embassy_executor::task]
-pub async fn software_serial_loop(mut software_serial: SoftwareSerial) {
-    let mut buffer = [0u8; 20];
-    loop {
-        software_serial.read(&mut buffer).await;
-        let date = NaiveDate::from_ymd_opt(2025, 1, 17).unwrap();
-        let si_punch = SiPunch::from_raw(buffer, date);
-        info!(
-            "{} punched {} at {}",
-            si_punch.card,
-            si_punch.code,
-            format!(30; "{}", si_punch.time).unwrap().as_str(),
-        );
+        buffer
     }
 }
 
@@ -80,27 +64,34 @@ impl SiUart {
     /// Read 20 bytes of data and convert it into SiPunch.
     ///
     /// Return error if reading from RX or conversion is unsuccessful.
-    async fn read(&mut self, today: NaiveDate) -> crate::Result<SiPunch> {
+    async fn read(&mut self) -> crate::Result<[u8; LEN]> {
         let mut buf = [0u8; LEN];
         self.rx.read(&mut buf).await.map_err(|_| Error::UartReadError)?;
-        Ok(SiPunch::from_raw(buf, today))
+        Ok(buf)
     }
 }
 
 #[embassy_executor::task]
-pub async fn si_uart_reader(mut si_uart: SiUart, si_uart_channel: &'static SiUartChannelType) {
+pub async fn si_uart_reader(
+    mut si_uart: SiUart,
+    mut software_serial: SoftwareSerial,
+    si_uart_channel: &'static SiUartChannelType,
+) {
+    // TODO: get current date
+    let date = NaiveDate::from_ymd_opt(2025, 1, 18).unwrap();
     loop {
-        // TODO: get current date
-        let date = NaiveDate::from_ymd_opt(2025, 1, 16).unwrap();
-        let si_punch = si_uart.read(date).await;
-        if let Ok(punch) = si_punch.as_ref() {
-            info!(
-                "{} punched {} at {}",
-                punch.card,
-                punch.code,
-                format!(30; "{}", punch.time).unwrap().as_str(),
-            );
+        match select(si_uart.read(), software_serial.read()).await {
+            Either::First(res) => match res {
+                Err(err) => {
+                    si_uart_channel.send(Err(err)).await;
+                }
+                Ok(buffer) => {
+                    si_uart_channel.send(Ok(SiPunch::from_raw(buffer, date))).await;
+                }
+            },
+            Either::Second(buffer) => {
+                si_uart_channel.send(Ok(SiPunch::from_raw(buffer, date))).await;
+            }
         }
-        si_uart_channel.send(si_punch).await;
     }
 }

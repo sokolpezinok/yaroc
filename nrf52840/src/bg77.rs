@@ -401,14 +401,22 @@ pub async fn bg77_event_handler(
                     }
                 }
                 Either4::Fourth(punch) => match punch {
-                    Ok(punch) => match bg77.send_punch(punch).await {
-                        Ok(()) => {
-                            info!("Sent punch");
+                    Ok(punch) => {
+                        info!(
+                            "{} punched {} at {}",
+                            punch.card,
+                            punch.code,
+                            format!(30; "{}", punch.time).unwrap().as_str(),
+                        );
+                        match bg77.send_punch(punch).await {
+                            Ok(()) => {
+                                info!("Sent punch");
+                            }
+                            Err(err) => {
+                                error!("Error while sending punch: {}", err);
+                            }
                         }
-                        Err(err) => {
-                            error!("Error while sending punch: {}", err);
-                        }
-                    },
+                    }
                     Err(err) => {
                         error!("Wrong punch: {}", err);
                     }
