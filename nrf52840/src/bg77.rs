@@ -2,9 +2,8 @@ use crate::{
     bg77_hw::{Bg77, ModemHw},
     error::Error,
     si_uart::SiUartChannelType,
-    status::{NrfTemp, Temp},
+    status::{NrfTemp, SystemInfo, Temp},
 };
-use chrono::{DateTime, FixedOffset};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
@@ -66,9 +65,7 @@ impl Default for MqttConfig {
 
 pub struct SendPunch<T: Temp, M: ModemHw> {
     pub bg77: M,
-    // Sys info
-    pub temp: T,
-    pub boot_time: Option<DateTime<FixedOffset>>,
+    system_info: SystemInfo<T>,
     // MQTT
     config: MqttConfig,
     msg_id: u8,
@@ -80,9 +77,8 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         bg77.spawn(Self::urc_handler, spawner);
         Self {
             bg77,
-            temp,
+            system_info: SystemInfo::<T>::new(temp),
             msg_id: 0,
-            boot_time: None,
             last_successful_send: Instant::now(),
             config,
         }
@@ -316,7 +312,8 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mini_call_home = self.mini_call_home().await.ok_or(Error::ModemError)?;
+        let mini_call_home =
+            self.system_info.mini_call_home(&mut self.bg77).await.ok_or(Error::ModemError)?;
         self.send_message::<250>("status", mini_call_home.to_proto(), 0).await
     }
 
@@ -338,6 +335,10 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
 
         let _ = self.mqtt_connect().await;
         Ok(())
+    }
+
+    pub async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        self.system_info.current_time(&mut self.bg77, false).await
     }
 }
 
@@ -397,7 +398,7 @@ pub async fn send_punch_event_handler(
                     last_reconnect = Some(Instant::now());
                 }
                 Either4::Third(_) => {
-                    let time = send_punch.current_time(false).await;
+                    let time = send_punch.synchronize_time().await;
                     match time {
                         None => warn!("Cannot get modem time"),
                         Some(time) => {
