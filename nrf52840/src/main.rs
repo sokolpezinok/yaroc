@@ -6,9 +6,9 @@ use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use yaroc_nrf52840::{
     self as _,
-    bg77::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
     device::Device,
     mqtt::MqttConfig,
+    send_punch::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
     si_uart::{si_uart_reader, SiUartChannelType},
 };
 
