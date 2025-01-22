@@ -8,11 +8,7 @@ use yaroc_common::{
     status::{parse_qlts, MiniCallHome},
 };
 
-use crate::{
-    bg77::BG77,
-    bg77_hw::{ModemHw, ModemPin},
-    error::Error,
-};
+use crate::{bg77::SendPunch, bg77_hw::ModemPin, error::Error};
 
 pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
@@ -45,10 +41,13 @@ impl Temp for FakeTemp {
     }
 }
 
-impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
+impl<S: Temp, T: Tx, P: ModemPin> SendPunch<S, T, P> {
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
-        let modem_clock =
-            self.simple_call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
+        let modem_clock = self
+            .bg77
+            .simple_call_at("+QLTS=2", None)
+            .await?
+            .parse1::<String<25>>([0], None)?;
         parse_qlts(&modem_clock).map_err(yaroc_common::error::Error::into)
     }
 
@@ -73,12 +72,12 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
 
     async fn battery_state(&mut self) -> Result<(u16, u8), Error> {
         let (bcs, volt) =
-            self.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
+            self.bg77.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
         Ok((volt, bcs))
     }
 
     async fn signal_info(&mut self) -> Result<(i8, i16, u8, i8), Error> {
-        let response = self.simple_call_at("+QCSQ", None).await?;
+        let response = self.bg77.simple_call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
@@ -86,7 +85,8 @@ impl<S: Temp, T: Tx, P: ModemPin> BG77<S, T, P> {
     }
 
     async fn cellid(&mut self) -> Result<u32, Error> {
-        self.simple_call_at("+CEREG?", None)
+        self.bg77
+            .simple_call_at("+CEREG?", None)
             .await?
             // TODO: support roaming, that's answer 5
             .parse2::<u32, String<8>>([1, 3], Some(1))

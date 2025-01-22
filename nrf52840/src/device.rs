@@ -1,4 +1,4 @@
-use crate::bg77::{MqttConfig, BG77};
+use crate::bg77::{MqttConfig, SendPunch};
 use crate::si_uart::{SiUart, SoftwareSerial};
 use crate::status::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
@@ -22,7 +22,7 @@ bind_interrupts!(struct Irqs {
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
-    pub bg77: BG77<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>,
+    pub send_punch: SendPunch<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>,
     pub si_uart: SiUart,
     pub saadc: Saadc<'static, 1>,
     pub software_serial: SoftwareSerial,
@@ -60,7 +60,7 @@ impl Device {
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            bg77: BG77::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
+            send_punch: SendPunch::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
             si_uart: SiUart::new(rx0),
             software_serial: SoftwareSerial::new(io2),
             saadc,

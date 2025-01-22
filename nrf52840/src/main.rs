@@ -21,13 +21,13 @@ async fn main(spawner: Spawner) {
     info!("Device initialized!");
 
     let Device {
-        bg77,
+        send_punch,
         si_uart,
         software_serial,
         ..
     } = device;
     {
-        *(BG77_MUTEX.lock().await) = Some(bg77);
+        *(BG77_MUTEX.lock().await) = Some(send_punch);
     }
 
     spawner.must_spawn(bg77_main_loop(&BG77_MUTEX));
