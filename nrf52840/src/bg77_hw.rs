@@ -28,21 +28,19 @@ impl ModemPin for Output<'static> {
 }
 
 /// Struct for accessing Quectel BG77 modem
-pub struct Bg77<T: Tx, P: ModemPin> {
-    uart1: AtUart<T>,
+pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
+    uart1: AtUart<T, R>,
     modem_pin: P,
 }
 
-impl<T: Tx, P: ModemPin> Bg77<T, P> {
-    pub fn new(
-        rx1: impl RxWithIdle,
-        tx1: T,
-        modem_pin: P,
-        urc_handler: fn(&CommandResponse) -> bool,
-        spawner: &Spawner,
-    ) -> Self {
-        let uart1 = AtUart::new(rx1, tx1, urc_handler, spawner);
+impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
+    pub fn new(tx: T, rx: R, modem_pin: P) -> Self {
+        let uart1 = AtUart::new(tx, rx);
         Self { uart1, modem_pin }
+    }
+
+    pub fn spawn(&mut self, urc_handler: fn(&CommandResponse) -> bool, spawner: &Spawner) {
+        self.uart1.spawn_rx(urc_handler, spawner);
     }
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.

@@ -1,13 +1,12 @@
-use crate::bg77::{MqttConfig, SendPunch};
+use crate::bg77_hw::Bg77;
 use crate::si_uart::{SiUart, SoftwareSerial};
 use crate::status::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
-use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
-use embassy_nrf::peripherals::{UARTE0, UARTE1};
+use embassy_nrf::peripherals::{TIMER0, UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
-use embassy_nrf::uarte::{self, UarteTx};
+use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
 
 use {defmt_rtt as _, panic_probe as _};
@@ -22,14 +21,16 @@ bind_interrupts!(struct Irqs {
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
-    pub send_punch: SendPunch<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>,
+    pub bg77:
+        Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
+    pub temp: NrfTemp,
     pub si_uart: SiUart,
     pub saadc: Saadc<'static, 1>,
     pub software_serial: SoftwareSerial,
 }
 
 impl Device {
-    pub fn new(spawner: Spawner, mqtt_config: MqttConfig) -> Self {
+    pub fn new() -> Self {
         let mut cortex_peripherals = CortexMPeripherals::take().unwrap();
         cortex_peripherals.DCB.enable_trace();
         cortex_peripherals.DWT.enable_cycle_counter();
@@ -43,10 +44,8 @@ impl Device {
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
 
-        let io2 = Input::new(p.P1_02, Pull::Up);
-        let _io3 = Input::new(p.P0_21, Pull::Up);
-
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
+        let bg77 = Bg77::new(tx1, rx1, modem_pin);
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
@@ -57,10 +56,14 @@ impl Device {
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
+        let io2 = Input::new(p.P1_02, Pull::Up);
+        let _io3 = Input::new(p.P0_21, Pull::Up);
+
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
-            send_punch: SendPunch::new(rx1, tx1, modem_pin, temp, &spawner, mqtt_config),
+            bg77,
+            temp,
             si_uart: SiUart::new(rx0),
             software_serial: SoftwareSerial::new(io2),
             saadc,

@@ -9,7 +9,11 @@ use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, select4, Either, Either4};
-use embassy_nrf::{gpio::Output, peripherals::UARTE1, uarte::UarteTx};
+use embassy_nrf::{
+    gpio::Output,
+    peripherals::{TIMER0, UARTE1},
+    uarte::{UarteRxWithIdle, UarteTx},
+};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
@@ -25,7 +29,12 @@ use yaroc_common::{
     RawMutex,
 };
 
-pub type SendPunchType = SendPunch<NrfTemp, UarteTx<'static, UARTE1>, Output<'static>>;
+pub type SendPunchType = SendPunch<
+    NrfTemp,
+    UarteTx<'static, UARTE1>,
+    UarteRxWithIdle<'static, UARTE1, TIMER0>,
+    Output<'static>,
+>;
 pub type BG77MutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
 const MQTT_MESSAGES: usize = 5;
@@ -60,8 +69,8 @@ impl Default for MqttConfig {
     }
 }
 
-pub struct SendPunch<S: Temp, T: Tx, P: ModemPin> {
-    pub bg77: Bg77<T, P>,
+pub struct SendPunch<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> {
+    pub bg77: Bg77<T, R, P>,
     // Sys info
     pub temp: S,
     pub boot_time: Option<DateTime<FixedOffset>>,
@@ -71,16 +80,9 @@ pub struct SendPunch<S: Temp, T: Tx, P: ModemPin> {
     last_successful_send: Instant,
 }
 
-impl<S: Temp, T: Tx, P: ModemPin> SendPunch<S, T, P> {
-    pub fn new(
-        rx1: impl RxWithIdle,
-        tx1: T,
-        modem_pin: P,
-        temp: S,
-        spawner: &Spawner,
-        config: MqttConfig,
-    ) -> Self {
-        let bg77 = Bg77::new(rx1, tx1, modem_pin, Self::urc_handler, spawner);
+impl<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> SendPunch<S, T, R, P> {
+    pub fn new(mut bg77: Bg77<T, R, P>, temp: S, spawner: &Spawner, config: MqttConfig) -> Self {
+        bg77.spawn(Self::urc_handler, spawner);
         Self {
             bg77,
             temp,

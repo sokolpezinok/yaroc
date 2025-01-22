@@ -185,23 +185,25 @@ impl Tx for FakeTx {
 ///
 /// The TX part is represented by Tx trait, the RX part is represented by a channel of
 /// type `MainRxChannelType`.
-pub struct AtUart<T: Tx> {
+pub struct AtUart<T: Tx, R: RxWithIdle> {
     tx: T,
+    rx: Option<R>,
     main_rx_channel: &'static MainRxChannelType,
 }
 
-impl<T: Tx> AtUart<T> {
-    pub fn new(
-        rx: impl RxWithIdle,
-        tx: T,
-        urc_handler: fn(&CommandResponse) -> bool,
-        spawner: &Spawner,
-    ) -> Self {
-        rx.spawn(spawner, urc_handler);
+impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
+    pub fn new(tx: T, rx: R) -> Self {
         Self {
             tx,
+            rx: Some(rx),
             main_rx_channel: &MAIN_RX_CHANNEL,
         }
+    }
+
+    pub fn spawn_rx(&mut self, urc_handler: fn(&CommandResponse) -> bool, spawner: &Spawner) {
+        // Consume self.rx, then set self.rx = None
+        let rx = self.rx.take();
+        rx.unwrap().spawn(spawner, urc_handler);
     }
 
     pub async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {

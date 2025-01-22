@@ -4,7 +4,7 @@ use embassy_nrf::temp::Temp as EmbassyNrfTemp;
 use embassy_time::Instant;
 use heapless::{format, String};
 use yaroc_common::{
-    at::uart::Tx,
+    at::uart::{RxWithIdle, Tx},
     status::{parse_qlts, MiniCallHome},
 };
 
@@ -41,7 +41,7 @@ impl Temp for FakeTemp {
     }
 }
 
-impl<S: Temp, T: Tx, P: ModemPin> SendPunch<S, T, P> {
+impl<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> SendPunch<S, T, R, P> {
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = self
             .bg77
