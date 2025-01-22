@@ -147,11 +147,11 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
 }
 
 #[embassy_executor::task]
-pub async fn send_punch_main_loop(bg77_mutex: &'static SendPunchMutexType) {
+pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType) {
     {
-        let mut bg77_unlocked = bg77_mutex.lock().await;
-        let bg77 = bg77_unlocked.as_mut().unwrap();
-        if let Err(err) = bg77.setup().await {
+        let mut send_punch_unlocked = send_punch_mutex.lock().await;
+        let send_punch = send_punch_unlocked.as_mut().unwrap();
+        if let Err(err) = send_punch.setup().await {
             error!("Setup failed: {}", err);
         }
     }

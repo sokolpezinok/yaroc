@@ -12,7 +12,7 @@ use yaroc_nrf52840::{
     si_uart::{si_uart_reader, SiUartChannelType},
 };
 
-static BG77_MUTEX: SendPunchMutexType = Mutex::new(None);
+static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
 static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
@@ -30,10 +30,13 @@ async fn main(spawner: Spawner) {
     } = device;
     let send_punch = SendPunch::new(bg77, temp, &spawner, mqtt_config);
     {
-        *(BG77_MUTEX.lock().await) = Some(send_punch);
+        *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
 
-    spawner.must_spawn(send_punch_main_loop(&BG77_MUTEX));
-    spawner.must_spawn(send_punch_event_handler(&BG77_MUTEX, &SI_UART_CHANNEL));
+    spawner.must_spawn(send_punch_main_loop(&SEND_PUNCH_MUTEX));
+    spawner.must_spawn(send_punch_event_handler(
+        &SEND_PUNCH_MUTEX,
+        &SI_UART_CHANNEL,
+    ));
     spawner.must_spawn(si_uart_reader(si_uart, software_serial, &SI_UART_CHANNEL));
 }
