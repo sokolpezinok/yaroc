@@ -63,13 +63,194 @@ impl Default for MqttConfig {
     }
 }
 
-pub struct SendPunch<T: Temp, M: ModemHw> {
-    pub bg77: M,
-    system_info: SystemInfo<T>,
-    // MQTT
+struct MqttClient {
     config: MqttConfig,
     msg_id: u8,
     last_successful_send: Instant,
+}
+
+impl MqttClient {
+    pub fn new(config: MqttConfig) -> Self {
+        Self {
+            config,
+            msg_id: 0,
+            last_successful_send: Instant::now(),
+        }
+    }
+
+    async fn network_registration(&mut self, bg77: &mut impl ModemHw) -> crate::Result<()> {
+        if self.last_successful_send + ACTIVATION_TIMEOUT * 3 < Instant::now() {
+            self.last_successful_send = Instant::now();
+            let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
+            Timer::after_secs(2).await;
+            let _ = bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
+            Timer::after_secs(2).await; // TODO
+            bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        }
+
+        let (_, state) =
+            bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        if state == 0 {
+            let _ = bg77.simple_call_at("+CGDCONT=1,\"IP\",trial-nbiot.corp", None).await;
+            bg77.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn mqtt_open(&self, bg77: &mut impl ModemHw, cid: u8) -> crate::Result<()> {
+        let opened = bg77
+            .simple_call_at("+QMTOPEN?", None)
+            .await?
+            .parse2::<u8, String<40>>([0, 1], Some(cid));
+        if let Ok((MQTT_CLIENT_ID, url)) = opened {
+            if *url == self.config.url {
+                info!("TCP connection already opened to {}", url.as_str());
+                return Ok(());
+            }
+            warn!(
+                "Connected to the wrong broker {}, will disconnect",
+                url.as_str()
+            );
+            let cmd = format!(50; "+QMTCLOSE={cid}")?;
+            bg77.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
+        }
+
+        let cmd = format!(50;
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
+            self.config.packet_timeout.as_secs()
+        )?;
+        bg77.simple_call_at(&cmd, None).await?;
+        let cmd = format!(50;
+            "+QMTCFG=\"keepalive\",{cid},{}",
+            (self.config.packet_timeout * 3).as_secs()
+        )?;
+        bg77.simple_call_at(&cmd, None).await?;
+
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
+        let (_, status) = bg77
+            .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
+            .await?
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
+        if status != 0 {
+            error!(
+                "Could not open TCP connection to {}",
+                self.config.url.as_str()
+            );
+            return Err(Error::MqttError(status));
+        }
+
+        Ok(())
+    }
+
+    pub async fn mqtt_connect(&mut self, bg77: &mut impl ModemHw) -> crate::Result<()> {
+        if let Err(err) = self.network_registration(bg77).await {
+            error!("Network registration failed: {}", err);
+            return Err(err);
+        }
+        let cid = MQTT_CLIENT_ID;
+        self.mqtt_open(bg77, cid).await?;
+
+        let (_, status) = bg77
+            .simple_call_at("+QMTCONN?", None)
+            .await?
+            .parse2::<u8, u8>([0, 1], Some(cid))?;
+        const MQTT_INITIALIZING: u8 = 1;
+        const MQTT_CONNECTING: u8 = 2;
+        const MQTT_CONNECTED: u8 = 3;
+        const MQTT_DISCONNECTING: u8 = 4;
+        match status {
+            MQTT_CONNECTED => {
+                info!("Already connected to MQTT");
+                Ok(())
+            }
+            MQTT_DISCONNECTING | MQTT_CONNECTING => {
+                info!("Connecting or disconnecting from MQTT");
+                Ok(())
+            }
+            MQTT_INITIALIZING => {
+                info!("Will connect to MQTT");
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
+                let (_, res, reason) = bg77
+                    .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
+                    .await?
+                    .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
+
+                if res == 0 && reason == 0 {
+                    Ok(())
+                } else {
+                    Err(Error::MqttError(reason))
+                }
+            }
+            _ => Err(Error::ModemError),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub async fn mqtt_disconnect(&mut self, bg77: &mut impl ModemHw, cid: u8) -> Result<(), Error> {
+        let cmd = format!(50; "+QMTDISC={cid}")?;
+        let (_, result) = bg77
+            .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
+            .await?
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
+        const MQTT_DISCONNECTED: i8 = 0;
+        if result != MQTT_DISCONNECTED {
+            return Err(Error::MqttError(result));
+        }
+        let cmd = format!(50; "+QMTCLOSE={cid}")?;
+        let _ = bg77.simple_call_at(&cmd, None).await; // TODO: Why does it fail?
+        Ok(())
+    }
+
+    pub async fn send_message(
+        &mut self,
+        bg77: &mut impl ModemHw,
+        topic: &str,
+        msg: &[u8],
+        qos: u8,
+    ) -> Result<(), Error> {
+        let msg_id = if qos == 0 { 0 } else { self.msg_id + 1 };
+        let idx = usize::from(msg_id);
+        MQTT_URCS[idx].reset();
+        if qos == 1 {
+            self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
+        }
+
+        let cmd = format!(100;
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos, topic, msg.len(),
+        )?;
+        bg77.simple_call_at(&cmd, None).await?;
+        bg77.call(msg).await?;
+        loop {
+            let (result, retries) = MQTT_URCS[idx]
+                .wait()
+                .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
+                .await
+                .map_err(|_| Error::TimeoutError)?;
+            // Retries should go into an async loop/queue
+            match result {
+                0 => break,
+                1 => {
+                    warn!("Message ID {} try {} failed", idx + 1, retries);
+                }
+                2 => {
+                    return Err(Error::TimeoutError);
+                }
+                _ => {
+                    return Err(Error::ModemError);
+                }
+            }
+        }
+        debug!("Message ID {} successfully sent", idx);
+        self.last_successful_send = Instant::now();
+        Ok(())
+    }
+}
+
+pub struct SendPunch<T: Temp, M: ModemHw> {
+    pub bg77: M,
+    client: MqttClient,
+    system_info: SystemInfo<T>,
 }
 
 impl<T: Temp, M: ModemHw> SendPunch<T, M> {
@@ -77,10 +258,8 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         bg77.spawn(Self::urc_handler, spawner);
         Self {
             bg77,
+            client: MqttClient::new(config),
             system_info: SystemInfo::<T>::new(temp),
-            msg_id: 0,
-            last_successful_send: Instant::now(),
-            config,
         }
     }
 
@@ -126,137 +305,6 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         Ok(())
     }
 
-    async fn network_registration(&mut self) -> crate::Result<()> {
-        if self.last_successful_send + ACTIVATION_TIMEOUT * 3 < Instant::now() {
-            self.last_successful_send = Instant::now();
-            let _ = self.bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
-            Timer::after_secs(2).await;
-            let _ = self.bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
-            Timer::after_secs(2).await; // TODO
-            self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        }
-
-        let (_, state) = self
-            .bg77
-            .simple_call_at("+CGACT?", None)
-            .await?
-            .parse2::<u8, u8>([0, 1], Some(1))?;
-        if state == 0 {
-            let _ = self.bg77.simple_call_at("+CGDCONT=1,\"IP\",trial-nbiot.corp", None).await;
-            self.bg77.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn mqtt_open(&mut self, cid: u8) -> crate::Result<()> {
-        let opened = self
-            .bg77
-            .simple_call_at("+QMTOPEN?", None)
-            .await?
-            .parse2::<u8, String<40>>([0, 1], Some(cid));
-        if let Ok((MQTT_CLIENT_ID, url)) = opened {
-            if *url == self.config.url {
-                info!("TCP connection already opened to {}", url.as_str());
-                return Ok(());
-            }
-            warn!(
-                "Connected to the wrong broker {}, will disconnect",
-                url.as_str()
-            );
-            let cmd = format!(50; "+QMTCLOSE={cid}")?;
-            self.bg77.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
-        }
-
-        let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{cid},{},2,1",
-            self.config.packet_timeout.as_secs()
-        )?;
-        self.bg77.simple_call_at(&cmd, None).await?;
-        let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.config.packet_timeout * 3).as_secs()
-        )?;
-        self.bg77.simple_call_at(&cmd, None).await?;
-
-        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
-        let (_, status) = self
-            .bg77
-            .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
-            .await?
-            .parse2::<u8, i8>([0, 1], Some(cid))?;
-        if status != 0 {
-            error!(
-                "Could not open TCP connection to {}",
-                self.config.url.as_str()
-            );
-            return Err(Error::MqttError(status));
-        }
-
-        Ok(())
-    }
-
-    pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        if let Err(err) = self.network_registration().await {
-            error!("Network registration failed: {}", err);
-            return Err(err);
-        }
-        let cid = MQTT_CLIENT_ID;
-        self.mqtt_open(cid).await?;
-
-        let (_, status) = self
-            .bg77
-            .simple_call_at("+QMTCONN?", None)
-            .await?
-            .parse2::<u8, u8>([0, 1], Some(cid))?;
-        const MQTT_INITIALIZING: u8 = 1;
-        const MQTT_CONNECTING: u8 = 2;
-        const MQTT_CONNECTED: u8 = 3;
-        const MQTT_DISCONNECTING: u8 = 4;
-        match status {
-            MQTT_CONNECTED => {
-                info!("Already connected to MQTT");
-                Ok(())
-            }
-            MQTT_DISCONNECTING | MQTT_CONNECTING => {
-                info!("Connecting or disconnecting from MQTT");
-                Ok(())
-            }
-            MQTT_INITIALIZING => {
-                info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
-                let (_, res, reason) = self
-                    .bg77
-                    .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
-                    .await?
-                    .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
-
-                if res == 0 && reason == 0 {
-                    Ok(())
-                } else {
-                    Err(Error::MqttError(reason))
-                }
-            }
-            _ => Err(Error::ModemError),
-        }
-    }
-
-    pub async fn mqtt_disconnect(&mut self, cid: u8) -> Result<(), Error> {
-        let cmd = format!(50; "+QMTDISC={cid}")?;
-        let (_, result) = self
-            .bg77
-            .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
-            .await?
-            .parse2::<u8, i8>([0, 1], Some(cid))?;
-        const MQTT_DISCONNECTED: i8 = 0;
-        if result != MQTT_DISCONNECTED {
-            return Err(Error::MqttError(result));
-        }
-        let cmd = format!(50; "+QMTCLOSE={cid}")?;
-        let _ = self.bg77.simple_call_at(&cmd, None).await; // TODO: Why does it fail?
-        Ok(())
-    }
-
     async fn send_message<const N: usize>(
         &mut self,
         topic: &str,
@@ -266,49 +314,11 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.send_message_impl(topic, &buf[..len], qos).await;
+        let res = self.client.send_message(&mut self.bg77, topic, &buf[..len], qos).await;
         if res.is_err() {
             MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
         }
         res
-    }
-
-    async fn send_message_impl(&mut self, topic: &str, msg: &[u8], qos: u8) -> Result<(), Error> {
-        let msg_id = if qos == 0 { 0 } else { self.msg_id + 1 };
-        let idx = usize::from(msg_id);
-        MQTT_URCS[idx].reset();
-        if qos == 1 {
-            self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
-        }
-
-        let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos, topic, msg.len(),
-        )?;
-        self.bg77.simple_call_at(&cmd, None).await?;
-        self.bg77.call(msg).await?;
-        loop {
-            let (result, retries) = MQTT_URCS[idx]
-                .wait()
-                .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
-                .await
-                .map_err(|_| Error::TimeoutError)?;
-            // Retries should go into an async loop/queue
-            match result {
-                0 => break,
-                1 => {
-                    warn!("Message ID {} try {} failed", idx + 1, retries);
-                }
-                2 => {
-                    return Err(Error::TimeoutError);
-                }
-                _ => {
-                    return Err(Error::ModemError);
-                }
-            }
-        }
-        debug!("Message ID {} successfully sent", idx);
-        self.last_successful_send = Instant::now();
-        Ok(())
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
@@ -333,8 +343,12 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         let _ = self.bg77.turn_on().await;
         self.config().await?;
 
-        let _ = self.mqtt_connect().await;
+        let _ = self.client.mqtt_connect(&mut self.bg77).await;
         Ok(())
+    }
+
+    pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+        self.client.mqtt_connect(&mut self.bg77).await
     }
 
     pub async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
