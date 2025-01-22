@@ -6,6 +6,7 @@
 use chrono::{DateTime, FixedOffset};
 use yaroc_nrf52840 as _;
 use yaroc_nrf52840::bg77::{MqttConfig, SendPunch};
+use yaroc_nrf52840::bg77_hw::Bg77;
 use yaroc_nrf52840::status::FakeTemp;
 
 use embassy_executor::Spawner;
@@ -32,7 +33,8 @@ async fn mini_call_home(spawner: Spawner) {
 
     let temp = FakeTemp { t: 27.0 };
     let mqtt_config = MqttConfig::default();
-    let mut send_punch = SendPunch::new(rx, tx, modem_pin, temp, &spawner, mqtt_config);
+    let bg77 = Bg77::new(tx, rx, modem_pin);
+    let mut send_punch = SendPunch::new(bg77, temp, &spawner, mqtt_config);
 
     let mch = send_punch.mini_call_home().await.unwrap();
     assert_eq!(mch.cellid, Some(u32::from_str_radix("2B2078", 16).unwrap()));
