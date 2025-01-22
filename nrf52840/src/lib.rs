@@ -5,6 +5,7 @@ pub mod bg77;
 pub mod bg77_hw;
 pub mod device;
 pub mod error;
+pub mod mqtt;
 pub mod si_uart;
 pub mod system_info;
 
