@@ -35,7 +35,7 @@ pub type SendPunchType = SendPunch<
     UarteRxWithIdle<'static, UARTE1, TIMER0>,
     Output<'static>,
 >;
-pub type BG77MutexType = Mutex<RawMutex, Option<SendPunchType>>;
+pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
 const MQTT_MESSAGES: usize = 5;
 const MQTT_CLIENT_ID: u8 = 0;
@@ -347,7 +347,7 @@ impl<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> SendPunch<S, T, R, P> {
 }
 
 #[embassy_executor::task]
-pub async fn bg77_main_loop(bg77_mutex: &'static BG77MutexType) {
+pub async fn send_punch_main_loop(bg77_mutex: &'static SendPunchMutexType) {
     {
         let mut bg77_unlocked = bg77_mutex.lock().await;
         let bg77 = bg77_unlocked.as_mut().unwrap();
@@ -367,8 +367,8 @@ pub async fn bg77_main_loop(bg77_mutex: &'static BG77MutexType) {
 }
 
 #[embassy_executor::task]
-pub async fn bg77_event_handler(
-    bg77_mutex: &'static BG77MutexType,
+pub async fn send_punch_event_handler(
+    send_punch_mutex: &'static SendPunchMutexType,
     si_uart_channel: &'static SiUartChannelType,
 ) {
     let mut last_reconnect: Option<Instant> = None;
@@ -381,10 +381,10 @@ pub async fn bg77_event_handler(
         )
         .await;
         {
-            let mut bg77_unlocked = bg77_mutex.lock().await;
-            let bg77 = bg77_unlocked.as_mut().unwrap();
+            let mut send_punch_unlocked = send_punch_mutex.lock().await;
+            let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either4::First(_) => match bg77.send_mini_call_home().await {
+                Either4::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
@@ -396,13 +396,13 @@ pub async fn bg77_event_handler(
                         continue;
                     }
 
-                    if let Err(err) = bg77.mqtt_connect().await {
+                    if let Err(err) = send_punch.mqtt_connect().await {
                         error!("Error connecting to MQTT: {}", err);
                     }
                     last_reconnect = Some(Instant::now());
                 }
                 Either4::Third(_) => {
-                    let time = bg77.current_time(false).await;
+                    let time = send_punch.current_time(false).await;
                     match time {
                         None => warn!("Cannot get modem time"),
                         Some(time) => {
@@ -418,7 +418,7 @@ pub async fn bg77_event_handler(
                             punch.code,
                             format!(30; "{}", punch.time).unwrap().as_str(),
                         );
-                        match bg77.send_punch(punch).await {
+                        match send_punch.send_punch(punch).await {
                             Ok(()) => {
                                 info!("Sent punch");
                             }
