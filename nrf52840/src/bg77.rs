@@ -1,5 +1,5 @@
 use crate::{
-    bg77_hw::{Bg77, ModemPin},
+    bg77_hw::{Bg77, ModemHw},
     error::Error,
     si_uart::SiUartChannelType,
     status::{NrfTemp, Temp},
@@ -20,10 +20,7 @@ use embassy_time::{Duration, Instant, Ticker, Timer, WithTimeout};
 use femtopb::{repeated, Message};
 use heapless::{format, String};
 use yaroc_common::{
-    at::{
-        response::CommandResponse,
-        uart::{RxWithIdle, Tx},
-    },
+    at::response::CommandResponse,
     proto::{Punch, Punches},
     punch::SiPunch,
     RawMutex,
@@ -31,9 +28,7 @@ use yaroc_common::{
 
 pub type SendPunchType = SendPunch<
     NrfTemp,
-    UarteTx<'static, UARTE1>,
-    UarteRxWithIdle<'static, UARTE1, TIMER0>,
-    Output<'static>,
+    Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
 >;
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
@@ -69,10 +64,10 @@ impl Default for MqttConfig {
     }
 }
 
-pub struct SendPunch<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> {
-    pub bg77: Bg77<T, R, P>,
+pub struct SendPunch<T: Temp, M: ModemHw> {
+    pub bg77: M,
     // Sys info
-    pub temp: S,
+    pub temp: T,
     pub boot_time: Option<DateTime<FixedOffset>>,
     // MQTT
     config: MqttConfig,
@@ -80,8 +75,8 @@ pub struct SendPunch<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> {
     last_successful_send: Instant,
 }
 
-impl<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> SendPunch<S, T, R, P> {
-    pub fn new(mut bg77: Bg77<T, R, P>, temp: S, spawner: &Spawner, config: MqttConfig) -> Self {
+impl<T: Temp, M: ModemHw> SendPunch<T, M> {
+    pub fn new(mut bg77: M, temp: T, spawner: &Spawner, config: MqttConfig) -> Self {
         bg77.spawn(Self::urc_handler, spawner);
         Self {
             bg77,

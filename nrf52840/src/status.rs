@@ -3,12 +3,9 @@ use defmt::info;
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
 use embassy_time::Instant;
 use heapless::{format, String};
-use yaroc_common::{
-    at::uart::{RxWithIdle, Tx},
-    status::{parse_qlts, MiniCallHome},
-};
+use yaroc_common::status::{parse_qlts, MiniCallHome};
 
-use crate::{bg77::SendPunch, bg77_hw::ModemPin, error::Error};
+use crate::{bg77::SendPunch, bg77_hw::ModemHw, error::Error};
 
 pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
@@ -41,7 +38,7 @@ impl Temp for FakeTemp {
     }
 }
 
-impl<S: Temp, T: Tx, R: RxWithIdle, P: ModemPin> SendPunch<S, T, R, P> {
+impl<T: Temp, M: ModemHw> SendPunch<T, M> {
     async fn get_modem_time(&mut self) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = self
             .bg77
