@@ -5,7 +5,7 @@ use embassy_time::{Duration, Timer};
 use heapless::Vec;
 use yaroc_common::at::{
     response::{AtResponse, CommandResponse, FromModem},
-    uart::{AtUart, RxWithIdle, Tx},
+    uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
 };
 
 use crate::error::Error;
@@ -39,7 +39,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
         Self { uart1, modem_pin }
     }
 
-    pub fn spawn(&mut self, urc_handler: fn(&CommandResponse) -> bool, spawner: &Spawner) {
+    pub fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: &Spawner) {
         self.uart1.spawn_rx(urc_handler, spawner);
     }
 

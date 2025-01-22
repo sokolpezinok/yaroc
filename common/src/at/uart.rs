@@ -200,7 +200,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         }
     }
 
-    pub fn spawn_rx(&mut self, urc_handler: fn(&CommandResponse) -> bool, spawner: &Spawner) {
+    pub fn spawn_rx(&mut self, urc_handler: UrcHandlerType, spawner: &Spawner) {
         // Consume self.rx, then set self.rx = None
         let rx = self.rx.take();
         rx.unwrap().spawn(spawner, urc_handler);
