@@ -6,7 +6,7 @@ pub mod bg77_hw;
 pub mod device;
 pub mod error;
 pub mod si_uart;
-pub mod status;
+pub mod system_info;
 
 type Result<T> = core::result::Result<T, error::Error>;
 

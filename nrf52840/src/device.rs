@@ -1,6 +1,6 @@
 use crate::bg77_hw::Bg77;
 use crate::si_uart::{SiUart, SoftwareSerial};
-use crate::status::NrfTemp;
+use crate::system_info::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::peripherals::{TIMER0, UARTE0, UARTE1};

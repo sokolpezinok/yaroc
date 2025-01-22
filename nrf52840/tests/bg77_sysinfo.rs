@@ -1,13 +1,15 @@
 // Note: if the test is successful it ends with: "Error: CPU halted unexpectedly."
 // This is caused by the final call to `asm::bkpt()`. A better solution is needed.
+//
+// To run this test you need to connect to a NRF52840 chip using a debug probe.
 #![no_std]
 #![no_main]
 
 use chrono::{DateTime, FixedOffset};
-use yaroc_nrf52840 as _;
-use yaroc_nrf52840::bg77::{MqttConfig, SendPunch};
+use yaroc_common::at::response::CommandResponse;
 use yaroc_nrf52840::bg77_hw::Bg77;
-use yaroc_nrf52840::status::FakeTemp;
+use yaroc_nrf52840::system_info::{FakeTemp, SystemInfo};
+use yaroc_nrf52840::{self as _, bg77_hw::ModemHw};
 
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -31,12 +33,13 @@ async fn mini_call_home(spawner: Spawner) {
     let tx = FakeTx::new(&TX_CHANNEL);
     let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
 
+    let mut bg77 = Bg77::new(tx, rx, modem_pin);
+    let handler = |_: &CommandResponse| false;
+    bg77.spawn(handler, &spawner);
     let temp = FakeTemp { t: 27.0 };
-    let mqtt_config = MqttConfig::default();
-    let bg77 = Bg77::new(tx, rx, modem_pin);
-    let mut send_punch = SendPunch::new(bg77, temp, &spawner, mqtt_config);
+    let mut send_punch = SystemInfo::new(temp);
 
-    let mch = send_punch.mini_call_home().await.unwrap();
+    let mch = send_punch.mini_call_home(&mut bg77).await.unwrap();
     assert_eq!(mch.cellid, Some(u32::from_str_radix("2B2078", 16).unwrap()));
     assert_eq!(mch.rssi_dbm, Some(-107));
     assert_eq!(mch.snr_cb, Some(-130));

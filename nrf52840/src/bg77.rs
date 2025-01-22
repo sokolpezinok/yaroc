@@ -2,7 +2,7 @@ use crate::{
     bg77_hw::{Bg77, ModemHw},
     error::Error,
     si_uart::SiUartChannelType,
-    status::{NrfTemp, SystemInfo, Temp},
+    system_info::{NrfTemp, SystemInfo, Temp},
 };
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
