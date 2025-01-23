@@ -25,8 +25,8 @@ use yaroc_common::{
 };
 
 pub type SendPunchType = SendPunch<
-    NrfTemp,
     Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
+    NrfTemp,
 >;
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
@@ -39,19 +39,19 @@ pub enum Command {
 }
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
-pub struct SendPunch<T: Temp, M: ModemHw> {
+pub struct SendPunch<M: ModemHw, T: Temp> {
     bg77: M,
-    client: MqttClient,
-    system_info: SystemInfo<T>,
+    client: MqttClient<M>,
+    system_info: SystemInfo<M, T>,
 }
 
-impl<T: Temp, M: ModemHw> SendPunch<T, M> {
+impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub fn new(mut bg77: M, temp: T, spawner: &Spawner, config: MqttConfig) -> Self {
-        bg77.spawn(MqttClient::urc_handler, spawner);
+        bg77.spawn(MqttClient::<M>::urc_handler, spawner);
         Self {
             bg77,
             client: MqttClient::new(config),
-            system_info: SystemInfo::<T>::new(temp),
+            system_info: SystemInfo::<M, T>::new(temp),
         }
     }
 

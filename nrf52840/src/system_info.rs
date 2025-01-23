@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use defmt::info;
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
@@ -38,21 +40,21 @@ impl Temp for FakeTemp {
     }
 }
 
-pub struct SystemInfo<T: Temp> {
+pub struct SystemInfo<M: ModemHw, T: Temp> {
     temp: T,
     boot_time: Option<DateTime<FixedOffset>>,
+    _phantom: PhantomData<M>,
 }
 
-impl<T: Temp> SystemInfo<T> {
+impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
     pub fn new(temp: T) -> Self {
         Self {
             temp,
             boot_time: None,
+            _phantom: PhantomData,
         }
     }
-}
 
-impl<T: Temp> SystemInfo<T> {
     async fn get_modem_time(bg77: &mut impl ModemHw) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock =
             bg77.simple_call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
@@ -61,7 +63,7 @@ impl<T: Temp> SystemInfo<T> {
 
     pub async fn current_time(
         &mut self,
-        bg77: &mut impl ModemHw,
+        bg77: &mut M,
         cached: bool,
     ) -> Option<DateTime<FixedOffset>> {
         if self.boot_time.is_none() || !cached {
@@ -81,13 +83,13 @@ impl<T: Temp> SystemInfo<T> {
         })
     }
 
-    async fn battery_state(bg77: &mut impl ModemHw) -> Result<(u16, u8), Error> {
+    async fn battery_state(bg77: &mut M) -> Result<(u16, u8), Error> {
         let (bcs, volt) =
             bg77.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
         Ok((volt, bcs))
     }
 
-    async fn signal_info(bg77: &mut impl ModemHw) -> Result<(i8, i16, u8, i8), Error> {
+    async fn signal_info(bg77: &mut M) -> Result<(i8, i16, u8, i8), Error> {
         let response = bg77.simple_call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
@@ -95,7 +97,7 @@ impl<T: Temp> SystemInfo<T> {
         Ok(response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4])?)
     }
 
-    async fn cellid(bg77: &mut impl ModemHw) -> Result<u32, Error> {
+    async fn cellid(bg77: &mut M) -> Result<u32, Error> {
         bg77.simple_call_at("+CEREG?", None)
             .await?
             // TODO: support roaming, that's answer 5
@@ -104,7 +106,7 @@ impl<T: Temp> SystemInfo<T> {
             .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
     }
 
-    pub async fn mini_call_home(&mut self, bg77: &mut impl ModemHw) -> Option<MiniCallHome> {
+    pub async fn mini_call_home(&mut self, bg77: &mut M) -> Option<MiniCallHome> {
         let timestamp = self.current_time(bg77, true).await?;
         let cpu_temperature = self.temp.cpu_temperature().await;
         let mut mini_call_home = MiniCallHome::new(timestamp).set_cpu_temperature(cpu_temperature);
