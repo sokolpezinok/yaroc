@@ -40,7 +40,7 @@ pub enum Command {
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 pub struct SendPunch<T: Temp, M: ModemHw> {
-    pub bg77: M,
+    bg77: M,
     client: MqttClient,
     system_info: SystemInfo<T>,
 }
