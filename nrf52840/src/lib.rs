@@ -5,8 +5,8 @@ pub mod bg77_hw;
 pub mod device;
 pub mod error;
 pub mod mqtt;
-pub mod si_uart;
 pub mod send_punch;
+pub mod si_uart;
 pub mod system_info;
 
 type Result<T> = core::result::Result<T, error::Error>;
