@@ -1,10 +1,14 @@
-use crate::{bg77_hw::ModemHw, error::Error};
+use crate::{
+    bg77_hw::ModemHw,
+    error::Error,
+    send_punch::{Command, EVENT_CHANNEL},
+};
 use core::str::FromStr;
 use defmt::{debug, error, info, warn};
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::{format, String};
-use yaroc_common::RawMutex;
+use yaroc_common::{at::response::CommandResponse, RawMutex};
 
 const MQTT_MESSAGES: usize = 5;
 const MQTT_CLIENT_ID: u8 = 0;
@@ -70,6 +74,40 @@ impl MqttClient {
         }
 
         Ok(())
+    }
+
+    pub fn urc_handler(response: &CommandResponse) -> bool {
+        match response.command() {
+            "QMTSTAT" | "QIURC" => {
+                let message = Command::MqttConnect(true, Instant::now());
+                if EVENT_CHANNEL.try_send(message).is_err() {
+                    error!("Error while sending Mqtt connect command, channel full");
+                }
+                true
+            }
+            "QMTPUB" => Self::qmtpub_handler(response),
+            _ => false,
+        }
+    }
+
+    fn qmtpub_handler(response: &CommandResponse) -> bool {
+        let values = match response.parse_values::<u8>() {
+            Ok(values) => values,
+            Err(_) => {
+                return false;
+            }
+        };
+
+        // TODO: get client ID
+        if values[0] == 0 {
+            let idx = usize::from(values[1]);
+            if idx < MQTT_URCS.len() {
+                MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
+            }
+            true
+        } else {
+            false
+        }
     }
 
     async fn mqtt_open(&self, bg77: &mut impl ModemHw, cid: u8) -> crate::Result<()> {

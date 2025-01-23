@@ -1,7 +1,7 @@
 use crate::{
     bg77_hw::{Bg77, ModemHw},
     error::Error,
-    mqtt::{MqttClient, MqttConfig, ACTIVATION_TIMEOUT, MQTT_URCS},
+    mqtt::{MqttClient, MqttConfig, ACTIVATION_TIMEOUT},
     si_uart::SiUartChannelType,
     system_info::{NrfTemp, SystemInfo, Temp},
 };
@@ -19,7 +19,6 @@ use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
-    at::response::CommandResponse,
     proto::{Punch, Punches},
     punch::SiPunch,
     RawMutex,
@@ -38,7 +37,7 @@ pub enum Command {
     SynchronizeTime(Instant),
     MqttConnect(bool, Instant),
 }
-static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
+pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 pub struct SendPunch<T: Temp, M: ModemHw> {
     pub bg77: M,
@@ -48,45 +47,11 @@ pub struct SendPunch<T: Temp, M: ModemHw> {
 
 impl<T: Temp, M: ModemHw> SendPunch<T, M> {
     pub fn new(mut bg77: M, temp: T, spawner: &Spawner, config: MqttConfig) -> Self {
-        bg77.spawn(Self::urc_handler, spawner);
+        bg77.spawn(MqttClient::urc_handler, spawner);
         Self {
             bg77,
             client: MqttClient::new(config),
             system_info: SystemInfo::<T>::new(temp),
-        }
-    }
-
-    pub fn urc_handler(response: &CommandResponse) -> bool {
-        match response.command() {
-            "QMTSTAT" | "QIURC" => {
-                let message = Command::MqttConnect(true, Instant::now());
-                if EVENT_CHANNEL.try_send(message).is_err() {
-                    error!("Error while sending Mqtt connect command, channel full");
-                }
-                true
-            }
-            "QMTPUB" => Self::qmtpub_handler(response),
-            _ => false,
-        }
-    }
-
-    fn qmtpub_handler(response: &CommandResponse) -> bool {
-        let values = match response.parse_values::<u8>() {
-            Ok(values) => values,
-            Err(_) => {
-                return false;
-            }
-        };
-
-        // TODO: get client ID
-        if values[0] == 0 {
-            let idx = usize::from(values[1]);
-            if idx < MQTT_URCS.len() {
-                MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
-            }
-            true
-        } else {
-            false
         }
     }
 
