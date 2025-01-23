@@ -7,14 +7,14 @@ use crate::{
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, select4, Either, Either4};
+use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
+use embassy_sync::{channel::Channel, mutex::Mutex};
 use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
@@ -33,8 +33,12 @@ pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
 // MiniCallHome signal
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
-static GET_TIME_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
-static MQTT_CONNECT_SIGNAL: Signal<RawMutex, (bool, Instant)> = Signal::new();
+
+pub enum Command {
+    SynchronizeTime(Instant),
+    MqttConnect(bool, Instant),
+}
+static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 pub struct SendPunch<T: Temp, M: ModemHw> {
     pub bg77: M,
@@ -55,7 +59,10 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
     pub fn urc_handler(response: &CommandResponse) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
-                MQTT_CONNECT_SIGNAL.signal((true, Instant::now()));
+                let message = Command::MqttConnect(true, Instant::now());
+                if EVENT_CHANNEL.try_send(message).is_err() {
+                    error!("Error while sending Mqtt connect command, channel full");
+                }
                 true
             }
             "QMTPUB" => Self::qmtpub_handler(response),
@@ -106,7 +113,7 @@ impl<T: Temp, M: ModemHw> SendPunch<T, M> {
         let len = msg.encoded_len();
         let res = self.client.send_message(&mut self.bg77, topic, &buf[..len], qos).await;
         if res.is_err() {
-            MQTT_CONNECT_SIGNAL.signal((false, Instant::now()));
+            EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
         }
         res
     }
@@ -161,7 +168,7 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
             Either::First(_) => MCH_SIGNAL.signal(Instant::now()),
-            Either::Second(_) => GET_TIME_SIGNAL.signal(Instant::now()),
+            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime(Instant::now())).await,
         }
     }
 }
@@ -173,10 +180,9 @@ pub async fn send_punch_event_handler(
 ) {
     let mut last_reconnect: Option<Instant> = None;
     loop {
-        let signal = select4(
+        let signal = select3(
             MCH_SIGNAL.wait(),
-            MQTT_CONNECT_SIGNAL.wait(),
-            GET_TIME_SIGNAL.wait(),
+            EVENT_CHANNEL.receive(),
             si_uart_channel.receive(),
         )
         .await;
@@ -184,33 +190,35 @@ pub async fn send_punch_event_handler(
             let mut send_punch_unlocked = send_punch_mutex.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either4::First(_) => match send_punch.send_mini_call_home().await {
+                Either3::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
-                Either4::Second((force, _)) => {
-                    if !force
-                        && last_reconnect.map(|t| t + Duration::from_secs(60) > Instant::now())
-                            == Some(true)
-                    {
-                        continue;
-                    }
+                Either3::Second(command) => match command {
+                    Command::MqttConnect(force, _) => {
+                        if !force
+                            && last_reconnect.map(|t| t + Duration::from_secs(60) > Instant::now())
+                                == Some(true)
+                        {
+                            continue;
+                        }
 
-                    if let Err(err) = send_punch.mqtt_connect().await {
-                        error!("Error connecting to MQTT: {}", err);
+                        if let Err(err) = send_punch.mqtt_connect().await {
+                            error!("Error connecting to MQTT: {}", err);
+                        }
+                        last_reconnect = Some(Instant::now());
                     }
-                    last_reconnect = Some(Instant::now());
-                }
-                Either4::Third(_) => {
-                    let time = send_punch.synchronize_time().await;
-                    match time {
-                        None => warn!("Cannot get modem time"),
-                        Some(time) => {
-                            info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
+                    Command::SynchronizeTime(_) => {
+                        let time = send_punch.synchronize_time().await;
+                        match time {
+                            None => warn!("Cannot get modem time"),
+                            Some(time) => {
+                                info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
+                            }
                         }
                     }
-                }
-                Either4::Fourth(punch) => match punch {
+                },
+                Either3::Third(punch) => match punch {
                     Ok(punch) => {
                         info!(
                             "{} punched {} at {}",
