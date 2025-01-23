@@ -23,6 +23,7 @@ pub static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES + 1] = [
 pub struct MqttConfig {
     pub url: String<40>,
     pub packet_timeout: Duration,
+    pub apn: String<30>,
 }
 
 impl Default for MqttConfig {
@@ -30,6 +31,7 @@ impl Default for MqttConfig {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
+            apn: String::from_str("trail-nbiot.corp").unwrap(),
         }
     }
 }
@@ -62,7 +64,8 @@ impl MqttClient {
         let (_, state) =
             bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
-            let _ = bg77.simple_call_at("+CGDCONT=1,\"IP\",trial-nbiot.corp", None).await;
+            let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
+            let _ = bg77.simple_call_at(&cmd, None).await;
             bg77.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
         }
 

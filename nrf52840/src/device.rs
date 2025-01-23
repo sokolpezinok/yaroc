@@ -29,6 +29,12 @@ pub struct Device {
     pub software_serial: SoftwareSerial,
 }
 
+impl Default for Device {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Device {
     pub fn new() -> Self {
         let mut cortex_peripherals = CortexMPeripherals::take().unwrap();
