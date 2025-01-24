@@ -45,10 +45,11 @@ impl Device {
         let mut p = embassy_nrf::init(Default::default());
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::BAUD38400;
-        let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P0_19, p.P0_20, config);
+        let uart0 = uarte::Uarte::new(p.UARTE0, Irqs, p.P1_02, p.P0_20, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
+        let io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
         let bg77 = Bg77::new(tx1, rx1, modem_pin);
@@ -62,16 +63,13 @@ impl Device {
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
-        let io2 = Input::new(p.P1_02, Pull::Up);
-        let _io3 = Input::new(p.P0_21, Pull::Up);
-
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
             bg77,
             temp,
             si_uart: SiUart::new(rx0),
-            software_serial: SoftwareSerial::new(io2),
+            software_serial: SoftwareSerial::new(io3),
             saadc,
         }
     }
