@@ -15,7 +15,7 @@ const MQTT_CLIENT_ID: u8 = 0;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
-pub static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES + 1] = [
+pub static MQTT_URCS: [Signal<RawMutex, MqttPublishReport>; MQTT_MESSAGES + 1] = [
     Signal::new(),
     Signal::new(),
     Signal::new(),
@@ -23,6 +23,31 @@ pub static MQTT_URCS: [Signal<RawMutex, (u8, u8)>; MQTT_MESSAGES + 1] = [
     Signal::new(),
     Signal::new(),
 ];
+
+pub enum MqttPubStatus {
+    Published,
+    Retrying(u8),
+    Timeout,
+    Unknown,
+}
+
+pub struct MqttPublishReport {
+    msg_id: u8,
+    status: MqttPubStatus,
+}
+
+impl MqttPublishReport {
+    pub fn new(msg_id: u8, status: u8, retries: Option<&u8>) -> Self {
+        let status = match status {
+            0 => MqttPubStatus::Published,
+            1 => MqttPubStatus::Retrying(*retries.unwrap_or(&0)),
+            2 => MqttPubStatus::Timeout,
+            _ => MqttPubStatus::Unknown,
+        };
+
+        Self { msg_id, status }
+    }
+}
 
 pub struct MqttConfig {
     pub url: String<40>,
@@ -103,7 +128,7 @@ impl<M: ModemHw> MqttClient<M> {
         if values[0] == 0 {
             let idx = usize::from(values[1]);
             if idx < MQTT_URCS.len() {
-                MQTT_URCS[idx].signal((values[2], *values.get(3).unwrap_or(&0)));
+                MQTT_URCS[idx].signal(MqttPublishReport::new(values[1], values[2], values.get(3)));
             }
             true
         } else {
@@ -235,23 +260,19 @@ impl<M: ModemHw> MqttClient<M> {
         bg77.simple_call_at(&cmd, None).await?;
         bg77.call(msg).await?;
         loop {
-            let (result, retries) = MQTT_URCS[idx]
+            let mqtt_report = MQTT_URCS[idx]
                 .wait()
                 .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
                 .await
                 .map_err(|_| Error::TimeoutError)?;
             // Retries should go into an async loop/queue
-            match result {
-                0 => break,
-                1 => {
-                    warn!("Message ID {} try {} failed", idx + 1, retries);
+            match mqtt_report.status {
+                MqttPubStatus::Published => break,
+                MqttPubStatus::Retrying(retries) => {
+                    warn!("Message ID {} try {} failed", mqtt_report.msg_id, retries);
                 }
-                2 => {
-                    return Err(Error::TimeoutError);
-                }
-                _ => {
-                    return Err(Error::ModemError);
-                }
+                MqttPubStatus::Timeout => return Err(Error::TimeoutError),
+                MqttPubStatus::Unknown => return Err(Error::ModemError),
             }
         }
         debug!("Message ID {} successfully sent", idx);
