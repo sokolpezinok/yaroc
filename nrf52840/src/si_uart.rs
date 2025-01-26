@@ -4,11 +4,13 @@ use embassy_futures::select::{select, Either};
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::Channel;
 use nrf52840_hal::pac::DWT;
-use yaroc_common::{punch::SiPunch, RawMutex};
+use yaroc_common::{
+    punch::{SiPunch, LEN},
+    RawMutex,
+};
 
 use crate::error::Error;
 
-const LEN: usize = 20;
 pub type SiUartChannelType = Channel<RawMutex, Result<SiPunch, Error>, 5>;
 
 pub struct SoftwareSerial {

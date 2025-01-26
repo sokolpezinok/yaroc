@@ -3,13 +3,15 @@ use heapless::Vec;
 
 use crate::{error::Error, proto::Punch};
 
+pub const LEN: usize = 20;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
     pub card: u32,
     pub code: u16,
     pub time: NaiveDateTime,
     pub mode: u8,
-    pub raw: [u8; 20],
+    pub raw: [u8; LEN],
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
@@ -26,7 +28,7 @@ impl SiPunch {
         }
     }
 
-    pub fn from_raw(bytes: [u8; 20], today: NaiveDate) -> Self {
+    pub fn from_raw(bytes: [u8; LEN], today: NaiveDate) -> Self {
         let data = &bytes[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -55,9 +57,9 @@ impl SiPunch {
 
     pub fn punches_from_payload(payload: &[u8], today: NaiveDate) -> Vec<Result<Self, Error>, 10> {
         payload
-            .chunks(20)
+            .chunks(LEN)
             .map(|chunk| {
-                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
+                let partial_payload: [u8; LEN] = chunk.try_into().map_err(|_| {
                     //    format!("Wrong length of chunk={}", chunk.len()),
                     Error::BufferTooSmallError
                 })?;
@@ -88,7 +90,7 @@ impl SiPunch {
     /// Note that they call it CRC but it is buggy. See the last test that leads to a checksum of 0 for
     /// a polynomial that's not divisible by 0x8005.
     fn sportident_checksum(message: &[u8]) -> u16 {
-        let mut msg: Vec<u8, 20> = Vec::from_slice(message).unwrap();
+        let mut msg: Vec<u8, LEN> = Vec::from_slice(message).unwrap();
         msg.push(0).unwrap();
         if msg.len() % 2 == 1 {
             msg.push(0).unwrap();
@@ -143,8 +145,8 @@ impl SiPunch {
         res
     }
 
-    fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> [u8; 20] {
-        let mut res = [0; 20];
+    fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> [u8; LEN] {
+        let mut res = [0; LEN];
         res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
         res[4..6].copy_from_slice(&code.to_be_bytes());
         res[6..10].copy_from_slice(&Self::card_to_bytes(card));
