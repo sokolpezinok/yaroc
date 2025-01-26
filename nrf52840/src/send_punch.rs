@@ -58,12 +58,13 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     // TODO: this method probably doesn't belong here
     pub async fn config(&mut self) -> Result<(), Error> {
         self.bg77.simple_call_at("E0", None).await?;
+        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", "trial-nbiot.corp")?;
+        let _ = self.bg77.simple_call_at(&cmd, None).await;
         self.bg77.simple_call_at("+CEREG=2", None).await?;
-        self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        // +QCFG needs +CGATT=1 first
         self.bg77.simple_call_at("+QCFG=\"nwscanseq\",03", None).await?;
         self.bg77.simple_call_at("+QCFG=\"iotopmode\",1,1", None).await?;
         self.bg77.simple_call_at("+QCFG=\"band\",0,0,80000", None).await?;
+        self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         Ok(())
     }
 

@@ -71,8 +71,6 @@ impl<M: ModemHw> MqttClient<M> {
         let (_, state) =
             bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if state == 0 {
-            let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
-            let _ = bg77.simple_call_at(&cmd, None).await;
             bg77.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
         }
 
