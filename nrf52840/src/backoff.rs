@@ -2,8 +2,9 @@ use defmt::{error, warn};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
+use femtopb::repeated;
 use heapless::binary_heap::{BinaryHeap, Min};
-use yaroc_common::{punch::RawPunch, RawMutex};
+use yaroc_common::{proto::{Punch, Punches}, punch::RawPunch, RawMutex};
 
 use crate::mqtt::{MqttPubStatus, MqttPublishReport};
 
@@ -95,8 +96,16 @@ impl BackoffRetries {
                     }
                 }
                 Either3::Third(_) => {
-                    if let Some(_punch_msg) = self.queue.pop() {
-                        // TODO: send punch_msg
+                    if let Some(punch_msg) = self.queue.pop() {
+                        let punch = [Punch {
+                            raw: &punch_msg.punch,
+                            ..Default::default()
+                        }];
+                        let _punches = Punches {
+                            punches: repeated::Repeated::from_slice(&punch),
+                            ..Default::default()
+                        };
+                        //self.send_message::<40>("p", punches, 1).await
                     }
                 }
             }

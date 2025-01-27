@@ -1,11 +1,11 @@
 use crate::{
-    backoff::{BackoffRetries, MQTT_MESSAGES},
+    backoff::{BackoffRetries, QMTPUB_URCS},
     bg77_hw::ModemHw,
     error::Error,
     send_punch::{Command, EVENT_CHANNEL},
 };
 use core::{marker::PhantomData, str::FromStr};
-use defmt::{debug, error, info, warn};
+use defmt::{error, info, warn};
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::{format, String};
@@ -15,17 +15,7 @@ const MQTT_CLIENT_ID: u8 = 0;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
-pub static MQTT_URCS: [Signal<RawMutex, MqttPublishReport>; MQTT_MESSAGES + 1] = [
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-];
+pub static MQTT_URC: Signal<RawMutex, MqttPublishReport> = Signal::new();
 
 pub enum MqttPubStatus {
     Published,
@@ -70,7 +60,6 @@ impl Default for MqttConfig {
 
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
-    msg_id: u8,
     last_successful_send: Instant,
     _phantom: PhantomData<M>,
 }
@@ -79,7 +68,6 @@ impl<M: ModemHw> MqttClient<M> {
     pub fn new(config: MqttConfig) -> Self {
         Self {
             config,
-            msg_id: 0,
             last_successful_send: Instant::now(),
             _phantom: PhantomData,
         }
@@ -129,9 +117,12 @@ impl<M: ModemHw> MqttClient<M> {
 
         // TODO: get client ID
         if values[0] == 0 {
-            let idx = usize::from(values[1]);
-            if idx < MQTT_URCS.len() {
-                MQTT_URCS[idx].signal(MqttPublishReport::new(values[1], values[2], values.get(3)));
+            let report = MqttPublishReport::new(values[1], values[2], values.get(3));
+            if values[1] == 0 {
+                MQTT_URC.signal(report);
+            } else {
+                // TODO: channel might be full
+                QMTPUB_URCS.try_send(report);
             }
             true
         } else {
@@ -243,42 +234,30 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    pub async fn send_message(
+    pub async fn send_message_qos0(
         &mut self,
         bg77: &mut M,
         topic: &str,
         msg: &[u8],
-        qos: u8,
     ) -> Result<(), Error> {
-        let msg_id = if qos == 0 { 0 } else { self.msg_id + 1 };
-        let idx = usize::from(msg_id);
-        MQTT_URCS[idx].reset();
-        if qos == 1 {
-            self.msg_id = (self.msg_id + 1) % u8::try_from(MQTT_MESSAGES).unwrap();
-        }
-
+        let qos = 0;
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos, topic, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, 0, qos, topic, msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
         bg77.call(msg).await?;
-        loop {
-            let mqtt_report = MQTT_URCS[idx]
-                .wait()
-                .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
-                .await
-                .map_err(|_| Error::TimeoutError)?;
-            // Retries should go into an async loop/queue
-            match mqtt_report.status {
-                MqttPubStatus::Published => break,
-                MqttPubStatus::Retrying(retries) => {
-                    warn!("Message ID {} try {} failed", mqtt_report.msg_id, retries);
-                }
-                MqttPubStatus::Timeout => return Err(Error::TimeoutError),
-                MqttPubStatus::Unknown => return Err(Error::ModemError),
-            }
+        // TODO: drop MQTT_URC
+        let mqtt_report = MQTT_URC
+            .wait()
+            // TODO: This timeout might be an overkill
+            .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
+            .await
+            .map_err(|_| Error::TimeoutError)?;
+        match mqtt_report.status {
+            MqttPubStatus::Timeout => return Err(Error::TimeoutError),
+            MqttPubStatus::Unknown => return Err(Error::ModemError),
+            _ => {}
         }
-        debug!("Message ID {} successfully sent", idx);
         self.last_successful_send = Instant::now();
         Ok(())
     }

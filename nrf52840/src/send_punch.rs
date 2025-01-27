@@ -1,4 +1,5 @@
 use crate::{
+    backoff::PUNCHES_TO_SEND,
     bg77_hw::{Bg77, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, ACTIVATION_TIMEOUT},
@@ -16,13 +17,9 @@ use embassy_nrf::{
 use embassy_sync::signal::Signal;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use embassy_time::{Duration, Instant, Ticker};
-use femtopb::{repeated, Message};
+use femtopb::Message;
 use heapless::format;
-use yaroc_common::{
-    proto::{Punch, Punches},
-    punch::SiPunch,
-    RawMutex,
-};
+use yaroc_common::{punch::SiPunch, RawMutex};
 
 pub type SendPunchType = SendPunch<
     Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
@@ -68,16 +65,15 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         Ok(())
     }
 
-    async fn send_message<const N: usize>(
+    async fn send_message_qos0<const N: usize>(
         &mut self,
         topic: &str,
         msg: impl Message<'_>,
-        qos: u8,
     ) -> Result<(), Error> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.client.send_message(&mut self.bg77, topic, &buf[..len], qos).await;
+        let res = self.client.send_message_qos0(&mut self.bg77, topic, &buf[..len]).await;
         if res.is_err() {
             EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
         }
@@ -87,21 +83,16 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home =
             self.system_info.mini_call_home(&mut self.bg77).await.ok_or(Error::ModemError)?;
-        self.send_message::<250>("status", mini_call_home.to_proto(), 0).await
+        self.send_message_qos0::<250>("status", mini_call_home.to_proto()).await
     }
 
-    pub async fn send_punch(&mut self, punch: SiPunch) -> crate::Result<()> {
-        let punch = [Punch {
-            raw: &punch.raw,
-            ..Default::default()
-        }];
-        let punches = Punches {
-            punches: repeated::Repeated::from_slice(&punch),
-            ..Default::default()
-        };
-        self.send_message::<40>("p", punches, 1).await
+    /// Tries to send one SI punch
+    pub async fn send_punch(&mut self, punch: SiPunch) {
+        // TODO: should get an ID or something to retrieve status
+        PUNCHES_TO_SEND.send(punch.raw).await;
     }
 
+    /// Basic setup of the modem
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.bg77.turn_on().await;
         self.config().await?;
@@ -110,10 +101,12 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         Ok(())
     }
 
+    /// Connects to the configured MQTT server.
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.client.mqtt_connect(&mut self.bg77).await
     }
 
+    /// Synchronizes time with the network time of the modem
     pub async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
         self.system_info.current_time(&mut self.bg77, false).await
     }
@@ -192,14 +185,8 @@ pub async fn send_punch_event_handler(
                             punch.code,
                             format!(30; "{}", punch.time).unwrap().as_str(),
                         );
-                        match send_punch.send_punch(punch).await {
-                            Ok(()) => {
-                                info!("Sent punch");
-                            }
-                            Err(err) => {
-                                error!("Error while sending punch: {}", err);
-                            }
-                        }
+                        send_punch.send_punch(punch).await;
+                        info!("Punch scheduled to be sent");
                     }
                     Err(err) => {
                         error!("Wrong punch: {}", err);
