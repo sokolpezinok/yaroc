@@ -240,12 +240,20 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         command_prefix: &str,
         timeout: Duration,
     ) -> crate::Result<AtResponse> {
+        let start = Instant::now();
         self.write(msg).await?;
         // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
         // technicality, the timeout is doubled this way, but it's never a problem.
         let mut lines = self.read(timeout).await?;
         lines.extend(self.read(timeout).await?);
-        Ok(AtResponse::new(lines, command_prefix))
+        let response = AtResponse::new(lines, command_prefix);
+        debug!(
+            "{}: {}, took {}ms",
+            command_prefix,
+            response,
+            (Instant::now() - start).as_millis()
+        );
+        Ok(response)
     }
 
     async fn call_at_impl(
