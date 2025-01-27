@@ -2,9 +2,8 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::Output;
 use embassy_time::{Duration, Timer};
-use heapless::Vec;
 use yaroc_common::at::{
-    response::{AtResponse, FromModem},
+    response::AtResponse,
     uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
 };
 
@@ -63,7 +62,8 @@ pub trait ModemHw {
     fn call(
         &mut self,
         msg: &[u8],
-    ) -> impl core::future::Future<Output = yaroc_common::Result<Vec<FromModem, 4>>>;
+        command_prefix: &str,
+    ) -> impl core::future::Future<Output = yaroc_common::Result<AtResponse>>;
 
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
@@ -96,8 +96,8 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.uart1.call_at(cmd, timeout, None).await
     }
 
-    async fn call(&mut self, msg: &[u8]) -> yaroc_common::Result<Vec<FromModem, 4>> {
-        self.uart1.call(msg, BG77_MINIMUM_TIMEOUT).await
+    async fn call(&mut self, msg: &[u8], command_prefix: &str) -> yaroc_common::Result<AtResponse> {
+        self.uart1.call(msg, command_prefix, BG77_MINIMUM_TIMEOUT).await
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {

@@ -4,7 +4,11 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use femtopb::repeated;
 use heapless::binary_heap::{BinaryHeap, Min};
-use yaroc_common::{proto::{Punch, Punches}, punch::RawPunch, RawMutex};
+use yaroc_common::{
+    proto::{Punch, Punches},
+    punch::RawPunch,
+    RawMutex,
+};
 
 use crate::mqtt::{MqttPubStatus, MqttPublishReport};
 
@@ -13,7 +17,7 @@ pub const MQTT_MESSAGES: usize = 8;
 pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, MQTT_MESSAGES> = Channel::new();
 pub static QMTPUB_URCS: Channel<RawMutex, MqttPublishReport, MQTT_MESSAGES> = Channel::new();
 
-#[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 struct PunchMsg {
     punch: RawPunch,
     next_send: Instant,
@@ -50,6 +54,12 @@ impl PunchMsg {
 impl Ord for PunchMsg {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.next_send.cmp(&other.next_send)
+    }
+}
+
+impl PartialOrd for PunchMsg {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.next_send.cmp(&other.next_send))
     }
 }
 

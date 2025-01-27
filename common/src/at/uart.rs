@@ -237,10 +237,15 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     pub async fn call(
         &mut self,
         msg: &[u8],
+        command_prefix: &str,
         timeout: Duration,
-    ) -> crate::Result<Vec<FromModem, AT_LINES>> {
+    ) -> crate::Result<AtResponse> {
         self.write(msg).await?;
-        self.read(timeout).await
+        // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
+        // technicality, the timeout is doubled this way, but it's never a problem.
+        let mut lines = self.read(timeout).await?;
+        lines.extend(self.read(timeout).await?);
+        Ok(AtResponse::new(lines, command_prefix))
     }
 
     async fn call_at_impl(

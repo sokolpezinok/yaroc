@@ -6,17 +6,16 @@ use crate::{
 };
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{error, info, warn};
-use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Instant, Timer, WithTimeout};
+use embassy_time::{Duration, Instant, Timer};
 use heapless::{format, String};
-use yaroc_common::{at::response::CommandResponse, RawMutex};
+use yaroc_common::at::response::CommandResponse;
 
 const MQTT_CLIENT_ID: u8 = 0;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
-pub static MQTT_URC: Signal<RawMutex, MqttPublishReport> = Signal::new();
 
+#[derive(PartialEq, Eq)]
 pub enum MqttPubStatus {
     Published,
     Retrying(u8),
@@ -118,13 +117,13 @@ impl<M: ModemHw> MqttClient<M> {
         // TODO: get client ID
         if values[0] == 0 {
             let report = MqttPublishReport::new(values[1], values[2], values.get(3));
-            if values[1] == 0 {
-                MQTT_URC.signal(report);
-            } else {
+            if values[1] > 0 {
                 // TODO: channel might be full
-                QMTPUB_URCS.try_send(report);
+                let _ = QMTPUB_URCS.try_send(report);
+                true
+            } else {
+                false
             }
-            true
         } else {
             false
         }
@@ -245,20 +244,12 @@ impl<M: ModemHw> MqttClient<M> {
             "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, 0, qos, topic, msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
-        bg77.call(msg).await?;
-        // TODO: drop MQTT_URC
-        let mqtt_report = MQTT_URC
-            .wait()
-            // TODO: This timeout might be an overkill
-            .with_timeout(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT)
-            .await
-            .map_err(|_| Error::TimeoutError)?;
-        match mqtt_report.status {
-            MqttPubStatus::Timeout => return Err(Error::TimeoutError),
-            MqttPubStatus::Unknown => return Err(Error::ModemError),
-            _ => {}
+        let response = bg77.call(msg, "+QMTPUB").await?;
+        let (msg_id, status) = response.parse2::<u8, u8>([1, 2], None)?;
+        let report = MqttPublishReport::new(msg_id, status, None);
+        if report.status == MqttPubStatus::Published {
+            self.last_successful_send = Instant::now();
         }
-        self.last_successful_send = Instant::now();
         Ok(())
     }
 }
