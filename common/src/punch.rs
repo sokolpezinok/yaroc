@@ -4,6 +4,7 @@ use heapless::Vec;
 use crate::{error::Error, proto::Punch};
 
 pub const LEN: usize = 20;
+pub type RawPunch = [u8; LEN];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
@@ -11,7 +12,7 @@ pub struct SiPunch {
     pub code: u16,
     pub time: NaiveDateTime,
     pub mode: u8,
-    pub raw: [u8; LEN],
+    pub raw: RawPunch,
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
@@ -28,7 +29,7 @@ impl SiPunch {
         }
     }
 
-    pub fn from_raw(bytes: [u8; LEN], today: NaiveDate) -> Self {
+    pub fn from_raw(bytes: RawPunch, today: NaiveDate) -> Self {
         let data = &bytes[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -59,7 +60,7 @@ impl SiPunch {
         payload
             .chunks(LEN)
             .map(|chunk| {
-                let partial_payload: [u8; LEN] = chunk.try_into().map_err(|_| {
+                let partial_payload: RawPunch = chunk.try_into().map_err(|_| {
                     //    format!("Wrong length of chunk={}", chunk.len()),
                     Error::BufferTooSmallError
                 })?;
@@ -145,7 +146,7 @@ impl SiPunch {
         res
     }
 
-    fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> [u8; LEN] {
+    fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> RawPunch {
         let mut res = [0; LEN];
         res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
         res[4..6].copy_from_slice(&code.to_be_bytes());
