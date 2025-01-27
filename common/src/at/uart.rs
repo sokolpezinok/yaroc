@@ -238,6 +238,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         &mut self,
         msg: &[u8],
         command_prefix: &str,
+        second_read: bool,
         timeout: Duration,
     ) -> crate::Result<AtResponse> {
         let start = Instant::now();
@@ -245,7 +246,9 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
         // technicality, the timeout is doubled this way, but it's never a problem.
         let mut lines = self.read(timeout).await?;
-        lines.extend(self.read(timeout).await?);
+        if second_read {
+            lines.extend(self.read(timeout).await?);
+        }
         let response = AtResponse::new(lines, command_prefix);
         debug!(
             "{}: {}, took {}ms",

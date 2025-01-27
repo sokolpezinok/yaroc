@@ -2,7 +2,7 @@ use crate::{
     backoff::PUNCHES_TO_SEND,
     bg77_hw::{Bg77, ModemHw},
     error::Error,
-    mqtt::{MqttClient, MqttConfig, ACTIVATION_TIMEOUT},
+    mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
     si_uart::SiUartChannelType,
     system_info::{NrfTemp, SystemInfo, Temp},
 };
@@ -65,15 +65,16 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         Ok(())
     }
 
-    async fn send_message_qos0<const N: usize>(
+    async fn send_message<const N: usize>(
         &mut self,
         topic: &str,
         msg: impl Message<'_>,
+        qos: MqttQos,
     ) -> Result<(), Error> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.client.send_message_qos0(&mut self.bg77, topic, &buf[..len]).await;
+        let res = self.client.send_message(&mut self.bg77, topic, &buf[..len], qos).await;
         if res.is_err() {
             EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
         }
@@ -83,7 +84,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home =
             self.system_info.mini_call_home(&mut self.bg77).await.ok_or(Error::ModemError)?;
-        self.send_message_qos0::<250>("status", mini_call_home.to_proto()).await
+        self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0).await
     }
 
     /// Tries to send one SI punch

@@ -58,11 +58,13 @@ pub trait ModemHw {
 
     /// Sends a raw message to the modem.
     ///
-    /// Waits only a short time for a response (non-configurable).
+    /// Waits only a short time for a response (non-configurable). The response should be prefixed
+    /// with `command_prefix`.
     fn call(
         &mut self,
         msg: &[u8],
         command_prefix: &str,
+        second_read: bool,
     ) -> impl core::future::Future<Output = yaroc_common::Result<AtResponse>>;
 
     /// Turns on the modem.
@@ -96,8 +98,13 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.uart1.call_at(cmd, timeout, None).await
     }
 
-    async fn call(&mut self, msg: &[u8], command_prefix: &str) -> yaroc_common::Result<AtResponse> {
-        self.uart1.call(msg, command_prefix, BG77_MINIMUM_TIMEOUT).await
+    async fn call(
+        &mut self,
+        msg: &[u8],
+        command_prefix: &str,
+        second_read: bool,
+    ) -> yaroc_common::Result<AtResponse> {
+        self.uart1.call(msg, command_prefix, second_read, BG77_MINIMUM_TIMEOUT).await
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {

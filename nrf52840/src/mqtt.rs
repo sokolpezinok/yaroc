@@ -15,6 +15,13 @@ const MQTT_CLIENT_ID: u8 = 0;
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum MqttQos {
+    Q0 = 0,
+    Q1 = 1,
+    // 2 is unsupported
+}
+
 #[derive(PartialEq, Eq)]
 pub enum MqttPubStatus {
     Published,
@@ -233,22 +240,25 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    pub async fn send_message_qos0(
+    pub async fn send_message(
         &mut self,
         bg77: &mut M,
         topic: &str,
         msg: &[u8],
+        qos: MqttQos,
     ) -> Result<(), Error> {
-        let qos = 0;
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, 0, qos, topic, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, 0, qos as u8, topic, msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
-        let response = bg77.call(msg, "+QMTPUB").await?;
-        let (msg_id, status) = response.parse2::<u8, u8>([1, 2], None)?;
-        let report = MqttPublishReport::new(msg_id, status, None);
-        if report.status == MqttPubStatus::Published {
-            self.last_successful_send = Instant::now();
+
+        let response = bg77.call(msg, "+QMTPUB", qos == MqttQos::Q0).await?;
+        if qos == MqttQos::Q0 {
+            let (msg_id, status) = response.parse2::<u8, u8>([1, 2], None)?;
+            let report = MqttPublishReport::new(msg_id, status, None);
+            if report.status == MqttPubStatus::Published {
+                self.last_successful_send = Instant::now();
+            }
         }
         Ok(())
     }
