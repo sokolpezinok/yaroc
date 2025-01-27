@@ -1,37 +1,31 @@
-use defmt::{error, warn};
+use defmt::{error, info, warn};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
-use femtopb::repeated;
 use heapless::binary_heap::{BinaryHeap, Min};
-use yaroc_common::{
-    proto::{Punch, Punches},
-    punch::RawPunch,
-    RawMutex,
-};
+use yaroc_common::{punch::RawPunch, RawMutex};
 
 use crate::mqtt::{MqttPubStatus, MqttPublishReport};
 
-pub const MQTT_MESSAGES: usize = 8;
-
-pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, MQTT_MESSAGES> = Channel::new();
-pub static QMTPUB_URCS: Channel<RawMutex, MqttPublishReport, MQTT_MESSAGES> = Channel::new();
+pub const PUNCH_QUEUE_SIZE: usize = 8;
+pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
+pub static QMTPUB_URCS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> = Channel::new();
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-struct PunchMsg {
+pub struct PunchMsg {
     punch: RawPunch,
     next_send: Instant,
     backoff: Duration,
-    id: Option<u8>,
+    id: u8,
 }
 
 impl Default for PunchMsg {
     fn default() -> Self {
         Self {
             punch: RawPunch::default(),
-            next_send: Instant::now() + Duration::from_secs(30),
-            backoff: Duration::from_secs(60),
-            id: None,
+            next_send: Instant::now(),
+            backoff: Duration::from_secs(30),
+            id: 0,
         }
     }
 }
@@ -40,7 +34,7 @@ impl PunchMsg {
     pub fn new(punch: RawPunch, msg_id: u8) -> Self {
         Self {
             punch,
-            id: Some(msg_id),
+            id: msg_id, // TODO: can't be 0
             ..Default::default()
         }
     }
@@ -63,13 +57,26 @@ impl PartialOrd for PunchMsg {
     }
 }
 
-#[derive(Default)]
-pub struct BackoffRetries {
-    queue: BinaryHeap<PunchMsg, Min, MQTT_MESSAGES>,
-    inflight_msgs: [PunchMsg; MQTT_MESSAGES],
+pub trait SendPunchImpl {
+    async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()>;
 }
 
-impl BackoffRetries {
+#[derive(Default)]
+pub struct BackoffRetries<S: SendPunchImpl> {
+    queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
+    inflight_msgs: [PunchMsg; PUNCH_QUEUE_SIZE],
+    send_punch_impl: S,
+}
+
+impl<S: SendPunchImpl> BackoffRetries<S> {
+    pub fn new(send_punch_impl: S) -> Self {
+        Self {
+            queue: Default::default(),
+            inflight_msgs: Default::default(),
+            send_punch_impl,
+        }
+    }
+
     pub async fn r#loop(&mut self) {
         loop {
             let top = self.queue.peek();
@@ -80,23 +87,26 @@ impl BackoffRetries {
 
             match select3(PUNCHES_TO_SEND.receive(), QMTPUB_URCS.receive(), timer).await {
                 Either3::First(punch) => {
-                    let idx = self.inflight_msgs.iter().position(|msg| msg.id.is_none());
-                    if let Some(id) = idx {
-                        // TODO: id = 0 is special, should we use it?
-                        let msg = PunchMsg::new(punch, id as u8);
-                        self.inflight_msgs[id] = msg;
-                        let _ = self.queue.push(msg);
-                    } else {
-                        error!("Message queue is full");
+                    // We skip the first element corresponding to ID=0
+                    let idx = self.inflight_msgs.iter().rposition(|msg| msg.id == 0);
+                    match idx {
+                        Some(id) if id > 0 => {
+                            let msg = PunchMsg::new(punch, id as u8);
+                            self.inflight_msgs[id] = msg;
+                            let _ = self.queue.push(msg);
+                        }
+                        _ => {
+                            error!("Message queue is full");
+                        }
                     }
                 }
-                Either3::Second(qmtpub_urc) => {
-                    if matches!(qmtpub_urc.status, MqttPubStatus::Timeout) {
-                        let mut msg = self.inflight_msgs[qmtpub_urc.msg_id as usize];
-                        if let Some(id) = msg.id {
-                            warn!("Message ID={} timed out, trying again", id);
+                Either3::Second(qmtpub_urc) => match qmtpub_urc.status {
+                    MqttPubStatus::Timeout => {
+                        let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
+                        if msg.id > 0 {
+                            warn!("Message ID={} timed out, trying again", msg.id);
                             msg.update_next_send();
-                            let _ = self.queue.push(msg);
+                            let _ = self.queue.push(*msg);
                         } else {
                             error!(
                                 "Gor URC for a message we don't know about, ID={}",
@@ -104,18 +114,29 @@ impl BackoffRetries {
                             );
                         }
                     }
-                }
+                    MqttPubStatus::Published => {
+                        let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
+                        msg.id = 0; // Delete
+                        info!("Message published");
+                    }
+                    MqttPubStatus::Retrying(retries) => {
+                        warn!("Message will be retried, has been tried {} times", retries);
+                    }
+                    _ => {
+                        error!("Uknown message status");
+                    }
+                },
                 Either3::Third(_) => {
                     if let Some(punch_msg) = self.queue.pop() {
-                        let punch = [Punch {
-                            raw: &punch_msg.punch,
-                            ..Default::default()
-                        }];
-                        let _punches = Punches {
-                            punches: repeated::Repeated::from_slice(&punch),
-                            ..Default::default()
-                        };
-                        //self.send_message::<40>("p", punches, 1).await
+                        let msg_id = punch_msg.id;
+                        if msg_id == 0 {
+                            continue;
+                        }
+                        if let Err(err) =
+                            self.send_punch_impl.send_punch(punch_msg.punch, msg_id).await
+                        {
+                            error!("Error while sending punch: {}", err);
+                        }
                     }
                 }
             }

@@ -8,7 +8,10 @@ use yaroc_nrf52840::{
     self as _,
     device::Device,
     mqtt::MqttConfig,
-    send_punch::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
+    send_punch::{
+        mqtt_backoff_retries, send_punch_event_handler, send_punch_main_loop, SendPunch,
+        SendPunchMutexType,
+    },
     si_uart::{si_uart_reader, SiUartChannelType},
 };
 
@@ -39,4 +42,5 @@ async fn main(spawner: Spawner) {
         &SI_UART_CHANNEL,
     ));
     spawner.must_spawn(si_uart_reader(si_uart, software_serial, &SI_UART_CHANNEL));
+    spawner.must_spawn(mqtt_backoff_retries(&SEND_PUNCH_MUTEX));
 }

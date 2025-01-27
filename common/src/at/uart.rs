@@ -2,7 +2,7 @@ use super::response::{AtResponse, CommandResponse, FromModem, AT_COMMAND_SIZE, A
 use core::option::Option::Some;
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
-use defmt::{self, debug, info};
+use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, WithTimeout};
@@ -57,7 +57,7 @@ impl AtRxBroker {
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
                 if (self.urc_handler)(command_response) {
                     #[cfg(feature = "defmt")]
-                    info!("Got URC {}", line);
+                    debug!("Got URC {}", line);
                     continue;
                 }
             }

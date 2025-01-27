@@ -1,5 +1,5 @@
 use crate::{
-    backoff::{BackoffRetries, QMTPUB_URCS},
+    backoff::QMTPUB_URCS,
     bg77_hw::ModemHw,
     error::Error,
     send_punch::{Command, EVENT_CHANNEL},
@@ -124,7 +124,7 @@ impl<M: ModemHw> MqttClient<M> {
         // TODO: get client ID
         if values[0] == 0 {
             let report = MqttPublishReport::new(values[1], values[2], values.get(3));
-            if values[1] > 0 {
+            if report.msg_id > 0 {
                 // TODO: channel might be full
                 let _ = QMTPUB_URCS.try_send(report);
                 true
@@ -246,9 +246,10 @@ impl<M: ModemHw> MqttClient<M> {
         topic: &str,
         msg: &[u8],
         qos: MqttQos,
+        msg_id: u8,
     ) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, 0, qos as u8, topic, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos as u8, topic, msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
@@ -262,10 +263,4 @@ impl<M: ModemHw> MqttClient<M> {
         }
         Ok(())
     }
-}
-
-#[embassy_executor::task]
-pub async fn mqtt_backoff_retries() {
-    let mut backoff_retries = BackoffRetries::default();
-    backoff_retries.r#loop().await;
 }
