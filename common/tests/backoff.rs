@@ -12,7 +12,7 @@ use yaroc_common::{
     RawMutex,
 };
 
-#[derive(Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Eq, PartialEq)]
 struct TimedResponse {
     time: Instant,
     report: MqttPublishReport,
@@ -21,6 +21,18 @@ struct TimedResponse {
 impl TimedResponse {
     pub fn new(time: Instant, report: MqttPublishReport) -> Self {
         Self { time, report }
+    }
+}
+
+impl PartialOrd for TimedResponse {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.time.partial_cmp(&other.time)
+    }
+}
+
+impl Ord for TimedResponse {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.time.cmp(&other.time)
     }
 }
 

@@ -51,6 +51,7 @@ impl PunchMsg {
     }
 }
 
+/// Trait for a send punch function used by `BackoffRetries` to send punches.
 pub trait SendPunchFn {
     fn send_punch(
         &mut self,
@@ -59,6 +60,7 @@ pub trait SendPunchFn {
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
+/// Exponential backoff retries for sending punches.
 #[derive(Default)]
 pub struct BackoffRetries<S: SendPunchFn> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
@@ -77,6 +79,25 @@ impl<S: SendPunchFn> BackoffRetries<S> {
         }
     }
 
+    /// Find vacant index in `inflight_msgs`.
+    ///
+    /// It's a position with PunchMsg.id == 0.
+    fn vacant_idx(&self) -> Option<usize> {
+        self.inflight_msgs.iter().rposition(|msg| msg.id == 0)
+    }
+
+    /// Delete message from infligh messages.
+    ///
+    /// Typically done after it's been succesfully sent.
+    fn delete_msg(&mut self, idx: u8) {
+        // Setting ID to 0 is the deletion operation. The `vacant_idx` function will consider this
+        // spot empty.
+        self.inflight_msgs[idx as usize].id = 0;
+    }
+
+    /// Main loop handling the retries.
+    ///
+    /// Needs to run on a separate thread.
     pub async fn r#loop(&mut self) {
         loop {
             let top = self.queue.peek();
@@ -87,9 +108,8 @@ impl<S: SendPunchFn> BackoffRetries<S> {
 
             match select3(PUNCHES_TO_SEND.receive(), QMTPUB_URCS.receive(), timer).await {
                 Either3::First(punch) => {
-                    // We skip the first element corresponding to ID=0
-                    let idx = self.inflight_msgs.iter().rposition(|msg| msg.id == 0);
-                    match idx {
+                    match self.vacant_idx() {
+                        // We skip the first element corresponding to ID=0
                         Some(id) if id > 0 => {
                             let msg = PunchMsg::new(punch, id as u8, self.initial_backoff);
                             self.inflight_msgs[id] = msg;
@@ -115,8 +135,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         }
                     }
                     MqttPubStatus::Published => {
-                        let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
-                        msg.id = 0; // Delete
+                        self.delete_msg(qmtpub_urc.msg_id);
                         info!("Message published");
                     }
                     MqttPubStatus::Retrying(retries) => {

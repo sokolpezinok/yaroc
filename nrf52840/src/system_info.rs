@@ -94,7 +94,7 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
-        Ok(response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4])?)
+        response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4])
     }
 
     async fn cellid(bg77: &mut M) -> Result<u32, Error> {
