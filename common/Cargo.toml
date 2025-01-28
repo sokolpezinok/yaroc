@@ -32,5 +32,9 @@ static_cell = "2.1.0"
 femtopb-build = "0.5.0"
 
 [[test]]
+name = "backoff"
+required-features = ["std"]
+
+[[test]]
 name = "uart"
 required-features = ["std"]

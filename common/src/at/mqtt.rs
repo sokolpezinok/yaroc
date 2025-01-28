@@ -6,6 +6,7 @@ pub enum MqttPubStatus {
     Unknown,
 }
 
+#[derive(PartialEq, Eq)]
 pub struct MqttPublishReport {
     pub msg_id: u8,
     pub status: MqttPubStatus,

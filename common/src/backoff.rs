@@ -29,18 +29,19 @@ impl Default for PunchMsg {
         Self {
             punch: RawPunch::default(),
             next_send: Instant::now(),
-            backoff: Duration::from_secs(30),
+            backoff: Duration::from_secs(1),
             id: 0,
         }
     }
 }
 
 impl PunchMsg {
-    pub fn new(punch: RawPunch, msg_id: u8) -> Self {
+    pub fn new(punch: RawPunch, msg_id: u8, initial_backoff: Duration) -> Self {
         Self {
             punch,
             id: msg_id, // TODO: can't be 0
-            ..Default::default()
+            backoff: initial_backoff,
+            next_send: Instant::now(),
         }
     }
 
@@ -75,14 +76,16 @@ pub struct BackoffRetries<S: SendPunchImpl> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
     inflight_msgs: [PunchMsg; PUNCH_QUEUE_SIZE],
     send_punch_impl: S,
+    initial_backoff: Duration,
 }
 
 impl<S: SendPunchImpl> BackoffRetries<S> {
-    pub fn new(send_punch_impl: S) -> Self {
+    pub fn new(send_punch_impl: S, initial_backoff: Duration) -> Self {
         Self {
             queue: Default::default(),
             inflight_msgs: Default::default(),
             send_punch_impl,
+            initial_backoff,
         }
     }
 
@@ -100,7 +103,7 @@ impl<S: SendPunchImpl> BackoffRetries<S> {
                     let idx = self.inflight_msgs.iter().rposition(|msg| msg.id == 0);
                     match idx {
                         Some(id) if id > 0 => {
-                            let msg = PunchMsg::new(punch, id as u8);
+                            let msg = PunchMsg::new(punch, id as u8, self.initial_backoff);
                             self.inflight_msgs[id] = msg;
                             let _ = self.queue.push(msg);
                         }
