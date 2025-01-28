@@ -44,6 +44,7 @@ pub struct SendPunch<M: ModemHw, T: Temp> {
     bg77: M,
     client: MqttClient<M>,
     system_info: SystemInfo<M, T>,
+    last_reconnect: Option<Instant>,
 }
 
 impl<M: ModemHw, T: Temp> SendPunch<M, T> {
@@ -53,6 +54,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
             bg77,
             client: MqttClient::new(config),
             system_info: SystemInfo::<M, T>::new(temp),
+            last_reconnect: None,
         }
     }
 
@@ -93,10 +95,23 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
             .await
     }
 
-    /// Tries to send one SI punch
-    pub async fn send_punch(&mut self, punch: SiPunch) {
-        // TODO: should get an ID or something to retrieve status
-        PUNCHES_TO_SEND.send(punch.raw).await;
+    /// Schedules the SI punch to be handled by `BackoffRetries`.
+    pub async fn schedule_punch(&self, punch: crate::Result<SiPunch>) {
+        match punch {
+            Ok(punch) => {
+                info!(
+                    "{} punched {} at {}",
+                    punch.card,
+                    punch.code,
+                    format!(30; "{}", punch.time).unwrap().as_str(),
+                );
+                // TODO: should get an ID or something to retrieve status
+                PUNCHES_TO_SEND.send(punch.raw).await;
+            }
+            Err(err) => {
+                error!("Wrong punch: {}", err);
+            }
+        }
     }
 
     pub async fn send_punch_impl(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
@@ -121,13 +136,40 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     }
 
     /// Connects to the configured MQTT server.
-    pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+    async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.client.mqtt_connect(&mut self.bg77).await
     }
 
     /// Synchronizes time with the network time of the modem
-    pub async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
         self.system_info.current_time(&mut self.bg77, false).await
+    }
+
+    pub async fn execute_command(&mut self, command: Command) {
+        match command {
+            Command::MqttConnect(force, _) => {
+                if !force
+                    && self.last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
+                        == Some(true)
+                {
+                    return;
+                }
+
+                if let Err(err) = self.mqtt_connect().await {
+                    error!("Error connecting to MQTT: {}", err);
+                }
+                self.last_reconnect = Some(Instant::now());
+            }
+            Command::SynchronizeTime(_) => {
+                let time = self.synchronize_time().await;
+                match time {
+                    None => warn!("Cannot get modem time"),
+                    Some(time) => {
+                        info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -156,7 +198,6 @@ pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
     si_uart_channel: &'static SiUartChannelType,
 ) {
-    let mut last_reconnect: Option<Instant> = None;
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),
@@ -172,60 +213,24 @@ pub async fn send_punch_event_handler(
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
-                Either3::Second(command) => match command {
-                    Command::MqttConnect(force, _) => {
-                        if !force
-                            && last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
-                                == Some(true)
-                        {
-                            continue;
-                        }
-
-                        if let Err(err) = send_punch.mqtt_connect().await {
-                            error!("Error connecting to MQTT: {}", err);
-                        }
-                        last_reconnect = Some(Instant::now());
-                    }
-                    Command::SynchronizeTime(_) => {
-                        let time = send_punch.synchronize_time().await;
-                        match time {
-                            None => warn!("Cannot get modem time"),
-                            Some(time) => {
-                                info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
-                            }
-                        }
-                    }
-                },
-                Either3::Third(punch) => match punch {
-                    Ok(punch) => {
-                        info!(
-                            "{} punched {} at {}",
-                            punch.card,
-                            punch.code,
-                            format!(30; "{}", punch.time).unwrap().as_str(),
-                        );
-                        send_punch.send_punch(punch).await;
-                    }
-                    Err(err) => {
-                        error!("Wrong punch: {}", err);
-                    }
-                },
+                Either3::Second(command) => send_punch.execute_command(command).await,
+                Either3::Third(punch) => send_punch.schedule_punch(punch).await,
             }
         }
     }
 }
 
-struct SendPunchForBackoff {
+struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
 }
 
-impl SendPunchForBackoff {
+impl Bg77SendPunchFn {
     pub fn new(send_punch_mutex: &'static SendPunchMutexType) -> Self {
         Self { send_punch_mutex }
     }
 }
 
-impl SendPunchFn for SendPunchForBackoff {
+impl SendPunchFn for Bg77SendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
         let mut send_punch = self.send_punch_mutex.lock().await;
         send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await
@@ -234,7 +239,7 @@ impl SendPunchFn for SendPunchForBackoff {
 
 #[embassy_executor::task]
 pub async fn mqtt_backoff_retries(send_punch_mutex: &'static SendPunchMutexType) {
-    let send_punch_for_backoff = SendPunchForBackoff::new(send_punch_mutex);
+    let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex);
     let mut backoff_retries = BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10));
     backoff_retries.r#loop().await;
 }
