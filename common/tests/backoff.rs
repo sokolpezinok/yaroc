@@ -6,7 +6,7 @@ use embassy_time::{Duration, Instant, Timer};
 use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
-    at::mqtt::MqttPublishReport,
+    at::mqtt::{MqttPubStatus, MqttPublishReport},
     backoff::{BackoffRetries, SendPunchFn, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE, QMTPUB_URCS},
     punch::RawPunch,
     RawMutex,
@@ -37,6 +37,7 @@ impl Ord for TimedResponse {
 }
 
 static TIMED_RESPONSES: Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE> = Channel::new();
+static PUBLISH_EVENTS: Channel<RawMutex, (u8, Instant), PUNCH_QUEUE_SIZE> = Channel::new();
 
 #[derive(Default)]
 struct FakeSendPunchFn {
@@ -69,6 +70,9 @@ impl FakeSendPunchFn {
             match select(timer, timed_responses.receive()).await {
                 embassy_futures::select::Either::First(_) => {
                     let top = queue.pop().unwrap();
+                    if top.report.status == MqttPubStatus::Published {
+                        PUBLISH_EVENTS.send((top.report.msg_id, Instant::now())).await;
+                    }
                     QMTPUB_URCS.send(top.report).await;
                 }
                 embassy_futures::select::Either::Second(timed_response) => {
@@ -140,6 +144,13 @@ async fn main(spawner: Spawner) {
     punch2[0] = 2;
     PUNCHES_TO_SEND.send(punch2).await;
 
-    Timer::after_secs(3).await;
-    std::process::exit(0); // TODO: this is ugly, is there a better way?
+    for _ in 0..2 {
+        let (msg_id, time) = PUBLISH_EVENTS.receive().await;
+        match msg_id {
+            6 => assert!(time.as_millis() - 1300 <= 10),
+            7 => assert!(time.as_millis() - 2100 <= 15),
+            _ => assert!(false, "Got wrong message"),
+        }
+    }
+    std::process::exit(0); // Exit from executor
 }
