@@ -67,14 +67,18 @@ impl<M: ModemHw> MqttClient<M> {
             let _ = bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await; // TODO
             bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+            return Ok(());
         }
 
+        let state = bg77.simple_call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
+        if state == 0 {
+            bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        }
+        // TODO: should we do something with the result?
         let (_, state) =
             bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
-        if state == 0 {
-            bg77.call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
-        }
 
+        info!("Already registered to network");
         Ok(())
     }
 
