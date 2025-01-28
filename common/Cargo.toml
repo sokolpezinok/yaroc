@@ -13,6 +13,7 @@ std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/
 chrono = { workspace = true }
 defmt = { workspace = true, optional = true }
 embassy-executor = { workspace = true }
+embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true, optional = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true }

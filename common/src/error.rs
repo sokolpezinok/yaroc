@@ -23,6 +23,10 @@ pub enum Error {
     TimeoutError,
     #[error("String encoding error")]
     StringEncodingError,
+    #[error("Network registrarion error")]
+    NetworkRegistrationError,
+    #[error("MQTT error {0}")]
+    MqttError(i8),
 }
 
 impl From<core::fmt::Error> for Error {

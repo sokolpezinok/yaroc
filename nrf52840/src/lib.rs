@@ -1,15 +1,14 @@
 #![no_std]
 #![no_main]
 
-mod backoff;
 pub mod bg77_hw;
 pub mod device;
-pub mod error;
 pub mod mqtt;
 pub mod send_punch;
 pub mod si_uart;
 pub mod system_info;
 
+pub use yaroc_common::error;
 type Result<T> = core::result::Result<T, error::Error>;
 
 use cortex_m_semihosting::debug;
@@ -39,16 +38,5 @@ pub fn exit() -> ! {
 unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
     loop {
         debug::exit(debug::EXIT_FAILURE);
-    }
-}
-
-#[cfg(test)]
-#[defmt_test::tests]
-mod unit_tests {
-    use defmt::assert;
-
-    #[test]
-    fn it_works() {
-        assert!(true)
     }
 }

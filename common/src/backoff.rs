@@ -1,11 +1,12 @@
+use crate::{at::mqtt::{MqttPubStatus, MqttPublishReport}, punch::RawPunch, RawMutex};
+#[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::binary_heap::{BinaryHeap, Min};
-use yaroc_common::{punch::RawPunch, RawMutex};
-
-use crate::mqtt::{MqttPubStatus, MqttPublishReport};
+#[cfg(not(feature = "defmt"))]
+use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
 pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
@@ -58,7 +59,11 @@ impl PartialOrd for PunchMsg {
 }
 
 pub trait SendPunchImpl {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()>;
+    fn send_punch(
+        &mut self,
+        punch: RawPunch,
+        msg_id: u8,
+    ) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
 #[derive(Default)]

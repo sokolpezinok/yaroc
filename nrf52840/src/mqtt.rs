@@ -1,5 +1,4 @@
 use crate::{
-    backoff::QMTPUB_URCS,
     bg77_hw::ModemHw,
     error::Error,
     send_punch::{Command, EVENT_CHANNEL},
@@ -8,7 +7,13 @@ use core::{marker::PhantomData, str::FromStr};
 use defmt::{error, info, warn};
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{format, String};
-use yaroc_common::at::response::CommandResponse;
+use yaroc_common::{
+    at::{
+        mqtt::{MqttPubStatus, MqttPublishReport},
+        response::CommandResponse,
+    },
+    backoff::QMTPUB_URCS,
+};
 
 const MQTT_CLIENT_ID: u8 = 0;
 
@@ -20,32 +25,6 @@ pub enum MqttQos {
     Q0 = 0,
     Q1 = 1,
     // 2 is unsupported
-}
-
-#[derive(PartialEq, Eq)]
-pub enum MqttPubStatus {
-    Published,
-    Retrying(u8),
-    Timeout,
-    Unknown,
-}
-
-pub struct MqttPublishReport {
-    pub msg_id: u8,
-    pub status: MqttPubStatus,
-}
-
-impl MqttPublishReport {
-    pub fn new(msg_id: u8, status: u8, retries: Option<&u8>) -> Self {
-        let status = match status {
-            0 => MqttPubStatus::Published,
-            1 => MqttPubStatus::Retrying(*retries.unwrap_or(&0)),
-            2 => MqttPubStatus::Timeout,
-            _ => MqttPubStatus::Unknown,
-        };
-
-        Self { msg_id, status }
-    }
 }
 
 pub struct MqttConfig {
@@ -123,7 +102,7 @@ impl<M: ModemHw> MqttClient<M> {
 
         // TODO: get client ID
         if values[0] == 0 {
-            let report = MqttPublishReport::new(values[1], values[2], values.get(3));
+            let report = MqttPublishReport::from_bg77_qmtpub(values[1], values[2], values.get(3));
             if report.msg_id > 0 {
                 // TODO: channel might be full
                 let _ = QMTPUB_URCS.try_send(report);
@@ -256,7 +235,7 @@ impl<M: ModemHw> MqttClient<M> {
         let response = bg77.call(msg, "+QMTPUB", qos == MqttQos::Q0).await?;
         if qos == MqttQos::Q0 {
             let (msg_id, status) = response.parse2::<u8, u8>([1, 2], None)?;
-            let report = MqttPublishReport::new(msg_id, status, None);
+            let report = MqttPublishReport::from_bg77_qmtpub(msg_id, status, None);
             if report.status == MqttPubStatus::Published {
                 self.last_successful_send = Instant::now();
             }

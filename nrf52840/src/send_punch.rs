@@ -1,5 +1,4 @@
 use crate::{
-    backoff::{BackoffRetries, SendPunchImpl, PUNCHES_TO_SEND},
     bg77_hw::{Bg77, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
@@ -20,6 +19,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
+    backoff::{BackoffRetries, SendPunchImpl, PUNCHES_TO_SEND},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     RawMutex,
