@@ -175,7 +175,7 @@ pub async fn send_punch_event_handler(
                 Either3::Second(command) => match command {
                     Command::MqttConnect(force, _) => {
                         if !force
-                            && last_reconnect.map(|t| t + Duration::from_secs(60) > Instant::now())
+                            && last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
                                 == Some(true)
                         {
                             continue;

@@ -59,7 +59,7 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if self.last_successful_send + ACTIVATION_TIMEOUT * 3 < Instant::now() {
+        if self.last_successful_send + ACTIVATION_TIMEOUT * 2 < Instant::now() {
             self.last_successful_send = Instant::now();
             bg77.simple_call_at("E0", None).await?;
             let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
