@@ -19,7 +19,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
-    backoff::{BackoffRetries, SendPunchImpl, PUNCHES_TO_SEND},
+    backoff::{BackoffRetries, SendPunchFn, PUNCHES_TO_SEND},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     RawMutex,
@@ -225,7 +225,7 @@ impl SendPunchForBackoff {
     }
 }
 
-impl SendPunchImpl for SendPunchForBackoff {
+impl SendPunchFn for SendPunchForBackoff {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
         let mut send_punch = self.send_punch_mutex.lock().await;
         send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await

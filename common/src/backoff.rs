@@ -16,10 +16,10 @@ pub const PUNCH_QUEUE_SIZE: usize = 8;
 pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
 pub static QMTPUB_URCS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> = Channel::new();
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PunchMsg {
-    punch: RawPunch,
     next_send: Instant,
+    punch: RawPunch,
     backoff: Duration,
     id: u8,
 }
@@ -51,19 +51,7 @@ impl PunchMsg {
     }
 }
 
-impl Ord for PunchMsg {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.next_send.cmp(&other.next_send)
-    }
-}
-
-impl PartialOrd for PunchMsg {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.next_send.cmp(&other.next_send))
-    }
-}
-
-pub trait SendPunchImpl {
+pub trait SendPunchFn {
     fn send_punch(
         &mut self,
         punch: RawPunch,
@@ -72,14 +60,14 @@ pub trait SendPunchImpl {
 }
 
 #[derive(Default)]
-pub struct BackoffRetries<S: SendPunchImpl> {
+pub struct BackoffRetries<S: SendPunchFn> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
     inflight_msgs: [PunchMsg; PUNCH_QUEUE_SIZE],
     send_punch_impl: S,
     initial_backoff: Duration,
 }
 
-impl<S: SendPunchImpl> BackoffRetries<S> {
+impl<S: SendPunchFn> BackoffRetries<S> {
     pub fn new(send_punch_impl: S, initial_backoff: Duration) -> Self {
         Self {
             queue: Default::default(),

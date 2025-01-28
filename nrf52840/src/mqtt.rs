@@ -75,7 +75,7 @@ impl<M: ModemHw> MqttClient<M> {
             bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         }
         // TODO: should we do something with the result?
-        let (_, state) =
+        let (_, _) =
             bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
 
         info!("Already registered to network");

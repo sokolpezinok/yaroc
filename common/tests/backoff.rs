@@ -7,31 +7,12 @@ use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::MqttPublishReport,
-    backoff::{BackoffRetries, SendPunchImpl, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE, QMTPUB_URCS},
+    backoff::{BackoffRetries, SendPunchFn, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE, QMTPUB_URCS},
     punch::RawPunch,
     RawMutex,
 };
 
-#[derive(Default)]
-struct FakeSendPunchImpl {
-    counters: [u8; 10],
-    pub send_time: [Option<Instant>; 10],
-    send_timeout: Duration,
-    successful_send: Duration,
-}
-
-impl FakeSendPunchImpl {
-    pub fn new(send_timeout: Duration, successful_send: Duration) -> Self {
-        Self {
-            counters: Default::default(),
-            send_time: Default::default(),
-            send_timeout,
-            successful_send,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Ord, PartialOrd)]
 struct TimedResponse {
     time: Instant,
     report: MqttPublishReport,
@@ -43,21 +24,28 @@ impl TimedResponse {
     }
 }
 
-impl PartialOrd for TimedResponse {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.time.partial_cmp(&other.time)
-    }
-}
-
-impl Ord for TimedResponse {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.time.cmp(&other.time)
-    }
-}
-
 static MSG_RESPONSES: Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE> = Channel::new();
 
-impl FakeSendPunchImpl {
+#[derive(Default)]
+struct FakeSendPunchFn {
+    counters: [u8; 10],
+    pub send_time: [Option<Instant>; 10],
+    send_timeout: Duration,
+    successful_send: Duration,
+}
+
+impl FakeSendPunchFn {
+    pub fn new(send_timeout: Duration, successful_send: Duration) -> Self {
+        Self {
+            counters: Default::default(),
+            send_time: Default::default(),
+            send_timeout,
+            successful_send,
+        }
+    }
+}
+
+impl FakeSendPunchFn {
     pub async fn process_responses(
         msg_responses: &'static Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE>,
     ) {
@@ -81,7 +69,7 @@ impl FakeSendPunchImpl {
     }
 }
 
-impl SendPunchImpl for FakeSendPunchImpl {
+impl SendPunchFn for FakeSendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> yaroc_common::Result<()> {
         let cnt = punch[0];
         let msg_id = msg_id as usize;
@@ -120,18 +108,18 @@ fn backoff_test() {
 async fn fake_responder(
     msg_responses: &'static Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE>,
 ) {
-    FakeSendPunchImpl::process_responses(&msg_responses).await;
+    FakeSendPunchFn::process_responses(&msg_responses).await;
 }
 
 #[embassy_executor::task]
-async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchImpl>) {
+async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn>) {
     backoff.r#loop().await;
 }
 
 #[embassy_executor::task]
 async fn main(spawner: Spawner) {
-    let fake: FakeSendPunchImpl =
-        FakeSendPunchImpl::new(Duration::from_millis(400), Duration::from_millis(200));
+    let fake: FakeSendPunchFn =
+        FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
     let backoff = BackoffRetries::new(fake, Duration::from_millis(100));
     spawner.must_spawn(backoff_loop(backoff));
     spawner.must_spawn(fake_responder(&MSG_RESPONSES));
