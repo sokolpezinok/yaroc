@@ -1,4 +1,8 @@
-use crate::{at::mqtt::{MqttPubStatus, MqttPublishReport}, punch::RawPunch, RawMutex};
+use crate::{
+    at::mqtt::{MqttPubStatus, MqttPublishReport},
+    punch::RawPunch,
+    RawMutex,
+};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_futures::select::{select3, Either3};
