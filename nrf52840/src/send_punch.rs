@@ -5,7 +5,7 @@ use crate::{
     si_uart::SiUartChannelType,
     system_info::{NrfTemp, SystemInfo, Temp},
 };
-use defmt::{error, info, warn};
+use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
@@ -35,7 +35,7 @@ pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
 pub enum Command {
-    SynchronizeTime(Instant),
+    SynchronizeTime,
     MqttConnect(bool, Instant),
 }
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
@@ -147,7 +147,11 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
 
     pub async fn execute_command(&mut self, command: Command) {
         match command {
-            Command::MqttConnect(force, _) => {
+            Command::MqttConnect(force, origin) => {
+                debug!(
+                    "MQTT connect request took {} milliseconds to arrive",
+                    (Instant::now() - origin).as_millis()
+                );
                 if !force
                     && self.last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
                         == Some(true)
@@ -160,7 +164,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
                 }
                 self.last_reconnect = Some(Instant::now());
             }
-            Command::SynchronizeTime(_) => {
+            Command::SynchronizeTime => {
                 let time = self.synchronize_time().await;
                 match time {
                     None => warn!("Cannot get modem time"),
@@ -188,7 +192,7 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
             Either::First(_) => MCH_SIGNAL.signal(Instant::now()),
-            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime(Instant::now())).await,
+            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime).await,
         }
     }
 }
