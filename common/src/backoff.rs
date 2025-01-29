@@ -20,7 +20,7 @@ pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Chan
 pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> =
     Channel::new();
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PunchMsg {
     next_send: Instant,
     punch: RawPunch,
@@ -69,7 +69,7 @@ pub trait SendPunchFn {
 pub struct BackoffRetries<S: SendPunchFn> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
     inflight_msgs: Vec<PunchMsg, PUNCH_QUEUE_SIZE>,
-    send_punch_impl: S,
+    send_punch_fn: S,
     initial_backoff: Duration,
 }
 
@@ -82,7 +82,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
         Self {
             queue: Default::default(),
             inflight_msgs,
-            send_punch_impl,
+            send_punch_fn: send_punch_impl,
             initial_backoff,
         }
     }
@@ -127,7 +127,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         Some(id) if id > 0 => {
                             let msg = PunchMsg::new(punch, id as u8, self.initial_backoff);
                             self.inflight_msgs[id] = msg;
-                            let _ = self.queue.push(msg);
+                            self.queue.push(msg).expect("Not enough space in queue");
                         }
                         _ => {
                             error!("Message queue is full");
@@ -140,7 +140,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         if msg.id > 0 {
                             warn!("Message ID={} failed to send, trying again", msg.id);
                             msg.update_next_send();
-                            let _ = self.queue.push(*msg);
+                            self.queue.push(*msg).expect("Not enough space in queue");
                         } else {
                             error!(
                                 "Gor URC for a message we don't know about, ID={}",
@@ -166,7 +166,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                             continue;
                         }
                         if let Err(err) =
-                            self.send_punch_impl.send_punch(punch_msg.punch, msg_id).await
+                            self.send_punch_fn.send_punch(punch_msg.punch, msg_id).await
                         {
                             error!("Error while sending punch: {}", err);
                             let report = MqttPublishReport::mqtt_error(msg_id);

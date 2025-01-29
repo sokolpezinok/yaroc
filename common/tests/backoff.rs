@@ -73,6 +73,7 @@ impl FakeSendPunchFn {
                     if top.report.status == MqttPubStatus::Published {
                         PUBLISH_EVENTS.send((top.report.msg_id, Instant::now())).await;
                     }
+                    // TODO: this notification should come from BackoffRetries
                     PUBLISHING_REPORTS.send(top.report).await;
                 }
                 embassy_futures::select::Either::Second(timed_response) => {
