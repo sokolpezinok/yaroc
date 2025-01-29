@@ -8,7 +8,10 @@ use defmt::{error, info, warn};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
-use heapless::binary_heap::{BinaryHeap, Min};
+use heapless::{
+    binary_heap::{BinaryHeap, Min},
+    Vec,
+};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 
@@ -65,16 +68,20 @@ pub trait SendPunchFn {
 #[derive(Default)]
 pub struct BackoffRetries<S: SendPunchFn> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
-    inflight_msgs: [PunchMsg; PUNCH_QUEUE_SIZE],
+    inflight_msgs: Vec<PunchMsg, PUNCH_QUEUE_SIZE>,
     send_punch_impl: S,
     initial_backoff: Duration,
 }
 
 impl<S: SendPunchFn> BackoffRetries<S> {
-    pub fn new(send_punch_impl: S, initial_backoff: Duration) -> Self {
+    pub fn new(send_punch_impl: S, initial_backoff: Duration, capacity: usize) -> Self {
+        let mut inflight_msgs = Vec::new();
+        inflight_msgs
+            .resize(capacity + 1, PunchMsg::default())
+            .expect("capacity set too high");
         Self {
             queue: Default::default(),
-            inflight_msgs: Default::default(),
+            inflight_msgs,
             send_punch_impl,
             initial_backoff,
         }

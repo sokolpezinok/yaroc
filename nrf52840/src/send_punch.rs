@@ -244,6 +244,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 #[embassy_executor::task]
 pub async fn mqtt_backoff_retries(send_punch_mutex: &'static SendPunchMutexType) {
     let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex);
-    let mut backoff_retries = BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10));
+    let mut backoff_retries =
+        BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10), 7);
     backoff_retries.r#loop().await;
 }

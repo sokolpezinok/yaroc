@@ -133,7 +133,7 @@ async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn>) {
 async fn main(spawner: Spawner) {
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
-    let backoff = BackoffRetries::new(fake, Duration::from_millis(100));
+    let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2);
     spawner.must_spawn(backoff_loop(backoff));
     spawner.must_spawn(fake_responder(&TIMED_RESPONSES));
 
@@ -144,13 +144,18 @@ async fn main(spawner: Spawner) {
     punch2[0] = 2;
     PUNCHES_TO_SEND.send(punch2).await;
 
+    let mut punch3 = RawPunch::default();
+    punch3[0] = 1;
+    PUNCHES_TO_SEND.send(punch3).await;
+
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
         match msg_id {
-            6 => assert!(time.as_millis().abs_diff(1300) <= 10),
-            7 => assert!(time.as_millis().abs_diff(2100) <= 15),
+            1 => assert!(time.as_millis().abs_diff(1300) <= 10),
+            2 => assert!(time.as_millis().abs_diff(2100) <= 15),
             _ => assert!(false, "Got wrong message"),
         }
     }
+    assert!(PUBLISH_EVENTS.is_empty());
     std::process::exit(0); // Exit from executor
 }
