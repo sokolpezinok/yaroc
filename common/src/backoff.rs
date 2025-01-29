@@ -17,7 +17,7 @@ use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
 pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
-pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> =
+pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]

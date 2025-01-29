@@ -95,7 +95,7 @@ impl<M: ModemHw> MqttClient<M> {
             "QMTSTAT" | "QIURC" => {
                 let message = Command::MqttConnect(true, Instant::now());
                 if EVENT_CHANNEL.try_send(message).is_err() {
-                    error!("Error while sending Mqtt connect command, channel full");
+                    error!("Error while sending MQTT connect command, channel full");
                 }
                 true
             }
@@ -116,9 +116,10 @@ impl<M: ModemHw> MqttClient<M> {
         if values[0] == 0 {
             let report = MqttPublishReport::from_bg77_qmtpub(values[1], values[2], values.get(3));
             if report.msg_id > 0 {
-                // TODO: channel might be full
                 // This should cause an update of self.last_successful_send (if published)
-                let _ = PUBLISHING_REPORTS.try_send(report);
+                if PUBLISHING_REPORTS.try_send(report).is_err() {
+                    error!("Error while sending MQTT message notification, channel full");
+                }
                 true
             } else {
                 false
