@@ -54,7 +54,7 @@ pub trait ModemHw {
         &mut self,
         cmd: &str,
         timeout: Duration,
-    ) -> impl core::future::Future<Output = yaroc_common::Result<AtResponse>>;
+    ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Sends a raw message to the modem.
     ///
@@ -65,7 +65,10 @@ pub trait ModemHw {
         msg: &[u8],
         command_prefix: &str,
         second_read: bool,
-    ) -> impl core::future::Future<Output = yaroc_common::Result<AtResponse>>;
+    ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
+
+    /// TODO: docstring
+    fn read(&mut self) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
@@ -105,6 +108,12 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         second_read: bool,
     ) -> yaroc_common::Result<AtResponse> {
         self.uart1.call(msg, command_prefix, second_read, BG77_MINIMUM_TIMEOUT).await
+    }
+
+    async fn read(&mut self) -> crate::Result<AtResponse> {
+        let lines = self.uart1.read(BG77_MINIMUM_TIMEOUT).await?;
+        // TODO: take command as parameter
+        Ok(AtResponse::new(lines, "+QMTPUB"))
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {

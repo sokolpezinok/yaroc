@@ -4,7 +4,7 @@ use crate::{
     send_punch::{Command, EVENT_CHANNEL},
 };
 use core::{marker::PhantomData, str::FromStr};
-use defmt::{error, info, warn};
+use defmt::{debug, error, info, warn};
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{format, String};
 use yaroc_common::{
@@ -65,14 +65,22 @@ impl<M: ModemHw> MqttClient<M> {
             let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
             let _ = bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
-            Timer::after_secs(2).await; // TODO
             bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+            Timer::after_secs(2).await;
             return Ok(());
         }
 
         let state = bg77.simple_call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
         if state == 0 {
             bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+            // CGATT=1 needs additional time and reading from modem
+            Timer::after_secs(1).await;
+            let response = bg77.read().await;
+            if let Ok(response) = response {
+                if !response.lines().is_empty() {
+                    debug!("Read {=[?]} after CGATT=1", response.lines());
+                }
+            }
         }
         // TODO: should we do something with the result?
         let (_, _) =
@@ -109,6 +117,7 @@ impl<M: ModemHw> MqttClient<M> {
             let report = MqttPublishReport::from_bg77_qmtpub(values[1], values[2], values.get(3));
             if report.msg_id > 0 {
                 // TODO: channel might be full
+                // This should cause an update of self.last_successful_send (if published)
                 let _ = QMTPUB_URCS.try_send(report);
                 true
             } else {

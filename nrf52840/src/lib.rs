@@ -9,7 +9,7 @@ pub mod si_uart;
 pub mod system_info;
 
 pub use yaroc_common::error;
-type Result<T> = core::result::Result<T, error::Error>;
+type Result<T> = yaroc_common::Result<T>;
 
 use cortex_m_semihosting::debug;
 use defmt_rtt as _;
