@@ -3,6 +3,7 @@ pub enum MqttPubStatus {
     Published,
     Retrying(u8),
     Timeout,
+    MqttError,
     Unknown,
 }
 
@@ -20,7 +21,13 @@ impl MqttPublishReport {
             2 => MqttPubStatus::Timeout,
             _ => MqttPubStatus::Unknown,
         };
-
         Self { msg_id, status }
+    }
+
+    pub fn mqtt_error(msg_id: u8) -> Self {
+        Self {
+            msg_id,
+            status: MqttPubStatus::MqttError,
+        }
     }
 }

@@ -14,7 +14,8 @@ use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
 pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
-pub static QMTPUB_URCS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> = Channel::new();
+pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, PUNCH_QUEUE_SIZE> =
+    Channel::new();
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PunchMsg {
@@ -106,7 +107,13 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                 Some(msg) => Timer::at(msg.next_send),
             };
 
-            match select3(PUNCHES_TO_SEND.receive(), QMTPUB_URCS.receive(), timer).await {
+            match select3(
+                PUNCHES_TO_SEND.receive(),
+                PUBLISHING_REPORTS.receive(),
+                timer,
+            )
+            .await
+            {
                 Either3::First(punch) => {
                     match self.vacant_idx() {
                         // We skip the first element corresponding to ID=0
@@ -121,10 +128,10 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                     }
                 }
                 Either3::Second(qmtpub_urc) => match qmtpub_urc.status {
-                    MqttPubStatus::Timeout => {
+                    MqttPubStatus::Timeout | MqttPubStatus::MqttError => {
                         let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
                         if msg.id > 0 {
-                            warn!("Message ID={} timed out, trying again", msg.id);
+                            warn!("Message ID={} failed to send, trying again", msg.id);
                             msg.update_next_send();
                             let _ = self.queue.push(*msg);
                         } else {
@@ -155,6 +162,8 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                             self.send_punch_impl.send_punch(punch_msg.punch, msg_id).await
                         {
                             error!("Error while sending punch: {}", err);
+                            let report = MqttPublishReport::mqtt_error(msg_id);
+                            PUBLISHING_REPORTS.send(report).await;
                         }
                     }
                 }

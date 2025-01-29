@@ -7,7 +7,7 @@ use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttPubStatus, MqttPublishReport},
-    backoff::{BackoffRetries, SendPunchFn, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE, QMTPUB_URCS},
+    backoff::{BackoffRetries, SendPunchFn, PUBLISHING_REPORTS, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE},
     punch::RawPunch,
     RawMutex,
 };
@@ -73,7 +73,7 @@ impl FakeSendPunchFn {
                     if top.report.status == MqttPubStatus::Published {
                         PUBLISH_EVENTS.send((top.report.msg_id, Instant::now())).await;
                     }
-                    QMTPUB_URCS.send(top.report).await;
+                    PUBLISHING_REPORTS.send(top.report).await;
                 }
                 embassy_futures::select::Either::Second(timed_response) => {
                     let _ = queue.push(timed_response);
@@ -87,22 +87,22 @@ impl SendPunchFn for FakeSendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> yaroc_common::Result<()> {
         let cnt = punch[0];
         let msg_idx = msg_id as usize;
-        if self.counters[msg_idx] < cnt {
+        let (time, report) = if self.counters[msg_idx] == 0 {
+            // First attempt fails
+            let report = MqttPublishReport::mqtt_error(msg_id);
+            self.counters[msg_idx] += 1;
+            (Instant::now() + self.send_timeout, report)
+        } else if self.counters[msg_idx] < cnt {
+            // Next attempts time out
             let report = MqttPublishReport::from_bg77_qmtpub(msg_id, 2, None);
             self.counters[msg_idx] += 1;
-            TIMED_RESPONSES
-                .send(TimedResponse::new(
-                    Instant::now() + self.send_timeout,
-                    report,
-                ))
-                .await;
+            (Instant::now() + self.send_timeout, report)
         } else {
             let report = MqttPublishReport::from_bg77_qmtpub(msg_id, 0, None);
             let send_time = Instant::now() + self.successful_send;
-            println!("{}: {}", msg_idx, send_time.as_millis());
-
-            TIMED_RESPONSES.send(TimedResponse::new(send_time, report)).await;
-        }
+            (send_time, report)
+        };
+        TIMED_RESPONSES.send(TimedResponse::new(time, report)).await;
         Ok(())
     }
 }
@@ -147,8 +147,8 @@ async fn main(spawner: Spawner) {
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
         match msg_id {
-            6 => assert!(time.as_millis() - 1300 <= 10),
-            7 => assert!(time.as_millis() - 2100 <= 15),
+            6 => assert!(time.as_millis().abs_diff(1300) <= 10),
+            7 => assert!(time.as_millis().abs_diff(2100) <= 15),
             _ => assert!(false, "Got wrong message"),
         }
     }

@@ -12,7 +12,7 @@ use yaroc_common::{
         mqtt::{MqttPubStatus, MqttPublishReport},
         response::CommandResponse,
     },
-    backoff::QMTPUB_URCS,
+    backoff::PUBLISHING_REPORTS,
 };
 
 const MQTT_CLIENT_ID: u8 = 0;
@@ -118,7 +118,7 @@ impl<M: ModemHw> MqttClient<M> {
             if report.msg_id > 0 {
                 // TODO: channel might be full
                 // This should cause an update of self.last_successful_send (if published)
-                let _ = QMTPUB_URCS.try_send(report);
+                let _ = PUBLISHING_REPORTS.try_send(report);
                 true
             } else {
                 false
