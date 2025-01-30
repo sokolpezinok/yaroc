@@ -27,6 +27,7 @@ pub enum MqttQos {
     // 2 is unsupported
 }
 
+#[derive(Clone)]
 pub struct MqttConfig {
     pub url: String<40>,
     pub packet_timeout: Duration,

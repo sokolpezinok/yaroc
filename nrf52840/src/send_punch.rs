@@ -15,7 +15,7 @@ use embassy_nrf::{
 };
 use embassy_sync::signal::Signal;
 use embassy_sync::{channel::Channel, mutex::Mutex};
-use embassy_time::{Duration, Instant, Ticker};
+use embassy_time::{Duration, Instant, Ticker, WithTimeout};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
@@ -226,24 +226,38 @@ pub async fn send_punch_event_handler(
 
 struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
+    packet_timeout: Duration,
 }
 
 impl Bg77SendPunchFn {
-    pub fn new(send_punch_mutex: &'static SendPunchMutexType) -> Self {
-        Self { send_punch_mutex }
+    pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
+        Self {
+            send_punch_mutex,
+            packet_timeout,
+        }
     }
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
-        let mut send_punch = self.send_punch_mutex.lock().await;
+        let mut send_punch = self
+            .send_punch_mutex
+            .lock()
+            // TODO: We avoid deadlock by adding a timeout, there might be better solutions
+            .with_timeout(self.packet_timeout)
+            .await
+            .map_err(|_| Error::TimeoutError)?;
         send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await
     }
 }
 
 #[embassy_executor::task]
-pub async fn mqtt_backoff_retries(send_punch_mutex: &'static SendPunchMutexType) {
-    let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex);
+pub async fn mqtt_backoff_retries(
+    send_punch_mutex: &'static SendPunchMutexType,
+    mqtt_config: MqttConfig,
+) {
+    // TODO: consider moving this to SendPunch::new(), just like we do with bg77.spawn()
+    let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, mqtt_config.packet_timeout);
     let mut backoff_retries =
         BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10), 7);
     backoff_retries.r#loop().await;
