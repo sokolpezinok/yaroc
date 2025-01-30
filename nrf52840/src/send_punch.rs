@@ -104,14 +104,14 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub async fn schedule_punch(&mut self, punch: crate::Result<SiPunch>) {
         match punch {
             Ok(punch) => {
+                let id = self.client.schedule_punch(punch.raw).await;
                 info!(
-                    "{} punched {} at {}",
+                    "{} punched {} at {}, ID={}",
                     punch.card,
                     punch.code,
-                    format!(30; "{}", punch.time).unwrap().as_str(),
+                    format!(30; "{}", punch.time).unwrap().as_str()[..23],
+                    id,
                 );
-                // TODO: should get an ID or something to retrieve status
-                self.client.schedule_punch(punch.raw).await;
             }
             Err(err) => {
                 error!("Wrong punch: {}", err);

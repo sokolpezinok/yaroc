@@ -105,7 +105,7 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if self.last_successful_send + ACTIVATION_TIMEOUT * 2 < Instant::now() {
+        if self.last_successful_send + self.config.packet_timeout * 4 < Instant::now() {
             self.last_successful_send = Instant::now();
             bg77.simple_call_at("E0", None).await?;
             let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
@@ -205,7 +205,7 @@ impl<M: ModemHw> MqttClient<M> {
         bg77.simple_call_at(&cmd, None).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
-            (self.config.packet_timeout * 3).as_secs()
+            (self.config.packet_timeout * 2).as_secs()
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
@@ -308,9 +308,12 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    pub async fn schedule_punch(&mut self, punch: RawPunch) {
+    /// Schedules punch and returns its Punch ID
+    pub async fn schedule_punch(&mut self, punch: RawPunch) -> u16 {
         // TODO: what if channel is full?
-        CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch, self.punch_cnt)).await;
+        let punch_id = self.punch_cnt;
+        CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch, punch_id)).await;
         self.punch_cnt += 1;
+        punch_id
     }
 }
