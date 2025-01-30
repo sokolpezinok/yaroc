@@ -16,9 +16,13 @@ use heapless::{
 use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
-pub static PUNCHES_TO_SEND: Channel<RawMutex, RawPunch, PUNCH_QUEUE_SIZE> = Channel::new();
+pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommands, PUNCH_QUEUE_SIZE> = Channel::new();
 pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
+
+pub enum BackoffCommands {
+    PublishPunch(RawPunch, u32),
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PunchMsg {
@@ -115,18 +119,18 @@ impl<S: SendPunchFn> BackoffRetries<S> {
             };
 
             match select3(
-                PUNCHES_TO_SEND.receive(),
+                CMD_FOR_BACKOFF.receive(),
                 PUBLISHING_REPORTS.receive(),
                 timer,
             )
             .await
             {
-                Either3::First(punch) => {
+                Either3::First(BackoffCommands::PublishPunch(punch, _punch_id)) => {
                     match self.vacant_idx() {
                         // We skip the first element corresponding to ID=0
-                        Some(id) if id > 0 => {
-                            let msg = PunchMsg::new(punch, id as u8, self.initial_backoff);
-                            self.inflight_msgs[id] = msg;
+                        Some(msg_id) if msg_id > 0 => {
+                            let msg = PunchMsg::new(punch, msg_id as u8, self.initial_backoff);
+                            self.inflight_msgs[msg_id] = msg;
                             self.queue.push(msg).expect("Not enough space in queue");
                         }
                         _ => {

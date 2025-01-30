@@ -101,7 +101,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     }
 
     /// Schedules the SI punch to be handled by `BackoffRetries`.
-    pub async fn schedule_punch(&self, punch: crate::Result<SiPunch>) {
+    pub async fn schedule_punch(&mut self, punch: crate::Result<SiPunch>) {
         match punch {
             Ok(punch) => {
                 info!(

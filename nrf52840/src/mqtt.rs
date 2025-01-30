@@ -13,7 +13,7 @@ use yaroc_common::{
         mqtt::{MqttPubStatus, MqttPublishReport},
         response::CommandResponse,
     },
-    backoff::{BackoffRetries, SendPunchFn, PUBLISHING_REPORTS, PUNCHES_TO_SEND},
+    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUBLISHING_REPORTS},
     punch::RawPunch,
 };
 
@@ -81,6 +81,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
+    punch_cnt: u32,
     _phantom: PhantomData<M>,
 }
 
@@ -98,6 +99,7 @@ impl<M: ModemHw> MqttClient<M> {
         Self {
             config,
             last_successful_send: Instant::now(),
+            punch_cnt: 0,
             _phantom: PhantomData,
         }
     }
@@ -301,8 +303,9 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    pub async fn schedule_punch(&self, punch: RawPunch) {
+    pub async fn schedule_punch(&mut self, punch: RawPunch) {
         // TODO: what if channel is full?
-        PUNCHES_TO_SEND.send(punch).await
+        CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch, self.punch_cnt)).await;
+        self.punch_cnt += 1;
     }
 }

@@ -7,7 +7,10 @@ use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttPubStatus, MqttPublishReport},
-    backoff::{BackoffRetries, SendPunchFn, PUBLISHING_REPORTS, PUNCHES_TO_SEND, PUNCH_QUEUE_SIZE},
+    backoff::{
+        BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUBLISHING_REPORTS,
+        PUNCH_QUEUE_SIZE,
+    },
     punch::RawPunch,
     RawMutex,
 };
@@ -140,14 +143,14 @@ async fn main(spawner: Spawner) {
 
     let mut punch1 = RawPunch::default();
     punch1[0] = 3;
-    PUNCHES_TO_SEND.send(punch1).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch1, 0)).await;
     let mut punch2 = RawPunch::default();
     punch2[0] = 2;
-    PUNCHES_TO_SEND.send(punch2).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch2, 1)).await;
 
     let mut punch3 = RawPunch::default();
     punch3[0] = 1;
-    PUNCHES_TO_SEND.send(punch3).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch3, 2)).await;
 
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
