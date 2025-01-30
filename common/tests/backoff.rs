@@ -40,7 +40,7 @@ impl Ord for TimedResponse {
 }
 
 static TIMED_RESPONSES: Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE> = Channel::new();
-static PUBLISH_EVENTS: Channel<RawMutex, (u8, Instant), PUNCH_QUEUE_SIZE> = Channel::new();
+static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_QUEUE_SIZE> = Channel::new();
 
 #[derive(Default)]
 struct FakeSendPunchFn {
@@ -143,14 +143,14 @@ async fn main(spawner: Spawner) {
 
     let mut punch1 = RawPunch::default();
     punch1[0] = 3;
-    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch1, 0)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch1, 0)).await;
     let mut punch2 = RawPunch::default();
     punch2[0] = 2;
-    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch2, 1)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch2, 1)).await;
 
     let mut punch3 = RawPunch::default();
     punch3[0] = 1;
-    CMD_FOR_BACKOFF.send(BackoffCommands::Punch(punch3, 2)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch3, 2)).await;
 
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
