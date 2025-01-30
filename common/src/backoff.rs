@@ -19,6 +19,7 @@ pub const PUNCH_QUEUE_SIZE: usize = 8;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommands, PUNCH_QUEUE_SIZE> = Channel::new();
 pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
+const BACKOFF_MULTIPLIER: u32 = 2;
 
 pub enum BackoffCommands {
     PublishPunch(RawPunch, u32),
@@ -29,7 +30,8 @@ pub struct PunchMsg {
     next_send: Instant,
     punch: RawPunch,
     backoff: Duration,
-    id: u8,
+    id: u32,
+    msg_id: u16,
 }
 
 impl Default for PunchMsg {
@@ -39,15 +41,17 @@ impl Default for PunchMsg {
             next_send: Instant::now(),
             backoff: Duration::from_secs(1),
             id: 0,
+            msg_id: 0,
         }
     }
 }
 
 impl PunchMsg {
-    pub fn new(punch: RawPunch, msg_id: u8, initial_backoff: Duration) -> Self {
+    pub fn new(punch: RawPunch, id: u32, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
             punch,
-            id: msg_id, // TODO: can't be 0
+            id,
+            msg_id, // TODO: can't be 0
             backoff: initial_backoff,
             next_send: Instant::now(),
         }
@@ -55,7 +59,7 @@ impl PunchMsg {
 
     pub fn update_next_send(&mut self) {
         self.next_send = Instant::now() + self.backoff;
-        self.backoff *= 2; // TODO: configurable
+        self.backoff *= BACKOFF_MULTIPLIER;
     }
 }
 
@@ -64,7 +68,7 @@ pub trait SendPunchFn {
     fn send_punch(
         &mut self,
         punch: RawPunch,
-        msg_id: u8,
+        msg_id: u16,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
@@ -95,16 +99,16 @@ impl<S: SendPunchFn> BackoffRetries<S> {
     ///
     /// It's a position with PunchMsg.id == 0.
     fn vacant_idx(&self) -> Option<usize> {
-        self.inflight_msgs.iter().rposition(|msg| msg.id == 0)
+        self.inflight_msgs.iter().rposition(|msg| msg.msg_id == 0)
     }
 
     /// Delete message from infligh messages.
     ///
     /// Typically done after it's been succesfully sent.
-    fn delete_msg(&mut self, idx: u8) {
+    fn delete_msg(&mut self, idx: u16) {
         // Setting ID to 0 is the deletion operation. The `vacant_idx` function will consider this
         // spot empty.
-        self.inflight_msgs[idx as usize].id = 0;
+        self.inflight_msgs[idx as usize].msg_id = 0;
     }
 
     /// Main loop handling the retries.
@@ -125,11 +129,12 @@ impl<S: SendPunchFn> BackoffRetries<S> {
             )
             .await
             {
-                Either3::First(BackoffCommands::PublishPunch(punch, _punch_id)) => {
+                Either3::First(BackoffCommands::PublishPunch(punch, punch_id)) => {
                     match self.vacant_idx() {
                         // We skip the first element corresponding to ID=0
                         Some(msg_id) if msg_id > 0 => {
-                            let msg = PunchMsg::new(punch, msg_id as u8, self.initial_backoff);
+                            let msg =
+                                PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                             self.inflight_msgs[msg_id] = msg;
                             self.queue.push(msg).expect("Not enough space in queue");
                         }
@@ -141,8 +146,8 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                 Either3::Second(qmtpub_urc) => match qmtpub_urc.status {
                     MqttPubStatus::Timeout | MqttPubStatus::MqttError => {
                         let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
-                        if msg.id > 0 {
-                            warn!("Message ID={} failed to send, trying again", msg.id);
+                        if msg.msg_id > 0 {
+                            warn!("Message ID={} failed to send, trying again", msg.msg_id);
                             msg.update_next_send();
                             self.queue.push(*msg).expect("Not enough space in queue");
                         } else {
@@ -165,7 +170,7 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                 },
                 Either3::Third(_) => {
                     if let Some(punch_msg) = self.queue.pop() {
-                        let msg_id = punch_msg.id;
+                        let msg_id = punch_msg.msg_id;
                         if msg_id == 0 {
                             continue;
                         }

@@ -88,7 +88,7 @@ impl FakeSendPunchFn {
 }
 
 impl SendPunchFn for FakeSendPunchFn {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> yaroc_common::Result<()> {
+    async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> yaroc_common::Result<()> {
         let cnt = punch[0];
         let msg_idx = msg_id as usize;
         let (time, report) = if self.counters[msg_idx] == 0 {

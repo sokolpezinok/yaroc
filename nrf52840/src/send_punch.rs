@@ -81,7 +81,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         topic: &str,
         msg: impl Message<'_>,
         qos: MqttQos,
-        msg_id: u8,
+        msg_id: u16,
     ) -> Result<(), Error> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
@@ -119,7 +119,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         }
     }
 
-    pub async fn send_punch_impl(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
+    pub async fn send_punch_impl(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
         let punch = [Punch {
             raw: &punch,
             ..Default::default()

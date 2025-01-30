@@ -66,7 +66,7 @@ impl Bg77SendPunchFn {
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
+    async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
         let mut send_punch = self
             .send_punch_mutex
             .lock()
@@ -160,7 +160,8 @@ impl<M: ModemHw> MqttClient<M> {
 
         // TODO: get client ID
         if values[0] == 0 {
-            let report = MqttPublishReport::from_bg77_qmtpub(values[1], values[2], values.get(3));
+            let report =
+                MqttPublishReport::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
             if report.msg_id > 0 {
                 // This should cause an update of self.last_successful_send (if published)
                 if PUBLISHING_REPORTS.try_send(report).is_err() {
@@ -285,7 +286,7 @@ impl<M: ModemHw> MqttClient<M> {
         topic: &str,
         msg: &[u8],
         qos: MqttQos,
-        msg_id: u8,
+        msg_id: u16,
     ) -> Result<(), Error> {
         let cmd = format!(100;
             "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos as u8, topic, msg.len(),
@@ -294,7 +295,7 @@ impl<M: ModemHw> MqttClient<M> {
 
         let response = bg77.call(msg, "+QMTPUB", qos == MqttQos::Q0).await?;
         if qos == MqttQos::Q0 {
-            let (msg_id, status) = response.parse2::<u8, u8>([1, 2], None)?;
+            let (msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
             let report = MqttPublishReport::from_bg77_qmtpub(msg_id, status, None);
             if report.status == MqttPubStatus::Published {
                 self.last_successful_send = Instant::now();
