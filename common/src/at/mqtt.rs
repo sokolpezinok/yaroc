@@ -21,7 +21,10 @@ impl MqttStatus {
             2 => StatusCode::Timeout,
             _ => StatusCode::Unknown,
         };
-        Self { msg_id, code: status }
+        Self {
+            msg_id,
+            code: status,
+        }
     }
 
     pub fn mqtt_error(msg_id: u16) -> Self {
