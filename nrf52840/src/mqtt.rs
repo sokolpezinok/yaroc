@@ -140,6 +140,11 @@ impl<M: ModemHw> MqttClient<M> {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
                 let message = Command::MqttConnect(true, Instant::now());
+                if response.command() == "QMTSTAT" {
+                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
+                        error!("Error while sending MQTT disconnect notification, channel full");
+                    }
+                }
                 if EVENT_CHANNEL.try_send(message).is_err() {
                     error!("Error while sending MQTT connect command, channel full");
                 }
