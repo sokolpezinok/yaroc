@@ -15,11 +15,10 @@ use embassy_nrf::{
 };
 use embassy_sync::signal::Signal;
 use embassy_sync::{channel::Channel, mutex::Mutex};
-use embassy_time::{Duration, Instant, Ticker, WithTimeout};
+use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
-    backoff::{BackoffRetries, SendPunchFn, PUNCHES_TO_SEND},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     RawMutex,
@@ -48,11 +47,17 @@ pub struct SendPunch<M: ModemHw, T: Temp> {
 }
 
 impl<M: ModemHw, T: Temp> SendPunch<M, T> {
-    pub fn new(mut bg77: M, temp: T, spawner: &Spawner, config: MqttConfig) -> Self {
+    pub fn new(
+        mut bg77: M,
+        temp: T,
+        send_punch_mutex: &'static SendPunchMutexType,
+        spawner: &Spawner,
+        config: MqttConfig,
+    ) -> Self {
         bg77.spawn(MqttClient::<M>::urc_handler, spawner);
         Self {
             bg77,
-            client: MqttClient::new(config),
+            client: MqttClient::new(send_punch_mutex, config, spawner),
             system_info: SystemInfo::<M, T>::new(temp),
             last_reconnect: None,
         }
@@ -106,7 +111,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
                     format!(30; "{}", punch.time).unwrap().as_str(),
                 );
                 // TODO: should get an ID or something to retrieve status
-                PUNCHES_TO_SEND.send(punch.raw).await;
+                self.client.schedule_punch(punch.raw).await;
             }
             Err(err) => {
                 error!("Wrong punch: {}", err);
@@ -222,43 +227,4 @@ pub async fn send_punch_event_handler(
             }
         }
     }
-}
-
-struct Bg77SendPunchFn {
-    send_punch_mutex: &'static SendPunchMutexType,
-    packet_timeout: Duration,
-}
-
-impl Bg77SendPunchFn {
-    pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
-        Self {
-            send_punch_mutex,
-            packet_timeout,
-        }
-    }
-}
-
-impl SendPunchFn for Bg77SendPunchFn {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u8) -> crate::Result<()> {
-        let mut send_punch = self
-            .send_punch_mutex
-            .lock()
-            // TODO: We avoid deadlock by adding a timeout, there might be better solutions
-            .with_timeout(self.packet_timeout)
-            .await
-            .map_err(|_| Error::TimeoutError)?;
-        send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await
-    }
-}
-
-#[embassy_executor::task]
-pub async fn mqtt_backoff_retries(
-    send_punch_mutex: &'static SendPunchMutexType,
-    mqtt_config: MqttConfig,
-) {
-    // TODO: consider moving this to SendPunch::new(), just like we do with bg77.spawn()
-    let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, mqtt_config.packet_timeout);
-    let mut backoff_retries =
-        BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10), 7);
-    backoff_retries.r#loop().await;
 }
