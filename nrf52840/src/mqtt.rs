@@ -10,10 +10,10 @@ use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::{format, String};
 use yaroc_common::{
     at::{
-        mqtt::{MqttPubStatus, MqttPublishReport},
+        mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
     },
-    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUBLISHING_REPORTS},
+    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF},
     punch::RawPunch,
 };
 
@@ -160,11 +160,10 @@ impl<M: ModemHw> MqttClient<M> {
 
         // TODO: get client ID
         if values[0] == 0 {
-            let report =
-                MqttPublishReport::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
-            if report.msg_id > 0 {
+            let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
+            if status.msg_id > 0 {
                 // This should cause an update of self.last_successful_send (if published)
-                if PUBLISHING_REPORTS.try_send(report).is_err() {
+                if CMD_FOR_BACKOFF.try_send(BackoffCommands::Status(status)).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }
                 true
@@ -296,8 +295,8 @@ impl<M: ModemHw> MqttClient<M> {
         let response = bg77.call(msg, "+QMTPUB", qos == MqttQos::Q0).await?;
         if qos == MqttQos::Q0 {
             let (msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
-            let report = MqttPublishReport::from_bg77_qmtpub(msg_id, status, None);
-            if report.status == MqttPubStatus::Published {
+            let status = MqttStatus::from_bg77_qmtpub(msg_id, status, None);
+            if status.code == StatusCode::Published {
                 self.last_successful_send = Instant::now();
             }
         }

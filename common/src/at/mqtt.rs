@@ -1,5 +1,5 @@
 #[derive(PartialEq, Eq)]
-pub enum MqttPubStatus {
+pub enum StatusCode {
     Published,
     Retrying(u8),
     Timeout,
@@ -8,26 +8,26 @@ pub enum MqttPubStatus {
 }
 
 #[derive(PartialEq, Eq)]
-pub struct MqttPublishReport {
+pub struct MqttStatus {
     pub msg_id: u16,
-    pub status: MqttPubStatus,
+    pub code: StatusCode,
 }
 
-impl MqttPublishReport {
+impl MqttStatus {
     pub fn from_bg77_qmtpub(msg_id: u16, status: u8, retries: Option<&u8>) -> Self {
         let status = match status {
-            0 => MqttPubStatus::Published,
-            1 => MqttPubStatus::Retrying(*retries.unwrap_or(&0)),
-            2 => MqttPubStatus::Timeout,
-            _ => MqttPubStatus::Unknown,
+            0 => StatusCode::Published,
+            1 => StatusCode::Retrying(*retries.unwrap_or(&0)),
+            2 => StatusCode::Timeout,
+            _ => StatusCode::Unknown,
         };
-        Self { msg_id, status }
+        Self { msg_id, code: status }
     }
 
     pub fn mqtt_error(msg_id: u16) -> Self {
         Self {
             msg_id,
-            status: MqttPubStatus::MqttError,
+            code: StatusCode::MqttError,
         }
     }
 }

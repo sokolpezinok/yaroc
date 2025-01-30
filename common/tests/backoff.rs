@@ -6,11 +6,8 @@ use embassy_time::{Duration, Instant, Timer};
 use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
-    at::mqtt::{MqttPubStatus, MqttPublishReport},
-    backoff::{
-        BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUBLISHING_REPORTS,
-        PUNCH_QUEUE_SIZE,
-    },
+    at::mqtt::{MqttStatus, StatusCode},
+    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE},
     punch::RawPunch,
     RawMutex,
 };
@@ -18,12 +15,12 @@ use yaroc_common::{
 #[derive(Eq, PartialEq)]
 struct TimedResponse {
     time: Instant,
-    report: MqttPublishReport,
+    status: MqttStatus,
 }
 
 impl TimedResponse {
-    pub fn new(time: Instant, report: MqttPublishReport) -> Self {
-        Self { time, report }
+    pub fn new(time: Instant, status: MqttStatus) -> Self {
+        Self { time, status }
     }
 }
 
@@ -73,11 +70,11 @@ impl FakeSendPunchFn {
             match select(timer, timed_responses.receive()).await {
                 embassy_futures::select::Either::First(_) => {
                     let top = queue.pop().unwrap();
-                    if top.report.status == MqttPubStatus::Published {
-                        PUBLISH_EVENTS.send((top.report.msg_id, Instant::now())).await;
+                    if top.status.code == StatusCode::Published {
+                        PUBLISH_EVENTS.send((top.status.msg_id, Instant::now())).await;
                     }
                     // TODO: this notification should come from BackoffRetries
-                    PUBLISHING_REPORTS.send(top.report).await;
+                    CMD_FOR_BACKOFF.send(BackoffCommands::Status(top.status)).await;
                 }
                 embassy_futures::select::Either::Second(timed_response) => {
                     let _ = queue.push(timed_response);
@@ -93,16 +90,16 @@ impl SendPunchFn for FakeSendPunchFn {
         let msg_idx = msg_id as usize;
         let (time, report) = if self.counters[msg_idx] == 0 {
             // First attempt fails
-            let report = MqttPublishReport::mqtt_error(msg_id);
+            let report = MqttStatus::mqtt_error(msg_id);
             self.counters[msg_idx] += 1;
             (Instant::now() + self.send_timeout, report)
         } else if self.counters[msg_idx] < cnt {
             // Next attempts time out
-            let report = MqttPublishReport::from_bg77_qmtpub(msg_id, 2, None);
+            let report = MqttStatus::from_bg77_qmtpub(msg_id, 2, None);
             self.counters[msg_idx] += 1;
             (Instant::now() + self.send_timeout, report)
         } else {
-            let report = MqttPublishReport::from_bg77_qmtpub(msg_id, 0, None);
+            let report = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
             let send_time = Instant::now() + self.successful_send;
             (send_time, report)
         };

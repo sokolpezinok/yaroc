@@ -1,11 +1,11 @@
 use crate::{
-    at::mqtt::{MqttPubStatus, MqttPublishReport},
+    at::mqtt::{MqttStatus, StatusCode},
     punch::RawPunch,
     RawMutex,
 };
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{select, Either};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{
@@ -16,13 +16,13 @@ use heapless::{
 use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
-pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommands, PUNCH_QUEUE_SIZE> = Channel::new();
-pub static PUBLISHING_REPORTS: Channel<RawMutex, MqttPublishReport, { PUNCH_QUEUE_SIZE * 2 }> =
+pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommands, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
 
 pub enum BackoffCommands {
     PublishPunch(RawPunch, u32),
+    Status(MqttStatus),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -122,14 +122,8 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                 Some(msg) => Timer::at(msg.next_send),
             };
 
-            match select3(
-                CMD_FOR_BACKOFF.receive(),
-                PUBLISHING_REPORTS.receive(),
-                timer,
-            )
-            .await
-            {
-                Either3::First(BackoffCommands::PublishPunch(punch, punch_id)) => {
+            match select(CMD_FOR_BACKOFF.receive(), timer).await {
+                Either::First(BackoffCommands::PublishPunch(punch, punch_id)) => {
                     match self.vacant_idx() {
                         // We skip the first element corresponding to ID=0
                         Some(msg_id) if msg_id > 0 => {
@@ -143,9 +137,9 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         }
                     }
                 }
-                Either3::Second(qmtpub_urc) => match qmtpub_urc.status {
-                    MqttPubStatus::Timeout | MqttPubStatus::MqttError => {
-                        let msg = &mut self.inflight_msgs[qmtpub_urc.msg_id as usize];
+                Either::First(BackoffCommands::Status(status)) => match status.code {
+                    StatusCode::Timeout | StatusCode::MqttError => {
+                        let msg = &mut self.inflight_msgs[status.msg_id as usize];
                         if msg.msg_id > 0 {
                             warn!("Message ID={} failed to send, trying again", msg.msg_id);
                             msg.update_next_send();
@@ -153,22 +147,22 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         } else {
                             error!(
                                 "Gor URC for a message we don't know about, ID={}",
-                                qmtpub_urc.msg_id
+                                status.msg_id
                             );
                         }
                     }
-                    MqttPubStatus::Published => {
-                        self.delete_msg(qmtpub_urc.msg_id);
+                    StatusCode::Published => {
+                        self.delete_msg(status.msg_id);
                         info!("Message published");
                     }
-                    MqttPubStatus::Retrying(retries) => {
+                    StatusCode::Retrying(retries) => {
                         warn!("Message will be retried, has been tried {} times", retries);
                     }
                     _ => {
                         error!("Uknown message status");
                     }
                 },
-                Either3::Third(_) => {
+                Either::Second(_) => {
                     if let Some(punch_msg) = self.queue.pop() {
                         let msg_id = punch_msg.msg_id;
                         if msg_id == 0 {
@@ -178,8 +172,8 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                             self.send_punch_fn.send_punch(punch_msg.punch, msg_id).await
                         {
                             error!("Error while sending punch: {}", err);
-                            let report = MqttPublishReport::mqtt_error(msg_id);
-                            PUBLISHING_REPORTS.send(report).await;
+                            let status = MqttStatus::mqtt_error(msg_id);
+                            CMD_FOR_BACKOFF.send(BackoffCommands::Status(status)).await;
                         }
                     }
                 }
