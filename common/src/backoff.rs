@@ -26,6 +26,8 @@ pub enum BackoffCommands {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+/// Struct holding all necessary information about a punch that will be send and retried if send
+/// fails.
 pub struct PunchMsg {
     next_send: Instant,
     punch: RawPunch,
@@ -111,6 +113,34 @@ impl<S: SendPunchFn> BackoffRetries<S> {
         self.inflight_msgs[idx as usize].msg_id = 0;
     }
 
+    async fn handle_status(&mut self, status: MqttStatus) {
+        match status.code {
+            StatusCode::Timeout | StatusCode::MqttError => {
+                let msg = &mut self.inflight_msgs[status.msg_id as usize];
+                if msg.msg_id > 0 {
+                    warn!("Message ID={} failed to send, trying again", msg.msg_id);
+                    msg.update_next_send();
+                    self.queue.push(*msg).expect("Not enough space in queue");
+                } else {
+                    error!(
+                        "Gor URC for a message we don't know about, ID={}",
+                        status.msg_id
+                    );
+                }
+            }
+            StatusCode::Published => {
+                self.delete_msg(status.msg_id);
+                info!("Message published");
+            }
+            StatusCode::Retrying(retries) => {
+                warn!("Message will be retried, has been tried {} times", retries);
+            }
+            _ => {
+                error!("Uknown message status");
+            }
+        }
+    }
+
     /// Main loop handling the retries.
     ///
     /// Needs to run on a separate thread.
@@ -130,38 +160,16 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                             let msg =
                                 PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                             self.inflight_msgs[msg_id] = msg;
-                            self.queue.push(msg).expect("Not enough space in queue");
+                            self.queue
+                                .push(msg)
+                                .expect("Queue should have space if 'inflight_msgs' has space");
                         }
                         _ => {
                             error!("Message queue is full");
                         }
                     }
                 }
-                Either::First(BackoffCommands::Status(status)) => match status.code {
-                    StatusCode::Timeout | StatusCode::MqttError => {
-                        let msg = &mut self.inflight_msgs[status.msg_id as usize];
-                        if msg.msg_id > 0 {
-                            warn!("Message ID={} failed to send, trying again", msg.msg_id);
-                            msg.update_next_send();
-                            self.queue.push(*msg).expect("Not enough space in queue");
-                        } else {
-                            error!(
-                                "Gor URC for a message we don't know about, ID={}",
-                                status.msg_id
-                            );
-                        }
-                    }
-                    StatusCode::Published => {
-                        self.delete_msg(status.msg_id);
-                        info!("Message published");
-                    }
-                    StatusCode::Retrying(retries) => {
-                        warn!("Message will be retried, has been tried {} times", retries);
-                    }
-                    _ => {
-                        error!("Uknown message status");
-                    }
-                },
+                Either::First(BackoffCommands::Status(status)) => self.handle_status(status).await,
                 Either::Second(_) => {
                     if let Some(punch_msg) = self.queue.pop() {
                         let msg_id = punch_msg.msg_id;
@@ -171,9 +179,12 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         if let Err(err) =
                             self.send_punch_fn.send_punch(punch_msg.punch, msg_id).await
                         {
-                            error!("Error while sending punch: {}", err);
+                            error!("Error while sending punch ID={}: {}", punch_msg.id, err);
                             let status = MqttStatus::mqtt_error(msg_id);
                             CMD_FOR_BACKOFF.send(BackoffCommands::Status(status)).await;
+                        } else {
+                            // TODO: succesfully sent punch ID=punch_msg.id. Should send
+                            // notification
                         }
                     }
                 }
