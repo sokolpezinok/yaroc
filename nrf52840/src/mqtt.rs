@@ -81,7 +81,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
-    punch_cnt: u32,
+    punch_cnt: u16,
     _phantom: PhantomData<M>,
 }
 

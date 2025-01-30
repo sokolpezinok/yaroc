@@ -21,7 +21,7 @@ pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE
 const BACKOFF_MULTIPLIER: u32 = 2;
 
 pub enum BackoffCommand {
-    PublishPunch(RawPunch, u32),
+    PublishPunch(RawPunch, u16),
     MqttDisconnected,
     Status(MqttStatus),
 }
@@ -33,7 +33,7 @@ pub struct PunchMsg {
     next_send: Instant,
     punch: RawPunch,
     backoff: Duration,
-    id: u32,
+    id: u16,
     msg_id: u16,
     inflight: bool,
 }
@@ -52,7 +52,7 @@ impl Default for PunchMsg {
 }
 
 impl PunchMsg {
-    pub fn new(punch: RawPunch, id: u32, msg_id: u16, initial_backoff: Duration) -> Self {
+    pub fn new(punch: RawPunch, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
             punch,
             id,
@@ -117,30 +117,45 @@ impl<S: SendPunchFn> BackoffRetries<S> {
         self.unpublished_msgs[idx as usize].msg_id = 0;
     }
 
+    /// Get mutable reference to an unpublished message
+    fn msg_mut_ref(&mut self, msg_id: u16) -> &mut PunchMsg {
+        &mut self.unpublished_msgs[msg_id as usize]
+    }
+
+    /// Convert message ID to punch ID
+    fn punch_id(&self, msg_id: u16) -> u16 {
+        self.unpublished_msgs[msg_id as usize].id
+    }
+
     fn handle_status(&mut self, status: MqttStatus) {
         match status.code {
             StatusCode::Timeout | StatusCode::MqttError => {
-                let msg = &mut self.unpublished_msgs[status.msg_id as usize];
-                if msg.msg_id > 0 {
-                    warn!("Message ID={} failed to send, trying again", msg.msg_id);
+                if status.msg_id > 0 {
+                    let msg = self.msg_mut_ref(status.msg_id);
+                    warn!("Punch ID={} failed to send, trying again", msg.id);
                     msg.inflight = false;
                     msg.update_next_send();
-                    self.queue.push(*msg).expect("Not enough space in queue");
+                    let to_send = *msg;
+                    self.queue.push(to_send).expect("Not enough space in queue");
                 } else {
                     error!(
                         "Gor URC for a message we don't know about, punch ID={}",
-                        msg.id
+                        self.punch_id(status.msg_id)
                     );
                 }
             }
             StatusCode::Published => {
                 self.delete_msg(status.msg_id);
-                info!("Message published");
+                info!("Punch ID={} published", self.punch_id(status.msg_id));
             }
             StatusCode::Retrying(retries) => {
-                warn!("Message will be retried, has been tried {} times", retries);
+                warn!(
+                    "Sending punch ID={} will be retried, has been tried {} times",
+                    self.punch_id(status.msg_id),
+                    retries
+                );
             }
-            _ => {
+            StatusCode::Unknown => {
                 error!("Uknown message status");
             }
         }
