@@ -13,7 +13,7 @@ use yaroc_common::{
         mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
     },
-    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF},
+    backoff::{BackoffCommand, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF},
     punch::RawPunch,
 };
 
@@ -163,7 +163,7 @@ impl<M: ModemHw> MqttClient<M> {
             let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
             if status.msg_id > 0 {
                 // This should cause an update of self.last_successful_send (if published)
-                if CMD_FOR_BACKOFF.try_send(BackoffCommands::Status(status)).is_err() {
+                if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status(status)).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }
                 true
@@ -305,7 +305,7 @@ impl<M: ModemHw> MqttClient<M> {
 
     pub async fn schedule_punch(&mut self, punch: RawPunch) {
         // TODO: what if channel is full?
-        CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch, self.punch_cnt)).await;
+        CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch, self.punch_cnt)).await;
         self.punch_cnt += 1;
     }
 }

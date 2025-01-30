@@ -16,12 +16,13 @@ use heapless::{
 use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 8;
-pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommands, { PUNCH_QUEUE_SIZE * 2 }> =
+pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
 
-pub enum BackoffCommands {
+pub enum BackoffCommand {
     PublishPunch(RawPunch, u32),
+    MqttDisconnected,
     Status(MqttStatus),
 }
 
@@ -34,6 +35,7 @@ pub struct PunchMsg {
     backoff: Duration,
     id: u32,
     msg_id: u16,
+    inflight: bool,
 }
 
 impl Default for PunchMsg {
@@ -44,6 +46,7 @@ impl Default for PunchMsg {
             backoff: Duration::from_secs(1),
             id: 0,
             msg_id: 0,
+            inflight: false,
         }
     }
 }
@@ -56,6 +59,7 @@ impl PunchMsg {
             msg_id, // TODO: can't be 0
             backoff: initial_backoff,
             next_send: Instant::now(),
+            inflight: false,
         }
     }
 
@@ -78,53 +82,54 @@ pub trait SendPunchFn {
 #[derive(Default)]
 pub struct BackoffRetries<S: SendPunchFn> {
     queue: BinaryHeap<PunchMsg, Min, PUNCH_QUEUE_SIZE>,
-    inflight_msgs: Vec<PunchMsg, PUNCH_QUEUE_SIZE>,
+    unpublished_msgs: Vec<PunchMsg, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
 }
 
 impl<S: SendPunchFn> BackoffRetries<S> {
-    pub fn new(send_punch_impl: S, initial_backoff: Duration, capacity: usize) -> Self {
+    pub fn new(send_punch_fn: S, initial_backoff: Duration, capacity: usize) -> Self {
         let mut inflight_msgs = Vec::new();
         inflight_msgs
             .resize(capacity + 1, PunchMsg::default())
             .expect("capacity set too high");
         Self {
             queue: Default::default(),
-            inflight_msgs,
-            send_punch_fn: send_punch_impl,
+            unpublished_msgs: inflight_msgs,
+            send_punch_fn,
             initial_backoff,
         }
     }
 
-    /// Find vacant index in `inflight_msgs`.
+    /// Find vacant index in `unpublished_msgs`.
     ///
     /// It's a position with PunchMsg.id == 0.
     fn vacant_idx(&self) -> Option<usize> {
-        self.inflight_msgs.iter().rposition(|msg| msg.msg_id == 0)
+        self.unpublished_msgs.iter().rposition(|msg| msg.msg_id == 0)
     }
 
-    /// Delete message from infligh messages.
+    /// Delete message from unpublished messages.
     ///
-    /// Typically done after it's been succesfully sent.
+    /// Typically done after it's been succesfully published.
     fn delete_msg(&mut self, idx: u16) {
         // Setting ID to 0 is the deletion operation. The `vacant_idx` function will consider this
         // spot empty.
-        self.inflight_msgs[idx as usize].msg_id = 0;
+        self.unpublished_msgs[idx as usize].msg_id = 0;
     }
 
-    async fn handle_status(&mut self, status: MqttStatus) {
+    fn handle_status(&mut self, status: MqttStatus) {
         match status.code {
             StatusCode::Timeout | StatusCode::MqttError => {
-                let msg = &mut self.inflight_msgs[status.msg_id as usize];
+                let msg = &mut self.unpublished_msgs[status.msg_id as usize];
                 if msg.msg_id > 0 {
                     warn!("Message ID={} failed to send, trying again", msg.msg_id);
+                    msg.inflight = false;
                     msg.update_next_send();
                     self.queue.push(*msg).expect("Not enough space in queue");
                 } else {
                     error!(
-                        "Gor URC for a message we don't know about, ID={}",
-                        status.msg_id
+                        "Gor URC for a message we don't know about, punch ID={}",
+                        msg.id
                     );
                 }
             }
@@ -141,6 +146,16 @@ impl<S: SendPunchFn> BackoffRetries<S> {
         }
     }
 
+    async fn mqtt_disconnected(&mut self) {
+        for punch_msg in self.unpublished_msgs.iter_mut() {
+            if punch_msg.inflight {
+                punch_msg.inflight = false;
+                let status = MqttStatus::mqtt_error(punch_msg.msg_id);
+                CMD_FOR_BACKOFF.send(BackoffCommand::Status(status)).await;
+            }
+        }
+    }
+
     /// Main loop handling the retries.
     ///
     /// Needs to run on a separate thread.
@@ -153,13 +168,13 @@ impl<S: SendPunchFn> BackoffRetries<S> {
             };
 
             match select(CMD_FOR_BACKOFF.receive(), timer).await {
-                Either::First(BackoffCommands::PublishPunch(punch, punch_id)) => {
+                Either::First(BackoffCommand::PublishPunch(punch, punch_id)) => {
                     match self.vacant_idx() {
                         // We skip the first element corresponding to ID=0
                         Some(msg_id) if msg_id > 0 => {
                             let msg =
                                 PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
-                            self.inflight_msgs[msg_id] = msg;
+                            self.unpublished_msgs[msg_id] = msg;
                             self.queue
                                 .push(msg)
                                 .expect("Queue should have space if 'inflight_msgs' has space");
@@ -169,19 +184,21 @@ impl<S: SendPunchFn> BackoffRetries<S> {
                         }
                     }
                 }
-                Either::First(BackoffCommands::Status(status)) => self.handle_status(status).await,
+                Either::First(BackoffCommand::Status(status)) => self.handle_status(status),
+                Either::First(BackoffCommand::MqttDisconnected) => self.mqtt_disconnected().await,
                 Either::Second(_) => {
                     if let Some(punch_msg) = self.queue.pop() {
                         let msg_id = punch_msg.msg_id;
                         if msg_id == 0 {
                             continue;
                         }
+                        self.unpublished_msgs[msg_id as usize].inflight = true;
                         if let Err(err) =
                             self.send_punch_fn.send_punch(punch_msg.punch, msg_id).await
                         {
                             error!("Error while sending punch ID={}: {}", punch_msg.id, err);
                             let status = MqttStatus::mqtt_error(msg_id);
-                            CMD_FOR_BACKOFF.send(BackoffCommands::Status(status)).await;
+                            CMD_FOR_BACKOFF.send(BackoffCommand::Status(status)).await;
                         } else {
                             // TODO: succesfully sent punch ID=punch_msg.id. Should send
                             // notification

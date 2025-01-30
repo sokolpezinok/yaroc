@@ -1,13 +1,13 @@
 // Note: this test is not finished yet, there's no asserts and it takes too long
 use embassy_executor::{Executor, Spawner};
-use embassy_futures::select::select;
+use embassy_futures::select::{select, Either};
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttStatus, StatusCode},
-    backoff::{BackoffCommands, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE},
+    backoff::{BackoffCommand, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE},
     punch::RawPunch,
     RawMutex,
 };
@@ -36,7 +36,12 @@ impl Ord for TimedResponse {
     }
 }
 
-static TIMED_RESPONSES: Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE> = Channel::new();
+enum Command {
+    Response(TimedResponse),
+    MqttDisconnected,
+}
+
+static COMMANDS: Channel<RawMutex, Command, PUNCH_QUEUE_SIZE> = Channel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_QUEUE_SIZE> = Channel::new();
 
 #[derive(Default)]
@@ -58,26 +63,29 @@ impl FakeSendPunchFn {
 
 impl FakeSendPunchFn {
     pub async fn process_responses(
-        timed_responses: &'static Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE>,
+        commands: &'static Channel<RawMutex, Command, PUNCH_QUEUE_SIZE>,
     ) {
         let mut queue = BinaryHeap::<TimedResponse, Min, PUNCH_QUEUE_SIZE>::new();
-
         loop {
             let timer = match queue.peek() {
                 None => Timer::after_secs(3600),
                 Some(msg) => Timer::at(msg.time),
             };
-            match select(timer, timed_responses.receive()).await {
-                embassy_futures::select::Either::First(_) => {
+            match select(timer, commands.receive()).await {
+                Either::First(_) => {
                     let top = queue.pop().unwrap();
                     if top.status.code == StatusCode::Published {
                         PUBLISH_EVENTS.send((top.status.msg_id, Instant::now())).await;
                     }
                     // TODO: this notification should come from BackoffRetries
-                    CMD_FOR_BACKOFF.send(BackoffCommands::Status(top.status)).await;
+                    CMD_FOR_BACKOFF.send(BackoffCommand::Status(top.status)).await;
                 }
-                embassy_futures::select::Either::Second(timed_response) => {
+                Either::Second(Command::Response(timed_response)) => {
+                    // TODO: this should panic
                     let _ = queue.push(timed_response);
+                }
+                Either::Second(Command::MqttDisconnected) => {
+                    queue.clear();
                 }
             }
         }
@@ -103,7 +111,7 @@ impl SendPunchFn for FakeSendPunchFn {
             let send_time = Instant::now() + self.successful_send;
             (send_time, report)
         };
-        TIMED_RESPONSES.send(TimedResponse::new(time, report)).await;
+        COMMANDS.send(Command::Response(TimedResponse::new(time, report))).await;
         Ok(())
     }
 }
@@ -119,10 +127,8 @@ fn backoff_test() {
 }
 
 #[embassy_executor::task]
-async fn fake_responder(
-    timed_responses: &'static Channel<RawMutex, TimedResponse, PUNCH_QUEUE_SIZE>,
-) {
-    FakeSendPunchFn::process_responses(&timed_responses).await;
+async fn fake_responder(commands: &'static Channel<RawMutex, Command, PUNCH_QUEUE_SIZE>) {
+    FakeSendPunchFn::process_responses(&commands).await;
 }
 
 #[embassy_executor::task]
@@ -136,24 +142,30 @@ async fn main(spawner: Spawner) {
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
     let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2);
     spawner.must_spawn(backoff_loop(backoff));
-    spawner.must_spawn(fake_responder(&TIMED_RESPONSES));
+    spawner.must_spawn(fake_responder(&COMMANDS));
 
     let mut punch1 = RawPunch::default();
     punch1[0] = 3;
-    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch1, 0)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch1, 0)).await;
     let mut punch2 = RawPunch::default();
     punch2[0] = 2;
-    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch2, 1)).await;
-
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch2, 1)).await;
     let mut punch3 = RawPunch::default();
     punch3[0] = 1;
-    CMD_FOR_BACKOFF.send(BackoffCommands::PublishPunch(punch3, 2)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch3, 2)).await;
+
+    Timer::after_millis(200).await;
+    // MQTT disconnect at 200 milliseconds cuts the first timeout in half
+    COMMANDS.send(Command::MqttDisconnected).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
         match msg_id {
-            1 => assert!(time.as_millis().abs_diff(1300) <= 10),
-            2 => assert!(time.as_millis().abs_diff(2100) <= 15),
+            // 200 + 400 timeout, 200 for sending, (1 + 2) * backoff
+            1 => assert!(time.as_millis().abs_diff(1100) <= 10),
+            // 200 + 2 * 400 timeout, 200 for sending, (1 + 2 + 4) * backoff
+            2 => assert!(time.as_millis().abs_diff(1900) <= 15),
             _ => assert!(false, "Got wrong message"),
         }
     }
