@@ -13,7 +13,9 @@ use yaroc_common::{
         mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
     },
-    backoff::{BackoffCommand, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF},
+    backoff::{
+        BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
+    },
     punch::RawPunch,
 };
 
@@ -52,7 +54,7 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
 }
 
 #[derive(Clone, Copy)]
-struct Bg77SendPunchFn {
+pub struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
     packet_timeout: Duration,
 }
@@ -66,6 +68,11 @@ impl Bg77SendPunchFn {
     }
 }
 
+#[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
+async fn bg77_send_punch_fn(msg: PunchMsg, send_punch_fn: Bg77SendPunchFn) {
+    BackoffRetries::try_sending_with_retries(msg, send_punch_fn).await
+}
+
 impl SendPunchFn for Bg77SendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
         let mut send_punch = self
@@ -76,6 +83,10 @@ impl SendPunchFn for Bg77SendPunchFn {
             .await
             .map_err(|_| Error::TimeoutError)?;
         send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await
+    }
+
+    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
+        spawner.must_spawn(bg77_send_punch_fn(msg, self));
     }
 }
 
