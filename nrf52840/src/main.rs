@@ -36,7 +36,7 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(send_punch_main_loop(&SEND_PUNCH_MUTEX));
     spawner.must_spawn(send_punch_event_handler(
         &SEND_PUNCH_MUTEX,
-        &SI_UART_CHANNEL,
+        SI_UART_CHANNEL.receiver(),
     ));
-    spawner.must_spawn(si_uart_reader(si_uart, software_serial, &SI_UART_CHANNEL));
+    spawner.must_spawn(si_uart_reader(si_uart, software_serial, SI_UART_CHANNEL.sender()));
 }

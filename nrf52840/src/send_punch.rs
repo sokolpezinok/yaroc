@@ -2,7 +2,6 @@ use crate::{
     bg77_hw::{Bg77, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
-    si_uart::SiUartChannelType,
     system_info::{NrfTemp, SystemInfo, Temp},
 };
 use defmt::{debug, error, info, warn};
@@ -13,8 +12,8 @@ use embassy_nrf::{
     peripherals::{TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::signal::Signal;
 use embassy_sync::{channel::Channel, mutex::Mutex};
+use embassy_sync::{channel::Receiver, signal::Signal};
 use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
@@ -205,13 +204,13 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    si_uart_channel: &'static SiUartChannelType,
+    punch_receiver: Receiver<'static, RawMutex, Result<SiPunch, Error>, 5>,
 ) {
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),
             EVENT_CHANNEL.receive(),
-            si_uart_channel.receive(),
+            punch_receiver.receive(),
         )
         .await;
         {

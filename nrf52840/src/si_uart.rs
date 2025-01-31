@@ -2,7 +2,7 @@
 use chrono::NaiveDate;
 use embassy_futures::select::{select, Either};
 use embassy_nrf::{gpio::Input, peripherals::UARTE0, uarte::UarteRx};
-use embassy_sync::channel::Channel;
+use embassy_sync::channel::{Channel, Sender};
 use nrf52840_hal::pac::DWT;
 use yaroc_common::{
     punch::{SiPunch, LEN},
@@ -77,7 +77,7 @@ impl SiUart {
 pub async fn si_uart_reader(
     mut si_uart: SiUart,
     mut software_serial: SoftwareSerial,
-    si_uart_channel: &'static SiUartChannelType,
+    punch_sender: Sender<'static, RawMutex, Result<SiPunch, Error>, 5>,
 ) {
     // TODO: get current date
     let date = NaiveDate::from_ymd_opt(2025, 1, 18).unwrap();
@@ -85,14 +85,14 @@ pub async fn si_uart_reader(
         match select(si_uart.read(), software_serial.read()).await {
             Either::First(res) => match res {
                 Err(err) => {
-                    si_uart_channel.send(Err(err)).await;
+                    punch_sender.send(Err(err)).await;
                 }
                 Ok(buffer) => {
-                    si_uart_channel.send(Ok(SiPunch::from_raw(buffer, date))).await;
+                    punch_sender.send(Ok(SiPunch::from_raw(buffer, date))).await;
                 }
             },
             Either::Second(buffer) => {
-                si_uart_channel.send(Ok(SiPunch::from_raw(buffer, date))).await;
+                punch_sender.send(Ok(SiPunch::from_raw(buffer, date))).await;
             }
         }
     }
