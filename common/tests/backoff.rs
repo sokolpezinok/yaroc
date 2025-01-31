@@ -7,7 +7,9 @@ use heapless::{binary_heap::Min, BinaryHeap};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttStatus, StatusCode},
-    backoff::{BackoffCommand, BackoffRetries, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE},
+    backoff::{
+        BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
+    },
     punch::RawPunch,
     RawMutex,
 };
@@ -46,7 +48,7 @@ static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_QUEUE_SIZE> = Cha
 
 #[derive(Clone, Copy, Default)]
 struct FakeSendPunchFn {
-    counters: [u8; 10],
+    counter: u8,
     send_timeout: Duration,
     successful_send: Duration,
 }
@@ -54,7 +56,7 @@ struct FakeSendPunchFn {
 impl FakeSendPunchFn {
     pub fn new(send_timeout: Duration, successful_send: Duration) -> Self {
         Self {
-            counters: Default::default(),
+            counter: 0,
             send_timeout,
             successful_send,
         }
@@ -92,19 +94,23 @@ impl FakeSendPunchFn {
     }
 }
 
+#[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
+async fn fake_send_punch_fn(msg: PunchMsg, send_punch_fn: FakeSendPunchFn) {
+    BackoffRetries::try_sending_with_retries(msg, send_punch_fn).await
+}
+
 impl SendPunchFn for FakeSendPunchFn {
     async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> yaroc_common::Result<()> {
         let cnt = punch[0];
-        let msg_idx = msg_id as usize;
-        let (time, report) = if self.counters[msg_idx] == 0 {
+        let (time, report) = if self.counter == 0 {
             // First attempt fails
             let report = MqttStatus::mqtt_error(msg_id);
-            self.counters[msg_idx] += 1;
+            self.counter += 1;
             (Instant::now() + self.send_timeout, report)
-        } else if self.counters[msg_idx] < cnt {
+        } else if self.counter < cnt {
             // Next attempts time out
             let report = MqttStatus::from_bg77_qmtpub(msg_id, 2, None);
-            self.counters[msg_idx] += 1;
+            self.counter += 1;
             (Instant::now() + self.send_timeout, report)
         } else {
             let report = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
@@ -113,6 +119,10 @@ impl SendPunchFn for FakeSendPunchFn {
         };
         COMMANDS.send(Command::Response(TimedResponse::new(time, report))).await;
         Ok(())
+    }
+
+    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
+        spawner.must_spawn(fake_send_punch_fn(msg, self));
     }
 }
 
