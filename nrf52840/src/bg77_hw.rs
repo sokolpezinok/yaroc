@@ -34,7 +34,7 @@ pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
 
 pub trait ModemHw {
     /// Spawn a task for the modem and process incoming URCs using the provided handler.
-    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: &Spawner);
+    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner);
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
@@ -82,7 +82,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
 }
 
 impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
-    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: &Spawner) {
+    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner) {
         self.uart1.spawn_rx(urc_handler, spawner);
     }
 

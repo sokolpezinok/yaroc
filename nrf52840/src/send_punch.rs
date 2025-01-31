@@ -50,7 +50,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         mut bg77: M,
         temp: T,
         send_punch_mutex: &'static SendPunchMutexType,
-        spawner: &Spawner,
+        spawner: Spawner,
         config: MqttConfig,
     ) -> Self {
         bg77.spawn(MqttClient::<M>::urc_handler, spawner);

@@ -28,7 +28,7 @@ async fn main(spawner: Spawner) {
         software_serial,
         ..
     } = device;
-    let send_punch = SendPunch::new(bg77, temp, &SEND_PUNCH_MUTEX, &spawner, mqtt_config);
+    let send_punch = SendPunch::new(bg77, temp, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
@@ -38,5 +38,9 @@ async fn main(spawner: Spawner) {
         &SEND_PUNCH_MUTEX,
         SI_UART_CHANNEL.receiver(),
     ));
-    spawner.must_spawn(si_uart_reader(si_uart, software_serial, SI_UART_CHANNEL.sender()));
+    spawner.must_spawn(si_uart_reader(
+        si_uart,
+        software_serial,
+        SI_UART_CHANNEL.sender(),
+    ));
 }

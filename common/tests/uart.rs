@@ -34,7 +34,7 @@ async fn main(spawner: Spawner) {
     let tx = FakeTx::new(&TX_CHANNEL);
     let handler = |_: &CommandResponse| false;
     let mut at_uart = AtUart::new(tx, rx);
-    at_uart.spawn_rx(handler, &spawner);
+    at_uart.spawn_rx(handler, spawner);
 
     let response = at_uart.call_at("I", Duration::from_millis(10), None).await.unwrap();
     assert_eq!(

@@ -102,7 +102,7 @@ impl AtRxBroker {
 pub trait RxWithIdle {
     /// Spawn a new task on `spawner` that reads RX from UART and clasifies answers using
     /// `urc_handler`.
-    fn spawn(self, spawner: &Spawner, urc_handler: UrcHandlerType);
+    fn spawn(self, spawner: Spawner, urc_handler: UrcHandlerType);
 
     /// Read from UART until it's idle. Return the number of read bytes.
     fn read_until_idle(
@@ -142,7 +142,7 @@ async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: &Spawner, urc_handler: UrcHandlerType) {
+    fn spawn(self, spawner: Spawner, urc_handler: UrcHandlerType) {
         let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
         spawner.must_spawn(reader(self, at_broker));
     }
@@ -200,7 +200,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         }
     }
 
-    pub fn spawn_rx(&mut self, urc_handler: UrcHandlerType, spawner: &Spawner) {
+    pub fn spawn_rx(&mut self, urc_handler: UrcHandlerType, spawner: Spawner) {
         // Consume self.rx, then set self.rx = None
         let rx = self.rx.take();
         rx.unwrap().spawn(spawner, urc_handler);

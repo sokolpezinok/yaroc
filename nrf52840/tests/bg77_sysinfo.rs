@@ -35,7 +35,7 @@ async fn mini_call_home(spawner: Spawner) {
 
     let mut bg77 = Bg77::new(tx, rx, modem_pin);
     let handler = |_: &CommandResponse| false;
-    bg77.spawn(handler, &spawner);
+    bg77.spawn(handler, spawner);
     let temp = FakeTemp { t: 27.0 };
     let mut send_punch = SystemInfo::new(temp);
 

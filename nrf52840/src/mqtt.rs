@@ -89,7 +89,7 @@ impl<M: ModemHw> MqttClient<M> {
     pub fn new(
         send_punch_mutex: &'static SendPunchMutexType,
         config: MqttConfig,
-        spawner: &Spawner,
+        spawner: Spawner,
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
         let backoff_retries =
