@@ -111,7 +111,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
                         "{} punched {} at {}, ID={}",
                         punch.card,
                         punch.code,
-                        format!(30; "{}", punch.time).unwrap().as_str()[..23],
+                        format!(30; "{}", punch.time).unwrap().as_str(),
                         id,
                     );
                 }

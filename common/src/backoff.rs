@@ -15,7 +15,7 @@ use heapless::{
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 
-pub const PUNCH_QUEUE_SIZE: usize = 8;
+pub const PUNCH_QUEUE_SIZE: usize = 32;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
