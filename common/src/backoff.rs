@@ -202,9 +202,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 }
                 StatusCode::Timeout | StatusCode::MqttError => {
                     error!(
-                        "Punch ID={} failed to send, trying again after {} ms",
+                        "Punch ID={} failed to send, trying again after {} s",
                         punch_id,
-                        punch_msg.backoff.as_millis()
+                        punch_msg.backoff.as_secs()
                     );
                     Timer::after(punch_msg.backoff).await;
                     punch_msg.update_backoff();

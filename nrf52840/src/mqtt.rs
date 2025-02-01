@@ -105,7 +105,7 @@ impl<M: ModemHw> MqttClient<M> {
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
         let backoff_retries =
-            BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10), 7);
+            BackoffRetries::new(send_punch_for_backoff, Duration::from_secs(10), 23);
         spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
         Self {
