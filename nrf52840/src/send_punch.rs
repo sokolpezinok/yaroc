@@ -4,7 +4,7 @@ use crate::{
     mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
     system_info::{NrfTemp, SystemInfo, Temp},
 };
-use defmt::{debug, error, info, warn};
+use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
@@ -155,11 +155,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
 
     pub async fn execute_command(&mut self, command: Command) {
         match command {
-            Command::MqttConnect(force, origin) => {
-                debug!(
-                    "MQTT connect request took {} milliseconds to arrive",
-                    (Instant::now() - origin).as_millis()
-                );
+            Command::MqttConnect(force, _) => {
                 if !force
                     && self.last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
                         == Some(true)
