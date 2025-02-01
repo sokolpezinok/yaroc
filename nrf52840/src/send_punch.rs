@@ -100,17 +100,21 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     }
 
     /// Schedules the SI punch to be handled by `BackoffRetries`.
-    pub async fn schedule_punch(&mut self, punch: crate::Result<SiPunch>) {
+    pub async fn schedule_punch(&mut self, punch: crate::Result<RawPunch>) {
         match punch {
             Ok(punch) => {
-                let id = self.client.schedule_punch(punch.raw).await;
-                info!(
-                    "{} punched {} at {}, ID={}",
-                    punch.card,
-                    punch.code,
-                    format!(30; "{}", punch.time).unwrap().as_str()[..23],
-                    id,
-                );
+                let id = self.client.schedule_punch(punch).await;
+                if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
+                    let today = time.date_naive();
+                    let punch = SiPunch::from_raw(punch, today);
+                    info!(
+                        "{} punched {} at {}, ID={}",
+                        punch.card,
+                        punch.code,
+                        format!(30; "{}", punch.time).unwrap().as_str()[..23],
+                        id,
+                    );
+                }
             }
             Err(err) => {
                 error!("Wrong punch: {}", err);
@@ -204,7 +208,7 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    punch_receiver: Receiver<'static, RawMutex, Result<SiPunch, Error>, 5>,
+    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, 15>,
 ) {
     loop {
         let signal = select3(
