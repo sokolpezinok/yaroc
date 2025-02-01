@@ -13,8 +13,6 @@ use yaroc_common::{
     RawMutex,
 };
 
-const PUNCH_COUNT: usize = 3;
-
 #[derive(Debug, Eq, PartialEq)]
 struct TimedResponse {
     time: Instant,
@@ -39,8 +37,14 @@ impl Ord for TimedResponse {
     }
 }
 
-static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] =
-    [Channel::new(), Channel::new(), Channel::new()];
+const PUNCH_COUNT: usize = 4;
+
+static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] = [
+    Channel::new(),
+    Channel::new(),
+    Channel::new(),
+    Channel::new(),
+];
 static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 3, PUNCH_COUNT, 1> = PubSubChannel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_COUNT> = Channel::new();
 
@@ -111,8 +115,7 @@ impl SendPunchFn for FakeSendPunchFn {
             let status = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
             (Instant::now() + self.successful_send, status)
         };
-        let punch_id = PUNCH_COUNT - 1 - msg_id as usize; // TODO: store in an array
-        COMMANDS[punch_id].send(TimedResponse::new(time, status)).await;
+        COMMANDS[punch.id as usize].send(TimedResponse::new(time, status)).await;
         Ok(())
     }
 
@@ -143,6 +146,7 @@ async fn main(spawner: Spawner) {
     let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2);
     spawner.must_spawn(backoff_loop(backoff));
 
+    // First test
     let mut punch0 = RawPunch::default();
     punch0[0] = 3;
     spawner.must_spawn(respond_to_fake(0, MQTT_DISCONNECT.subscriber().unwrap()));
@@ -157,8 +161,8 @@ async fn main(spawner: Spawner) {
     CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch2, 2)).await;
 
     let disconnect_publisher = MQTT_DISCONNECT.publisher().unwrap();
-    // MQTT disconnect at 200 milliseconds cuts the first timeout in half
-    Timer::after_millis(200).await;
+    // MQTT disconnect at 100 milliseconds cuts the first try (timeout) to just 100 ms
+    Timer::after_millis(100).await;
     disconnect_publisher.publish_immediate(true);
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
@@ -173,13 +177,36 @@ async fn main(spawner: Spawner) {
     for _ in 0..2 {
         let (punch_id, time) = PUBLISH_EVENTS.receive().await;
         match punch_id {
-            // 200 until disconnect + 2 * 400 timeout, 200 sending, (1 + 2 + 4) * 100 backoff
-            0 => assert!(time.as_millis().abs_diff(1900) <= 15),
-            // 200 until disconnect + 400 timeout, 200 sending, (1 + 2) * 100 backoff
-            1 => assert!(time.as_millis().abs_diff(1100) <= 10),
+            // Try 1 is shortened by MQTT disconnect message, so it takes 200 instead of 400 ms.
+            // 100 try 1,  400 try 2 + 3, 200 try 4, and in-between (1 + 2 + 4) * 100 backoff
+            0 => assert!(time.as_millis().abs_diff(1800) <= 15),
+            // 100 try 1,  400 try 2, 200 try 3, and in-between (1 + 2) * 100 backoff
+            1 => assert!(time.as_millis().abs_diff(1000) <= 10),
             _ => assert!(false, "Got wrong message"),
         }
     }
+    assert!(PUBLISH_EVENTS.is_empty());
+    // End of first test
+
+    // Second test
+    let start = Instant::now();
+    let mut punch3 = RawPunch::default();
+    punch3[0] = 3;
+    spawner.must_spawn(respond_to_fake(3, MQTT_DISCONNECT.subscriber().unwrap()));
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch3, 3)).await;
+
+    Timer::after_millis(300).await;
+    // MQTT connect during sending has no effect
+    CMD_FOR_BACKOFF.send(BackoffCommand::MqttConnected).await;
+    Timer::after_millis(700).await;
+    // MQTT connect shortens the wait
+    CMD_FOR_BACKOFF.send(BackoffCommand::MqttConnected).await;
+
+    let (punch_id, time) = PUBLISH_EVENTS.receive().await;
+    assert_eq!(punch_id, 3);
+    assert!((time - start).as_millis().abs_diff(1700) <= 15);
+    // End of second test
+
     assert!(PUBLISH_EVENTS.is_empty());
     std::process::exit(0); // Exit from executor
 }

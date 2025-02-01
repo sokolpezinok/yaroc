@@ -271,6 +271,10 @@ impl<M: ModemHw> MqttClient<M> {
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
                 if res == 0 && reason == 0 {
+                    info!("Successfully connected to MQTT");
+                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
+                        error!("Error while sending MQTT connect notification, channel full");
+                    }
                     Ok(())
                 } else {
                     Err(Error::MqttError(reason))
