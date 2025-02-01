@@ -208,6 +208,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     );
                     Timer::after(punch_msg.backoff).await;
                     punch_msg.update_backoff();
+                    // Updates during backoff are uninteresting, it's probably MQTT disconnect
+                    STATUS_UPDATES[msg_idx].reset();
                 }
                 StatusCode::Retrying(retries) => {
                     warn!(

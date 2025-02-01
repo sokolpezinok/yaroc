@@ -169,6 +169,11 @@ async fn main(spawner: Spawner) {
     COMMANDS.send(Command::MqttDisconnected).await;
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
+    Timer::after_millis(600).await;
+    // MQTT disconnect during a backoff wait should have no effect.
+    COMMANDS.send(Command::MqttDisconnected).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
+
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
         match msg_id {
