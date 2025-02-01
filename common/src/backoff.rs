@@ -87,7 +87,7 @@ pub struct BackoffRetries<S: SendPunchFn> {
     initial_backoff: Duration,
 }
 
-impl<S: SendPunchFn> BackoffRetries<S> {
+impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     pub fn new(send_punch_fn: S, initial_backoff: Duration, capacity: usize) -> Self {
         let mut inflight_msgs = Vec::new();
         inflight_msgs

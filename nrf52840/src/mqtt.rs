@@ -51,6 +51,7 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
     backoff_retries.r#loop().await;
 }
 
+#[derive(Clone, Copy)]
 struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
     packet_timeout: Duration,

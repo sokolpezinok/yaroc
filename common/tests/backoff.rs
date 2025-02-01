@@ -44,7 +44,7 @@ enum Command {
 static COMMANDS: Channel<RawMutex, Command, PUNCH_QUEUE_SIZE> = Channel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_QUEUE_SIZE> = Channel::new();
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct FakeSendPunchFn {
     counters: [u8; 10],
     send_timeout: Duration,
@@ -162,9 +162,9 @@ async fn main(spawner: Spawner) {
     for _ in 0..2 {
         let (msg_id, time) = PUBLISH_EVENTS.receive().await;
         match msg_id {
-            // 200 + 400 timeout, 200 for sending, (1 + 2) * backoff
+            // 200 until disconnect + 400 timeout, 200 sending, (1 + 2) * 100 backoff
             1 => assert!(time.as_millis().abs_diff(1100) <= 10),
-            // 200 + 2 * 400 timeout, 200 for sending, (1 + 2 + 4) * backoff
+            // 200 until disconnect + 2 * 400 timeout, 200 sending, (1 + 2 + 4) * 100 backoff
             2 => assert!(time.as_millis().abs_diff(1900) <= 15),
             _ => assert!(false, "Got wrong message"),
         }
