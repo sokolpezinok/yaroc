@@ -92,8 +92,9 @@ async fn fake_send_punch_fn(msg: PunchMsg, send_punch_fn: FakeSendPunchFn) {
 }
 
 impl SendPunchFn for FakeSendPunchFn {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> yaroc_common::Result<()> {
-        let cnt = punch[0];
+    async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
+        let cnt = punch.punch[0];
+        let msg_id = punch.msg_id;
         let (time, status) = if self.counter == 0 {
             // First attempt fails
             let status = MqttStatus::mqtt_error(msg_id);

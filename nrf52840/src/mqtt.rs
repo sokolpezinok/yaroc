@@ -74,7 +74,7 @@ async fn bg77_send_punch_fn(msg: PunchMsg, send_punch_fn: Bg77SendPunchFn) {
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
-    async fn send_punch(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
+    async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
         let mut send_punch = self
             .send_punch_mutex
             .lock()
@@ -82,7 +82,7 @@ impl SendPunchFn for Bg77SendPunchFn {
             .with_timeout(self.packet_timeout)
             .await
             .map_err(|_| Error::TimeoutError)?;
-        send_punch.as_mut().unwrap().send_punch_impl(punch, msg_id).await
+        send_punch.as_mut().unwrap().send_punch_impl(punch.punch, punch.msg_id).await
     }
 
     fn spawn(self, msg: PunchMsg, spawner: Spawner) {

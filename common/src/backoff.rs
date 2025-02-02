@@ -28,11 +28,10 @@ pub enum BackoffCommand {
 /// Struct holding all necessary information about a punch that will be send and retried if send
 /// fails.
 pub struct PunchMsg {
-    punch: RawPunch,
+    pub punch: RawPunch,
     backoff: Duration,
     id: u16,
-    msg_id: u16,
-    inflight: bool,
+    pub msg_id: u16,
 }
 
 impl Default for PunchMsg {
@@ -42,7 +41,6 @@ impl Default for PunchMsg {
             backoff: Duration::from_secs(1),
             id: 0,
             msg_id: 0,
-            inflight: false,
         }
     }
 }
@@ -54,7 +52,6 @@ impl PunchMsg {
             id,
             msg_id, // TODO: can't be 0
             backoff: initial_backoff,
-            inflight: false,
         }
     }
 
@@ -67,8 +64,7 @@ impl PunchMsg {
 pub trait SendPunchFn {
     fn send_punch(
         &mut self,
-        punch: RawPunch,
-        msg_id: u16,
+        punch: &PunchMsg,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 
     fn spawn(self, msg: PunchMsg, spawner: Spawner);
@@ -188,7 +184,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         STATUS_UPDATES[msg_idx].reset();
         let punch_id = punch_msg.id;
 
-        let res = send_punch_fn.send_punch(punch_msg.punch, punch_msg.msg_id).await;
+        let res = send_punch_fn.send_punch(&punch_msg).await;
         if res.is_err() {
             STATUS_UPDATES[msg_idx].signal(StatusCode::MqttError);
         }
@@ -222,7 +218,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     error!("Uknown message status");
                 }
             }
-            let res = send_punch_fn.send_punch(punch_msg.punch, punch_msg.msg_id).await;
+            let res = send_punch_fn.send_punch(&punch_msg).await;
             if res.is_err() {
                 STATUS_UPDATES[msg_idx].signal(StatusCode::MqttError);
             }
