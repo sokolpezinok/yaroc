@@ -7,7 +7,7 @@ pub enum StatusCode {
     Unknown,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct MqttStatus {
     pub msg_id: u16,
     pub code: StatusCode,
