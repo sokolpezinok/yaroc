@@ -68,10 +68,10 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", "trial-nbiot.corp")?;
         let _ = self.bg77.simple_call_at(&cmd, None).await;
         self.bg77.simple_call_at("+CEREG=2", None).await?;
+        self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         self.bg77.simple_call_at("+QCFG=\"nwscanseq\",03", None).await?;
         self.bg77.simple_call_at("+QCFG=\"iotopmode\",1,1", None).await?;
         self.bg77.simple_call_at("+QCFG=\"band\",0,0,80000", None).await?;
-        self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         Ok(())
     }
 
@@ -85,11 +85,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        let res = self.client.send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id).await;
-        if res.is_err() {
-            EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
-        }
-        res
+        self.client.send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id).await
     }
 
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
@@ -219,7 +215,10 @@ pub async fn send_punch_event_handler(
             match signal {
                 Either3::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
-                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+                    Err(err) => {
+                        EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
+                        error!("Sending of MiniCallHome failed: {}", err);
+                    }
                 },
                 Either3::Second(command) => send_punch.execute_command(command).await,
                 Either3::Third(punch) => send_punch.schedule_punch(punch).await,
