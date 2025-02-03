@@ -153,6 +153,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     }
 
     async fn mqtt_disconnected(&mut self) {
+        // TODO: These two commands could be `publish_immediately()` instead. Investigate.
+        self.mqtt_events.clear();
         self.mqtt_events.publish(MqttEvent::Disconnect).await
     }
 
