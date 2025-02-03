@@ -6,7 +6,12 @@ use crate::{
 #[cfg(feature = "defmt")]
 use defmt::{error, warn};
 use embassy_executor::Spawner;
-use embassy_sync::{channel::Channel, signal::Signal};
+use embassy_futures::select::{select, Either};
+use embassy_sync::{
+    channel::Channel,
+    pubsub::{PubSubChannel, Publisher},
+    signal::Signal,
+};
 use embassy_time::{Duration, Timer};
 use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
@@ -30,7 +35,7 @@ pub enum BackoffCommand {
 pub struct PunchMsg {
     pub punch: RawPunch,
     backoff: Duration,
-    id: u16,
+    pub id: u16,
     pub msg_id: u16,
 }
 
@@ -98,22 +103,33 @@ static STATUS_UPDATES: [Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE] = [
     Signal::new(),
 ];
 
+#[derive(Copy, Clone)]
+enum MqttEvent {
+    #[allow(dead_code)]
+    Connect,
+    Disconnect,
+}
+static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1> =
+    PubSubChannel::new();
+
 /// Exponential backoff retries for sending punches.
-#[derive(Default)]
 pub struct BackoffRetries<S: SendPunchFn> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
+    mqtt_events: Publisher<'static, RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1>,
 }
 
 impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     pub fn new(send_punch_fn: S, initial_backoff: Duration, capacity: usize) -> Self {
         let mut unpublished_msgs = Vec::new();
         unpublished_msgs.resize(capacity + 1, false).expect("capacity set too high");
+        let mqtt_events = MQTT_EVENTS.publisher().unwrap();
         Self {
             unpublished_msgs,
             send_punch_fn,
             initial_backoff,
+            mqtt_events,
         }
     }
 
@@ -137,11 +153,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     }
 
     async fn mqtt_disconnected(&mut self) {
-        for (idx, val) in self.unpublished_msgs.iter().enumerate() {
-            if *val {
-                STATUS_UPDATES[idx].signal(StatusCode::MqttError);
-            }
-        }
+        self.mqtt_events.publish(MqttEvent::Disconnect).await
     }
 
     /// Main loop handling the retries.
@@ -183,20 +195,27 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         let msg_idx = punch_msg.msg_id as usize;
         STATUS_UPDATES[msg_idx].reset();
         let punch_id = punch_msg.id;
+        let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
         let res = send_punch_fn.send_punch(&punch_msg).await;
         if res.is_err() {
             STATUS_UPDATES[msg_idx].signal(StatusCode::MqttError);
         }
         loop {
-            match STATUS_UPDATES[msg_idx].wait().await {
-                StatusCode::Published => {
+            match select(
+                STATUS_UPDATES[msg_idx].wait(),
+                mqtt_events.next_message_pure(),
+            )
+            .await
+            {
+                Either::First(StatusCode::Published) => {
                     CMD_FOR_BACKOFF
                         .send(BackoffCommand::PunchPublished(punch_id, punch_msg.msg_id))
                         .await;
                     break;
                 }
-                StatusCode::Timeout | StatusCode::MqttError => {
+                Either::First(StatusCode::Timeout | StatusCode::MqttError)
+                | Either::Second(MqttEvent::Disconnect) => {
                     error!(
                         "Punch ID={} failed to send, trying again after {} s",
                         punch_id,
@@ -204,17 +223,16 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     );
                     Timer::after(punch_msg.backoff).await;
                     punch_msg.update_backoff();
-                    // Updates during backoff are uninteresting, it's probably MQTT disconnect
-                    STATUS_UPDATES[msg_idx].reset();
+                    while mqtt_events.try_next_message_pure().is_some() {}
                 }
-                StatusCode::Retrying(retries) => {
+                Either::First(StatusCode::Retrying(retries)) => {
                     warn!(
                         "Sending punch ID={} will be retried, has been tried {} times",
                         punch_id, retries
                     );
                     continue;
                 }
-                StatusCode::Unknown => {
+                Either::Second(_) | Either::First(StatusCode::Unknown) => {
                     error!("Uknown message status");
                 }
             }

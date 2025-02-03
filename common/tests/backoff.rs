@@ -41,7 +41,7 @@ impl Ord for TimedResponse {
 
 static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] =
     [Channel::new(), Channel::new(), Channel::new()];
-static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 1, PUNCH_COUNT, 1> = PubSubChannel::new();
+static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 3, PUNCH_COUNT, 1> = PubSubChannel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_COUNT> = Channel::new();
 
 #[derive(Clone, Copy, Default)]
@@ -64,24 +64,26 @@ impl FakeSendPunchFn {
 #[embassy_executor::task(pool_size = PUNCH_COUNT)]
 async fn respond_to_fake(
     punch_id: usize,
-    mut mqtt_notifications: Subscriber<'static, RawMutex, bool, 1, PUNCH_COUNT, 1>,
+    mut mqtt_notifications: Subscriber<'static, RawMutex, bool, 3, PUNCH_COUNT, 1>,
 ) {
     loop {
         let timed_response = COMMANDS[punch_id].receive().await;
-        mqtt_notifications.clear();
+        while mqtt_notifications.try_next_message_pure().is_some() {} // Clear old
         if mqtt_notifications
             .next_message_pure()
             .with_deadline(timed_response.time)
             .await
             .is_err()
         {
+            let status_code = timed_response.status.code;
+            CMD_FOR_BACKOFF.send(BackoffCommand::Status(timed_response.status)).await;
             // We actually want the deadline: meaning there was no disconnect during that time
             // We perform no acton for MQTT disconnects.
-            if timed_response.status.code == StatusCode::Published {
+            if status_code == StatusCode::Published {
                 // TODO: This should be a notification from BackoffRetries
                 PUBLISH_EVENTS.send((punch_id as u16, Instant::now())).await;
+                break;
             }
-            CMD_FOR_BACKOFF.send(BackoffCommand::Status(timed_response.status)).await;
         }
     }
 }
@@ -162,6 +164,9 @@ async fn main(spawner: Spawner) {
 
     Timer::after_millis(600).await;
     // MQTT disconnect during a backoff wait should have no effect.
+    disconnect_publisher.publish_immediate(true);
+    CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
+    Timer::after_millis(10).await;
     disconnect_publisher.publish_immediate(true);
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
