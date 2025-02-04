@@ -9,7 +9,7 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
 use embassy_sync::{
     channel::Channel,
-    pubsub::{PubSubChannel, Publisher},
+    pubsub::{ImmediatePublisher, PubSubChannel},
     signal::Signal,
 };
 use embassy_time::{Duration, Instant, Timer};
@@ -123,7 +123,7 @@ enum MqttEvent {
     Connect,
     Disconnect,
 }
-static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1> =
+static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1> =
     PubSubChannel::new();
 
 /// Exponential backoff retries for sending punches.
@@ -131,7 +131,7 @@ pub struct BackoffRetries<S: SendPunchFn, R: Random> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
-    mqtt_events: Publisher<'static, RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1>,
+    mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     _rng: R,
 }
 
@@ -139,7 +139,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     pub fn new(send_punch_fn: S, rng: R, initial_backoff: Duration, capacity: usize) -> Self {
         let mut unpublished_msgs = Vec::new();
         unpublished_msgs.resize(capacity + 1, false).expect("capacity set too high");
-        let mqtt_events = MQTT_EVENTS.publisher().unwrap();
+        let mqtt_events = MQTT_EVENTS.immediate_publisher();
         Self {
             unpublished_msgs,
             send_punch_fn,
@@ -168,15 +168,12 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
         STATUS_UPDATES[status.msg_id as usize].signal(status.code);
     }
 
-    async fn mqtt_disconnected(&mut self) {
-        // TODO: These two commands could be `publish_immediately()` instead. Investigate.
-        self.mqtt_events.clear();
-        self.mqtt_events.publish(MqttEvent::Disconnect).await
+    fn mqtt_disconnected(&mut self) {
+        self.mqtt_events.publish_immediate(MqttEvent::Disconnect)
     }
 
-    async fn mqtt_connected(&mut self) {
-        self.mqtt_events.clear();
-        self.mqtt_events.publish(MqttEvent::Connect).await
+    fn mqtt_connected(&mut self) {
+        self.mqtt_events.publish_immediate(MqttEvent::Connect)
     }
 
     /// Main loop handling the retries.
@@ -207,8 +204,8 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                     }
                 }
                 BackoffCommand::Status(status) => self.handle_status(status),
-                BackoffCommand::MqttDisconnected => self.mqtt_disconnected().await,
-                BackoffCommand::MqttConnected => self.mqtt_connected().await,
+                BackoffCommand::MqttDisconnected => self.mqtt_disconnected(),
+                BackoffCommand::MqttConnected => self.mqtt_connected(),
                 BackoffCommand::PunchPublished(_punch_id, msg_id) => {
                     self.delete_msg(msg_id);
                 }
