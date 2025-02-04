@@ -17,6 +17,10 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
 
+pub trait Random {
+    fn u16(&mut self) -> impl core::future::Future<Output = u16>;
+}
+
 pub const PUNCH_QUEUE_SIZE: usize = 24;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
@@ -123,15 +127,16 @@ static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1> =
     PubSubChannel::new();
 
 /// Exponential backoff retries for sending punches.
-pub struct BackoffRetries<S: SendPunchFn> {
+pub struct BackoffRetries<S: SendPunchFn, R: Random> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
     mqtt_events: Publisher<'static, RawMutex, MqttEvent, 3, PUNCH_QUEUE_SIZE, 1>,
+    _rng: R,
 }
 
-impl<S: SendPunchFn + Copy> BackoffRetries<S> {
-    pub fn new(send_punch_fn: S, initial_backoff: Duration, capacity: usize) -> Self {
+impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
+    pub fn new(send_punch_fn: S, rng: R, initial_backoff: Duration, capacity: usize) -> Self {
         let mut unpublished_msgs = Vec::new();
         unpublished_msgs.resize(capacity + 1, false).expect("capacity set too high");
         let mqtt_events = MQTT_EVENTS.publisher().unwrap();
@@ -140,6 +145,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
             send_punch_fn,
             initial_backoff,
             mqtt_events,
+            _rng: rng,
         }
     }
 

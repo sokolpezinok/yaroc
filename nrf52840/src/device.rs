@@ -3,7 +3,8 @@ use crate::si_uart::{SiUart, SoftwareSerial};
 use crate::system_info::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
-use embassy_nrf::peripherals::{TIMER0, UARTE0, UARTE1};
+use embassy_nrf::peripherals::{RNG, TIMER0, UARTE0, UARTE1};
+use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
@@ -12,6 +13,7 @@ use embassy_nrf::{bind_interrupts, saadc};
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
+    RNG => rng::InterruptHandler<RNG>;
     SAADC => saadc::InterruptHandler;
     TEMP => temp::InterruptHandler;
     UARTE0 => uarte::InterruptHandler<UARTE0>;
@@ -23,10 +25,11 @@ pub struct Device {
     _green_led: Output<'static>,
     pub bg77:
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
-    pub temp: NrfTemp,
-    pub si_uart: SiUart,
+    pub rng: Rng<'static, RNG>,
     pub saadc: Saadc<'static, 1>,
+    pub si_uart: SiUart,
     pub software_serial: SoftwareSerial,
+    pub temp: NrfTemp,
 }
 
 impl Default for Device {
@@ -63,10 +66,12 @@ impl Device {
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
+        let rng = Rng::new(p.RNG, Irqs);
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
             bg77,
+            rng,
             temp,
             si_uart: SiUart::new(rx0),
             software_serial: SoftwareSerial::new(io3),

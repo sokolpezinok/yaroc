@@ -9,7 +9,8 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::Output,
-    peripherals::{TIMER0, UARTE1},
+    peripherals::{RNG, TIMER0, UARTE1},
+    rng::Rng,
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_sync::{channel::Channel, mutex::Mutex};
@@ -49,6 +50,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub fn new(
         mut bg77: M,
         temp: T,
+        rng: Rng<'static, RNG>,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
         config: MqttConfig,
@@ -56,7 +58,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         bg77.spawn(MqttClient::<M>::urc_handler, spawner);
         Self {
             bg77,
-            client: MqttClient::new(send_punch_mutex, config, spawner),
+            client: MqttClient::new(send_punch_mutex, config, rng, spawner),
             system_info: SystemInfo::<M, T>::new(temp),
             last_reconnect: None,
         }

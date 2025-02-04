@@ -8,7 +8,7 @@ use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttStatus, StatusCode},
-    backoff::{BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF},
+    backoff::{BackoffCommand, BackoffRetries, PunchMsg, Random, SendPunchFn, CMD_FOR_BACKOFF},
     punch::RawPunch,
     RawMutex,
 };
@@ -62,6 +62,13 @@ impl FakeSendPunchFn {
             send_timeout,
             successful_send,
         }
+    }
+}
+
+struct FakeRandom;
+impl Random for FakeRandom {
+    async fn u16(&mut self) -> u16 {
+        0
     }
 }
 
@@ -143,7 +150,7 @@ async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn>) {
 async fn main(spawner: Spawner) {
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
-    let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2);
+    let backoff = BackoffRetries::new(fake, FakeRandom, Duration::from_millis(100), 2);
     spawner.must_spawn(backoff_loop(backoff));
 
     // First test

@@ -24,11 +24,12 @@ async fn main(spawner: Spawner) {
     let Device {
         bg77,
         temp,
+        rng,
         si_uart,
         software_serial,
         ..
     } = device;
-    let send_punch = SendPunch::new(bg77, temp, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
+    let send_punch = SendPunch::new(bg77, temp, rng, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
