@@ -71,8 +71,17 @@ impl Bg77SendPunchFn {
 }
 
 #[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
-async fn bg77_send_punch_fn(msg: PunchMsg, send_punch_fn: Bg77SendPunchFn) {
-    BackoffRetries::<Bg77SendPunchFn, NrfRandom>::try_sending_with_retries(msg, send_punch_fn).await
+async fn bg77_send_punch_fn(
+    msg: PunchMsg,
+    jitter_after_connect: Duration,
+    send_punch_fn: Bg77SendPunchFn,
+) {
+    BackoffRetries::<Bg77SendPunchFn, NrfRandom>::try_sending_with_retries(
+        msg,
+        jitter_after_connect,
+        send_punch_fn,
+    )
+    .await
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
@@ -87,8 +96,8 @@ impl SendPunchFn for Bg77SendPunchFn {
         send_punch.as_mut().unwrap().send_punch_impl(punch.punch, punch.msg_id).await
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(bg77_send_punch_fn(msg, self));
+    fn spawn(self, msg: PunchMsg, jitter_after_connect: Duration, spawner: Spawner) {
+        spawner.must_spawn(bg77_send_punch_fn(msg, jitter_after_connect, self));
     }
 }
 

@@ -100,9 +100,17 @@ async fn respond_to_fake(
 }
 
 #[embassy_executor::task(pool_size = PUNCH_COUNT)]
-async fn fake_send_punch_fn(msg: PunchMsg, send_punch_fn: FakeSendPunchFn) {
-    BackoffRetries::<FakeSendPunchFn, FakeRandom>::try_sending_with_retries(msg, send_punch_fn)
-        .await
+async fn fake_send_punch_fn(
+    msg: PunchMsg,
+    jitter_after_connect: Duration,
+    send_punch_fn: FakeSendPunchFn,
+) {
+    BackoffRetries::<FakeSendPunchFn, FakeRandom>::try_sending_with_retries(
+        msg,
+        jitter_after_connect,
+        send_punch_fn,
+    )
+    .await
 }
 
 impl SendPunchFn for FakeSendPunchFn {
@@ -127,8 +135,8 @@ impl SendPunchFn for FakeSendPunchFn {
         Ok(())
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(fake_send_punch_fn(msg, self));
+    fn spawn(self, msg: PunchMsg, jitter_after_connect: Duration, spawner: Spawner) {
+        spawner.must_spawn(fake_send_punch_fn(msg, jitter_after_connect, self));
     }
 }
 

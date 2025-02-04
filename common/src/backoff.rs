@@ -87,7 +87,7 @@ pub trait SendPunchFn {
         punch: &PunchMsg,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner);
+    fn spawn(self, msg: PunchMsg, jitter_after_connect: Duration, spawner: Spawner);
 }
 
 // TODO: find a better way of instantiating this
@@ -193,7 +193,13 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                                 PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                             self.unpublished_msgs[msg_id] = true;
                             // Spawn an future that will try to send the punch.
-                            self.send_punch_fn.spawn(msg, Spawner::for_current_executor().await);
+                            let jitter =
+                                Duration::from_millis(u64::from(self._rng.u16().await % 30_000));
+                            self.send_punch_fn.spawn(
+                                msg,
+                                jitter,
+                                Spawner::for_current_executor().await,
+                            );
                         }
                         _ => {
                             error!("Message queue is full");
@@ -214,7 +220,11 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     ///
     /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
     /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
-    pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
+    pub async fn try_sending_with_retries(
+        mut punch_msg: PunchMsg,
+        jitter_after_connect: Duration,
+        mut send_punch_fn: S,
+    ) {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
         STATUS_UPDATES[msg_idx].reset();
@@ -255,6 +265,9 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                             }
                             Either::Second(MqttEvent::Connect) => {
                                 punch_msg.halve_backoff();
+                                // After MQTT connect we sleep for a random time in order to not
+                                // overload the MQTT client (modem).
+                                Timer::after(jitter_after_connect).await;
                                 break;
                             }
                             _ => {}
