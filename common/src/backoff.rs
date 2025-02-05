@@ -102,7 +102,7 @@ pub trait SendPunchFn {
 
 // TODO: find a better way of instantiating this
 static STATUS_UPDATES: LazyLock<[Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE]> =
-    LazyLock::new(|| Default::default());
+    LazyLock::new(Default::default);
 
 #[derive(Copy, Clone)]
 enum MqttEvent {
