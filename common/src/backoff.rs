@@ -9,6 +9,7 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
 use embassy_sync::{
     channel::Channel,
+    lazy_lock::LazyLock,
     pubsub::{ImmediatePublisher, PubSubChannel},
     signal::Signal,
 };
@@ -100,32 +101,8 @@ pub trait SendPunchFn {
 }
 
 // TODO: find a better way of instantiating this
-static STATUS_UPDATES: [Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE] = [
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-    Signal::new(),
-];
+static STATUS_UPDATES: LazyLock<[Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE]> =
+    LazyLock::new(|| Default::default());
 
 #[derive(Copy, Clone)]
 enum MqttEvent {
@@ -196,7 +173,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     }
 
     fn handle_status(&mut self, status: MqttStatus) {
-        STATUS_UPDATES[status.msg_id as usize].signal(status.code);
+        STATUS_UPDATES.get()[status.msg_id as usize].signal(status.code);
     }
 
     fn mqtt_disconnected(&mut self) {
@@ -233,17 +210,17 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
-        STATUS_UPDATES[msg_idx].reset();
+        STATUS_UPDATES.get()[msg_idx].reset();
         let punch_id = punch_msg.id;
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
         let res = send_punch_fn.send_punch(&punch_msg).await;
         if res.is_err() {
-            STATUS_UPDATES[msg_idx].signal(StatusCode::MqttError);
+            STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
         }
         loop {
             match select(
-                STATUS_UPDATES[msg_idx].wait(),
+                STATUS_UPDATES.get()[msg_idx].wait(),
                 mqtt_events.next_message_pure(),
             )
             .await
@@ -296,7 +273,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             }
             let res = send_punch_fn.send_punch(&punch_msg).await;
             if res.is_err() {
-                STATUS_UPDATES[msg_idx].signal(StatusCode::MqttError);
+                STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
         }
     }
