@@ -9,6 +9,7 @@ use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
+use yaroc_common::backoff::Random;
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -20,12 +21,25 @@ bind_interrupts!(struct Irqs {
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
+// Find a better location for it
+pub struct NrfRandom {
+    rng: Rng<'static, RNG>,
+}
+
+impl Random for NrfRandom {
+    async fn u16(&mut self) -> u16 {
+        let mut bytes = [0, 0];
+        self.rng.fill_bytes(&mut bytes).await;
+        u16::from_be_bytes(bytes)
+    }
+}
+
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
     pub bg77:
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
-    pub rng: Rng<'static, RNG>,
+    pub rng: NrfRandom,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
     pub software_serial: SoftwareSerial,
@@ -67,6 +81,8 @@ impl Device {
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
         let rng = Rng::new(p.RNG, Irqs);
+        let rng = NrfRandom { rng };
+
         Self {
             _blue_led: blue_led,
             _green_led: green_led,

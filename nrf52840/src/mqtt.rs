@@ -1,12 +1,12 @@
 use crate::{
     bg77_hw::ModemHw,
+    device::NrfRandom,
     error::Error,
     send_punch::{Command, SendPunchMutexType, EVENT_CHANNEL},
 };
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
-use embassy_nrf::{peripherals::RNG, rng::Rng};
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::{format, String};
 use yaroc_common::{
@@ -15,8 +15,7 @@ use yaroc_common::{
         response::CommandResponse,
     },
     backoff::{
-        BackoffCommand, BackoffRetries, PunchMsg, Random, SendPunchFn, CMD_FOR_BACKOFF,
-        PUNCH_QUEUE_SIZE,
+        BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
     },
     punch::RawPunch,
 };
@@ -108,28 +107,14 @@ pub struct MqttClient<M: ModemHw> {
     _phantom: PhantomData<M>,
 }
 
-// Find a better location for it
-struct NrfRandom {
-    rng: Rng<'static, RNG>,
-}
-
-impl Random for NrfRandom {
-    async fn u16(&mut self) -> u16 {
-        let mut bytes = [0, 0];
-        self.rng.fill_bytes(&mut bytes).await;
-        u16::from_be_bytes(bytes)
-    }
-}
-
 impl<M: ModemHw> MqttClient<M> {
     pub fn new(
         send_punch_mutex: &'static SendPunchMutexType,
         config: MqttConfig,
-        rng: Rng<'static, RNG>,
+        rng: NrfRandom,
         spawner: Spawner,
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
-        let rng = NrfRandom { rng };
         let backoff_retries =
             BackoffRetries::new(send_punch_for_backoff, rng, Duration::from_secs(10), 23);
         spawner.must_spawn(backoff_retries_loop(backoff_retries));

@@ -1,5 +1,6 @@
 use crate::{
     bg77_hw::{Bg77, ModemHw},
+    device::NrfRandom,
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
     system_info::{NrfTemp, SystemInfo, Temp},
@@ -9,8 +10,7 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::Output,
-    peripherals::{RNG, TIMER0, UARTE1},
-    rng::Rng,
+    peripherals::{TIMER0, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_sync::{channel::Channel, mutex::Mutex};
@@ -50,7 +50,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub fn new(
         mut bg77: M,
         temp: T,
-        rng: Rng<'static, RNG>,
+        rng: NrfRandom,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
         config: MqttConfig,

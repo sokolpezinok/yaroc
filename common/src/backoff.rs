@@ -132,7 +132,7 @@ pub struct BackoffRetries<S: SendPunchFn, R: Random> {
     send_punch_fn: S,
     initial_backoff: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
-    _rng: R,
+    rng: R,
 }
 
 impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
@@ -145,7 +145,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             send_punch_fn,
             initial_backoff,
             mqtt_events,
-            _rng: rng,
+            rng,
         }
     }
 
@@ -191,7 +191,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                             self.unpublished_msgs[msg_id] = true;
                             // Spawn an future that will try to send the punch.
                             let jitter =
-                                Duration::from_millis(u64::from(self._rng.u16().await % 30_000));
+                                Duration::from_millis(u64::from(self.rng.u16().await % 30_000));
                             self.send_punch_fn.spawn(
                                 msg,
                                 jitter,
