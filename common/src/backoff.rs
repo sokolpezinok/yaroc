@@ -43,7 +43,6 @@ pub struct PunchMsg {
     backoff: Duration,
     pub id: u16,
     pub msg_id: u16,
-    pub jitter_ms: u16,
 }
 
 impl PunchMsg {
@@ -63,25 +62,17 @@ impl Default for PunchMsg {
             backoff: Duration::from_secs(1),
             id: 0,
             msg_id: 0,
-            jitter_ms: 0,
         }
     }
 }
 
 impl PunchMsg {
-    pub fn new(
-        punch: RawPunch,
-        id: u16,
-        msg_id: u16,
-        initial_backoff: Duration,
-        jitter_ms: u16,
-    ) -> Self {
+    pub fn new(punch: RawPunch, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
             punch,
             id,
             msg_id, // TODO: can't be 0
             backoff: initial_backoff,
-            jitter_ms,
         }
     }
 
@@ -129,7 +120,7 @@ pub struct BackoffRetries<S: SendPunchFn, R: Random> {
     send_punch_fn: S,
     initial_backoff: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
-    rng: R,
+    _rng: R,
 }
 
 impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
@@ -142,7 +133,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             send_punch_fn,
             initial_backoff,
             mqtt_events,
-            rng,
+            _rng: rng,
         }
     }
 
@@ -165,14 +156,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
         match self.vacant_idx() {
             // We skip the first element corresponding to ID=0
             Some(msg_id) if msg_id > 0 => {
-                let jitter_ms = self.rng.u16().await % 30_000;
-                let msg = PunchMsg::new(
-                    punch,
-                    punch_id,
-                    msg_id as u16,
-                    self.initial_backoff,
-                    jitter_ms,
-                );
+                let msg = PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
                 self.send_punch_fn.spawn(msg, Spawner::for_current_executor().await);
@@ -252,11 +236,6 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                             }
                             Either::Second(MqttEvent::Connect) => {
                                 punch_msg.halve_backoff();
-                                // After MQTT connect we sleep for a random time in order to not
-                                // overload the MQTT client (modem).
-                                let jitter_after_connect =
-                                    Duration::from_millis(u64::from(punch_msg.jitter_ms));
-                                Timer::after(jitter_after_connect).await;
                                 break;
                             }
                             _ => {}
