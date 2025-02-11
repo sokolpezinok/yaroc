@@ -72,6 +72,40 @@ impl FakeSendPunchFn {
     }
 }
 
+impl SendPunchFn for FakeSendPunchFn {
+    // No sophisticated type needed
+    type SemaphoreReleaser = ();
+
+    async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
+        let cnt = punch.punch[0];
+        let msg_id = punch.msg_id;
+        let (time, status) = if self.counter == 0 {
+            // First attempt fails
+            let status = MqttStatus::mqtt_error(msg_id);
+            self.counter += 1;
+            (Instant::now() + self.send_timeout, status)
+        } else if self.counter < cnt {
+            // Next attempts time out
+            let status = MqttStatus::from_bg77_qmtpub(msg_id, 2, None);
+            self.counter += 1;
+            (Instant::now() + self.send_timeout, status)
+        } else {
+            let status = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
+            (Instant::now() + self.successful_send, status)
+        };
+        COMMANDS[punch.id as usize].send(TimedResponse::new(time, status)).await;
+        Ok(())
+    }
+
+    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
+        spawner.must_spawn(fake_send_punch_fn(msg, self));
+    }
+
+    async fn acquire(&mut self) -> yaroc_common::Result<Self::SemaphoreReleaser> {
+        Ok(())
+    }
+}
+
 #[embassy_executor::task(pool_size = PUNCH_COUNT)]
 async fn respond_to_fake(
     punch_id: usize,
@@ -105,33 +139,6 @@ async fn fake_send_punch_fn(msg: PunchMsg, send_punch_fn: FakeSendPunchFn) {
         .await
 }
 
-impl SendPunchFn for FakeSendPunchFn {
-    async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
-        let cnt = punch.punch[0];
-        let msg_id = punch.msg_id;
-        let (time, status) = if self.counter == 0 {
-            // First attempt fails
-            let status = MqttStatus::mqtt_error(msg_id);
-            self.counter += 1;
-            (Instant::now() + self.send_timeout, status)
-        } else if self.counter < cnt {
-            // Next attempts time out
-            let status = MqttStatus::from_bg77_qmtpub(msg_id, 2, None);
-            self.counter += 1;
-            (Instant::now() + self.send_timeout, status)
-        } else {
-            let status = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
-            (Instant::now() + self.successful_send, status)
-        };
-        COMMANDS[punch.id as usize].send(TimedResponse::new(time, status)).await;
-        Ok(())
-    }
-
-    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(fake_send_punch_fn(msg, self));
-    }
-}
-
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 #[test]
@@ -149,6 +156,10 @@ async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn, FakeRandom>) 
 
 #[embassy_executor::task]
 async fn main(spawner: Spawner) {
+    env_logger::builder()
+        .is_test(true)
+        .try_init()
+        .expect("Logger failed to initialize");
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
     let backoff = BackoffRetries::new(fake, FakeRandom, Duration::from_millis(100), 2);

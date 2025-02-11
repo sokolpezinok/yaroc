@@ -216,7 +216,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
 
     /// Figure out if message has been sent.
     async fn is_message_sent(
-        mut punch_msg: PunchMsg,
+        punch_msg: &mut PunchMsg,
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     ) -> bool {
         let msg_idx = punch_msg.msg_id as usize;
@@ -239,7 +239,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                     error!(
                         "Punch ID={} failed to send, trying again after {} s",
                         punch_id,
-                        punch_msg.backoff.as_secs()
+                        punch_msg.backoff.as_millis() as f32 / 1_000.0
                     );
 
                     // TODO: factor out into a separate function
@@ -264,7 +264,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                     }
                     return false;
                 }
-                Either::Second(MqttEvent::Connect) => return false,
+                Either::Second(MqttEvent::Connect) => {}
                 Either::First(StatusCode::Retrying(retries)) => {
                     warn!(
                         "Sending punch ID={} will be retried, has been tried {} times",
@@ -282,7 +282,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     ///
     /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
     /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
-    pub async fn try_sending_with_retries(punch_msg: PunchMsg, mut send_punch_fn: S) {
+    pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
         STATUS_UPDATES.get()[msg_idx].reset();
@@ -294,7 +294,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             if res.is_err() {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
-            if Self::is_message_sent(punch_msg, &mut mqtt_events).await {
+            if Self::is_message_sent(&mut punch_msg, &mut mqtt_events).await {
                 break;
             }
         }
