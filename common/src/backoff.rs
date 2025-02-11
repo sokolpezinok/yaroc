@@ -200,7 +200,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
 
     /// Figure out if message has been sent.
     async fn is_message_sent(
-        punch_msg: &mut PunchMsg,
+        punch_msg: &PunchMsg,
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     ) -> bool {
         let msg_idx = punch_msg.msg_id as usize;
@@ -226,21 +226,6 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                         punch_msg.backoff.as_millis() as f32 / 1_000.0
                     );
 
-                    // TODO: factor out into a separate function
-                    let next_send = punch_msg.next_send();
-                    loop {
-                        match select(Timer::at(next_send), mqtt_events.next_message_pure()).await {
-                            Either::First(_) => {
-                                punch_msg.update_backoff();
-                                break;
-                            }
-                            Either::Second(MqttEvent::Connect) => {
-                                punch_msg.halve_backoff();
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
                     return false;
                 }
                 Either::Second(MqttEvent::Connect) => {}
@@ -253,6 +238,30 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                 Either::First(StatusCode::Unknown) => {
                     error!("Uknown message status");
                 }
+            }
+        }
+    }
+
+    /// Wait for the period of punch_msg.backoff.
+    ///
+    /// The backoff can be interrupted by an MQTT connect event.
+    async fn backoff(
+        punch_msg: &mut PunchMsg,
+        mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
+    ) {
+        let next_send = punch_msg.next_send();
+        loop {
+            match select(Timer::at(next_send), mqtt_events.next_message_pure()).await {
+                Either::First(_) => {
+                    punch_msg.update_backoff();
+                    return;
+                }
+                Either::Second(MqttEvent::Connect) => {
+                    // After MQTT connect we
+                    punch_msg.halve_backoff();
+                    return;
+                }
+                _ => {}
             }
         }
     }
@@ -273,8 +282,10 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             if res.is_err() {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
-            if Self::is_message_sent(&mut punch_msg, &mut mqtt_events).await {
+            if Self::is_message_sent(&punch_msg, &mut mqtt_events).await {
                 break;
+            } else {
+                Self::backoff(&mut punch_msg, &mut mqtt_events).await
             }
         }
     }
