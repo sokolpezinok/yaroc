@@ -10,7 +10,7 @@ use embassy_futures::select::{select, Either};
 use embassy_sync::{
     channel::Channel,
     lazy_lock::LazyLock,
-    pubsub::{ImmediatePublisher, PubSubChannel},
+    pubsub::{ImmediatePublisher, PubSubChannel, Subscriber},
     signal::Signal,
 };
 use embassy_time::{Duration, Instant, Timer};
@@ -92,6 +92,17 @@ impl PunchMsg {
 
 /// Trait for a send punch function used by `BackoffRetries` to send punches.
 pub trait SendPunchFn {
+    type SemaphoreReleaser;
+
+    /// Acquire concurrent access to the send punch function.
+    ///
+    /// The releaser should be dropped once you received an publish, timeout or error response via
+    /// `STATUS_UPDATES`.
+    fn acquire(
+        &mut self,
+    ) -> impl core::future::Future<Output = crate::Result<Self::SemaphoreReleaser>>;
+
+    /// Send punch. The result of the operation is received via `STATUS_UPDATES`.
     fn send_punch(
         &mut self,
         punch: &PunchMsg,
@@ -203,21 +214,13 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
         }
     }
 
-    /// Try sending a punch using `send_punch_fn`, retrying if necessary.
-    ///
-    /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
-    /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
-    pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
-        // TODO: set expiration deadline
+    /// Figure out if message has been sent.
+    async fn is_message_sent(
+        mut punch_msg: PunchMsg,
+        mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
+    ) -> bool {
         let msg_idx = punch_msg.msg_id as usize;
-        STATUS_UPDATES.get()[msg_idx].reset();
         let punch_id = punch_msg.id;
-        let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
-
-        let res = send_punch_fn.send_punch(&punch_msg).await;
-        if res.is_err() {
-            STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
-        }
         loop {
             match select(
                 STATUS_UPDATES.get()[msg_idx].wait(),
@@ -229,7 +232,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                     CMD_FOR_BACKOFF
                         .send(BackoffCommand::PunchPublished(punch_id, punch_msg.msg_id))
                         .await;
-                    break;
+                    return true;
                 }
                 Either::First(StatusCode::Timeout | StatusCode::MqttError)
                 | Either::Second(MqttEvent::Disconnect) => {
@@ -239,6 +242,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                         punch_msg.backoff.as_secs()
                     );
 
+                    // TODO: factor out into a separate function
                     let next_send = punch_msg.next_send();
                     loop {
                         match select(Timer::at(next_send), mqtt_events.next_message_pure()).await {
@@ -258,22 +262,40 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                             _ => {}
                         }
                     }
+                    return false;
                 }
-                Either::Second(MqttEvent::Connect) => continue,
+                Either::Second(MqttEvent::Connect) => return false,
                 Either::First(StatusCode::Retrying(retries)) => {
                     warn!(
                         "Sending punch ID={} will be retried, has been tried {} times",
                         punch_id, retries
                     );
-                    continue;
                 }
                 Either::First(StatusCode::Unknown) => {
                     error!("Uknown message status");
                 }
             }
+        }
+    }
+
+    /// Try sending a punch using `send_punch_fn`, retrying if necessary.
+    ///
+    /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
+    /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
+    pub async fn try_sending_with_retries(punch_msg: PunchMsg, mut send_punch_fn: S) {
+        // TODO: set expiration deadline
+        let msg_idx = punch_msg.msg_id as usize;
+        STATUS_UPDATES.get()[msg_idx].reset();
+        let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
+
+        loop {
+            let _releaser = send_punch_fn.acquire().await.unwrap();
             let res = send_punch_fn.send_punch(&punch_msg).await;
             if res.is_err() {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
+            }
+            if Self::is_message_sent(punch_msg, &mut mqtt_events).await {
+                break;
             }
         }
     }

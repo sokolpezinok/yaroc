@@ -7,6 +7,7 @@ use crate::{
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
+use embassy_sync::semaphore::{FairSemaphore, Semaphore};
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::{format, String};
 use yaroc_common::{
@@ -18,12 +19,16 @@ use yaroc_common::{
         BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
     },
     punch::RawPunch,
+    RawMutex,
 };
 
 const MQTT_CLIENT_ID: u8 = 0;
+const PUNCHES_INFLIGHT: usize = 5;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
+static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
+    FairSemaphore::new(PUNCHES_INFLIGHT);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MqttQos {
@@ -57,6 +62,7 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
 #[derive(Clone, Copy)]
 pub struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
+    bg77_punch_semaphore: &'static FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
     packet_timeout: Duration,
 }
 
@@ -64,6 +70,7 @@ impl Bg77SendPunchFn {
     pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
         Self {
             send_punch_mutex,
+            bg77_punch_semaphore: &BG77_PUNCH_SEMAPHORE,
             packet_timeout,
         }
     }
@@ -75,6 +82,11 @@ async fn bg77_send_punch_fn(msg: PunchMsg, send_punch_fn: Bg77SendPunchFn) {
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
+    type SemaphoreReleaser = embassy_sync::semaphore::SemaphoreReleaser<
+        'static,
+        FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
+    >;
+
     async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
         let mut send_punch = self
             .send_punch_mutex
@@ -84,6 +96,11 @@ impl SendPunchFn for Bg77SendPunchFn {
             .await
             .map_err(|_| Error::TimeoutError)?;
         send_punch.as_mut().unwrap().send_punch_impl(punch.punch, punch.msg_id).await
+    }
+
+    async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
+        // The modem doesn't like too many messages being sent out at the same time.
+        self.bg77_punch_semaphore.acquire(1).await.map_err(|_| Error::SemaphoreError)
     }
 
     fn spawn(self, msg: PunchMsg, spawner: Spawner) {

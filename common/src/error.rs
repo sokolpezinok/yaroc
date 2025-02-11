@@ -27,6 +27,8 @@ pub enum Error {
     NetworkRegistrationError,
     #[error("MQTT error {0}")]
     MqttError(i8),
+    #[error("Semaphore synchronization error")]
+    SemaphoreError,
 }
 
 impl From<core::fmt::Error> for Error {
