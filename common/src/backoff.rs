@@ -13,7 +13,7 @@ use embassy_sync::{
     pubsub::{ImmediatePublisher, PubSubChannel, Subscriber},
     signal::Signal,
 };
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
@@ -282,10 +282,18 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             if res.is_err() {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
-            if Self::is_message_sent(&punch_msg, &mut mqtt_events).await {
-                break;
-            } else {
-                Self::backoff(&mut punch_msg, &mut mqtt_events).await
+            let res = Self::is_message_sent(&punch_msg, &mut mqtt_events)
+                .with_timeout(Duration::from_secs(120))
+                .await;
+            match res {
+                Err(_) => {
+                    error!("Response from modem timed out");
+                    break;
+                }
+                Ok(true) => {
+                    break;
+                }
+                _ => Self::backoff(&mut punch_msg, &mut mqtt_events).await,
             }
         }
     }
