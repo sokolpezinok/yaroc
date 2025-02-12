@@ -99,7 +99,7 @@ pub trait SendPunchFn {
         punch: &PunchMsg,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner);
+    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
 // TODO: find a better way of instantiating this
@@ -119,12 +119,19 @@ pub struct BackoffRetries<S: SendPunchFn, R: Random> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
+    send_punch_timeout: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     _rng: R,
 }
 
 impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
-    pub fn new(send_punch_fn: S, rng: R, initial_backoff: Duration, capacity: usize) -> Self {
+    pub fn new(
+        send_punch_fn: S,
+        rng: R,
+        initial_backoff: Duration,
+        send_punch_timeout: Duration,
+        capacity: usize,
+    ) -> Self {
         let mut unpublished_msgs = Vec::new();
         unpublished_msgs.resize(capacity + 1, false).expect("capacity set too high");
         let mqtt_events = MQTT_EVENTS.immediate_publisher();
@@ -132,6 +139,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             unpublished_msgs,
             send_punch_fn,
             initial_backoff,
+            send_punch_timeout,
             mqtt_events,
             _rng: rng,
         }
@@ -159,7 +167,11 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                 let msg = PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
-                self.send_punch_fn.spawn(msg, Spawner::for_current_executor().await);
+                self.send_punch_fn.spawn(
+                    msg,
+                    Spawner::for_current_executor().await,
+                    self.send_punch_timeout,
+                );
             }
             _ => {
                 error!("Message queue is full");
@@ -267,7 +279,11 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     ///
     /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
     /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
-    pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
+    pub async fn try_sending_with_retries(
+        mut punch_msg: PunchMsg,
+        mut send_punch_fn: S,
+        send_punch_timeout: Duration,
+    ) {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
         let punch_id = punch_msg.id;
@@ -281,7 +297,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
             let res = Self::is_message_sent(&punch_msg, &mut mqtt_events)
-                .with_timeout(Duration::from_secs(300))
+                .with_timeout(send_punch_timeout)
                 .await;
             match res {
                 Ok(true) => {

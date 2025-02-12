@@ -77,8 +77,17 @@ impl Bg77SendPunchFn {
 }
 
 #[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
-async fn bg77_send_punch_fn(msg: PunchMsg, send_punch_fn: Bg77SendPunchFn) {
-    BackoffRetries::<Bg77SendPunchFn, NrfRandom>::try_sending_with_retries(msg, send_punch_fn).await
+async fn bg77_send_punch_fn(
+    msg: PunchMsg,
+    send_punch_fn: Bg77SendPunchFn,
+    send_punch_timeout: Duration,
+) {
+    BackoffRetries::<Bg77SendPunchFn, NrfRandom>::try_sending_with_retries(
+        msg,
+        send_punch_fn,
+        send_punch_timeout,
+    )
+    .await
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
@@ -103,8 +112,8 @@ impl SendPunchFn for Bg77SendPunchFn {
         self.bg77_punch_semaphore.acquire(1).await.map_err(|_| Error::SemaphoreError)
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(bg77_send_punch_fn(msg, self));
+    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
+        spawner.must_spawn(bg77_send_punch_fn(msg, self, send_punch_timeout));
     }
 }
 
@@ -123,8 +132,14 @@ impl<M: ModemHw> MqttClient<M> {
         spawner: Spawner,
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
-        let backoff_retries =
-            BackoffRetries::new(send_punch_for_backoff, rng, Duration::from_secs(10), 23);
+        let send_punch_timeout = ACTIVATION_TIMEOUT + config.packet_timeout * 2;
+        let backoff_retries = BackoffRetries::new(
+            send_punch_for_backoff,
+            rng,
+            Duration::from_secs(10),
+            send_punch_timeout,
+            23,
+        );
         spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
         Self {

@@ -97,8 +97,8 @@ impl SendPunchFn for FakeSendPunchFn {
         Ok(())
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(fake_send_punch_fn(msg, self));
+    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
+        spawner.must_spawn(fake_send_punch_fn(msg, self, send_punch_timeout));
     }
 
     async fn acquire(&mut self) -> yaroc_common::Result<Self::SemaphoreReleaser> {
@@ -134,9 +134,17 @@ async fn respond_to_fake(
 }
 
 #[embassy_executor::task(pool_size = PUNCH_COUNT)]
-async fn fake_send_punch_fn(msg: PunchMsg, send_punch_fn: FakeSendPunchFn) {
-    BackoffRetries::<FakeSendPunchFn, FakeRandom>::try_sending_with_retries(msg, send_punch_fn)
-        .await
+async fn fake_send_punch_fn(
+    msg: PunchMsg,
+    send_punch_fn: FakeSendPunchFn,
+    send_punch_timeout: Duration,
+) {
+    BackoffRetries::<FakeSendPunchFn, FakeRandom>::try_sending_with_retries(
+        msg,
+        send_punch_fn,
+        send_punch_timeout,
+    )
+    .await
 }
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -162,7 +170,13 @@ async fn main(spawner: Spawner) {
         .expect("Logger failed to initialize");
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
-    let backoff = BackoffRetries::new(fake, FakeRandom, Duration::from_millis(100), 2);
+    let backoff = BackoffRetries::new(
+        fake,
+        FakeRandom,
+        Duration::from_millis(100),
+        Duration::from_millis(1000),
+        2,
+    );
     spawner.must_spawn(backoff_loop(backoff));
 
     // First test
