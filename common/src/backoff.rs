@@ -213,9 +213,6 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             .await
             {
                 Either::First(StatusCode::Published) => {
-                    CMD_FOR_BACKOFF
-                        .send(BackoffCommand::PunchPublished(punch_id, punch_msg.msg_id))
-                        .await;
                     return true;
                 }
                 Either::First(StatusCode::Timeout | StatusCode::MqttError)
@@ -273,6 +270,7 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
     pub async fn try_sending_with_retries(mut punch_msg: PunchMsg, mut send_punch_fn: S) {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
+        let punch_id = punch_msg.id;
         STATUS_UPDATES.get()[msg_idx].reset();
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
@@ -283,15 +281,18 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
                 STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
             }
             let res = Self::is_message_sent(&punch_msg, &mut mqtt_events)
-                .with_timeout(Duration::from_secs(120))
+                .with_timeout(Duration::from_secs(300))
                 .await;
             match res {
-                Err(_) => {
-                    error!("Response from modem timed out");
+                Ok(true) => {
+                    // Published
+                    CMD_FOR_BACKOFF
+                        .send(BackoffCommand::PunchPublished(punch_id, punch_msg.msg_id))
+                        .await;
                     break;
                 }
-                Ok(true) => {
-                    break;
+                Err(_) => {
+                    error!("Response from modem timed out for punch ID={}", punch_id);
                 }
                 _ => Self::backoff(&mut punch_msg, &mut mqtt_events).await,
             }
