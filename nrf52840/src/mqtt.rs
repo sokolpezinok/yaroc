@@ -120,6 +120,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
+    cgatt_cnt: u8,
     punch_cnt: u16,
     _phantom: PhantomData<M>,
 }
@@ -145,40 +146,44 @@ impl<M: ModemHw> MqttClient<M> {
         Self {
             config,
             last_successful_send: Instant::now(),
+            cgatt_cnt: 0,
             punch_cnt: 0,
             _phantom: PhantomData,
         }
     }
 
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if self.last_successful_send + self.config.packet_timeout * 4 < Instant::now() {
+        if self.last_successful_send + self.config.packet_timeout * (4 + 2 * self.cgatt_cnt).into()
+            < Instant::now()
+        {
+            warn!("Will reattach to network because of no messages being sent for a long time");
             self.last_successful_send = Instant::now();
             bg77.simple_call_at("E0", None).await?;
             let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
             let _ = bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
-            bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-            Timer::after_secs(2).await;
-            return Ok(());
+            self.cgatt_cnt += 1;
+        } else {
+            let state = bg77.simple_call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
+            if state == 1 {
+                info!("Already registered to network");
+                return Ok(());
+            }
         }
 
-        let state = bg77.simple_call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
-        if state == 0 {
-            bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-            // CGATT=1 needs additional time and reading from modem
-            Timer::after_secs(1).await;
-            let response = bg77.read().await;
-            if let Ok(response) = response {
-                if !response.lines().is_empty() {
-                    debug!("Read {=[?]} after CGATT=1", response.lines());
-                }
+        bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        // CGATT=1 needs additional time and reading from modem
+        Timer::after_secs(1).await;
+        let response = bg77.read().await;
+        if let Ok(response) = response {
+            if !response.lines().is_empty() {
+                debug!("Read {=[?]} after CGATT=1", response.lines());
             }
         }
         // TODO: should we do something with the result?
         let (_, _) =
             bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
 
-        info!("Already registered to network");
         Ok(())
     }
 
@@ -309,6 +314,7 @@ impl<M: ModemHw> MqttClient<M> {
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
                         error!("Error while sending MQTT connect notification, channel full");
                     }
+                    self.cgatt_cnt = 0;
                     Ok(())
                 } else {
                     Err(Error::MqttError(reason))
