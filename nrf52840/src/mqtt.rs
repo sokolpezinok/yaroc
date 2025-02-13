@@ -201,6 +201,7 @@ impl<M: ModemHw> MqttClient<M> {
                 }
                 true
             }
+            "CEREG" => response.values().len() == 4,
             "QMTPUB" => Self::qmtpub_handler(response),
             _ => false,
         }
