@@ -58,7 +58,7 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
     async fn get_modem_time(bg77: &mut impl ModemHw) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock =
             bg77.simple_call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
-        parse_qlts(&modem_clock).map_err(yaroc_common::error::Error::into)
+        parse_qlts(&modem_clock)
     }
 
     pub async fn current_time(
@@ -102,7 +102,6 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
             .await?
             // TODO: support roaming, that's answer 5
             .parse2::<u32, String<8>>([1, 3], Some(1))
-            .map_err(Error::from)
             .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
     }
 

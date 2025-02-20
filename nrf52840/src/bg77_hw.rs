@@ -7,8 +7,6 @@ use yaroc_common::at::{
     uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
 };
 
-use crate::error::Error;
-
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub trait ModemPin {
@@ -91,10 +89,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        self.uart1
-            .call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout)
-            .await
-            .map_err(Error::from)
+        self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout).await
     }
 
     async fn call_at(&mut self, cmd: &str, timeout: Duration) -> yaroc_common::Result<AtResponse> {
