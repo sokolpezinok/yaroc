@@ -1,8 +1,8 @@
 use crate::{
-    bg77_hw::{Bg77, ModemHw},
+    bg77_hw::{Bg77, ModemConfig, ModemHw},
     device::NrfRandom,
     error::Error,
-    mqtt::{MqttClient, MqttConfig, MqttQos, ACTIVATION_TIMEOUT},
+    mqtt::{MqttClient, MqttConfig, MqttQos},
     system_info::{NrfTemp, SystemInfo, Temp},
 };
 use defmt::{error, info, warn};
@@ -41,6 +41,7 @@ pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 pub struct SendPunch<M: ModemHw, T: Temp> {
     bg77: M,
+    modem_config: ModemConfig,
     client: MqttClient<M>,
     system_info: SystemInfo<M, T>,
     last_reconnect: Option<Instant>,
@@ -53,29 +54,17 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         rng: NrfRandom,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
-        config: MqttConfig,
+        modem_config: ModemConfig,
+        mqtt_config: MqttConfig,
     ) -> Self {
         bg77.spawn(MqttClient::<M>::urc_handler, spawner);
         Self {
             bg77,
-            client: MqttClient::new(send_punch_mutex, config, rng, spawner),
+            modem_config,
+            client: MqttClient::new(send_punch_mutex, mqtt_config, rng, spawner),
             system_info: SystemInfo::<M, T>::new(temp),
             last_reconnect: None,
         }
-    }
-
-    // TODO: this method probably doesn't belong here
-    pub async fn config(&mut self) -> Result<(), Error> {
-        self.bg77.simple_call_at("E0", None).await?;
-        // TODO: forward APN from config
-        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", "internet.iot")?;
-        let _ = self.bg77.simple_call_at(&cmd, None).await;
-        self.bg77.simple_call_at("+CEREG=2", None).await?;
-        self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        self.bg77.simple_call_at("+QCFG=\"nwscanseq\",00", None).await?;
-        self.bg77.simple_call_at("+QCFG=\"iotopmode\",2,1", None).await?;
-        self.bg77.simple_call_at("+QCFG=\"band\",0,100002000000000F0E189F,80000", None).await?;
-        Ok(())
     }
 
     async fn send_message<const N: usize>(
@@ -136,7 +125,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     /// Basic setup of the modem
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.bg77.turn_on().await;
-        self.config().await?;
+        self.bg77.configure(&self.modem_config).await?;
 
         let _ = self.client.mqtt_connect(&mut self.bg77).await;
         Ok(())

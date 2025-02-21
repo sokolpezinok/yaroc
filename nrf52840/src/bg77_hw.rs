@@ -1,13 +1,20 @@
+use core::str::FromStr;
+
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::Output;
 use embassy_time::{Duration, Timer};
-use yaroc_common::at::{
-    response::AtResponse,
-    uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
+use heapless::{format, String};
+use yaroc_common::{
+    at::{
+        response::AtResponse,
+        uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
+    },
+    error::Error,
 };
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
 pub trait ModemPin {
     fn set_low(&mut self);
@@ -24,6 +31,18 @@ impl ModemPin for Output<'static> {
     }
 }
 
+pub struct ModemConfig {
+    pub apn: String<30>,
+}
+
+impl Default for ModemConfig {
+    fn default() -> Self {
+        Self {
+            apn: String::from_str("internet.iot").unwrap(),
+        }
+    }
+}
+
 /// Struct for accessing Quectel BG77 modem
 pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
     uart1: AtUart<T, R>,
@@ -31,6 +50,10 @@ pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
 }
 
 pub trait ModemHw {
+    fn configure(
+        &mut self,
+        modem_config: &ModemConfig,
+    ) -> impl core::future::Future<Output = Result<(), Error>>;
     /// Spawn a task for the modem and process incoming URCs using the provided handler.
     fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner);
 
@@ -126,6 +149,19 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
             let res = self.uart1.read(Duration::from_secs(5)).await?;
             info!("Modem response: {=[?]}", res.as_slice());
         }
+        Ok(())
+    }
+
+    async fn configure(&mut self, modem_config: &ModemConfig) -> Result<(), Error> {
+        self.simple_call_at("E0", None).await?;
+        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", modem_config.apn)?;
+        let _ = self.simple_call_at(&cmd, None).await;
+        self.simple_call_at("+CEREG=2", None).await?;
+        self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        self.simple_call_at("+QCFG=\"nwscanseq\",00", None).await?;
+        self.simple_call_at("+QCFG=\"iotopmode\",2,1", None).await?;
+        self.simple_call_at("+QCFG=\"band\",0,100002000000000F0E189F,80000", None)
+            .await?;
         Ok(())
     }
 }

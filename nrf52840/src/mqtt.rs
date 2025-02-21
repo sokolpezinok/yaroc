@@ -1,5 +1,5 @@
 use crate::{
-    bg77_hw::ModemHw,
+    bg77_hw::{ModemHw, ACTIVATION_TIMEOUT},
     device::NrfRandom,
     error::Error,
     send_punch::{Command, SendPunchMutexType, EVENT_CHANNEL},
@@ -26,7 +26,6 @@ const MQTT_CLIENT_ID: u8 = 0;
 const PUNCHES_INFLIGHT: usize = 5;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
-pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
     FairSemaphore::new(PUNCHES_INFLIGHT);
 
@@ -41,7 +40,6 @@ pub enum MqttQos {
 pub struct MqttConfig {
     pub url: String<40>,
     pub packet_timeout: Duration,
-    pub apn: String<30>,
 }
 
 impl Default for MqttConfig {
@@ -49,7 +47,6 @@ impl Default for MqttConfig {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
-            apn: String::from_str("internet.iot").unwrap(),
         }
     }
 }

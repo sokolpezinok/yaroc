@@ -6,6 +6,7 @@ use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use yaroc_nrf52840::{
     self as _,
+    bg77_hw::ModemConfig,
     device::Device,
     mqtt::MqttConfig,
     send_punch::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
@@ -18,6 +19,7 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mqtt_config = MqttConfig::default();
+    let modem_config = ModemConfig::default();
     let device = Device::new();
     info!("Device initialized!");
 
@@ -29,7 +31,15 @@ async fn main(spawner: Spawner) {
         software_serial,
         ..
     } = device;
-    let send_punch = SendPunch::new(bg77, temp, rng, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
+    let send_punch = SendPunch::new(
+        bg77,
+        temp,
+        rng,
+        &SEND_PUNCH_MUTEX,
+        spawner,
+        modem_config,
+        mqtt_config,
+    );
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
