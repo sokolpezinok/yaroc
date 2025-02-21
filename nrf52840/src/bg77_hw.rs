@@ -31,14 +31,22 @@ impl ModemPin for Output<'static> {
     }
 }
 
+pub enum RAT {
+    Ltem,      // LTE-M
+    NbIot,     // NB-IoT
+    LtemNbIot, // Both
+}
+
 pub struct ModemConfig {
     pub apn: String<30>,
+    pub rat: RAT,
 }
 
 impl Default for ModemConfig {
     fn default() -> Self {
         Self {
             apn: String::from_str("internet.iot").unwrap(),
+            rat: RAT::LtemNbIot,
         }
     }
 }
@@ -158,8 +166,16 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         let _ = self.simple_call_at(&cmd, None).await;
         self.simple_call_at("+CEREG=2", None).await?;
         self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        self.simple_call_at("+QCFG=\"nwscanseq\",00", None).await?;
-        self.simple_call_at("+QCFG=\"iotopmode\",2,1", None).await?;
+
+        let (nwscanseq, iotopmode) = match modem_config.rat {
+            RAT::Ltem => ("02", 0),
+            RAT::NbIot => ("03", 1),
+            RAT::LtemNbIot => ("00", 2),
+        };
+        let cmd = format!(50; "+QCFG=\"nwscanseq\",{}", nwscanseq)?;
+        self.simple_call_at(&cmd, None).await?;
+        let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
+        self.simple_call_at(&cmd, None).await?;
         self.simple_call_at("+QCFG=\"band\",0,100002000000000F0E189F,80000", None)
             .await?;
         Ok(())
