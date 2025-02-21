@@ -165,7 +165,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", modem_config.apn)?;
         let _ = self.simple_call_at(&cmd, None).await;
         self.simple_call_at("+CEREG=2", None).await?;
-        self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        let _ = self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
 
         let (nwscanseq, iotopmode) = match modem_config.rat {
             RAT::Ltem => ("02", 0),
