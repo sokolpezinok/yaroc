@@ -67,7 +67,8 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     // TODO: this method probably doesn't belong here
     pub async fn config(&mut self) -> Result<(), Error> {
         self.bg77.simple_call_at("E0", None).await?;
-        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", "trial-nbiot.corp")?;
+        // TODO: forward APN from config
+        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", "internet.iot")?;
         let _ = self.bg77.simple_call_at(&cmd, None).await;
         self.bg77.simple_call_at("+CEREG=2", None).await?;
         self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;

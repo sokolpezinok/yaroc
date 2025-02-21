@@ -49,7 +49,7 @@ impl Default for MqttConfig {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
-            apn: String::from_str("trail-nbiot.corp").unwrap(),
+            apn: String::from_str("internet.iot").unwrap(),
         }
     }
 }
