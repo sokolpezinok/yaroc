@@ -102,7 +102,9 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         command_prefix: &str,
         second_read: bool,
     ) -> yaroc_common::Result<AtResponse> {
-        self.uart1.call(msg, command_prefix, second_read, BG77_MINIMUM_TIMEOUT).await
+        self.uart1
+            .call(msg, command_prefix, second_read, BG77_MINIMUM_TIMEOUT * 2)
+            .await
     }
 
     async fn read(&mut self) -> crate::Result<AtResponse> {

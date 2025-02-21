@@ -72,9 +72,9 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         let _ = self.bg77.simple_call_at(&cmd, None).await;
         self.bg77.simple_call_at("+CEREG=2", None).await?;
         self.bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        self.bg77.simple_call_at("+QCFG=\"nwscanseq\",03", None).await?;
-        self.bg77.simple_call_at("+QCFG=\"iotopmode\",1,1", None).await?;
-        self.bg77.simple_call_at("+QCFG=\"band\",0,0,80000", None).await?;
+        self.bg77.simple_call_at("+QCFG=\"nwscanseq\",00", None).await?;
+        self.bg77.simple_call_at("+QCFG=\"iotopmode\",2,1", None).await?;
+        self.bg77.simple_call_at("+QCFG=\"band\",0,100002000000000F0E189F,80000", None).await?;
         Ok(())
     }
 
