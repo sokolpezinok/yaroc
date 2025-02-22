@@ -75,7 +75,7 @@ class SIM7020Interface:
         await self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
         await self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         response = await self.async_at.call(
-            'AT*MCGDEFCONT="IP","trial-nbiot.corp"', timeout=self._connect_timeout
+            'AT*MCGDEFCONT="IP","internet.iot"', timeout=self._connect_timeout
         )
 
         if not response.success:
