@@ -58,10 +58,12 @@ pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
 }
 
 pub trait ModemHw {
+    /// Configures the modem according to a modem config.
     fn configure(
         &mut self,
         modem_config: &ModemConfig,
     ) -> impl core::future::Future<Output = Result<(), Error>>;
+
     /// Spawn a task for the modem and process incoming URCs using the provided handler.
     fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner);
 
@@ -177,7 +179,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.simple_call_at(&cmd, None).await?;
         let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
         self.simple_call_at(&cmd, None).await?;
-        self.simple_call_at("+QCFG=\"band\",0,100002000000000F0E189F,80000", None)
+        self.simple_call_at("+QCFG=\"band\",0,80000,80000", None)
             .await?;
         Ok(())
     }
