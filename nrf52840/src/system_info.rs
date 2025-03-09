@@ -5,9 +5,17 @@ use defmt::info;
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
 use embassy_time::Instant;
 use heapless::{format, String};
-use yaroc_common::status::{parse_qlts, MiniCallHome};
+use yaroc_common::status::{parse_qlts, CellNetworkType, MiniCallHome};
 
 use crate::{bg77_hw::ModemHw, error::Error};
+
+pub struct SignalInfo {
+    network_type: CellNetworkType,
+    /// RSSI in dBm
+    rssi_dbm: i8,
+    /// SNR in centibells (instead of decibells)
+    snr_cb: i16,
+}
 
 pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
@@ -89,12 +97,22 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
         Ok((volt, bcs))
     }
 
-    async fn signal_info(bg77: &mut M) -> Result<(i8, i16, u8, i8), Error> {
+    async fn signal_info(bg77: &mut M) -> Result<SignalInfo, Error> {
         let response = bg77.simple_call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
-        response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4])
+        let (mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
+            response.parse4::<i8, i16, u8, i8>([1, 2, 3, 4])?;
+        let snr_cb = i16::from(snr_mult) * 2 - 200;
+        if rssi_dbm == 0 {
+            rssi_dbm = (rsrp_dbm - i16::from(rsrq_dbm)) as i8; // TODO: error if not i8
+        }
+        Ok(SignalInfo {
+            network_type: CellNetworkType::NbIotEcl0,
+            rssi_dbm,
+            snr_cb,
+        })
     }
 
     async fn cellid(bg77: &mut M) -> Result<u32, Error> {
@@ -112,9 +130,11 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
         if let Ok((battery_mv, battery_percents)) = Self::battery_state(bg77).await {
             mini_call_home.set_battery_info(battery_mv, battery_percents);
         }
-        if let Ok((rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm)) = Self::signal_info(bg77).await {
-            let snr_cb = i16::from(snr_mult) * 2 - 200;
-            mini_call_home.set_signal_info(snr_cb, rssi_dbm, rsrp_dbm, rsrq_dbm);
+        if let Ok(SignalInfo {
+            rssi_dbm, snr_cb, ..
+        }) = Self::signal_info(bg77).await
+        {
+            mini_call_home.set_signal_info(snr_cb, rssi_dbm);
         }
         match Self::cellid(bg77).await {
             Ok(cellid) => mini_call_home.set_cellid(cellid),

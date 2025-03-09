@@ -17,8 +17,26 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
         .fixed_offset())
 }
 
+/// Cell network type, currently only NB-IoT and LTE-M is supported
+#[derive(Default, Debug)]
+pub enum CellNetworkType {
+    #[default]
+    Unknown,
+    // NB-IoT can be on 3 different extended coverage levels (ECL): 0, 1 and 2.
+    // We encode it in this enum to save a few bytes.
+    /// NB-IoT ECL 0
+    NbIotEcl0,
+    /// NB-IoT ECL 1
+    NbIotEcl1,
+    /// NB-IoT ECL 2
+    NbIotEcl2,
+    /// LTE-M
+    LteM,
+}
+
 #[derive(Default, Debug)]
 pub struct MiniCallHome {
+    pub network_type: CellNetworkType,
     pub rssi_dbm: Option<i8>,
     pub snr_cb: Option<i16>, // centibells, 1/10th of decibell
     pub cellid: Option<u32>,
@@ -37,11 +55,8 @@ impl MiniCallHome {
         }
     }
 
-    pub fn set_signal_info(&mut self, snr_cb: i16, mut rssi_dbm: i8, rsrp_dbm: i16, rsrq_dbm: i8) {
+    pub fn set_signal_info(&mut self, snr_cb: i16, rssi_dbm: i8) {
         self.snr_cb = Some(snr_cb);
-        if rssi_dbm == 0 {
-            rssi_dbm = (rsrp_dbm - i16::from(rsrq_dbm)) as i8; // TODO: error if not i8
-        }
         self.rssi_dbm = Some(rssi_dbm);
     }
 
