@@ -7,8 +7,15 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 
 Added: EventType
 DESCRIPTOR: _descriptor.FileDescriptor
+Lte: CellNetworkType
+LteM: CellNetworkType
+NbIotEcl0: CellNetworkType
+NbIotEcl1: CellNetworkType
+NbIotEcl2: CellNetworkType
 Removed: EventType
+Umts: CellNetworkType
 Unknown: EventType
+UnknownNetworkType: CellNetworkType
 
 class Coordinates(_message.Message):
     __slots__ = ["altitude", "latitude", "longitude", "time"]
@@ -60,13 +67,13 @@ class MiniCallHome(_message.Message):
     max_freq: int
     millivolts: int
     min_freq: int
-    network_type: int
+    network_type: CellNetworkType
     signal_dbm: int
     signal_snr_cb: int
     time: _timestamp_pb2.Timestamp
     totaldatarx: int
     totaldatatx: int
-    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr_cb: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[int] = ..., codes: _Optional[_Iterable[int]] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, local_ip: _Optional[int] = ..., cpu_temperature: _Optional[float] = ..., freq: _Optional[int] = ..., min_freq: _Optional[int] = ..., max_freq: _Optional[int] = ..., millivolts: _Optional[int] = ..., signal_dbm: _Optional[int] = ..., signal_snr_cb: _Optional[int] = ..., cellid: _Optional[int] = ..., network_type: _Optional[_Union[CellNetworkType, str]] = ..., codes: _Optional[_Iterable[int]] = ..., totaldatarx: _Optional[int] = ..., totaldatatx: _Optional[int] = ..., time: _Optional[_Union[_timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Status(_message.Message):
     __slots__ = ["dev_event", "disconnected", "mini_call_home"]
@@ -79,4 +86,7 @@ class Status(_message.Message):
     def __init__(self, disconnected: _Optional[_Union[Disconnected, _Mapping]] = ..., mini_call_home: _Optional[_Union[MiniCallHome, _Mapping]] = ..., dev_event: _Optional[_Union[DeviceEvent, _Mapping]] = ...) -> None: ...
 
 class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = []
+
+class CellNetworkType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = []

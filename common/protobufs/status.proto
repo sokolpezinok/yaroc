@@ -23,6 +23,16 @@ message Coordinates {
   Timestamp time = 4;
 }
 
+enum CellNetworkType {
+  UnknownNetworkType = 0;
+  Lte = 1;
+  Umts = 2;
+  LteM = 3;
+  NbIotEcl0 = 4;
+  NbIotEcl1 = 5;
+  NbIotEcl2 = 6;
+}
+
 message MiniCallHome {
   uint32 local_ip = 1;
   float cpu_temperature = 2;
@@ -33,7 +43,7 @@ message MiniCallHome {
   sint32 signal_dbm = 7;
   sint32 signal_snr_cb = 8; // SNR in centibells
   uint32 cellid = 9;
-  uint32 network_type = 10;
+  CellNetworkType network_type = 10;
   repeated uint32 codes = 11;
   uint64 totaldatarx = 12;
   uint64 totaldatatx = 13;

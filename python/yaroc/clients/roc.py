@@ -6,9 +6,9 @@ from datetime import datetime
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
-from ..pb.status_pb2 import EventType, Status
+from ..pb.status_pb2 import CellNetworkType, EventType, Status
 from ..rs import SiPunchLog
-from ..utils.sys_info import FREQ_MULTIPLIER, NetworkType
+from ..utils.sys_info import FREQ_MULTIPLIER
 from .client import Client
 
 ROC_SEND_PUNCH = "https://roc.olresultat.se/ver7.1/sendpunches_v2.php"
@@ -77,9 +77,9 @@ class RocClient(Client):
         oneof = status.WhichOneof("msg")
         if oneof == "mini_call_home":
             mch = status.mini_call_home
-            if mch.network_type == NetworkType.Lte:
+            if mch.network_type == CellNetworkType.Lte:
                 network_type = "101"
-            elif mch.network_type == NetworkType.Umts:
+            elif mch.network_type == CellNetworkType.Umts:
                 network_type = "41"
             else:
                 network_type = "0"

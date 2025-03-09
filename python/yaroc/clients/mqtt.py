@@ -12,7 +12,7 @@ from aiomqtt import MqttCodeError, MqttError
 from aiomqtt.client import Will
 
 from ..pb.punches_pb2 import Punch, Punches
-from ..pb.status_pb2 import Disconnected, Status
+from ..pb.status_pb2 import CellNetworkType, Disconnected, Status
 from ..pb.utils import create_punch_proto
 from ..rs import SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
@@ -107,7 +107,14 @@ class MqttClient(Client):
                         status.mini_call_home.signal_dbm = round(network_state.rssi)
                     if network_state.snr is not None:
                         status.mini_call_home.signal_snr_cb = round(network_state.snr * 10)
-                    status.mini_call_home.network_type = network_state.type.value
+
+                    if network_state.type == NetworkType.Gsm:
+                        status.mini_call_home.network_type = CellNetworkType.Gsm
+                    if network_state.type == NetworkType.Umts:
+                        status.mini_call_home.network_type = CellNetworkType.Umts
+                    if network_state.type == NetworkType.Lte:
+                        status.mini_call_home.network_type = CellNetworkType.Lte
+
                     cellid = await self.mm.get_cellid(modems[0])
                     if cellid is not None:
                         status.mini_call_home.cellid = cellid
@@ -216,7 +223,7 @@ class SIM7020MqttClient(Client):
                     mch.signal_dbm = rssi_dbm
                     mch.signal_snr_cb = snr * 10
                     mch.cellid = cellid
-                    mch.network_type = NetworkType.NbIot.value
+                    mch.network_type = CellNetworkType.NbIotEcl0
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 

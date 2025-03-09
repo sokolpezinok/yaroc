@@ -25,7 +25,7 @@ class SmsState(Enum):
 
 
 @dataclass
-class NetworkState:
+class SignalInfo:
     type: NetworkType = NetworkType.Unknown
     rssi: float | None = None
     snr: float | None = None
@@ -34,7 +34,10 @@ class NetworkState:
         if self.type == NetworkType.Unknown:
             return "Unknown"
         if self.type == NetworkType.Lte:
-            return f"{self.type} RSSI {self.rssi:.0f}dBm, SNR {self.snr:.0f}dB"
+            if self.snr is not None:
+                return f"{self.type} RSSI {self.rssi:.0f}dBm, SNR {self.snr:.0f}dB"
+            else:
+                return f"{self.type} RSSI {self.rssi:.0f}dBm"
         return f"{self.type} RSSI {self.rssi:.0f}dBm"
 
 
@@ -102,25 +105,27 @@ class ModemManager:
         )
         await interface.call_setup(rate_secs)
 
-    async def get_signal(self, modem_path: str) -> NetworkState:
+    async def get_signal(self, modem_path: str) -> SignalInfo:
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
         lte = await interface.get_lte()
         if "rssi" in lte:
-            return NetworkState(NetworkType.Lte, lte["rssi"].value, lte["snr"].value)
+            snr = None if "snr" not in lte else lte["snr"].value
+            return SignalInfo(NetworkType.Lte, lte["rssi"].value, snr)
         umts = await interface.get_umts()
         if "rssi" in umts:
-            return NetworkState(NetworkType.Umts, umts["rssi"].value, None)
+            return SignalInfo(NetworkType.Umts, umts["rssi"].value, None)
         gsm = await interface.get_gsm()
         if "rssi" in gsm:
-            return NetworkState(NetworkType.Gsm, gsm["rssi"].value, None)
+            return SignalInfo(NetworkType.Gsm, gsm["rssi"].value, None)
         nr5g = await interface.get_nr5g()
         if "rssi" in nr5g:
-            return NetworkState(NetworkType.Lte, nr5g["rssi"].value, nr5g["snr"].value)
+            snr = None if "snr" not in nr5g else nr5g["snr"].value
+            return SignalInfo(NetworkType.Lte, nr5g["rssi"].value, snr)
 
         logging.error("Error getting signal strength")
-        return NetworkState(NetworkType.Unknown, None, None)
+        return SignalInfo(NetworkType.Unknown, None, None)
 
     async def get_cellid(self, modem_path: str) -> int | None:
         interface = await self.get_modem_interface(

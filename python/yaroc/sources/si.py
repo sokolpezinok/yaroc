@@ -38,7 +38,7 @@ class SiWorker:
         now = datetime.now().astimezone()
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time:%H:%M:%S.%f}, received after "
-            f"{(now-punch.time).total_seconds():3.2f}s"
+            f"{(now - punch.time).total_seconds():3.2f}s"
         )
         await queue.put(punch)
         self._codes.add(punch.code)
