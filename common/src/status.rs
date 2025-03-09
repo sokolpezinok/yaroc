@@ -18,7 +18,7 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
 }
 
 /// Cell network type, currently only NB-IoT and LTE-M is supported
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub enum CellNetworkType {
     #[default]
     Unknown,
@@ -32,6 +32,14 @@ pub enum CellNetworkType {
     NbIotEcl2,
     /// LTE-M
     LteM,
+}
+
+pub struct SignalInfo {
+    pub network_type: CellNetworkType,
+    /// RSSI in dBm
+    pub rssi_dbm: i8,
+    /// SNR in centibells (instead of decibells)
+    pub snr_cb: i16,
 }
 
 #[derive(Default, Debug)]
@@ -55,9 +63,10 @@ impl MiniCallHome {
         }
     }
 
-    pub fn set_signal_info(&mut self, snr_cb: i16, rssi_dbm: i8) {
-        self.snr_cb = Some(snr_cb);
-        self.rssi_dbm = Some(rssi_dbm);
+    pub fn set_signal_info(&mut self, signal_info: SignalInfo) {
+        self.network_type = signal_info.network_type;
+        self.snr_cb = Some(signal_info.snr_cb);
+        self.rssi_dbm = Some(signal_info.rssi_dbm);
     }
 
     pub fn set_battery_info(&mut self, battery_mv: u16, battery_percents: u8) {

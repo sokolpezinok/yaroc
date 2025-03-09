@@ -7,6 +7,7 @@
 
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
+use yaroc_common::status::CellNetworkType;
 use yaroc_nrf52840::bg77_hw::Bg77;
 use yaroc_nrf52840::system_info::{FakeTemp, SystemInfo};
 use yaroc_nrf52840::{self as _, bg77_hw::ModemHw};
@@ -46,6 +47,7 @@ async fn mini_call_home(spawner: Spawner) {
     assert_eq!(mch.batt_mv, Some(3967));
     assert_eq!(mch.batt_percents, Some(76));
     assert_eq!(mch.cpu_temperature, Some(27.0));
+    assert_eq!(mch.network_type, CellNetworkType::NbIotEcl0);
     assert_eq!(
         mch.timestamp,
         DateTime::<FixedOffset>::parse_from_str(

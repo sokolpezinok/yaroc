@@ -291,6 +291,20 @@ impl AtResponse {
             Self::parse::<W>(&values[3])?,
         ))
     }
+
+    pub fn parse5<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr, X: FromStr>(
+        self,
+        indices: [usize; 5],
+    ) -> Result<(T, U, V, W, X), Error> {
+        let values = self.pick_values::<T, 5>(indices, None)?;
+        Ok((
+            Self::parse::<T>(&values[0])?,
+            Self::parse::<U>(&values[1])?,
+            Self::parse::<V>(&values[2])?,
+            Self::parse::<W>(&values[3])?,
+            Self::parse::<X>(&values[4])?,
+        ))
+    }
 }
 
 #[cfg(test)]
