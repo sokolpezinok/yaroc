@@ -6,7 +6,7 @@ use std::fmt::{self, Display};
 use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
-use yaroc_common::status::MiniCallHome;
+use yaroc_common::status::{CellNetworkType, MiniCallHome};
 
 use crate::status::Position;
 
@@ -124,9 +124,14 @@ impl MiniCallHomeLog {
             mch_proto.time.ok_or(Error::FormatError)?,
             tz,
         );
+        let network_type = match mch_proto.network_type {
+            EnumValue::Known(network_type) => network_type.into(),
+            EnumValue::Unknown(_) => CellNetworkType::Unknown,
+        };
         let mch = MiniCallHome {
             batt_mv: Some(mch_proto.millivolts as u16),
             batt_percents: None, // TODO
+            network_type,
             rssi_dbm: Some(i8::try_from(mch_proto.signal_dbm).map_err(|_| Error::FormatError)?),
             snr_cb: Some(i16::try_from(mch_proto.signal_snr_cb).map_err(|_| Error::FormatError)?),
             cellid: if mch_proto.cellid > 0 {

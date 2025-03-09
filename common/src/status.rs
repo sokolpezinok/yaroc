@@ -2,7 +2,7 @@ use chrono::prelude::*;
 
 use crate::{
     error::Error,
-    proto::{status, MiniCallHome as MiniCallHomeProto, Status, Timestamp},
+    proto::{self, status, MiniCallHome as MiniCallHomeProto, Status, Timestamp},
 };
 
 /// Parses the output of AT+QLTS=2 command into a date+time.
@@ -32,6 +32,24 @@ pub enum CellNetworkType {
     NbIotEcl2,
     /// LTE-M
     LteM,
+    /// UMTS
+    Umts,
+    /// LTE
+    Lte,
+}
+
+impl From<proto::CellNetworkType> for CellNetworkType {
+    fn from(value: proto::CellNetworkType) -> Self {
+        match value {
+            proto::CellNetworkType::Lte => CellNetworkType::Lte,
+            proto::CellNetworkType::Umts => CellNetworkType::Umts,
+            proto::CellNetworkType::LteM => CellNetworkType::LteM,
+            proto::CellNetworkType::NbIotEcl0 => CellNetworkType::NbIotEcl0,
+            proto::CellNetworkType::NbIotEcl1 => CellNetworkType::NbIotEcl1,
+            proto::CellNetworkType::NbIotEcl2 => CellNetworkType::NbIotEcl2,
+            _ => CellNetworkType::Unknown,
+        }
+    }
 }
 
 pub struct SignalInfo {
@@ -84,10 +102,20 @@ impl MiniCallHome {
     }
 
     pub fn to_proto(&self) -> Status {
+        let network_type = match self.network_type {
+            CellNetworkType::Lte => proto::CellNetworkType::Lte,
+            CellNetworkType::Umts => proto::CellNetworkType::Umts,
+            CellNetworkType::LteM => proto::CellNetworkType::LteM,
+            CellNetworkType::NbIotEcl0 => proto::CellNetworkType::NbIotEcl0,
+            CellNetworkType::NbIotEcl1 => proto::CellNetworkType::NbIotEcl1,
+            CellNetworkType::NbIotEcl2 => proto::CellNetworkType::NbIotEcl2,
+            _ => proto::CellNetworkType::UnknownNetworkType,
+        };
         Status {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
                 freq: 32,
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
+                network_type: femtopb::EnumValue::Unknown(network_type as i32),
                 signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
                 signal_snr_cb: self.snr_cb.unwrap_or_default() as i32,
                 cellid: self.cellid.unwrap_or_default(),
