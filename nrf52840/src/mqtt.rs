@@ -351,7 +351,12 @@ impl<M: ModemHw> MqttClient<M> {
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
-        let response = bg77.call(msg, "+QMTPUB", qos == MqttQos::Q0).await?;
+        let second_read_timeout = if qos == MqttQos::Q0 {
+            Some(Duration::from_secs(5))
+        } else {
+            None
+        };
+        let response = bg77.call(msg, "+QMTPUB", second_read_timeout).await?;
         if qos == MqttQos::Q0 {
             let (msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
             let status = MqttStatus::from_bg77_qmtpub(msg_id, status, None);

@@ -87,13 +87,13 @@ pub trait ModemHw {
 
     /// Sends a raw message to the modem.
     ///
-    /// Waits only a short time for a response (non-configurable). The response should be prefixed
-    /// with `command_prefix`.
+    /// Waits for a response if `second_read_timeout` is set and the timeout is the value of
+    /// `second_read_timeout`. The response should be prefixed with `command_prefix`.
     fn call(
         &mut self,
         msg: &[u8],
         command_prefix: &str,
-        second_read: bool,
+        second_read_timeout: Option<Duration>,
     ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// TODO: docstring
@@ -131,11 +131,12 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         &mut self,
         msg: &[u8],
         command_prefix: &str,
-        second_read: bool,
+        second_read_timeout: Option<Duration>,
     ) -> yaroc_common::Result<AtResponse> {
-        self.uart1
-            .call(msg, command_prefix, second_read, BG77_MINIMUM_TIMEOUT * 2)
-            .await
+        match second_read_timeout {
+            None => self.uart1.call(msg, command_prefix, false, BG77_MINIMUM_TIMEOUT).await,
+            Some(timeout) => self.uart1.call(msg, command_prefix, true, timeout).await,
+        }
     }
 
     async fn read(&mut self) -> crate::Result<AtResponse> {
