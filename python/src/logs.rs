@@ -168,6 +168,16 @@ impl fmt::Display for MiniCallHomeLog {
             if let Some(snr_cb) = &self.mini_call_home.snr_cb {
                 write!(f, " SNR{:5.1}", f32::from(*snr_cb) / 10.)?;
             }
+            let network_type = match self.mini_call_home.network_type {
+                CellNetworkType::NbIotEcl0 => "NB ECL0",
+                CellNetworkType::NbIotEcl1 => "NB ECL1",
+                CellNetworkType::NbIotEcl2 => "NB ECL2",
+                CellNetworkType::LteM => "LTE-M",
+                CellNetworkType::Umts => "UMTS",
+                CellNetworkType::Lte => "LTE",
+                _ => "",
+            };
+            write!(f, " {network_type:>7}")?;
         }
         if let Some(cellid) = &self.mini_call_home.cellid {
             write!(f, ", cell {cellid:X}")?;
@@ -221,6 +231,7 @@ impl PositionName {
 #[cfg(test)]
 mod test_logs {
     use super::*;
+    use femtopb::EnumValue::Known;
     use yaroc_common::proto::{MiniCallHome, Timestamp};
 
     #[test]
@@ -229,6 +240,7 @@ mod test_logs {
         let log_message = MiniCallHomeLog {
             mini_call_home: yaroc_common::status::MiniCallHome {
                 batt_mv: Some(1260),
+                network_type: CellNetworkType::NbIotEcl0,
                 rssi_dbm: Some(-87),
                 snr_cb: Some(70),
                 cellid: Some(2580590),
@@ -244,7 +256,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, RSSI  -87 SNR  7.0, cell 27606E, 1.26V, lat. 1.39s"
+            "spe01 17:40:43: 51.5°C, RSSI  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V, lat. 1.39s"
         );
     }
 
@@ -274,6 +286,7 @@ mod test_logs {
             msg: Some(Msg::MiniCallHome(MiniCallHome {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
+                network_type: Known(yaroc_common::proto::CellNetworkType::LteM),
                 signal_dbm: -80,
                 signal_snr_cb: 120,
                 time: Some(timestamp),
@@ -285,7 +298,9 @@ mod test_logs {
             CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
                 .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
-        assert!(formatted_log_msg.starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0, 3.85V"));
+        println!("{}", formatted_log_msg);
+        assert!(formatted_log_msg
+            .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V"));
 
         let status = Status {
             msg: Some(Msg::MiniCallHome(MiniCallHome {

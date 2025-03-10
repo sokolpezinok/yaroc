@@ -1,6 +1,6 @@
 [project]
 name = "yaroc"
-version = "0.1.14b1"
+version = "0.1.14b2"
 authors = [
   {name = "Lukáš Poláček", email = "lukas@polacek.email" }
 ]
