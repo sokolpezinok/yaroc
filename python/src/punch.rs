@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::logs::HostInfo;
+use crate::logs::HostInfoPy;
 use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
 use yaroc_common::punch::SiPunch as CommonSiPunch;
@@ -27,7 +27,7 @@ pub struct SiPunchLog {
     pub punch: SiPunch,
     pub latency: Duration,
     #[pyo3(get)]
-    pub host_info: HostInfo,
+    pub host_info: HostInfoPy,
 }
 
 #[pymethods]
@@ -77,7 +77,7 @@ impl SiPunch {
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn from_raw(payload: [u8; 20], host_info: &HostInfoPy, now: DateTime<FixedOffset>) -> Self {
         let punch = SiPunch::from_raw(payload);
         Self {
             latency: now - punch.time,
@@ -87,7 +87,7 @@ impl SiPunchLog {
     }
 
     #[staticmethod]
-    pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn new(punch: SiPunch, host_info: &HostInfoPy, now: DateTime<FixedOffset>) -> Self {
         Self {
             latency: now - punch.time,
             punch,
@@ -96,10 +96,11 @@ impl SiPunchLog {
     }
 
     pub fn is_meshtastic(&self) -> bool {
-        matches!(
-            self.host_info.mac_address,
-            crate::logs::MacAddress::Meshtastic(_)
-        )
+        //matches!(
+        //    self.host_info.mac_address(),
+        //    crate::logs::MacAddress::Meshtastic(_)
+        //)
+        self.host_info.mac_address().len() == 8
     }
 
     pub fn __repr__(&self) -> String {
@@ -112,7 +113,9 @@ impl fmt::Display for SiPunchLog {
         write!(
             f,
             "{} {} punched {} ",
-            self.host_info.name, self.punch.card, self.punch.code
+            self.host_info.name(),
+            self.punch.card,
+            self.punch.code
         )?;
         write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;

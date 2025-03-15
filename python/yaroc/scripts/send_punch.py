@@ -109,7 +109,7 @@ async def main():
     client_group = await create_clients(container.client_factories)
     ps = PunchSender(
         client_group,
-        HostInfo.new(hostname, mac_addr_int),
+        HostInfo.new_full_mac(hostname, mac_addr_int),
         config.get("call_home_interval", None),
     )
     await ps.loop()

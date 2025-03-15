@@ -84,25 +84,45 @@ impl Display for MacAddress {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass]
+#[pyclass(name = "HostInfo")]
+pub struct HostInfoPy {
+    host_info: HostInfo,
+}
+
+#[pymethods]
+impl HostInfoPy {
+    #[staticmethod]
+    pub fn new_full_mac(name: String, mac_addr: u64) -> Self {
+        HostInfo::new(name, MacAddress::Full(mac_addr)).into()
+    }
+
+    #[getter]
+    pub fn mac_address(&self) -> String {
+        self.host_info.mac_address.to_string()
+    }
+}
+
+impl HostInfoPy {
+    pub fn name(&self) -> &str {
+        &self.host_info.name
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct HostInfo {
     pub name: String,
     pub mac_address: MacAddress,
 }
 
-#[pymethods]
-impl HostInfo {
-    #[staticmethod]
-    pub fn new(name: String, mac_addr: u64) -> Self {
-        Self {
-            name,
-            mac_address: MacAddress::Full(mac_addr),
-        }
+impl From<HostInfo> for HostInfoPy {
+    fn from(value: HostInfo) -> Self {
+        Self { host_info: value }
     }
+}
 
-    #[getter]
-    fn mac_address(&self) -> String {
-        self.mac_address.to_string()
+impl HostInfo {
+    pub fn new(name: String, mac_address: MacAddress) -> Self {
+        Self { name, mac_address }
     }
 }
 

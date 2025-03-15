@@ -6,7 +6,7 @@ from typing import List, Tuple
 class HostInfo(object):
     mac_address: str
     @staticmethod
-    def new(name: str, mac_address: str) -> "HostInfo": ...
+    def new_full_mac(name: str, mac_address: int) -> "HostInfo": ...
 
 class SiPunch(object):
     CARD_FIELD_NUMBER: _ClassVar[int]

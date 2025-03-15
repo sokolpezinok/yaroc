@@ -136,10 +136,9 @@ impl MessageHandler {
 
     pub fn punches(&mut self, payload: &[u8], mac_address: u64) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
-        let mac_address_full = MacAddress::Full(mac_address);
-        let host_info: HostInfo =
-            HostInfo::new(self.resolve(mac_address_full).to_owned(), mac_address);
-        let status = self.get_cellular_status(mac_address_full);
+        let mac_address = MacAddress::Full(mac_address);
+        let host_info: HostInfo = HostInfo::new(self.resolve(mac_address).to_owned(), mac_address);
+        let status = self.get_cellular_status(mac_address);
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
@@ -211,10 +210,7 @@ impl MessageHandler {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = HostInfo {
-            name: self.resolve(mac_address).to_owned(),
-            mac_address,
-        };
+        let host_info = HostInfo::new(self.resolve(mac_address).to_owned(), mac_address);
         let punches = match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
                 portnum: SERIAL_APP,
@@ -236,7 +232,7 @@ impl MessageHandler {
                     result.push(SiPunchLog {
                         latency: now - punch.time,
                         punch,
-                        host_info: host_info.clone(),
+                        host_info: host_info.clone().into(),
                     });
                 }
                 Err(err) => {
@@ -261,7 +257,7 @@ impl MessageHandler {
                     format!("Wrong length of chunk={length}"),
                 )
             })?,
-            host_info,
+            &host_info.clone().into(),
             now,
         ))
     }

@@ -59,7 +59,7 @@ pub fn current_timestamp_millis() -> i64 {
 pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::punch::SiPunch>()?;
     m.add_class::<crate::punch::SiPunchLog>()?;
-    m.add_class::<crate::logs::HostInfo>()?;
+    m.add_class::<crate::logs::HostInfoPy>()?;
     m.add_class::<RaspberryModel>()?;
     m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
 
