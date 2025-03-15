@@ -3,8 +3,10 @@
 pub mod at;
 pub mod backoff;
 pub mod error;
-#[cfg(feature = "std")]
+#[cfg(feature = "receive")]
 pub mod logs;
+#[cfg(feature = "receive")]
+pub mod meshtastic;
 pub mod punch;
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));

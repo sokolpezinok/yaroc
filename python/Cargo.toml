@@ -6,7 +6,7 @@ rust-version = "1.70"
 
 [features]
 default = ["receive"]
-receive = ["dep:meshtastic"]
+receive = ["yaroc-common/receive", "dep:meshtastic"]
 
 [build-dependencies]
 walkdir = "2.3.2"
@@ -17,7 +17,7 @@ yaroc-common = { path = "../common", features = ["std"] }
 chrono = { workspace = true, default-features = true }
 femtopb = { workspace = true }
 log = { workspace = true }
-meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20", optional = true }
+meshtastic = { workspace = true, optional = true }
 pyo3 = { version = "0.23", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-log = "0.12.0"
 regex = "1.11"

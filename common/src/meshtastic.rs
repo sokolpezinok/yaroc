@@ -1,13 +1,18 @@
+extern crate std;
+
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
+use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
-use yaroc_common::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
-use yaroc_common::status::Position;
+use std::string::String;
+
+use crate::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
+use crate::status::Position;
 
 #[derive(Debug, PartialEq)]
 pub enum MshMetrics {
@@ -26,7 +31,7 @@ pub struct MshLogMessage {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        yaroc_common::time::datetime_from_millis(i64::from(posix_time) * 1000, &Local)
+        crate::time::datetime_from_millis(i64::from(posix_time) * 1000, &Local)
     }
 
     fn parse_inner(
@@ -183,8 +188,10 @@ impl fmt::Display for MshLogMessage {
 #[cfg(test)]
 mod test_meshtastic {
     use super::*;
+    use crate::logs::RssiSnr;
     use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
-    use yaroc_common::logs::RssiSnr;
+    use std::format;
+    use std::vec::Vec;
 
     fn telemetry_service_envelope(
         from: u32,
@@ -277,7 +284,7 @@ mod test_meshtastic {
             rssi_snr: Some(RssiSnr {
                 rssi_dbm: -80,
                 snr: 4.25,
-                distance: Some((813., "spr02".to_string())),
+                distance: Some((813., "spr02".to_owned())),
             }),
         };
         assert_eq!(

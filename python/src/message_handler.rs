@@ -8,17 +8,14 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use yaroc_common::error::Error;
-use yaroc_common::logs::CellularLogMessage;
-use yaroc_common::logs::{HostInfo, MacAddress, PositionName};
+use yaroc_common::logs::{CellularLogMessage, HostInfo, MacAddress, PositionName};
+use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
 use yaroc_common::proto::{Punches, Status};
 
 use chrono::prelude::*;
 use chrono::DateTime;
 
-use crate::meshtastic::MshLogMessage;
-use crate::meshtastic::MshMetrics;
-use crate::punch::SiPunch;
-use crate::punch::SiPunchLog;
+use crate::punch::{SiPunch, SiPunchLog};
 use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 
 #[pyclass]

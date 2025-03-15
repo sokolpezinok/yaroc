@@ -220,11 +220,10 @@ impl PositionName {
 
 #[cfg(test)]
 mod test_logs {
-    use std::format;
-
     use super::*;
     use crate::proto::{MiniCallHome, Timestamp};
     use femtopb::EnumValue::Known;
+    use std::format;
 
     #[test]
     fn test_cellular_dbm() {

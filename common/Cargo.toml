@@ -7,8 +7,8 @@ edition = "2021"
 default = []
 defmt = ["dep:defmt"]
 nrf = ["dep:embassy-nrf"]
-std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc",
-       "dep:geoutils"]
+receive = ["std", "dep:meshtastic", "dep:geoutils"]
+std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
 
 [dependencies]
 chrono = { workspace = true }
@@ -22,6 +22,7 @@ femtopb = { workspace = true }
 geoutils = { workspace = true, optional = true }
 heapless =  { workspace = true }
 log = { workspace = true }
+meshtastic = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

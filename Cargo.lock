@@ -2683,6 +2683,7 @@ dependencies = [
  "geoutils",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "log",
+ "meshtastic",
  "static_cell",
  "thiserror 2.0.12",
 ]
