@@ -3,32 +3,41 @@ use std::collections::HashSet;
 use pyo3::prelude::*;
 
 use chrono::prelude::*;
-use geoutils::Location;
 
-use crate::{logs::RssiSnr, punch::SiPunch};
+use crate::punch::SiPunch;
+use yaroc_common::{
+    logs::{HostInfo, MacAddress, RssiSnr},
+    status::Position,
+};
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Position {
-    pub lat: f32,
-    pub lon: f32,
-    pub elevation: i32,
-    pub timestamp: chrono::DateTime<FixedOffset>,
+#[derive(Clone, Debug, Default, PartialEq)]
+#[pyclass(name = "HostInfo")]
+pub struct HostInfoPy {
+    host_info: HostInfo,
 }
 
-impl Position {
-    pub fn new(lat: f32, lon: f32, timestamp: DateTime<FixedOffset>) -> Self {
-        Self {
-            lat,
-            lon,
-            elevation: 0,
-            timestamp,
-        }
+#[pymethods]
+impl HostInfoPy {
+    #[staticmethod]
+    pub fn new_full_mac(name: String, mac_addr: u64) -> Self {
+        HostInfo::new(name, MacAddress::Full(mac_addr)).into()
     }
 
-    pub fn distance_m(&self, other: &Position) -> Result<f64, String> {
-        let me = Location::new(self.lat, self.lon);
-        let other = Location::new(other.lat, other.lon);
-        Ok(me.distance_to(&other)?.meters())
+    #[getter]
+    pub fn mac_address(&self) -> String {
+        self.host_info.mac_address.to_string()
+    }
+}
+
+impl HostInfoPy {
+    pub fn name(&self) -> &str {
+        &self.host_info.name
+    }
+}
+
+impl From<HostInfo> for HostInfoPy {
+    fn from(value: HostInfo) -> Self {
+        Self { host_info: value }
     }
 }
 

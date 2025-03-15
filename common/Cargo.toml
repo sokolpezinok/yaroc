@@ -18,6 +18,7 @@ embassy-nrf = { workspace = true, optional = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
 femtopb = { workspace = true }
+geoutils = { workspace = true }
 heapless =  { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }

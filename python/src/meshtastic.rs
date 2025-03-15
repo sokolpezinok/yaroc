@@ -6,9 +6,8 @@ use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
 use std::collections::HashMap;
 use std::fmt;
-
-use crate::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
-use crate::status::Position;
+use yaroc_common::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
+use yaroc_common::status::Position;
 
 #[derive(Debug, PartialEq)]
 pub enum MshMetrics {
@@ -183,10 +182,9 @@ impl fmt::Display for MshLogMessage {
 
 #[cfg(test)]
 mod test_meshtastic {
-    use crate::logs::MacAddress;
-
     use super::*;
     use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
+    use yaroc_common::logs::RssiSnr;
 
     fn telemetry_service_envelope(
         from: u32,

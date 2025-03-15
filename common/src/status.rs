@@ -1,4 +1,5 @@
 use chrono::prelude::*;
+use geoutils::Location;
 
 use crate::{
     error::Error,
@@ -58,6 +59,31 @@ pub struct SignalInfo {
     pub rssi_dbm: i8,
     /// SNR in centibells (instead of decibells)
     pub snr_cb: i16,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Position {
+    pub lat: f32,
+    pub lon: f32,
+    pub elevation: i32,
+    pub timestamp: DateTime<FixedOffset>,
+}
+
+impl Position {
+    pub fn new(lat: f32, lon: f32, timestamp: DateTime<FixedOffset>) -> Self {
+        Self {
+            lat,
+            lon,
+            elevation: 0,
+            timestamp,
+        }
+    }
+
+    pub fn distance_m(&self, other: &Position) -> crate::Result<f64> {
+        let me = Location::new(self.lat, self.lon);
+        let other = Location::new(other.lat, other.lon);
+        Ok(me.distance_to(&other).map_err(|_| Error::ValueError)?.meters())
+    }
 }
 
 #[derive(Default, Debug)]

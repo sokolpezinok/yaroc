@@ -1,4 +1,3 @@
-pub mod logs;
 #[cfg(feature = "receive")]
 pub mod meshtastic;
 #[cfg(feature = "receive")]

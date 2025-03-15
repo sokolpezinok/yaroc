@@ -1,12 +1,16 @@
+extern crate std;
+
+use crate::error::Error;
+use crate::proto::status::Msg;
+use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
+use crate::status::{CellNetworkType, MiniCallHome};
+use crate::time::datetime_from_timestamp;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
-use pyo3::prelude::*;
+use std::borrow::ToOwned;
 use std::fmt::{self, Display};
-use yaroc_common::error::Error;
-use yaroc_common::proto::status::Msg;
-use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
-use yaroc_common::status::{CellNetworkType, MiniCallHome};
+use std::string::String;
 
 use crate::status::Position;
 
@@ -37,7 +41,7 @@ impl CellularLogMessage {
         mac_addr: MacAddress,
         hostname: &str,
         tz: &impl TimeZone,
-    ) -> yaroc_common::Result<Self> {
+    ) -> crate::Result<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => Ok(
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
@@ -84,40 +88,9 @@ impl Display for MacAddress {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass(name = "HostInfo")]
-pub struct HostInfoPy {
-    host_info: HostInfo,
-}
-
-#[pymethods]
-impl HostInfoPy {
-    #[staticmethod]
-    pub fn new_full_mac(name: String, mac_addr: u64) -> Self {
-        HostInfo::new(name, MacAddress::Full(mac_addr)).into()
-    }
-
-    #[getter]
-    pub fn mac_address(&self) -> String {
-        self.host_info.mac_address.to_string()
-    }
-}
-
-impl HostInfoPy {
-    pub fn name(&self) -> &str {
-        &self.host_info.name
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
 pub struct HostInfo {
     pub name: String,
     pub mac_address: MacAddress,
-}
-
-impl From<HostInfo> for HostInfoPy {
-    fn from(value: HostInfo) -> Self {
-        Self { host_info: value }
-    }
 }
 
 impl HostInfo {
@@ -138,12 +111,9 @@ impl MiniCallHomeLog {
         mac_address: MacAddress,
         now: DateTime<FixedOffset>,
         tz: &impl TimeZone,
-        mch_proto: yaroc_common::proto::MiniCallHome,
-    ) -> yaroc_common::Result<Self> {
-        let timestamp = yaroc_common::time::datetime_from_timestamp(
-            mch_proto.time.ok_or(Error::FormatError)?,
-            tz,
-        );
+        mch_proto: crate::proto::MiniCallHome,
+    ) -> crate::Result<Self> {
+        let timestamp = datetime_from_timestamp(mch_proto.time.ok_or(Error::FormatError)?, tz);
         let network_type = match mch_proto.network_type {
             EnumValue::Known(network_type) => network_type.into(),
             EnumValue::Unknown(_) => CellNetworkType::Unknown,
@@ -250,15 +220,17 @@ impl PositionName {
 
 #[cfg(test)]
 mod test_logs {
+    use std::format;
+
     use super::*;
+    use crate::proto::{MiniCallHome, Timestamp};
     use femtopb::EnumValue::Known;
-    use yaroc_common::proto::{MiniCallHome, Timestamp};
 
     #[test]
     fn test_cellular_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
         let log_message = MiniCallHomeLog {
-            mini_call_home: yaroc_common::status::MiniCallHome {
+            mini_call_home: crate::status::MiniCallHome {
                 batt_mv: Some(1260),
                 network_type: CellNetworkType::NbIotEcl0,
                 rssi_dbm: Some(-87),
@@ -306,7 +278,7 @@ mod test_logs {
             msg: Some(Msg::MiniCallHome(MiniCallHome {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
-                network_type: Known(yaroc_common::proto::CellNetworkType::LteM),
+                network_type: Known(crate::proto::CellNetworkType::LteM),
                 signal_dbm: -80,
                 signal_snr_cb: 120,
                 time: Some(timestamp),
@@ -318,7 +290,6 @@ mod test_logs {
             CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
                 .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
-        println!("{}", formatted_log_msg);
         assert!(formatted_log_msg
             .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V"));
 

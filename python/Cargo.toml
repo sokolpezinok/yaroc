@@ -16,7 +16,6 @@ yaroc-common = { path = "../common", features = ["std"] }
 
 chrono = { workspace = true, default-features = true }
 femtopb = { workspace = true }
-geoutils = "0.5.1"
 log = { workspace = true }
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20", optional = true }
 pyo3 = { version = "0.23", features = ["extension-module", "chrono", "abi3-py311"] }

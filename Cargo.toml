@@ -16,9 +16,11 @@ embassy-nrf = { version = "0.3", features = ["defmt", "nrf52840", "time-driver-r
 embassy-sync = "0.6.1"
 embassy-time = { version = "0.4" }
 femtopb = "0.5.0"
+geoutils = "0.5.1"
 heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebca23" }
 log = "0.4"
 thiserror = { version = "2.0.0", default-features = false }
+
 
 [profile.release]
 debug = 2

@@ -2680,6 +2680,7 @@ dependencies = [
  "env_logger",
  "femtopb",
  "femtopb-build",
+ "geoutils",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=0ebca23)",
  "log",
  "static_cell",
@@ -2722,7 +2723,6 @@ version = "0.1.14"
 dependencies = [
  "chrono",
  "femtopb",
- "geoutils",
  "log",
  "meshtastic",
  "pyo3",

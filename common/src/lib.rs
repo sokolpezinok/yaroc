@@ -3,6 +3,8 @@
 pub mod at;
 pub mod backoff;
 pub mod error;
+#[cfg(feature = "std")]
+pub mod logs;
 pub mod punch;
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));
