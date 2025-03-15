@@ -129,7 +129,7 @@ mod test_punch {
     use yaroc_common::punch::SiPunch as CommonSiPunch;
 
     use crate::{
-        logs::{HostInfo, MacAddress},
+        logs::HostInfoPy,
         punch::{SiPunch, SiPunchLog},
     };
 
@@ -156,10 +156,7 @@ mod test_punch {
     #[test]
     fn test_display() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
-        let host_info = HostInfo {
-            name: "ROC1".to_owned(),
-            mac_address: MacAddress::default(),
-        };
+        let host_info = HostInfoPy::new_full_mac("ROC1".to_owned(), 0x1234);
         let punch = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),
             &host_info,
