@@ -1,4 +1,5 @@
 use chrono::prelude::*;
+#[cfg(feature = "std")]
 use geoutils::Location;
 
 use crate::{
@@ -79,6 +80,7 @@ impl Position {
         }
     }
 
+    #[cfg(feature = "std")]
     pub fn distance_m(&self, other: &Position) -> crate::Result<f64> {
         let me = Location::new(self.lat, self.lon);
         let other = Location::new(other.lat, other.lon);
