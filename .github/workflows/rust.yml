@@ -26,7 +26,7 @@ jobs:
       run: cargo fmt --check
     - name: Run tests
       run: |
-        cargo test -p yaroc-common --features std --verbose
+        cargo test -p yaroc-common --features receive --verbose
         cargo test -p yaroc-python --verbose
     - name: Run clippy
       run: cargo clippy -- -D warnings
