@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
 
 use chrono::prelude::*;
 
@@ -19,8 +19,9 @@ pub struct HostInfoPy {
 #[pymethods]
 impl HostInfoPy {
     #[staticmethod]
-    pub fn new_full_mac(name: String, mac_addr: u64) -> Self {
-        HostInfo::new(name, MacAddress::Full(mac_addr)).into()
+    pub fn new(name: String, mac_addr: &str) -> PyResult<Self> {
+        let mac_address = MacAddress::try_from(mac_addr).map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
+        Ok(HostInfo::new(name, mac_address).into())
     }
 
     #[getter]

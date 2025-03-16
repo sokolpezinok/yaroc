@@ -97,6 +97,7 @@ impl SiPunchLog {
     }
 
     pub fn is_meshtastic(&self) -> bool {
+        // TODO: drop the comparison of length
         //matches!(
         //    self.host_info.mac_address(),
         //    crate::logs::MacAddress::Meshtastic(_)
@@ -127,12 +128,9 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use chrono::{prelude::*, Duration};
-    use yaroc_common::punch::SiPunch as CommonSiPunch;
+    use yaroc_common::{logs::HostInfo, punch::SiPunch as CommonSiPunch};
 
-    use crate::{
-        punch::{SiPunch, SiPunchLog},
-        status::HostInfoPy,
-    };
+    use crate::punch::{SiPunch, SiPunchLog};
 
     #[test]
     fn test_punches_from_payload() {
@@ -157,10 +155,13 @@ mod test_punch {
     #[test]
     fn test_display() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
-        let host_info = HostInfoPy::new_full_mac("ROC1".to_owned(), 0x1234);
+        let host_info = HostInfo::new(
+            "ROC1".to_owned(),
+            yaroc_common::logs::MacAddress::Full(0x123456789012),
+        );
         let punch = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),
-            &host_info,
+            &host_info.into(),
             time + Duration::milliseconds(2831),
         );
 

@@ -72,6 +72,22 @@ pub enum MacAddress {
     Full(u64),
 }
 
+impl TryFrom<&str> for MacAddress {
+    type Error = crate::error::Error;
+
+    fn try_from(mac_address: &str) -> crate::Result<Self> {
+        match mac_address.len() {
+            8 => Ok(MacAddress::Meshtastic(
+                u32::from_str_radix(&mac_address, 16).map_err(|_| Error::ParseError)?,
+            )),
+            12 => Ok(MacAddress::Full(
+                u64::from_str_radix(&mac_address, 16).map_err(|_| Error::ParseError)?,
+            )),
+            _ => Err(Error::ValueError),
+        }
+    }
+}
+
 impl Default for MacAddress {
     fn default() -> Self {
         Self::Full(0x1234)

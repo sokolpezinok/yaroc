@@ -301,7 +301,7 @@ impl<M: ModemHw> MqttClient<M> {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840\"")?;
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-dev\"")?;
                 let (_, res, reason) = bg77
                     .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
