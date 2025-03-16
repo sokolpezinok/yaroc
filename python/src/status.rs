@@ -20,12 +20,13 @@ pub struct HostInfoPy {
 impl HostInfoPy {
     #[staticmethod]
     pub fn new(name: String, mac_addr: &str) -> PyResult<Self> {
-        let mac_address = MacAddress::try_from(mac_addr).map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
+        let mac_address = MacAddress::try_from(mac_addr)
+            .map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
         Ok(HostInfo::new(name, mac_address).into())
     }
 
-    #[getter]
-    pub fn mac_address(&self) -> String {
+    #[getter(mac_address)]
+    pub fn mac_address_str(&self) -> String {
         self.host_info.mac_address.to_string()
     }
 }
@@ -33,6 +34,10 @@ impl HostInfoPy {
 impl HostInfoPy {
     pub fn name(&self) -> &str {
         &self.host_info.name
+    }
+
+    pub fn mac_address(&self) -> &MacAddress {
+        &self.host_info.mac_address
     }
 }
 

@@ -78,10 +78,10 @@ impl TryFrom<&str> for MacAddress {
     fn try_from(mac_address: &str) -> crate::Result<Self> {
         match mac_address.len() {
             8 => Ok(MacAddress::Meshtastic(
-                u32::from_str_radix(&mac_address, 16).map_err(|_| Error::ParseError)?,
+                u32::from_str_radix(mac_address, 16).map_err(|_| Error::ParseError)?,
             )),
             12 => Ok(MacAddress::Full(
-                u64::from_str_radix(&mac_address, 16).map_err(|_| Error::ParseError)?,
+                u64::from_str_radix(mac_address, 16).map_err(|_| Error::ParseError)?,
             )),
             _ => Err(Error::ValueError),
         }

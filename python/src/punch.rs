@@ -2,7 +2,7 @@ use std::fmt;
 
 use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
-use yaroc_common::punch::SiPunch as CommonSiPunch;
+use yaroc_common::{logs::MacAddress, punch::SiPunch as CommonSiPunch};
 
 use crate::status::HostInfoPy;
 
@@ -97,12 +97,7 @@ impl SiPunchLog {
     }
 
     pub fn is_meshtastic(&self) -> bool {
-        // TODO: drop the comparison of length
-        //matches!(
-        //    self.host_info.mac_address(),
-        //    crate::logs::MacAddress::Meshtastic(_)
-        //)
-        self.host_info.mac_address().len() == 8
+        matches!(self.host_info.mac_address(), MacAddress::Meshtastic(_))
     }
 
     pub fn __repr__(&self) -> String {
