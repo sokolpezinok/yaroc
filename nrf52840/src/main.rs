@@ -22,7 +22,8 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mqtt_config = MqttConfig {
-        mac_address: String::from_str("f722045d3d61").unwrap(),
+        name: String::from_str("spe-dev").unwrap(),
+        mac_address: String::from_str("cee423506cac").unwrap(),
         ..Default::default()
     };
     let modem_config = ModemConfig::default();

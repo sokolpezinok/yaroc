@@ -40,6 +40,7 @@ pub enum MqttQos {
 pub struct MqttConfig {
     pub url: String<40>,
     pub packet_timeout: Duration,
+    pub name: String<20>,
     pub mac_address: String<12>,
 }
 
@@ -48,6 +49,7 @@ impl Default for MqttConfig {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
+            name: String::new(),
             mac_address: String::new(),
         }
     }
@@ -297,7 +299,7 @@ impl<M: ModemHw> MqttClient<M> {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-dev\"")?;
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?;
                 let (_, res, reason) = bg77
                     .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
