@@ -218,12 +218,17 @@ class SIM7020MqttClient(Client):
             async with self._lock:
                 res = await self._sim7020.get_signal_info()
                 if res is not None:
-                    (rssi_dbm, cellid, snr) = res
+                    (rssi_dbm, cellid, snr, ecl) = res
                     mch = status.mini_call_home
                     mch.signal_dbm = rssi_dbm
                     mch.signal_snr_cb = snr * 10
                     mch.cellid = cellid
-                    mch.network_type = CellNetworkType.NbIotEcl0
+                    if ecl == 0:
+                        mch.network_type = CellNetworkType.NbIotEcl0
+                    elif ecl == 1:
+                        mch.network_type = CellNetworkType.NbIotEcl1
+                    elif ecl == 2:
+                        mch.network_type = CellNetworkType.NbIotEcl2
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
