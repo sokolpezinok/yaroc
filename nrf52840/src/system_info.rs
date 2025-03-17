@@ -74,7 +74,7 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
                     time.checked_sub_signed(booted).unwrap()
                 })
                 .ok()?;
-            info!("Boot at {}", format!(30; "{}", boot_time).unwrap().as_str());
+            info!("Boot at {}", format!(30; "{}", boot_time).unwrap());
             self.boot_time = Some(boot_time);
         }
         self.boot_time.map(|boot_time| {

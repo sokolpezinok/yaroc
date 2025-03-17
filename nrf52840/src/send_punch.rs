@@ -99,7 +99,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
                         "{} punched {} at {}, ID={}",
                         punch.card,
                         punch.code,
-                        format!(30; "{}", punch.time).unwrap().as_str(),
+                        format!(30; "{}", punch.time).unwrap(),
                         id,
                     );
                 }
@@ -161,7 +161,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
                 match time {
                     None => warn!("Cannot get modem time"),
                     Some(time) => {
-                        info!("Modem time: {}", format!(30; "{}", time).unwrap().as_str())
+                        info!("Modem time: {}", format!(30; "{}", time).unwrap())
                     }
                 }
             }

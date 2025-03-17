@@ -238,13 +238,10 @@ impl<M: ModemHw> MqttClient<M> {
             .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((MQTT_CLIENT_ID, url)) = opened {
             if *url == self.config.url {
-                info!("TCP connection already opened to {}", url.as_str());
+                info!("TCP connection already opened to {}", url);
                 return Ok(());
             }
-            warn!(
-                "Connected to the wrong broker {}, will disconnect",
-                url.as_str()
-            );
+            warn!("Connected to the wrong broker {}, will disconnect", url);
             let cmd = format!(50; "+QMTCLOSE={cid}")?;
             bg77.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
         }
@@ -266,10 +263,7 @@ impl<M: ModemHw> MqttClient<M> {
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
-            error!(
-                "Could not open TCP connection to {}",
-                self.config.url.as_str()
-            );
+            error!("Could not open TCP connection to {}", self.config.url);
             return Err(Error::MqttError(status));
         }
 

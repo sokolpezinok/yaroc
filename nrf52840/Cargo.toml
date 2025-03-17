@@ -34,7 +34,7 @@ nrf-softdevice = { version = "0.1.0", features = ["s140", "ble-peripheral", "cri
 
 chrono = { workspace = true }
 femtopb = { workspace = true }
-heapless =  { workspace = true }
+heapless =  { workspace = true, features = ["defmt-03"] }
 thiserror = { workspace = true }
 
 [lib]

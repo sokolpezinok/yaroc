@@ -970,6 +970,7 @@ name = "heapless"
 version = "0.8.0"
 source = "git+https://github.com/rust-embedded/heapless.git?rev=0ebca23#0ebca2320970b8a1aa3e58ceba924f8c65385946"
 dependencies = [
+ "defmt",
  "hash32",
  "stable_deref_trait",
 ]

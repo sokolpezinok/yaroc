@@ -123,7 +123,7 @@ impl CommandResponse {
 
 impl Display for CommandResponse {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.line.as_str().trim())
+        write!(f, "{}", self.line.trim())
     }
 }
 
@@ -131,7 +131,7 @@ impl Display for CommandResponse {
 impl defmt::Format for CommandResponse {
     fn format(&self, fmt: defmt::Formatter) {
         // TODO: should we show parsed content?
-        defmt::write!(fmt, "{}", self.line.as_str())
+        defmt::write!(fmt, "{}", self.line)
     }
 }
 
@@ -154,7 +154,7 @@ impl FromModem {
 impl defmt::Format for FromModem {
     fn format(&self, fmt: defmt::Formatter) {
         match self {
-            FromModem::Line(line) => defmt::write!(fmt, "{}", line.as_str()),
+            FromModem::Line(line) => defmt::write!(fmt, "{}", line),
             FromModem::CommandResponse(command_response) => {
                 defmt::write!(fmt, "{}", command_response)
             }
