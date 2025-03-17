@@ -53,7 +53,7 @@ impl CommandResponse {
     }
 
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
-        Self::split_values(&self.line.as_str()[self.prefix.end() + 2..]).unwrap()
+        Self::split_values(&self.line[self.prefix.end() + 2..]).unwrap()
     }
 
     fn split_at_response(line: &str) -> Option<(&str, &str)> {
@@ -208,7 +208,7 @@ impl AtResponse {
     ) -> Result<&CommandResponse, Error> {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line {
-                if command_response.command() == &self.command.as_str()[1..] {
+                if command_response.command() == &self.command[1..] {
                     let values = command_response.values();
                     match filter.as_ref() {
                         Some((t, idx)) => {
