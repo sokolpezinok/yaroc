@@ -1,9 +1,12 @@
 #![no_std]
 #![no_main]
 
+use core::str::FromStr;
+
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
+use heapless::String;
 use yaroc_nrf52840::{
     self as _,
     bg77_hw::ModemConfig,
@@ -18,7 +21,10 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let mqtt_config = MqttConfig::default();
+    let mqtt_config = MqttConfig {
+        mac_address: String::from_str("f722045d3d61").unwrap(),
+        ..Default::default()
+    };
     let modem_config = ModemConfig::default();
     let device = Device::new();
     info!("Device initialized!");

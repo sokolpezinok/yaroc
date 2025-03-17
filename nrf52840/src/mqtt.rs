@@ -40,6 +40,7 @@ pub enum MqttQos {
 pub struct MqttConfig {
     pub url: String<40>,
     pub packet_timeout: Duration,
+    pub mac_address: String<12>,
 }
 
 impl Default for MqttConfig {
@@ -47,6 +48,7 @@ impl Default for MqttConfig {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
+            mac_address: String::new(),
         }
     }
 }
@@ -347,7 +349,7 @@ impl<M: ModemHw> MqttClient<M> {
         msg_id: u16,
     ) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/cee423506cac/{}\",{}", MQTT_CLIENT_ID, msg_id, qos as u8, topic, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/{}/{}\",{}", MQTT_CLIENT_ID, msg_id, qos as u8, &self.config.mac_address, topic, msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
