@@ -12,7 +12,6 @@ use std::fmt;
 use std::io::ErrorKind;
 use std::string::String;
 
-use crate::logs::PositionName;
 use crate::status::{HostInfo, MacAddress, Position};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,6 +35,20 @@ impl RssiSnr {
 
     pub fn add_distance(&mut self, dist_m: f32, name: &str) {
         self.distance = Some((dist_m, name.to_owned()));
+    }
+}
+
+pub struct PositionName {
+    pub position: Position,
+    pub name: String,
+}
+
+impl PositionName {
+    pub fn new(position: &Position, name: &str) -> Self {
+        Self {
+            position: position.clone(),
+            name: name.to_owned(),
+        }
     }
 }
 

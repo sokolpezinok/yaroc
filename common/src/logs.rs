@@ -12,8 +12,6 @@ use std::borrow::ToOwned;
 use std::fmt;
 use std::string::String;
 
-use crate::status::Position;
-
 pub enum CellularLogMessage {
     Disconnected(String, String),
     MCH(MiniCallHomeLog),
@@ -144,20 +142,6 @@ impl fmt::Display for MiniCallHomeLog {
         }
         let secs = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", lat. {:4.2}s", secs)
-    }
-}
-
-pub struct PositionName {
-    pub position: Position,
-    pub name: String,
-}
-
-impl PositionName {
-    pub fn new(position: &Position, name: &str) -> Self {
-        Self {
-            position: position.clone(),
-            name: name.to_owned(),
-        }
     }
 }
 

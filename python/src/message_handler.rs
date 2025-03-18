@@ -9,11 +9,10 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use yaroc_common::error::Error;
 use yaroc_common::logs::CellularLogMessage;
-use yaroc_common::logs::PositionName;
+use yaroc_common::meshtastic::PositionName;
 use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
 use yaroc_common::proto::{Punches, Status};
-use yaroc_common::status::HostInfo;
-use yaroc_common::status::MacAddress;
+use yaroc_common::status::{HostInfo, MacAddress};
 
 use chrono::prelude::*;
 use chrono::DateTime;
