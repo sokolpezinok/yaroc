@@ -9,6 +9,7 @@ pub fn datetime_from_millis(timestamp: i64, tz: &impl TimeZone) -> DateTime<Fixe
     tz.timestamp_millis_opt(timestamp).unwrap().fixed_offset()
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod test_time {
     use super::*;
