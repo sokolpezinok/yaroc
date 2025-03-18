@@ -74,32 +74,6 @@ impl HostInfo {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct RssiSnr {
-    pub rssi_dbm: i16,
-    pub snr: f32,
-    pub distance: Option<(f32, String<20>)>,
-}
-
-impl RssiSnr {
-    pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
-        match rssi_dbm {
-            0 => None,
-            rx_rssi => Some(RssiSnr {
-                rssi_dbm: rx_rssi as i16,
-                snr,
-                distance: None,
-            }),
-        }
-    }
-
-    pub fn add_distance(&mut self, dist_m: f32, name: &str) -> crate::Result<()> {
-        let name = name.try_into().map_err(|_| Error::ValueError)?;
-        self.distance = Some((dist_m, name));
-        Ok(())
-    }
-}
-
 /// Cell network type, currently only NB-IoT and LTE-M is supported
 #[derive(Default, Debug, PartialEq, Eq)]
 pub enum CellNetworkType {

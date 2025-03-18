@@ -9,7 +9,7 @@ use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
 use std::borrow::ToOwned;
-use std::fmt::{self};
+use std::fmt;
 use std::string::String;
 
 use crate::status::Position;
@@ -183,7 +183,7 @@ mod test_logs {
                 ..Default::default()
             },
             host_info: HostInfo {
-                name: "spe01".to_owned(),
+                name: "spe01".try_into().unwrap(),
                 mac_address: MacAddress::Full(0x1234),
             },
             latency: Duration::milliseconds(1390),

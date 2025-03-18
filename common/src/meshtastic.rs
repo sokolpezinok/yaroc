@@ -6,13 +6,38 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
+use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::ErrorKind;
 use std::string::String;
 
 use crate::logs::PositionName;
-use crate::status::{HostInfo, MacAddress, Position, RssiSnr};
+use crate::status::{HostInfo, MacAddress, Position};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RssiSnr {
+    pub rssi_dbm: i16,
+    pub snr: f32,
+    pub distance: Option<(f32, String)>,
+}
+
+impl RssiSnr {
+    pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
+        match rssi_dbm {
+            0 => None,
+            rx_rssi => Some(RssiSnr {
+                rssi_dbm: rx_rssi as i16,
+                snr,
+                distance: None,
+            }),
+        }
+    }
+
+    pub fn add_distance(&mut self, dist_m: f32, name: &str) {
+        self.distance = Some((dist_m, name.to_owned()));
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum MshMetrics {
@@ -82,14 +107,10 @@ impl MshLogMessage {
                     recv_position.as_ref().map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
                     if let Some(rssi_snr) = rssi_snr.as_mut() {
-                        rssi_snr
-                            .add_distance(
-                                distance as f32,
-                                &recv_position.map_or(String::new(), |x| x.name),
-                            )
-                            .map_err(|_| {
-                                std::io::Error::new(ErrorKind::InvalidInput, "Too long name")
-                            })?;
+                        rssi_snr.add_distance(
+                            distance as f32,
+                            &recv_position.map_or(String::new(), |x| x.name),
+                        );
                     }
                 }
 
@@ -232,7 +253,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T21:34:49+01:00").unwrap();
         let log_message = MshLogMessage {
             host_info: HostInfo {
-                name: "spr01".to_owned(),
+                name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
@@ -251,7 +272,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
             host_info: HostInfo {
-                name: "spr01".to_owned(),
+                name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
@@ -275,7 +296,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MshLogMessage {
             host_info: HostInfo {
-                name: "spr01".to_owned(),
+                name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
@@ -289,7 +310,7 @@ mod test_meshtastic {
             rssi_snr: Some(RssiSnr {
                 rssi_dbm: -80,
                 snr: 4.25,
-                distance: Some((813., "spr02".to_owned())),
+                distance: Some((813., "spr02".try_into().unwrap())),
             }),
         };
         assert_eq!(

@@ -5,7 +5,9 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use chrono::prelude::*;
 
 use crate::punch::SiPunch;
-use yaroc_common::status::{HostInfo, MacAddress, Position, RssiSnr};
+#[cfg(feature = "receive")]
+use yaroc_common::meshtastic::RssiSnr;
+use yaroc_common::status::{HostInfo, MacAddress, Position};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 #[pyclass(name = "HostInfo")]
@@ -132,6 +134,7 @@ impl CellularRocStatus {
     }
 }
 
+#[cfg(feature = "receive")]
 #[derive(Default, Clone)]
 pub struct MeshtasticRocStatus {
     pub name: String,
@@ -143,6 +146,7 @@ pub struct MeshtasticRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
+#[cfg(feature = "receive")]
 impl MeshtasticRocStatus {
     pub fn new(name: String) -> Self {
         Self {
