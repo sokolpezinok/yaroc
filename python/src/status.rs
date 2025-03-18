@@ -5,10 +5,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use chrono::prelude::*;
 
 use crate::punch::SiPunch;
-use yaroc_common::{
-    logs::{HostInfo, MacAddress, RssiSnr},
-    status::Position,
-};
+use yaroc_common::status::{HostInfo, MacAddress, Position, RssiSnr};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 #[pyclass(name = "HostInfo")]
@@ -19,10 +16,12 @@ pub struct HostInfoPy {
 #[pymethods]
 impl HostInfoPy {
     #[staticmethod]
-    pub fn new(name: String, mac_addr: &str) -> PyResult<Self> {
+    pub fn new(name: &str, mac_addr: &str) -> PyResult<Self> {
         let mac_address = MacAddress::try_from(mac_addr)
             .map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
-        Ok(HostInfo::new(name, mac_address).into())
+        Ok(HostInfo::new(name, mac_address)
+            .map_err(|_| PyValueError::new_err("Name too long"))?
+            .into())
     }
 
     #[getter(mac_address)]

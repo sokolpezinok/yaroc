@@ -6,13 +6,13 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
-use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
+use std::io::ErrorKind;
 use std::string::String;
 
-use crate::logs::{HostInfo, MacAddress, PositionName, RssiSnr};
-use crate::status::Position;
+use crate::logs::PositionName;
+use crate::status::{HostInfo, MacAddress, Position, RssiSnr};
 
 #[derive(Debug, PartialEq)]
 pub enum MshMetrics {
@@ -82,10 +82,14 @@ impl MshLogMessage {
                     recv_position.as_ref().map(|other| position.distance_m(&other.position));
                 if let Some(Ok(distance)) = distance {
                     if let Some(rssi_snr) = rssi_snr.as_mut() {
-                        rssi_snr.add_distance(
-                            distance as f32,
-                            recv_position.map_or(String::new(), |x| x.name),
-                        );
+                        rssi_snr
+                            .add_distance(
+                                distance as f32,
+                                &recv_position.map_or(String::new(), |x| x.name),
+                            )
+                            .map_err(|_| {
+                                std::io::Error::new(ErrorKind::InvalidInput, "Too long name")
+                            })?;
                     }
                 }
 
@@ -121,7 +125,9 @@ impl MshLogMessage {
                 Self::parse_inner(
                     data,
                     HostInfo {
-                        name: name.to_owned(),
+                        name: name.try_into().map_err(|_| {
+                            std::io::Error::new(ErrorKind::InvalidInput, "Too long name")
+                        })?,
                         mac_address,
                     },
                     now,
@@ -133,7 +139,7 @@ impl MshLogMessage {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
             }) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
+                ErrorKind::InvalidData,
                 "Encrypted message, disable encryption in MQTT!",
             )),
             _ => Ok(None),
@@ -188,7 +194,6 @@ impl fmt::Display for MshLogMessage {
 #[cfg(test)]
 mod test_meshtastic {
     use super::*;
-    use crate::logs::RssiSnr;
     use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
     use std::format;
     use std::vec::Vec;

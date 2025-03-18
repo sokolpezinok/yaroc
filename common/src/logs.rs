@@ -3,13 +3,13 @@ extern crate std;
 use crate::error::Error;
 use crate::proto::status::Msg;
 use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
-use crate::status::{CellNetworkType, MiniCallHome};
+use crate::status::{CellNetworkType, HostInfo, MacAddress, MiniCallHome};
 use crate::time::datetime_from_timestamp;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
 use std::borrow::ToOwned;
-use std::fmt::{self, Display};
+use std::fmt::{self};
 use std::string::String;
 
 use crate::status::Position;
@@ -66,55 +66,6 @@ impl CellularLogMessage {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub enum MacAddress {
-    Meshtastic(u32),
-    Full(u64),
-}
-
-impl TryFrom<&str> for MacAddress {
-    type Error = crate::error::Error;
-
-    fn try_from(mac_address: &str) -> crate::Result<Self> {
-        match mac_address.len() {
-            8 => Ok(MacAddress::Meshtastic(
-                u32::from_str_radix(mac_address, 16).map_err(|_| Error::ParseError)?,
-            )),
-            12 => Ok(MacAddress::Full(
-                u64::from_str_radix(mac_address, 16).map_err(|_| Error::ParseError)?,
-            )),
-            _ => Err(Error::ValueError),
-        }
-    }
-}
-
-impl Default for MacAddress {
-    fn default() -> Self {
-        Self::Full(0x1234)
-    }
-}
-
-impl Display for MacAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MacAddress::Meshtastic(mac) => write!(f, "{:08x}", mac),
-            MacAddress::Full(mac) => write!(f, "{:012x}", mac),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct HostInfo {
-    pub name: String,
-    pub mac_address: MacAddress,
-}
-
-impl HostInfo {
-    pub fn new(name: String, mac_address: MacAddress) -> Self {
-        Self { name, mac_address }
-    }
-}
-
 pub struct MiniCallHomeLog {
     pub mini_call_home: MiniCallHome,
     pub host_info: HostInfo,
@@ -154,7 +105,7 @@ impl MiniCallHomeLog {
         Ok(Self {
             mini_call_home: mch,
             host_info: HostInfo {
-                name: name.to_owned(),
+                name: name.try_into().map_err(|_| Error::ValueError)?,
                 mac_address,
             },
             latency: now - timestamp,
@@ -193,30 +144,6 @@ impl fmt::Display for MiniCallHomeLog {
         }
         let secs = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", lat. {:4.2}s", secs)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct RssiSnr {
-    pub rssi_dbm: i16,
-    pub snr: f32,
-    pub distance: Option<(f32, String)>,
-}
-
-impl RssiSnr {
-    pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
-        match rssi_dbm {
-            0 => None,
-            rx_rssi => Some(RssiSnr {
-                rssi_dbm: rx_rssi as i16,
-                snr,
-                distance: None,
-            }),
-        }
-    }
-
-    pub fn add_distance(&mut self, dist_m: f32, name: String) {
-        self.distance = Some((dist_m, name));
     }
 }
 

@@ -8,9 +8,12 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use yaroc_common::error::Error;
-use yaroc_common::logs::{CellularLogMessage, HostInfo, MacAddress, PositionName};
+use yaroc_common::logs::CellularLogMessage;
+use yaroc_common::logs::PositionName;
 use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
 use yaroc_common::proto::{Punches, Status};
+use yaroc_common::status::HostInfo;
+use yaroc_common::status::MacAddress;
 
 use chrono::prelude::*;
 use chrono::DateTime;
@@ -133,7 +136,7 @@ impl MessageHandler {
     pub fn punches(&mut self, payload: &[u8], mac_address: u64) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
         let mac_address = MacAddress::Full(mac_address);
-        let host_info: HostInfo = HostInfo::new(self.resolve(mac_address).to_owned(), mac_address);
+        let host_info = HostInfo::new(self.resolve(mac_address), mac_address)?;
         let status = self.get_cellular_status(mac_address);
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
@@ -155,7 +158,7 @@ impl MessageHandler {
     fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
         self.meshtastic_statuses
             .entry(host_info.mac_address)
-            .or_insert(MeshtasticRocStatus::new(host_info.name.clone()))
+            .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
     }
 
     fn resolve(&self, mac_addr: MacAddress) -> &str {
@@ -206,7 +209,8 @@ impl MessageHandler {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = HostInfo::new(self.resolve(mac_address).to_owned(), mac_address);
+        let host_info = HostInfo::new(self.resolve(mac_address), mac_address)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Too long name"))?;
         let punches = match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
                 portnum: SERIAL_APP,

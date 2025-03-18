@@ -2,7 +2,7 @@ use std::fmt;
 
 use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
-use yaroc_common::{logs::MacAddress, punch::SiPunch as CommonSiPunch};
+use yaroc_common::{punch::SiPunch as CommonSiPunch, status::MacAddress};
 
 use crate::status::HostInfoPy;
 
@@ -123,7 +123,10 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use chrono::{prelude::*, Duration};
-    use yaroc_common::{logs::HostInfo, punch::SiPunch as CommonSiPunch};
+    use yaroc_common::{
+        punch::SiPunch as CommonSiPunch,
+        status::{HostInfo, MacAddress},
+    };
 
     use crate::punch::{SiPunch, SiPunchLog};
 
@@ -150,10 +153,7 @@ mod test_punch {
     #[test]
     fn test_display() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
-        let host_info = HostInfo::new(
-            "ROC1".to_owned(),
-            yaroc_common::logs::MacAddress::Full(0x123456789012),
-        );
+        let host_info = HostInfo::new("ROC1", MacAddress::Full(0x123456789012)).unwrap();
         let punch = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),
             &host_info.into(),
