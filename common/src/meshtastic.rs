@@ -147,12 +147,22 @@ impl MshLogMessage {
     ) -> Result<Option<Self>, std::io::Error> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
         match service_envelope.packet {
-            Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
+            Some(packet) => Self::from_parsed_mesh_packet(packet, now, dns, recv_position),
             None => Ok(None),
         }
     }
 
     pub fn from_mesh_packet(
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        dns: &HashMap<MacAddress, String>,
+        recv_position: Option<PositionName>,
+    ) -> Result<Option<Self>, std::io::Error> {
+        let packet = MeshPacket::decode(payload)?;
+        Self::from_parsed_mesh_packet(packet, now, dns, recv_position)
+    }
+
+    fn from_parsed_mesh_packet(
         packet: MeshPacket,
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,

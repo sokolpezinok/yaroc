@@ -112,7 +112,7 @@ class MqttForwader:
             ):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
                 recv_mac_addr_int = int(recv_mac_addr, 16)
-                self.handler.meshtastic_status_update(
+                self.handler.meshtastic_status_service_envelope(
                     MqttForwader._payload_to_bytes(msg.payload), now, recv_mac_addr_int
                 )
 

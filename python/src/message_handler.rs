@@ -44,14 +44,24 @@ impl MessageHandler {
         Ok(self.msh_serial_msg(payload)?)
     }
 
-    #[pyo3(name = "meshtastic_status_update", signature = (payload, now, recv_mac_address=None))]
-    pub fn meshtastic_status_update(
+    #[pyo3(signature = (payload, now, recv_mac_address=None))]
+    pub fn meshtastic_status_service_envelope(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<u32>,
     ) {
-        self.msh_status_update(payload, now, recv_mac_address);
+        self.msh_status_service_envelope(payload, now, recv_mac_address);
+    }
+
+    #[pyo3(signature = (payload, now, recv_mac_address=None))]
+    pub fn meshtastic_status_mesh_packet(
+        &mut self,
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        recv_mac_address: Option<u32>,
+    ) {
+        self.msh_status_mesh_packet(payload, now, recv_mac_address);
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {
@@ -164,7 +174,20 @@ impl MessageHandler {
         self.dns.get(&mac_addr).map(|x| x.as_str()).unwrap_or("Unknown")
     }
 
-    pub fn msh_status_update(
+    pub fn msh_status_mesh_packet(
+        &mut self,
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        recv_mac_address: Option<u32>,
+    ) {
+        let recv_position = recv_mac_address
+            .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
+        let msh_log_message =
+            MshLogMessage::from_mesh_packet(payload, now, &self.dns, recv_position);
+        self.msh_status_update(msh_log_message)
+    }
+
+    pub fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
@@ -174,10 +197,11 @@ impl MessageHandler {
             .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
         let msh_log_message =
             MshLogMessage::from_service_envelope(payload, now, &self.dns, recv_position);
-        match msh_log_message {
-            Err(err) => {
-                error!("Failed to parse msh status proto: {}", err);
-            }
+        self.msh_status_update(msh_log_message)
+    }
+
+    fn msh_status_update(&mut self, log_message: Result<Option<MshLogMessage>, std::io::Error>) {
+        match log_message {
             Ok(Some(log_message)) => {
                 info!("{}", log_message);
                 let status = self.msh_roc_status(&log_message.host_info);
@@ -195,7 +219,10 @@ impl MessageHandler {
                     status.clear_rssi_snr();
                 }
             }
-            _ => {}
+            Err(err) => {
+                error!("Failed to parse msh status proto: {}", err);
+            }
+            _ => {} // Ignored proto, maybe add a debug print?
         }
     }
 
@@ -390,7 +417,7 @@ mod test_punch {
         };
         let message = envelope1.encode_to_vec();
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
-        handler.msh_status_update(&message, Local::now().fixed_offset(), None);
+        handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, Some(-98));
@@ -403,7 +430,11 @@ mod test_punch {
             }),
             ..Default::default()
         };
-        handler.msh_status_update(&envelope.encode_to_vec(), Local::now().fixed_offset(), None);
+        handler.msh_status_service_envelope(
+            &envelope.encode_to_vec(),
+            Local::now().fixed_offset(),
+            None,
+        );
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].rssi_dbm, None);
@@ -438,7 +469,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope(0xdeadbeef, data).encode_to_vec();
-        handler.msh_status_update(&message, Local::now().fixed_offset(), None);
+        handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
     }
