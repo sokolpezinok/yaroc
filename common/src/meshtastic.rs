@@ -139,7 +139,7 @@ impl MshLogMessage {
         }
     }
 
-    pub fn from_mesh_packet(
+    pub fn from_service_envelope(
         payload: &[u8],
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
@@ -147,13 +147,25 @@ impl MshLogMessage {
     ) -> Result<Option<Self>, std::io::Error> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
         match service_envelope.packet {
-            Some(MeshPacket {
+            Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
+            None => Ok(None),
+        }
+    }
+
+    pub fn from_mesh_packet(
+        packet: MeshPacket,
+        now: DateTime<FixedOffset>,
+        dns: &HashMap<MacAddress, String>,
+        recv_position: Option<PositionName>,
+    ) -> Result<Option<Self>, std::io::Error> {
+        match packet {
+            MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
                 from,
                 rx_rssi,
                 rx_snr,
                 ..
-            }) => {
+            } => {
                 let mac_address = MacAddress::Meshtastic(from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
                 Self::parse_inner(
@@ -169,10 +181,10 @@ impl MshLogMessage {
                     recv_position,
                 )
             }
-            Some(MeshPacket {
+            MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            }) => Err(std::io::Error::new(
+            } => Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 "Encrypted message, disable encryption in MQTT!",
             )),
@@ -349,8 +361,9 @@ mod test_meshtastic {
         );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
         let dns = HashMap::from([(MacAddress::Meshtastic(0x123456), "yaroc1".to_owned())]);
-        let log_message =
-            MshLogMessage::from_mesh_packet(&message, now, &dns, None).unwrap().unwrap();
+        let log_message = MshLogMessage::from_service_envelope(&message, now, &dns, None)
+            .unwrap()
+            .unwrap();
 
         assert_eq!(
             log_message.rssi_snr,
@@ -386,9 +399,10 @@ mod test_meshtastic {
             4.0,
         );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
-        let log_message = MshLogMessage::from_mesh_packet(&message, now, &HashMap::new(), None)
-            .unwrap()
-            .unwrap();
+        let log_message =
+            MshLogMessage::from_service_envelope(&message, now, &HashMap::new(), None)
+                .unwrap()
+                .unwrap();
 
         assert_eq!(
             log_message.rssi_snr,

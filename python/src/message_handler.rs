@@ -173,7 +173,7 @@ impl MessageHandler {
         let recv_position = recv_mac_address
             .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
         let msh_log_message =
-            MshLogMessage::from_mesh_packet(payload, now, &self.dns, recv_position);
+            MshLogMessage::from_service_envelope(payload, now, &self.dns, recv_position);
         match msh_log_message {
             Err(err) => {
                 error!("Failed to parse msh status proto: {}", err);
