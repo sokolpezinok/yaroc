@@ -2,7 +2,7 @@ use femtopb::Message as _;
 use log::error;
 use log::info;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::{Data, PortNum, ServiceEnvelope};
+use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use meshtastic::Message as MeshtasticMessage;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -39,9 +39,15 @@ impl MessageHandler {
         })
     }
 
-    #[pyo3(name = "meshtastic_serial_msg")]
-    pub fn meshtastic_serial_msg_py(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
-        Ok(self.msh_serial_msg(payload)?)
+    pub fn meshtastic_serial_serial_envelope(
+        &mut self,
+        payload: &[u8],
+    ) -> PyResult<Vec<SiPunchLog>> {
+        Ok(self.msh_serial_service_envelope(payload)?)
+    }
+
+    pub fn meshtastic_serial_mesh_packet(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
+        Ok(self.msh_serial_mesh_packet(payload)?)
     }
 
     #[pyo3(signature = (payload, now, recv_mac_address=None))]
@@ -226,12 +232,21 @@ impl MessageHandler {
         }
     }
 
-    fn msh_serial_msg(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
+    fn msh_serial_service_envelope(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
         let service_envelope = ServiceEnvelope::decode(payload).map_err(std::io::Error::from)?;
         let packet = service_envelope.packet.ok_or(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Missing packet in ServiceEnvelope",
         ))?;
+        self.msh_serial(packet)
+    }
+
+    fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
+        let packet = MeshPacket::decode(payload).map_err(std::io::Error::from)?;
+        self.msh_serial(packet)
+    }
+
+    fn msh_serial(&mut self, packet: MeshPacket) -> std::io::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
@@ -383,7 +398,7 @@ mod test_punch {
         )
         .encode_to_vec();
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
-        let punch_logs = handler.msh_serial_msg(&message).unwrap();
+        let punch_logs = handler.msh_serial_service_envelope(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -457,7 +472,7 @@ mod test_punch {
         .encode_to_vec();
 
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
-        handler.msh_serial_msg(&message).unwrap();
+        handler.msh_serial_service_envelope(&message).unwrap();
 
         let telemetry = Telemetry {
             time: 1735157442,
