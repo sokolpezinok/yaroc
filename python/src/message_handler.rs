@@ -39,7 +39,7 @@ impl MessageHandler {
         })
     }
 
-    pub fn meshtastic_serial_serial_envelope(
+    pub fn meshtastic_serial_service_envelope(
         &mut self,
         payload: &[u8],
     ) -> PyResult<Vec<SiPunchLog>> {
