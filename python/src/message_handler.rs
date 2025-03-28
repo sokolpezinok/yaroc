@@ -43,11 +43,11 @@ impl MessageHandler {
         &mut self,
         payload: &[u8],
     ) -> PyResult<Vec<SiPunchLog>> {
-        Ok(self.msh_serial_service_envelope(payload)?)
+        self.msh_serial_service_envelope(payload).map_err(PyErr::from)
     }
 
     pub fn meshtastic_serial_mesh_packet(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
-        Ok(self.msh_serial_mesh_packet(payload)?)
+        self.msh_serial_mesh_packet(payload).map_err(PyErr::from)
     }
 
     #[pyo3(signature = (payload, now, recv_mac_address=None))]
