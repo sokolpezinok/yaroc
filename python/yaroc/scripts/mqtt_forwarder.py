@@ -34,6 +34,7 @@ async def main():
         config.get("broker_port", None),
         meshtastic_conf.get("main_channel", None),
         config.get("display", None),
+        config.get("meshtastic_port", None),
     )
     await forwarder.loop()
 

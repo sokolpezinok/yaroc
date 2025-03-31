@@ -48,7 +48,7 @@ class MeshtasticSerial:
                 break
             except Exception as err:
                 logging.error(f"Error while connecting to Meshtastic serial at {err}")
-                await asyncio.sleep(5)
+                await asyncio.sleep(15)
 
         await asyncio.sleep(1000000)
 
