@@ -179,7 +179,7 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
         }
     }
 
-    let mut mch_ticker = Ticker::every(Duration::from_secs(20));
+    let mut mch_ticker = Ticker::every(Duration::from_secs(30));
     let mut get_time_ticker = Ticker::every(Duration::from_secs(300));
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
