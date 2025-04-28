@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from dependency_injector import containers, providers
 from dependency_injector.wiring import Provide, inject
@@ -94,8 +94,8 @@ class Container(containers.DeclarativeContainer):
 @inject
 async def create_clients(
     client_factories: providers.FactoryAggregate,
+    mac_addresses: Dict[str, str] = {},
     config: Dict[str, Any] | None = Provide[Container.config.client],
-    meshtastic_mac_override: str | None = None,
 ) -> ClientGroup:
     clients: list[Client] = []
     if config is not None:
@@ -113,7 +113,9 @@ async def create_clients(
             clients.append(client_factories.mqtt())
         if config.get("roc", {}).get("enable", False):
             logging.info("Enabled ROC client")
-            clients.append(client_factories.roc(meshtastic_mac_override))
+            override_map = config.get("roc", {}).get("override", {})
+            mac_override_map = {mac_addresses[k]: v for k, v in override_map.items()}
+            clients.append(client_factories.roc(mac_override_map))
         if config.get("mop", {}).get("enable", False):
             clients.append(client_factories.mop())
             logging.info("Enabled MOP client")
