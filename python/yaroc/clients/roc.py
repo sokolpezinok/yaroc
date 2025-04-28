@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 from datetime import datetime
+from typing import Dict
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
@@ -18,8 +19,8 @@ ROC_RECEIVEDATA = "https://roc.olresultat.se/ver7.1/receivedata.php"
 class RocClient(Client):
     """Class for sending punches to ROC"""
 
-    def __init__(self, meshtastic_override_mac: str | None = None):
-        self.meshtastic_override_mac = meshtastic_override_mac
+    def __init__(self, mac_override_map: Dict[str, str] = {}):
+        self.mac_override_map = mac_override_map
 
     async def loop(self):
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=50))
@@ -44,10 +45,9 @@ class RocClient(Client):
 
         punch = punch_log.punch
         now = datetime.now()
-        if punch_log.is_meshtastic() and self.meshtastic_override_mac is not None:
-            mac_address = self.meshtastic_override_mac
-        else:
-            mac_address = punch_log.host_info.mac_address
+
+        mac_address = punch_log.host_info.mac_address
+        self.mac_override_map.get(mac_address, mac_address)
         data = {
             "control1": str(punch.code),
             "sinumber1": str(punch.card),
@@ -73,7 +73,8 @@ class RocClient(Client):
             logging.error(f"ROC error: {e}")
             return False
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
+    async def send_status(self, status: Status, mac_address: str) -> bool:
+        mac_address = self.mac_override_map.get(mac_address, mac_address)
         oneof = status.WhichOneof("msg")
         if oneof == "mini_call_home":
             mch = status.mini_call_home
@@ -86,7 +87,7 @@ class RocClient(Client):
             params = {
                 "function": "callhome",
                 "command": "setmini",
-                "macaddr": mac_addr,
+                "macaddr": mac_address,
                 "failedcallhomes": "0",
                 "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
                 "codes": ",".join(str(code) for code in mch.codes),
@@ -109,7 +110,7 @@ class RocClient(Client):
             params = {
                 "function": "callhome",
                 "command": "setmini",
-                "macaddr": mac_addr,
+                "macaddr": mac_address,
                 "failedcallhomes": "0",
                 "codes": codes,
             }
