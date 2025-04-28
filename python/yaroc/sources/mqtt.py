@@ -61,8 +61,8 @@ class MqttForwader:
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
+        meshtastic_serial_port: str | None = None,
         display_model: str | None = None,
-        msh_serial_port: str | None = None,
     ):
         self.client_group = client_group
         self.dns = dns
@@ -74,9 +74,11 @@ class MqttForwader:
         self.executor = ThreadPoolExecutor(max_workers=1)
 
         self.msh_serial: MeshtasticSerial | None = None
-        if msh_serial_port is not None:
+        if meshtastic_serial_port is not None:
             self.msh_serial = MeshtasticSerial(
-                msh_serial_port, self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
+                meshtastic_serial_port,
+                self.on_msh_status,
+                self._handle_meshtastic_serial_mesh_packet,
             )
 
     @staticmethod
