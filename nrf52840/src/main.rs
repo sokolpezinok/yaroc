@@ -55,8 +55,5 @@ async fn main(spawner: Spawner) {
         &SEND_PUNCH_MUTEX,
         SI_UART_CHANNEL.receiver(),
     ));
-    spawner.must_spawn(si_uart_reader(
-        si_uart,
-        SI_UART_CHANNEL.sender(),
-    ));
+    spawner.must_spawn(si_uart_reader(si_uart, SI_UART_CHANNEL.sender()));
 }
