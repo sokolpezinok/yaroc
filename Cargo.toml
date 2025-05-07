@@ -17,7 +17,7 @@ embassy-sync = "0.6.1"
 embassy-time = { version = "0.4" }
 femtopb = "0.5.0"
 geoutils = "0.5.1"
-heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "0ebca23" }
+heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "1a33fec8585f2d82c96ded9c8644059f73e64f62" }
 log = "0.4"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "7410cefb3747ee7c8b6dc81a182ed91b810f9e20" }
 thiserror = { version = "2.0.0", default-features = false }
