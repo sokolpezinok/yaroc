@@ -2,6 +2,8 @@
 #![no_main]
 
 pub mod bg77_hw;
+#[cfg(feature = "bluetooth-le")]
+pub mod ble;
 pub mod device;
 pub mod mqtt;
 pub mod send_punch;

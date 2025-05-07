@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.81"
 
 [features]
-default = []
+default = ["cortex-m/critical-section-single-core"]
 bluetooth-le = ["dep:nrf-softdevice"]
 
 [dependencies]
@@ -22,7 +22,7 @@ embedded-hal-async = "1.0.0"
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
 
-cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5.0"
 embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }

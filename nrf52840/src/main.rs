@@ -3,10 +3,12 @@
 
 use core::str::FromStr;
 
-use defmt::*;
+use defmt::info;
 use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use heapless::String;
+#[cfg(feature = "bluetooth-le")]
+use yaroc_nrf52840::ble::Ble;
 use yaroc_nrf52840::{
     self as _,
     bg77_hw::ModemConfig,
@@ -21,15 +23,23 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    let device = Device::new();
+
+    #[cfg(feature = "bluetooth-le")]
+    let mac_address = {
+        let ble = Ble::new();
+        ble.get_mac_address()
+    };
+    #[cfg(not(feature = "bluetooth-le"))]
+    let mac_address: String<12> = String::from_str("cee423506cac").unwrap();
+
+    info!("Device initialized, MAC address: {}", mac_address.as_str());
     let mqtt_config = MqttConfig {
         name: String::from_str("spe-dev").unwrap(),
-        mac_address: String::from_str("cee423506cac").unwrap(),
+        mac_address,
         ..Default::default()
     };
     let modem_config = ModemConfig::default();
-    let device = Device::new();
-    info!("Device initialized!");
-
     let Device {
         bg77,
         temp,
