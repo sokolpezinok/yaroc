@@ -13,8 +13,8 @@ bluetooth-le = ["dep:nrf-softdevice"]
 yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
 
 defmt = { workspace = true }
-defmt-rtt = "0.4"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
