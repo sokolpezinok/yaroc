@@ -1,5 +1,5 @@
 use crate::bg77_hw::Bg77;
-use crate::si_uart::{SiUart, SoftwareSerial};
+use crate::si_uart::SiUart;
 use crate::system_info::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -42,7 +42,6 @@ pub struct Device {
     pub rng: NrfRandom,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
-    pub software_serial: SoftwareSerial,
     pub temp: NrfTemp,
 }
 
@@ -67,7 +66,7 @@ impl Device {
         let uart1 = uarte::Uarte::new(p.UARTE1, Irqs, p.P0_15, p.P0_16, Default::default());
         let (_tx0, rx0) = uart0.split();
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER0, p.PPI_CH0, p.PPI_CH1);
-        let io3 = Input::new(p.P0_21, Pull::Up);
+        let _io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
         let bg77 = Bg77::new(tx1, rx1, modem_pin);
@@ -91,7 +90,6 @@ impl Device {
             rng,
             temp,
             si_uart: SiUart::new(rx0),
-            software_serial: SoftwareSerial::new(io3),
             saadc,
         }
     }

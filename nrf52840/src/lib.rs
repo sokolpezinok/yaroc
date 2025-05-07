@@ -13,7 +13,6 @@ type Result<T> = yaroc_common::Result<T>;
 
 use cortex_m_semihosting::debug;
 use defmt_rtt as _;
-use nrf52840_hal as _; // memory layout
 use panic_probe as _;
 
 #[defmt::panic_handler]

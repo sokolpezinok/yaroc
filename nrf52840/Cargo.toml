@@ -29,7 +29,6 @@ embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
-nrf52840-hal = { version = "0.18.0", default-features = false, features = ["embedded-hal-02"] }
 nrf-softdevice = { version = "0.1.0", features = ["s140", "ble-peripheral", "critical-section-impl"], optional = true }
 
 chrono = { workspace = true }

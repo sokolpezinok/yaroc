@@ -35,7 +35,6 @@ async fn main(spawner: Spawner) {
         temp,
         rng,
         si_uart,
-        software_serial,
         ..
     } = device;
     let send_punch = SendPunch::new(
@@ -58,7 +57,6 @@ async fn main(spawner: Spawner) {
     ));
     spawner.must_spawn(si_uart_reader(
         si_uart,
-        software_serial,
         SI_UART_CHANNEL.sender(),
     ));
 }
