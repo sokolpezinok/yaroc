@@ -29,7 +29,7 @@ embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
-nrf-softdevice = { version = "0.1.0", features = ["s140", "ble-peripheral", "critical-section-impl"], optional = true }
+nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"], optional = true }
 
 chrono = { workspace = true }
 femtopb = { workspace = true }

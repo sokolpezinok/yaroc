@@ -1358,6 +1358,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
+ "defmt 0.3.100",
  "embassy-futures",
  "embassy-sync 0.5.0",
  "embedded-storage",
@@ -1367,6 +1368,7 @@ dependencies = [
  "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "nrf-softdevice-macro",
  "nrf-softdevice-s140",
+ "nrf52840-pac",
  "num_enum",
 ]
 
@@ -1389,6 +1391,17 @@ name = "nrf-softdevice-s140"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ea93a1e11efdafcf914ed6b81b5be0cd99ee8ff6c3060102265ea863a355393"
+
+[[package]]
+name = "nrf52840-pac"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30713f36f1be02e5bc9abefa30eae4a1f943d810f199d4923d3ad062d1be1b3d"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "vcell",
+]
 
 [[package]]
 name = "num-traits"
