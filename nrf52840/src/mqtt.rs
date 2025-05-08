@@ -1,6 +1,5 @@
 use crate::{
     bg77_hw::{ModemHw, ACTIVATION_TIMEOUT},
-    device::NrfRandom,
     error::Error,
     send_punch::{Command, SendPunchMutexType, EVENT_CHANNEL},
 };
@@ -56,7 +55,7 @@ impl Default for MqttConfig {
 }
 
 #[embassy_executor::task]
-pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn, NrfRandom>) {
+pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
     backoff_retries.r#loop().await;
 }
 
@@ -83,7 +82,7 @@ async fn bg77_send_punch_fn(
     send_punch_fn: Bg77SendPunchFn,
     send_punch_timeout: Duration,
 ) {
-    BackoffRetries::<Bg77SendPunchFn, NrfRandom>::try_sending_with_retries(
+    BackoffRetries::<Bg77SendPunchFn>::try_sending_with_retries(
         msg,
         send_punch_fn,
         send_punch_timeout,
@@ -130,14 +129,12 @@ impl<M: ModemHw> MqttClient<M> {
     pub fn new(
         send_punch_mutex: &'static SendPunchMutexType,
         config: MqttConfig,
-        rng: NrfRandom,
         spawner: Spawner,
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
         let send_punch_timeout = ACTIVATION_TIMEOUT + config.packet_timeout * 2;
         let backoff_retries = BackoffRetries::new(
             send_punch_for_backoff,
-            rng,
             Duration::from_secs(10),
             send_punch_timeout,
             23,

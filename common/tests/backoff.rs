@@ -48,13 +48,6 @@ static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] = 
 static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 3, PUNCH_COUNT, 1> = PubSubChannel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_COUNT> = Channel::new();
 
-struct FakeRandom;
-impl Random for FakeRandom {
-    async fn u16(&mut self) -> u16 {
-        0
-    }
-}
-
 #[derive(Clone, Copy, Default)]
 struct FakeSendPunchFn {
     counter: u8,
@@ -139,7 +132,7 @@ async fn fake_send_punch_fn(
     send_punch_fn: FakeSendPunchFn,
     send_punch_timeout: Duration,
 ) {
-    BackoffRetries::<FakeSendPunchFn, FakeRandom>::try_sending_with_retries(
+    BackoffRetries::<FakeSendPunchFn>::try_sending_with_retries(
         msg,
         send_punch_fn,
         send_punch_timeout,
@@ -158,7 +151,7 @@ fn backoff_test() {
 }
 
 #[embassy_executor::task]
-async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn, FakeRandom>) {
+async fn backoff_loop(mut backoff: BackoffRetries<FakeSendPunchFn>) {
     backoff.r#loop().await;
 }
 
@@ -172,7 +165,6 @@ async fn main(spawner: Spawner) {
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
     let backoff = BackoffRetries::new(
         fake,
-        FakeRandom,
         Duration::from_millis(100),
         Duration::from_millis(1000),
         2,

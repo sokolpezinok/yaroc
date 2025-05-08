@@ -1,6 +1,5 @@
 use crate::{
     bg77_hw::{Bg77, ModemConfig, ModemHw},
-    device::NrfRandom,
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
     system_info::{NrfTemp, SystemInfo, Temp},
@@ -51,7 +50,6 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
     pub fn new(
         mut bg77: M,
         temp: T,
-        rng: NrfRandom,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
         modem_config: ModemConfig,
@@ -61,7 +59,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
         Self {
             bg77,
             modem_config,
-            client: MqttClient::new(send_punch_mutex, mqtt_config, rng, spawner),
+            client: MqttClient::new(send_punch_mutex, mqtt_config, spawner),
             system_info: SystemInfo::<M, T>::new(temp),
             last_reconnect: None,
         }

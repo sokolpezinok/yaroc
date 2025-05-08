@@ -33,14 +33,12 @@ async fn main(spawner: Spawner) {
     let Device {
         bg77,
         temp,
-        rng,
         si_uart,
         ..
     } = device;
     let send_punch = SendPunch::new(
         bg77,
         temp,
-        rng,
         &SEND_PUNCH_MUTEX,
         spawner,
         modem_config,

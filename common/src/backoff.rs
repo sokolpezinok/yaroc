@@ -18,10 +18,6 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
 
-pub trait Random {
-    fn u16(&mut self) -> impl core::future::Future<Output = u16>;
-}
-
 pub const PUNCH_QUEUE_SIZE: usize = 24;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
@@ -115,19 +111,17 @@ static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1> =
     PubSubChannel::new();
 
 /// Exponential backoff retries for sending punches.
-pub struct BackoffRetries<S: SendPunchFn, R: Random> {
+pub struct BackoffRetries<S: SendPunchFn> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
     send_punch_timeout: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
-    _rng: R,
 }
 
-impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
+impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     pub fn new(
         send_punch_fn: S,
-        rng: R,
         initial_backoff: Duration,
         send_punch_timeout: Duration,
         capacity: usize,
@@ -141,7 +135,6 @@ impl<S: SendPunchFn + Copy, R: Random> BackoffRetries<S, R> {
             initial_backoff,
             send_punch_timeout,
             mqtt_events,
-            _rng: rng,
         }
     }
 

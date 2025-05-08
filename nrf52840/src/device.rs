@@ -5,43 +5,26 @@ use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
-use embassy_nrf::peripherals::{RNG, TIMER1, UARTE0, UARTE1};
-use embassy_nrf::rng::{self, Rng};
+use embassy_nrf::peripherals::{TIMER1, UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp::{self, Temp};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
-use yaroc_common::backoff::Random;
 
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
-    RNG => rng::InterruptHandler<RNG>;
     SAADC => saadc::InterruptHandler;
     TEMP => temp::InterruptHandler;
     UARTE0 => uarte::InterruptHandler<UARTE0>;
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
-// Find a better location for it
-pub struct NrfRandom {
-    rng: Rng<'static, RNG>,
-}
-
-impl Random for NrfRandom {
-    async fn u16(&mut self) -> u16 {
-        let mut bytes = [0, 0];
-        self.rng.fill_bytes(&mut bytes).await;
-        u16::from_be_bytes(bytes)
-    }
-}
-
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
     pub bg77:
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
-    pub rng: NrfRandom,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
     pub temp: NrfTemp,
@@ -83,14 +66,10 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
-        let rng = Rng::new(p.RNG, Irqs);
-        let rng = NrfRandom { rng };
-
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
             bg77,
-            rng,
             temp,
             si_uart: SiUart::new(rx0),
             saadc,
