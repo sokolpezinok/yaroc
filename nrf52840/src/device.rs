@@ -2,7 +2,9 @@ use crate::bg77_hw::Bg77;
 use crate::si_uart::SiUart;
 use crate::system_info::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
+use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
+use embassy_nrf::interrupt::Priority;
 use embassy_nrf::peripherals::{RNG, TIMER0, UARTE0, UARTE1};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
@@ -58,7 +60,11 @@ impl Device {
         cortex_peripherals.DWT.enable_cycle_counter();
         cortex_peripherals.DWT.set_cycle_count(0);
 
-        let mut p = embassy_nrf::init(Default::default());
+        let mut config: NrfConfig = Default::default();
+        if cfg!(feature = "bluetooth-le") {
+            config.time_interrupt_priority = Priority::P2;
+        }
+        let mut p = embassy_nrf::init(config);
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::BAUD38400;
         // P0.14 is SCL, use it for UART0. P0.20 is TX, so it's unused.
