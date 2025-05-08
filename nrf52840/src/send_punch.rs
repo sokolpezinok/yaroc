@@ -10,7 +10,7 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::Output,
-    peripherals::{TIMER0, UARTE1},
+    peripherals::{TIMER1, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_sync::{channel::Channel, mutex::Mutex};
@@ -25,7 +25,7 @@ use yaroc_common::{
 };
 
 pub type SendPunchType = SendPunch<
-    Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER0>, Output<'static>>,
+    Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
     NrfTemp,
 >;
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
@@ -179,7 +179,7 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
         }
     }
 
-    let mut mch_ticker = Ticker::every(Duration::from_secs(30));
+    let mut mch_ticker = Ticker::every(Duration::from_secs(10));
     let mut get_time_ticker = Ticker::every(Duration::from_secs(300));
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
