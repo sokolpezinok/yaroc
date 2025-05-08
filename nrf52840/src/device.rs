@@ -47,12 +47,6 @@ pub struct Device {
     pub temp: NrfTemp,
 }
 
-impl Default for Device {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Device {
     pub fn new() -> Self {
         let mut cortex_peripherals = CortexMPeripherals::take().unwrap();
