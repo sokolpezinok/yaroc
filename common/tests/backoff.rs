@@ -8,7 +8,7 @@ use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use static_cell::StaticCell;
 use yaroc_common::{
     at::mqtt::{MqttStatus, StatusCode},
-    backoff::{BackoffCommand, BackoffRetries, PunchMsg, Random, SendPunchFn, CMD_FOR_BACKOFF},
+    backoff::{BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF},
     punch::RawPunch,
     RawMutex,
 };
