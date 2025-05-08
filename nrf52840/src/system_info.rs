@@ -30,6 +30,15 @@ impl Temp for NrfTemp {
     }
 }
 
+pub struct SoftdeviceTemp {}
+
+impl Temp for SoftdeviceTemp {
+    async fn cpu_temperature(&mut self) -> f32 {
+        //TODO: get temperature from softdevice, use embassy_sync::Watch
+        25.9
+    }
+}
+
 pub struct FakeTemp {
     pub t: f32,
 }

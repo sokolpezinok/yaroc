@@ -1,13 +1,12 @@
 use crate::bg77_hw::Bg77;
 use crate::si_uart::SiUart;
-use crate::system_info::NrfTemp;
 use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
-use embassy_nrf::peripherals::{TIMER1, UARTE0, UARTE1};
+use embassy_nrf::peripherals::{TEMP, TIMER1, UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
-use embassy_nrf::temp::{self, Temp};
+use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
 
@@ -20,6 +19,22 @@ bind_interrupts!(struct Irqs {
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
+#[cfg(not(feature = "bluetooth-le"))]
+pub type OwnTemp = crate::system_info::NrfTemp;
+#[cfg(feature = "bluetooth-le")]
+pub type OwnTemp = crate::system_info::SoftdeviceTemp;
+
+#[cfg(not(feature = "bluetooth-le"))]
+fn create_temp(t: TEMP) -> crate::system_info::NrfTemp {
+    let temp = embassy_nrf::temp::Temp::new(t, Irqs);
+    crate::system_info::NrfTemp::new(temp)
+}
+
+#[cfg(feature = "bluetooth-le")]
+fn create_temp(_: TEMP) -> crate::system_info::SoftdeviceTemp {
+    crate::system_info::SoftdeviceTemp {}
+}
+
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
@@ -27,7 +42,7 @@ pub struct Device {
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
-    pub temp: NrfTemp,
+    pub temp: OwnTemp,
 }
 
 impl Device {
@@ -58,13 +73,13 @@ impl Device {
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
-        let temp = Temp::new(p.TEMP, Irqs);
-        let temp = NrfTemp::new(temp);
 
         let saadc_config = SaadcConfig::default();
         let channel_config = ChannelConfig::single_ended(&mut p.P0_05);
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
+
+        let temp = create_temp(p.TEMP);
 
         Self {
             _blue_led: blue_led,

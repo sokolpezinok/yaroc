@@ -1,8 +1,9 @@
 use crate::{
     bg77_hw::{Bg77, ModemConfig, ModemHw},
+    device::OwnTemp,
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
-    system_info::{NrfTemp, SystemInfo, Temp},
+    system_info::{SystemInfo, Temp},
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -25,7 +26,7 @@ use yaroc_common::{
 
 pub type SendPunchType = SendPunch<
     Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
-    NrfTemp,
+    OwnTemp,
 >;
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
