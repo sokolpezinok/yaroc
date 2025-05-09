@@ -1,6 +1,5 @@
 use crate::bg77_hw::Bg77;
 use crate::si_uart::SiUart;
-use cortex_m::peripheral::Peripherals as CortexMPeripherals;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -47,11 +46,6 @@ pub struct Device {
 
 impl Device {
     pub fn new() -> Self {
-        let mut cortex_peripherals = CortexMPeripherals::take().unwrap();
-        cortex_peripherals.DCB.enable_trace();
-        cortex_peripherals.DWT.enable_cycle_counter();
-        cortex_peripherals.DWT.set_cycle_count(0);
-
         let mut config: NrfConfig = Default::default();
         if cfg!(feature = "bluetooth-le") {
             config.time_interrupt_priority = Priority::P2;
