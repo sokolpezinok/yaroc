@@ -11,6 +11,8 @@ pub enum Error {
     ParseError,
     #[error("Supplied wrong function argument")]
     ValueError,
+    #[error("Softdevice (BLE) error")]
+    SoftdeviceError,
     #[error("Inconsistent AT response")]
     ModemError,
     #[error("UART read error")]

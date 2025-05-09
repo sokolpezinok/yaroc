@@ -1,7 +1,8 @@
 use core::fmt::Write;
 use embassy_executor::Spawner;
 use heapless::String;
-use nrf_softdevice::{ble, raw, Softdevice};
+use nrf_softdevice::{ble, raw, temperature_celsius, Softdevice};
+use yaroc_common::error::Error;
 
 pub struct Ble {
     inner: &'static Softdevice,
@@ -59,6 +60,13 @@ impl Ble {
             write!(&mut res, "{:02x}", b).expect("Unexpected length, this is a bug");
         }
         res
+    }
+
+    pub fn temperature(&self) -> crate::Result<f32> {
+        temperature_celsius(self.inner)
+            .map(|val| val.to_num::<f32>())
+            //TODO: consider propagating the error code
+            .map_err(|_| Error::SoftdeviceError)
     }
 }
 
