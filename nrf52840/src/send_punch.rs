@@ -1,5 +1,5 @@
 use crate::{
-    bg77_hw::{Bg77, ModemConfig, ModemHw},
+    bg77_hw::{Bg77, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
     system_info::SystemInfo,
@@ -39,7 +39,6 @@ pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 pub struct SendPunch<M: ModemHw> {
     bg77: M,
-    modem_config: ModemConfig,
     client: MqttClient<M>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
@@ -50,13 +49,11 @@ impl<M: ModemHw> SendPunch<M> {
         mut bg77: M,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
-        modem_config: ModemConfig,
         mqtt_config: MqttConfig,
     ) -> Self {
         bg77.spawn(MqttClient::<M>::urc_handler, spawner);
         Self {
             bg77,
-            modem_config,
             client: MqttClient::new(send_punch_mutex, mqtt_config, spawner),
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
@@ -121,7 +118,7 @@ impl<M: ModemHw> SendPunch<M> {
     /// Basic setup of the modem
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.bg77.turn_on().await;
-        self.bg77.configure(&self.modem_config).await?;
+        self.bg77.configure().await?;
 
         let _ = self.client.mqtt_connect(&mut self.bg77).await;
         Ok(())

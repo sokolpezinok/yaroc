@@ -22,7 +22,8 @@ static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let device = Device::new();
+    let modem_config = ModemConfig::default();
+    let device = Device::new(modem_config);
     let Device {
         bg77,
         si_uart,
@@ -44,7 +45,6 @@ async fn main(spawner: Spawner) {
         mac_address,
         ..Default::default()
     };
-    let modem_config = ModemConfig::default();
 
     #[cfg(not(feature = "bluetooth-le"))]
     let temp = yaroc_nrf52840::system_info::NrfTemp::new(temp);
@@ -55,7 +55,6 @@ async fn main(spawner: Spawner) {
         bg77,
         &SEND_PUNCH_MUTEX,
         spawner,
-        modem_config,
         mqtt_config.clone(),
     );
     {

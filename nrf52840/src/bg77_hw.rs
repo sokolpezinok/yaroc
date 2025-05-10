@@ -55,14 +55,12 @@ impl Default for ModemConfig {
 pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
     uart1: AtUart<T, R>,
     modem_pin: P,
+    config: ModemConfig,
 }
 
 pub trait ModemHw {
     /// Configures the modem according to a modem config.
-    fn configure(
-        &mut self,
-        modem_config: &ModemConfig,
-    ) -> impl core::future::Future<Output = Result<(), Error>>;
+    fn configure(&mut self) -> impl core::future::Future<Output = Result<(), Error>>;
 
     /// Spawn a task for the modem and process incoming URCs using the provided handler.
     fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner);
@@ -106,9 +104,13 @@ pub trait ModemHw {
 }
 
 impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
-    pub fn new(tx: T, rx: R, modem_pin: P) -> Self {
+    pub fn new(tx: T, rx: R, modem_pin: P, config: ModemConfig) -> Self {
         let uart1 = AtUart::new(tx, rx);
-        Self { uart1, modem_pin }
+        Self {
+            uart1,
+            modem_pin,
+            config,
+        }
     }
 }
 
@@ -163,14 +165,14 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         Ok(())
     }
 
-    async fn configure(&mut self, modem_config: &ModemConfig) -> Result<(), Error> {
+    async fn configure(&mut self) -> Result<(), Error> {
         self.simple_call_at("E0", None).await?;
-        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", modem_config.apn)?;
+        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         let _ = self.simple_call_at(&cmd, None).await;
         self.simple_call_at("+CEREG=2", None).await?;
         let _ = self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
 
-        let (nwscanseq, iotopmode) = match modem_config.rat {
+        let (nwscanseq, iotopmode) = match self.config.rat {
             RAT::Ltem => ("02", 0),
             RAT::NbIot => ("03", 1),
             RAT::LtemNbIot => ("00", 2),

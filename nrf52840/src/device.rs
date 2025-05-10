@@ -1,4 +1,4 @@
-use crate::bg77_hw::Bg77;
+use crate::bg77_hw::{Bg77, ModemConfig};
 use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -32,7 +32,7 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new() -> Self {
+    pub fn new(modem_config: ModemConfig) -> Self {
         let mut config: NrfConfig = Default::default();
         if cfg!(feature = "bluetooth-le") {
             config.time_interrupt_priority = Priority::P2;
@@ -50,7 +50,7 @@ impl Device {
         let _io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
-        let bg77 = Bg77::new(tx1, rx1, modem_pin);
+        let bg77 = Bg77::new(tx1, rx1, modem_pin, modem_config);
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
