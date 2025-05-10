@@ -10,7 +10,7 @@ use yaroc_common::status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo
 use crate::{bg77_hw::ModemHw, error::Error};
 
 pub trait Temp {
-    fn cpu_temperature(&mut self) -> impl core::future::Future<Output = f32>;
+    fn cpu_temperature(&mut self) -> impl core::future::Future<Output = crate::Result<f32>>;
 }
 
 pub struct NrfTemp {
@@ -24,18 +24,29 @@ impl NrfTemp {
 }
 
 impl Temp for NrfTemp {
-    async fn cpu_temperature(&mut self) -> f32 {
+    async fn cpu_temperature(&mut self) -> crate::Result<f32> {
         let temp = self.temp.read().await;
-        temp.to_num::<f32>()
+        Ok(temp.to_num::<f32>())
     }
 }
 
-pub struct SoftdeviceTemp {}
+#[cfg(feature = "bluetooth-le")]
+pub struct SoftdeviceTemp {
+    // TODO: this needs to be behind a mutex
+    // ble: crate::ble::Ble,
+}
 
+#[cfg(feature = "bluetooth-le")]
+impl SoftdeviceTemp {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(feature = "bluetooth-le")]
 impl Temp for SoftdeviceTemp {
-    async fn cpu_temperature(&mut self) -> f32 {
-        //TODO: get temperature from softdevice, use embassy_sync::Watch
-        25.9
+    async fn cpu_temperature(&mut self) -> crate::Result<f32> {
+        Ok(25.9)
     }
 }
 
@@ -44,8 +55,8 @@ pub struct FakeTemp {
 }
 
 impl Temp for FakeTemp {
-    async fn cpu_temperature(&mut self) -> f32 {
-        self.t
+    async fn cpu_temperature(&mut self) -> crate::Result<f32> {
+        Ok(self.t)
     }
 }
 
@@ -133,7 +144,10 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
     pub async fn mini_call_home(&mut self, bg77: &mut M) -> Option<MiniCallHome> {
         let timestamp = self.current_time(bg77, true).await?;
         let cpu_temperature = self.temp.cpu_temperature().await;
-        let mut mini_call_home = MiniCallHome::new(timestamp).set_cpu_temperature(cpu_temperature);
+        let mut mini_call_home = MiniCallHome::new(timestamp);
+        if let Ok(cpu_temperature) = cpu_temperature {
+            mini_call_home.set_cpu_temperature(cpu_temperature);
+        }
         if let Ok((battery_mv, battery_percents)) = Self::battery_state(bg77).await {
             mini_call_home.set_battery_info(battery_mv, battery_percents);
         }

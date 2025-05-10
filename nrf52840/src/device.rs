@@ -3,7 +3,7 @@ use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
-use embassy_nrf::peripherals::{TEMP, TIMER1, UARTE0, UARTE1};
+use embassy_nrf::peripherals::{TIMER1, UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
@@ -23,17 +23,6 @@ pub type OwnTemp = crate::system_info::NrfTemp;
 #[cfg(feature = "bluetooth-le")]
 pub type OwnTemp = crate::system_info::SoftdeviceTemp;
 
-#[cfg(not(feature = "bluetooth-le"))]
-fn create_temp(t: TEMP) -> crate::system_info::NrfTemp {
-    let temp = embassy_nrf::temp::Temp::new(t, Irqs);
-    crate::system_info::NrfTemp::new(temp)
-}
-
-#[cfg(feature = "bluetooth-le")]
-fn create_temp(_: TEMP) -> crate::system_info::SoftdeviceTemp {
-    crate::system_info::SoftdeviceTemp {}
-}
-
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
@@ -42,6 +31,8 @@ pub struct Device {
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
     pub temp: OwnTemp,
+    #[cfg(feature = "bluetooth-le")]
+    pub ble: crate::ble::Ble,
 }
 
 impl Device {
@@ -73,7 +64,17 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
-        let temp = create_temp(p.TEMP);
+        #[cfg(not(feature = "bluetooth-le"))]
+        let temp = {
+            let temp = embassy_nrf::temp::Temp::new(p.TEMP, Irqs);
+            crate::system_info::NrfTemp::new(temp)
+        };
+
+        #[cfg(feature = "bluetooth-le")]
+        let ble = crate::ble::Ble::new();
+
+        #[cfg(feature = "bluetooth-le")]
+        let temp = crate::system_info::SoftdeviceTemp::new();
 
         Self {
             _blue_led: blue_led,
@@ -82,6 +83,8 @@ impl Device {
             temp,
             si_uart: SiUart::new(rx0),
             saadc,
+            #[cfg(feature = "bluetooth-le")]
+            ble,
         }
     }
 }

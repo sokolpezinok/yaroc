@@ -175,9 +175,8 @@ impl MiniCallHome {
         self.batt_percents = Some(battery_percents);
     }
 
-    pub fn set_cpu_temperature(mut self, cpu_temperature: f32) -> Self {
+    pub fn set_cpu_temperature(&mut self, cpu_temperature: f32) {
         self.cpu_temperature = Some(cpu_temperature);
-        self
     }
 
     pub fn set_cellid(&mut self, cellid: u32) {
