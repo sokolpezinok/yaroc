@@ -14,6 +14,7 @@ use yaroc_nrf52840::{
     mqtt::MqttConfig,
     send_punch::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
     si_uart::{si_uart_reader, SiUartChannelType},
+    system_info::temperature_update,
 };
 
 static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
@@ -52,7 +53,6 @@ async fn main(spawner: Spawner) {
 
     let send_punch = SendPunch::new(
         bg77,
-        temp,
         &SEND_PUNCH_MUTEX,
         spawner,
         modem_config,
@@ -67,5 +67,6 @@ async fn main(spawner: Spawner) {
         &SEND_PUNCH_MUTEX,
         SI_UART_CHANNEL.receiver(),
     ));
+    spawner.must_spawn(temperature_update(temp));
     spawner.must_spawn(si_uart_reader(si_uart, SI_UART_CHANNEL.sender()));
 }

@@ -1,11 +1,15 @@
 use core::marker::PhantomData;
 
 use chrono::{DateTime, FixedOffset, TimeDelta};
-use defmt::info;
+use defmt::{error, info};
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
-use embassy_time::Instant;
+use embassy_sync::watch::{Receiver, Watch};
+use embassy_time::{Duration, Instant, Timer};
 use heapless::{format, String};
-use yaroc_common::status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo};
+use yaroc_common::{
+    status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo},
+    RawMutex,
+};
 
 use crate::{bg77_hw::ModemHw, error::Error};
 
@@ -32,21 +36,20 @@ impl Temp for NrfTemp {
 
 #[cfg(feature = "bluetooth-le")]
 pub struct SoftdeviceTemp {
-    // ble: crate::ble::Ble,
+    ble: crate::ble::Ble,
 }
 
 #[cfg(feature = "bluetooth-le")]
 impl SoftdeviceTemp {
-    pub fn new(_ble: crate::ble::Ble) -> Self {
-        Self {}
+    pub fn new(ble: crate::ble::Ble) -> Self {
+        Self { ble }
     }
 }
 
 #[cfg(feature = "bluetooth-le")]
 impl Temp for SoftdeviceTemp {
     async fn cpu_temperature(&mut self) -> crate::Result<f32> {
-        Ok(25.9)
-        // self.ble.temperature()
+        self.ble.temperature()
     }
 }
 
@@ -60,16 +63,33 @@ impl Temp for FakeTemp {
     }
 }
 
-pub struct SystemInfo<M: ModemHw, T: Temp> {
-    temp: T,
+static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
+#[cfg(not(feature = "bluetooth-le"))]
+pub type OwnTemp = NrfTemp;
+#[cfg(feature = "bluetooth-le")]
+pub type OwnTemp = SoftdeviceTemp;
+
+#[embassy_executor::task]
+pub async fn temperature_update(mut temp: OwnTemp) {
+    let sender = TEMPERATURE.sender();
+    loop {
+        if let Err(err) = temp.cpu_temperature().await.map(|t| sender.send(t)) {
+            error!("Temperature update failed: {}", err);
+        }
+        Timer::after(Duration::from_secs(300)).await;
+    }
+}
+
+pub struct SystemInfo<M: ModemHw> {
+    temp: Receiver<'static, RawMutex, f32, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
-    pub fn new(temp: T) -> Self {
+impl<M: ModemHw> SystemInfo<M> {
+    pub fn new() -> Self {
         Self {
-            temp,
+            temp: TEMPERATURE.receiver().unwrap(),
             boot_time: None,
             _phantom: PhantomData,
         }
@@ -143,9 +163,9 @@ impl<M: ModemHw, T: Temp> SystemInfo<M, T> {
 
     pub async fn mini_call_home(&mut self, bg77: &mut M) -> Option<MiniCallHome> {
         let timestamp = self.current_time(bg77, true).await?;
-        let cpu_temperature = self.temp.cpu_temperature().await;
+        let cpu_temperature = self.temp.try_get();
         let mut mini_call_home = MiniCallHome::new(timestamp);
-        if let Ok(cpu_temperature) = cpu_temperature {
+        if let Some(cpu_temperature) = cpu_temperature {
             mini_call_home.set_cpu_temperature(cpu_temperature);
         }
         if let Ok((battery_mv, battery_percents)) = Self::battery_state(bg77).await {

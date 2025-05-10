@@ -2,7 +2,7 @@ use crate::{
     bg77_hw::{Bg77, ModemConfig, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
-    system_info::{SystemInfo, Temp},
+    system_info::SystemInfo,
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -23,14 +23,8 @@ use yaroc_common::{
     RawMutex,
 };
 
-#[cfg(not(feature = "bluetooth-le"))]
-pub type OwnTemp = crate::system_info::NrfTemp;
-#[cfg(feature = "bluetooth-le")]
-pub type OwnTemp = crate::system_info::SoftdeviceTemp;
-
 pub type SendPunchType = SendPunch<
     Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
-    OwnTemp,
 >;
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
@@ -43,18 +37,17 @@ pub enum Command {
 }
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
-pub struct SendPunch<M: ModemHw, T: Temp> {
+pub struct SendPunch<M: ModemHw> {
     bg77: M,
     modem_config: ModemConfig,
     client: MqttClient<M>,
-    system_info: SystemInfo<M, T>,
+    system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
 
-impl<M: ModemHw, T: Temp> SendPunch<M, T> {
+impl<M: ModemHw> SendPunch<M> {
     pub fn new(
         mut bg77: M,
-        temp: T,
         send_punch_mutex: &'static SendPunchMutexType,
         spawner: Spawner,
         modem_config: ModemConfig,
@@ -65,7 +58,7 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
             bg77,
             modem_config,
             client: MqttClient::new(send_punch_mutex, mqtt_config, spawner),
-            system_info: SystemInfo::<M, T>::new(temp),
+            system_info: SystemInfo::<M>::new(),
             last_reconnect: None,
         }
     }
