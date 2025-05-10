@@ -34,6 +34,7 @@ static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 pub enum Command {
     SynchronizeTime,
     MqttConnect(bool, Instant),
+    BatteryUpdate,
 }
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
@@ -144,10 +145,9 @@ impl<M: ModemHw> SendPunch<M> {
                     return;
                 }
 
-                if let Err(err) = self.mqtt_connect().await {
-                    error!("Error connecting to MQTT: {}", err);
-                }
+                let res = self.mqtt_connect().await;
                 self.last_reconnect = Some(Instant::now());
+                let _ = res.inspect_err(|err| error!("Error connecting to MQTT: {}", err));
             }
             Command::SynchronizeTime => {
                 let time = self.synchronize_time().await;
@@ -157,6 +157,13 @@ impl<M: ModemHw> SendPunch<M> {
                         info!("Modem time: {}", format!(30; "{}", time).unwrap())
                     }
                 }
+            }
+            Command::BatteryUpdate => {
+                let _ = self
+                    .system_info
+                    .update_battery_state(&mut self.bg77)
+                    .await
+                    .inspect_err(|err| error!("Error while getting battery state: {}", err));
             }
         }
     }

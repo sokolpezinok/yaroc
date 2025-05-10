@@ -2,9 +2,9 @@ use core::marker::PhantomData;
 
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use defmt::{error, info};
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select3, Either3};
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
-use embassy_sync::watch::{Receiver, Watch};
+use embassy_sync::watch::{Receiver, Sender, Watch};
 use embassy_time::{Duration, Instant, Ticker};
 use heapless::{format, String};
 use yaroc_common::{
@@ -64,25 +64,47 @@ pub type OwnTemp = NrfTemp;
 #[cfg(feature = "bluetooth-le")]
 pub type OwnTemp = SoftdeviceTemp;
 
+#[derive(Clone, Copy)]
+pub struct BatteryInfo {
+    pub mv: u16,
+    pub percents: u8,
+}
+pub static BATTERY: Watch<RawMutex, BatteryInfo, 1> = Watch::new();
+
 #[embassy_executor::task]
 pub async fn sysinfo_update(mut temp: OwnTemp) {
+    // Initial commands in the beginning
+    EVENT_CHANNEL.send(Command::SynchronizeTime).await;
+    EVENT_CHANNEL.send(Command::BatteryUpdate).await;
     let temp_sender = TEMPERATURE.sender();
     let mut temperature_ticker = Ticker::every(Duration::from_secs(120));
     let mut time_sync_ticker = Ticker::every(Duration::from_secs(1800));
+    let mut battery_update = Ticker::every(Duration::from_secs(120));
     loop {
-        match select(temperature_ticker.next(), time_sync_ticker.next()).await {
-            Either::First(_) => {
-                if let Err(err) = temp.cpu_temperature().await.map(|t| temp_sender.send(t)) {
-                    error!("Temperature update failed: {}", err);
-                }
+        match select3(
+            temperature_ticker.next(),
+            time_sync_ticker.next(),
+            battery_update.next(),
+        )
+        .await
+        {
+            Either3::First(_) => {
+                let _ = temp
+                    .cpu_temperature()
+                    .await
+                    .map(|t| temp_sender.send(t))
+                    .inspect_err(|err| error!("Temperature update failed: {}", err));
             }
-            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime).await,
+            Either3::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime).await,
+            Either3::Third(_) => EVENT_CHANNEL.send(Command::BatteryUpdate).await,
         }
     }
 }
 
 pub struct SystemInfo<M: ModemHw> {
     temp: Receiver<'static, RawMutex, f32, 1>,
+    battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
+    battery_sender: Sender<'static, RawMutex, BatteryInfo, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
     _phantom: PhantomData<M>,
 }
@@ -91,6 +113,8 @@ impl<M: ModemHw> Default for SystemInfo<M> {
     fn default() -> Self {
         Self {
             temp: TEMPERATURE.receiver().unwrap(),
+            battery: BATTERY.receiver().unwrap(),
+            battery_sender: BATTERY.sender(),
             boot_time: None,
             _phantom: PhantomData,
         }
@@ -126,10 +150,11 @@ impl<M: ModemHw> SystemInfo<M> {
         })
     }
 
-    async fn battery_state(bg77: &mut M) -> Result<(u16, u8), Error> {
-        let (bcs, volt) =
+    pub async fn update_battery_state(&self, bg77: &mut M) -> Result<(), Error> {
+        let (percents, mv) =
             bg77.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
-        Ok((volt, bcs))
+        self.battery_sender.send(BatteryInfo { mv, percents });
+        Ok(())
     }
 
     async fn signal_info(bg77: &mut M) -> Result<SignalInfo, Error> {
@@ -171,8 +196,8 @@ impl<M: ModemHw> SystemInfo<M> {
         if let Some(cpu_temperature) = cpu_temperature {
             mini_call_home.set_cpu_temperature(cpu_temperature);
         }
-        if let Ok((battery_mv, battery_percents)) = Self::battery_state(bg77).await {
-            mini_call_home.set_battery_info(battery_mv, battery_percents);
+        if let Some(BatteryInfo { mv, percents }) = self.battery.try_get() {
+            mini_call_home.set_battery_info(mv, percents);
         }
         if let Ok(signal_info) = Self::signal_info(bg77).await {
             mini_call_home.set_signal_info(signal_info);
