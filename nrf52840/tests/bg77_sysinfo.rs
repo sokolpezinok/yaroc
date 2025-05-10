@@ -9,7 +9,7 @@ use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
 use yaroc_common::status::CellNetworkType;
 use yaroc_nrf52840::bg77_hw::Bg77;
-use yaroc_nrf52840::system_info::{FakeTemp, SystemInfo};
+use yaroc_nrf52840::system_info::{SystemInfo, TEMPERATURE};
 use yaroc_nrf52840::{self as _, bg77_hw::ModemHw};
 
 use embassy_executor::Spawner;
@@ -37,8 +37,8 @@ async fn mini_call_home(spawner: Spawner) {
     let mut bg77 = Bg77::new(tx, rx, modem_pin);
     let handler = |_: &CommandResponse| false;
     bg77.spawn(handler, spawner);
-    let temp = FakeTemp { t: 27.0 };
-    let mut send_punch = SystemInfo::new(temp);
+    TEMPERATURE.sender().send(27.0);
+    let mut send_punch = SystemInfo::new();
 
     let mch = send_punch.mini_call_home(&mut bg77).await.unwrap();
     assert_eq!(mch.cellid, Some(u32::from_str_radix("2B2078", 16).unwrap()));

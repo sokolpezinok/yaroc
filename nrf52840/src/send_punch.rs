@@ -58,7 +58,7 @@ impl<M: ModemHw> SendPunch<M> {
             bg77,
             modem_config,
             client: MqttClient::new(send_punch_mutex, mqtt_config, spawner),
-            system_info: SystemInfo::<M>::new(),
+            system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
         }
     }

@@ -53,17 +53,7 @@ impl Temp for SoftdeviceTemp {
     }
 }
 
-pub struct FakeTemp {
-    pub t: f32,
-}
-
-impl Temp for FakeTemp {
-    async fn cpu_temperature(&mut self) -> crate::Result<f32> {
-        Ok(self.t)
-    }
-}
-
-static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
+pub static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
 #[cfg(not(feature = "bluetooth-le"))]
 pub type OwnTemp = NrfTemp;
 #[cfg(feature = "bluetooth-le")]
@@ -86,15 +76,17 @@ pub struct SystemInfo<M: ModemHw> {
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw> SystemInfo<M> {
-    pub fn new() -> Self {
+impl<M: ModemHw> Default for SystemInfo<M> {
+    fn default() -> Self {
         Self {
             temp: TEMPERATURE.receiver().unwrap(),
             boot_time: None,
             _phantom: PhantomData,
         }
     }
+}
 
+impl<M: ModemHw> SystemInfo<M> {
     async fn get_modem_time(bg77: &mut impl ModemHw) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock =
             bg77.simple_call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
