@@ -24,8 +24,9 @@ async fn main(spawner: Spawner) {
     let device = Device::new();
     let Device {
         bg77,
-        temp,
         si_uart,
+        #[cfg(not(feature = "bluetooth-le"))]
+        temp,
         #[cfg(feature = "bluetooth-le")]
         ble,
         ..
@@ -43,6 +44,12 @@ async fn main(spawner: Spawner) {
         ..Default::default()
     };
     let modem_config = ModemConfig::default();
+
+    #[cfg(not(feature = "bluetooth-le"))]
+    let temp = yaroc_nrf52840::system_info::NrfTemp::new(temp);
+    #[cfg(feature = "bluetooth-le")]
+    let temp = yaroc_nrf52840::system_info::SoftdeviceTemp::new(ble);
+
     let send_punch = SendPunch::new(
         bg77,
         temp,

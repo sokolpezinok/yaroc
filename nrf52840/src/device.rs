@@ -18,11 +18,6 @@ bind_interrupts!(struct Irqs {
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
-#[cfg(not(feature = "bluetooth-le"))]
-pub type OwnTemp = crate::system_info::NrfTemp;
-#[cfg(feature = "bluetooth-le")]
-pub type OwnTemp = crate::system_info::SoftdeviceTemp;
-
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
@@ -30,7 +25,8 @@ pub struct Device {
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
-    pub temp: OwnTemp,
+    #[cfg(not(feature = "bluetooth-le"))]
+    pub temp: embassy_nrf::temp::Temp<'static>,
     #[cfg(feature = "bluetooth-le")]
     pub ble: crate::ble::Ble,
 }
@@ -64,25 +60,17 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
-        #[cfg(not(feature = "bluetooth-le"))]
-        let temp = {
-            let temp = embassy_nrf::temp::Temp::new(p.TEMP, Irqs);
-            crate::system_info::NrfTemp::new(temp)
-        };
-
         #[cfg(feature = "bluetooth-le")]
         let ble = crate::ble::Ble::new();
-
-        #[cfg(feature = "bluetooth-le")]
-        let temp = crate::system_info::SoftdeviceTemp::new();
 
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
             bg77,
-            temp,
             si_uart: SiUart::new(rx0),
             saadc,
+            #[cfg(not(feature = "bluetooth-le"))]
+            temp: embassy_nrf::temp::Temp::new(p.TEMP, Irqs),
             #[cfg(feature = "bluetooth-le")]
             ble,
         }

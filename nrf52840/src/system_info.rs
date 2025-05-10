@@ -32,13 +32,12 @@ impl Temp for NrfTemp {
 
 #[cfg(feature = "bluetooth-le")]
 pub struct SoftdeviceTemp {
-    // TODO: this needs to be behind a mutex
     // ble: crate::ble::Ble,
 }
 
 #[cfg(feature = "bluetooth-le")]
 impl SoftdeviceTemp {
-    pub fn new() -> Self {
+    pub fn new(_ble: crate::ble::Ble) -> Self {
         Self {}
     }
 }
@@ -47,6 +46,7 @@ impl SoftdeviceTemp {
 impl Temp for SoftdeviceTemp {
     async fn cpu_temperature(&mut self) -> crate::Result<f32> {
         Ok(25.9)
+        // self.ble.temperature()
     }
 }
 

@@ -1,6 +1,5 @@
 use crate::{
     bg77_hw::{Bg77, ModemConfig, ModemHw},
-    device::OwnTemp,
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
     system_info::{SystemInfo, Temp},
@@ -23,6 +22,11 @@ use yaroc_common::{
     punch::{RawPunch, SiPunch},
     RawMutex,
 };
+
+#[cfg(not(feature = "bluetooth-le"))]
+pub type OwnTemp = crate::system_info::NrfTemp;
+#[cfg(feature = "bluetooth-le")]
+pub type OwnTemp = crate::system_info::SoftdeviceTemp;
 
 pub type SendPunchType = SendPunch<
     Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
