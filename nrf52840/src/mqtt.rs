@@ -41,6 +41,7 @@ pub struct MqttConfig {
     pub packet_timeout: Duration,
     pub name: String<20>,
     pub mac_address: String<12>,
+    pub minicallhome_interval: Duration,
 }
 
 impl Default for MqttConfig {
@@ -50,6 +51,7 @@ impl Default for MqttConfig {
             packet_timeout: Duration::from_secs(35),
             name: String::new(),
             mac_address: String::new(),
+            minicallhome_interval: Duration::from_secs(30),
         }
     }
 }

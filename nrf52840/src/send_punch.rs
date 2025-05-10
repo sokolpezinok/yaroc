@@ -169,7 +169,10 @@ impl<M: ModemHw, T: Temp> SendPunch<M, T> {
 }
 
 #[embassy_executor::task]
-pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType) {
+pub async fn send_punch_main_loop(
+    send_punch_mutex: &'static SendPunchMutexType,
+    mqtt_config: MqttConfig,
+) {
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
@@ -178,8 +181,8 @@ pub async fn send_punch_main_loop(send_punch_mutex: &'static SendPunchMutexType)
         }
     }
 
-    let mut mch_ticker = Ticker::every(Duration::from_secs(10));
-    let mut get_time_ticker = Ticker::every(Duration::from_secs(300));
+    let mut mch_ticker = Ticker::every(mqtt_config.minicallhome_interval);
+    let mut get_time_ticker = Ticker::every(Duration::from_secs(1800));
     loop {
         match select(mch_ticker.next(), get_time_ticker.next()).await {
             Either::First(_) => MCH_SIGNAL.signal(Instant::now()),

@@ -52,13 +52,13 @@ async fn main(spawner: Spawner) {
         &SEND_PUNCH_MUTEX,
         spawner,
         modem_config,
-        mqtt_config,
+        mqtt_config.clone(),
     );
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
 
-    spawner.must_spawn(send_punch_main_loop(&SEND_PUNCH_MUTEX));
+    spawner.must_spawn(send_punch_main_loop(&SEND_PUNCH_MUTEX, mqtt_config));
     spawner.must_spawn(send_punch_event_handler(
         &SEND_PUNCH_MUTEX,
         SI_UART_CHANNEL.receiver(),
