@@ -3,7 +3,7 @@ use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::{Channel, Sender};
 use yaroc_common::{punch::RawPunch, RawMutex};
 
-pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 15>;
+pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
 
 // TODO: requires DWT which is now disabled
 // pub struct SoftwareSerial {
@@ -69,7 +69,7 @@ impl SiUart {
 #[embassy_executor::task]
 pub async fn si_uart_reader(
     mut si_uart: SiUart,
-    punch_sender: Sender<'static, RawMutex, Result<RawPunch, Error>, 15>,
+    punch_sender: Sender<'static, RawMutex, Result<RawPunch, Error>, 40>,
 ) {
     loop {
         match si_uart.read().await {

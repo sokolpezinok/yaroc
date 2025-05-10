@@ -6,7 +6,7 @@ use crate::{
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_futures::select::{select3, Either3};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{TIMER1, UARTE1},
@@ -163,9 +163,22 @@ impl<M: ModemHw> SendPunch<M> {
 }
 
 #[embassy_executor::task]
-pub async fn send_punch_main_loop(
+pub async fn minicallhome_loop(minicallhome_interval: Duration) {
+    let mut mch_ticker = Ticker::every(minicallhome_interval);
+    loop {
+        // We use Signal, so that MiniCallHome requests do not queue up. If we do not fulfill a few
+        // requests, e.g. during a long network search, it's not a problem. There's no reason to
+        // fulfill all skipped requests, it's important to send (at least) one ping with the latest
+        // info.
+        MCH_SIGNAL.signal(Instant::now());
+        mch_ticker.next().await;
+    }
+}
+
+#[embassy_executor::task]
+pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    mqtt_config: MqttConfig,
+    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, 40>,
 ) {
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
@@ -175,21 +188,6 @@ pub async fn send_punch_main_loop(
         }
     }
 
-    let mut mch_ticker = Ticker::every(mqtt_config.minicallhome_interval);
-    let mut get_time_ticker = Ticker::every(Duration::from_secs(1800));
-    loop {
-        match select(mch_ticker.next(), get_time_ticker.next()).await {
-            Either::First(_) => MCH_SIGNAL.signal(Instant::now()),
-            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime).await,
-        }
-    }
-}
-
-#[embassy_executor::task]
-pub async fn send_punch_event_handler(
-    send_punch_mutex: &'static SendPunchMutexType,
-    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, 15>,
-) {
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),

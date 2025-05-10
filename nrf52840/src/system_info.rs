@@ -2,16 +2,21 @@ use core::marker::PhantomData;
 
 use chrono::{DateTime, FixedOffset, TimeDelta};
 use defmt::{error, info};
+use embassy_futures::select::{select, Either};
 use embassy_nrf::temp::Temp as EmbassyNrfTemp;
 use embassy_sync::watch::{Receiver, Watch};
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Instant, Ticker};
 use heapless::{format, String};
 use yaroc_common::{
     status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo},
     RawMutex,
 };
 
-use crate::{bg77_hw::ModemHw, error::Error};
+use crate::{
+    bg77_hw::ModemHw,
+    error::Error,
+    send_punch::{Command, EVENT_CHANNEL},
+};
 
 pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = crate::Result<f32>>;
@@ -60,13 +65,19 @@ pub type OwnTemp = NrfTemp;
 pub type OwnTemp = SoftdeviceTemp;
 
 #[embassy_executor::task]
-pub async fn temperature_update(mut temp: OwnTemp) {
-    let sender = TEMPERATURE.sender();
+pub async fn sysinfo_update(mut temp: OwnTemp) {
+    let temp_sender = TEMPERATURE.sender();
+    let mut temperature_ticker = Ticker::every(Duration::from_secs(120));
+    let mut time_sync_ticker = Ticker::every(Duration::from_secs(1800));
     loop {
-        if let Err(err) = temp.cpu_temperature().await.map(|t| sender.send(t)) {
-            error!("Temperature update failed: {}", err);
+        match select(temperature_ticker.next(), time_sync_ticker.next()).await {
+            Either::First(_) => {
+                if let Err(err) = temp.cpu_temperature().await.map(|t| temp_sender.send(t)) {
+                    error!("Temperature update failed: {}", err);
+                }
+            }
+            Either::Second(_) => EVENT_CHANNEL.send(Command::SynchronizeTime).await,
         }
-        Timer::after(Duration::from_secs(300)).await;
     }
 }
 

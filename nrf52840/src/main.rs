@@ -12,9 +12,9 @@ use yaroc_nrf52840::{
     bg77_hw::ModemConfig,
     device::Device,
     mqtt::MqttConfig,
-    send_punch::{send_punch_event_handler, send_punch_main_loop, SendPunch, SendPunchMutexType},
+    send_punch::{minicallhome_loop, send_punch_event_handler, SendPunch, SendPunchMutexType},
     si_uart::{si_uart_reader, SiUartChannelType},
-    system_info::temperature_update,
+    system_info::sysinfo_update,
 };
 
 static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
@@ -46,26 +46,21 @@ async fn main(spawner: Spawner) {
         ..Default::default()
     };
 
-    #[cfg(not(feature = "bluetooth-le"))]
-    let temp = yaroc_nrf52840::system_info::NrfTemp::new(temp);
-    #[cfg(feature = "bluetooth-le")]
-    let temp = yaroc_nrf52840::system_info::SoftdeviceTemp::new(ble);
+    spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
 
-    let send_punch = SendPunch::new(
-        bg77,
-        &SEND_PUNCH_MUTEX,
-        spawner,
-        mqtt_config.clone(),
-    );
+    let send_punch = SendPunch::new(bg77, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
-
-    spawner.must_spawn(send_punch_main_loop(&SEND_PUNCH_MUTEX, mqtt_config));
     spawner.must_spawn(send_punch_event_handler(
         &SEND_PUNCH_MUTEX,
         SI_UART_CHANNEL.receiver(),
     ));
-    spawner.must_spawn(temperature_update(temp));
     spawner.must_spawn(si_uart_reader(si_uart, SI_UART_CHANNEL.sender()));
+
+    #[cfg(not(feature = "bluetooth-le"))]
+    let temp = yaroc_nrf52840::system_info::NrfTemp::new(temp);
+    #[cfg(feature = "bluetooth-le")]
+    let temp = yaroc_nrf52840::system_info::SoftdeviceTemp::new(ble);
+    spawner.must_spawn(sysinfo_update(temp));
 }
