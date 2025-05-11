@@ -1,41 +1,46 @@
-// Note: if the test is successful it ends with: "Error: CPU halted unexpectedly."
-// This is caused by the final call to `asm::bkpt()`. A better solution is needed.
-//
-// To run this test you need to connect to a NRF52840 chip using a debug probe.
-#![no_std]
-#![no_main]
-
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
 use yaroc_common::bg77_hw::{Bg77, FakePin, ModemHw};
 use yaroc_common::status::CellNetworkType;
-use yaroc_nrf52840 as _;
-use yaroc_nrf52840::system_info::{SystemInfo, TEMPERATURE};
 
-use embassy_executor::Spawner;
+use embassy_executor::{Executor, Spawner};
 use embassy_sync::channel::Channel;
 use heapless::Vec;
+use static_cell::StaticCell;
 use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType};
+use yaroc_common::system_info::{SystemInfo, BATTERY, TEMPERATURE};
 
-#[embassy_executor::main]
-async fn mini_call_home(spawner: Spawner) {
+static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+#[test]
+fn bg77_sysinfo_test() {
+    let executor = EXECUTOR.init(Executor::new());
+    executor.run(|spawner| {
+        spawner.must_spawn(main(spawner));
+    });
+}
+
+#[embassy_executor::task]
+async fn main(spawner: Spawner) {
     static TX_CHANNEL: TxChannelType = Channel::new();
     let rx = FakeRxWithIdle::new(
         Vec::from_array([
             ("AT+QLTS=2\r", "+QLTS: \"2024/12/24,10:48:23+04,0\"\r\nOK"),
-            ("AT+CBC\r", "+CBC: 0,76,3967\r\nOK"),
             ("AT+QCSQ\r", "+QCSQ: \"NBIoT\",-107,-134,35,-20\r\nOK"),
             ("AT+CEREG?\r", "+CEREG: 2,1,\"2008\",\"2B2078\",9\r\nOK"),
         ]),
         &TX_CHANNEL,
     );
     let tx = FakeTx::new(&TX_CHANNEL);
-    let modem_pin = FakePin {};
 
-    let mut bg77 = Bg77::new(tx, rx, modem_pin, Default::default());
+    let mut bg77 = Bg77::new(tx, rx, FakePin {}, Default::default());
     let handler = |_: &CommandResponse| false;
     bg77.spawn(handler, spawner);
     TEMPERATURE.sender().send(27.0);
+    BATTERY.sender().send(yaroc_common::system_info::BatteryInfo {
+        mv: 3967,
+        percents: 76,
+    });
     let mut send_punch = SystemInfo::default();
 
     let mch = send_punch.mini_call_home(&mut bg77).await.unwrap();
@@ -55,6 +60,5 @@ async fn mini_call_home(spawner: Spawner) {
         .unwrap()
     );
 
-    defmt::info!("Test OK");
-    cortex_m::asm::bkpt();
+    std::process::exit(0); // TODO: this is ugly, is there a better way?
 }

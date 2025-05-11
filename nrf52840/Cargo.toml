@@ -36,14 +36,3 @@ chrono = { workspace = true }
 femtopb = { workspace = true }
 heapless =  { workspace = true, features = ["defmt-03"] }
 thiserror = { workspace = true }
-
-[lib]
-harness = false
-
-[dev-dependencies]
-defmt-test = "0.3"
-static_cell = "2.1.0"
-
-[[test]]
-name = "bg77_sysinfo"
-harness = false

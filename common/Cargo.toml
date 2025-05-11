@@ -25,6 +25,9 @@ log = { workspace = true }
 meshtastic = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
+[build-dependencies]
+femtopb-build = "0.5.0"
+
 [dev-dependencies]
 critical-section = { version = "1", features = ["std"]}
 embassy-executor = { workspace = true }
@@ -32,11 +35,12 @@ embassy-futures = { workspace = true }
 env_logger = "0.11.6"
 static_cell = "2.1.0"
 
-[build-dependencies]
-femtopb-build = "0.5.0"
-
 [[test]]
 name = "backoff"
+required-features = ["std"]
+
+[[test]]
+name = "bg77_sysinfo"
 required-features = ["std"]
 
 [[test]]
