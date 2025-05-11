@@ -40,6 +40,7 @@ class MeshtasticSerial:
 
     async def loop(self):
         for i in range(50):
+            # TODO: use udev to detect connection
             try:
                 self._serial = SerialInterface(self.port)
                 self.recv_mac_addr_int = self._serial.myInfo.my_node_num
@@ -61,8 +62,8 @@ class MqttForwader:
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
-        display_model: str | None = None,
         msh_serial_port: str | None = None,
+        display_model: str | None = None,
     ):
         self.client_group = client_group
         self.dns = dns
