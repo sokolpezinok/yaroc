@@ -31,6 +31,12 @@ impl ModemPin for Output<'static> {
     }
 }
 
+pub struct FakePin {}
+impl ModemPin for FakePin {
+    fn set_low(&mut self) {}
+    fn set_high(&mut self) {}
+}
+
 pub enum RAT {
     Ltem,      // LTE-M
     NbIot,     // NB-IoT
@@ -181,6 +187,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.simple_call_at(&cmd, None).await?;
         let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
         self.simple_call_at(&cmd, None).await?;
+        //TODO: allow band configuration
         self.simple_call_at("+QCFG=\"band\",0,80000,80000", None).await?;
         Ok(())
     }

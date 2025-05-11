@@ -8,12 +8,11 @@
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
 use yaroc_common::status::CellNetworkType;
-use yaroc_nrf52840::bg77_hw::Bg77;
+use yaroc_nrf52840::bg77_hw::{Bg77, FakePin};
 use yaroc_nrf52840::system_info::{SystemInfo, TEMPERATURE};
 use yaroc_nrf52840::{self as _, bg77_hw::ModemHw};
 
 use embassy_executor::Spawner;
-use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_sync::channel::Channel;
 use heapless::Vec;
 use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType};
@@ -21,7 +20,6 @@ use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType};
 #[embassy_executor::main]
 async fn mini_call_home(spawner: Spawner) {
     static TX_CHANNEL: TxChannelType = Channel::new();
-    let p = embassy_nrf::init(Default::default());
     let rx = FakeRxWithIdle::new(
         Vec::from_array([
             ("AT+QLTS=2\r", "+QLTS: \"2024/12/24,10:48:23+04,0\"\r\nOK"),
@@ -32,13 +30,13 @@ async fn mini_call_home(spawner: Spawner) {
         &TX_CHANNEL,
     );
     let tx = FakeTx::new(&TX_CHANNEL);
-    let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
+    let modem_pin = FakePin {};
 
-    let mut bg77 = Bg77::new(tx, rx, modem_pin);
+    let mut bg77 = Bg77::new(tx, rx, modem_pin, Default::default());
     let handler = |_: &CommandResponse| false;
     bg77.spawn(handler, spawner);
     TEMPERATURE.sender().send(27.0);
-    let mut send_punch = SystemInfo::new();
+    let mut send_punch = SystemInfo::default();
 
     let mch = send_punch.mini_call_home(&mut bg77).await.unwrap();
     assert_eq!(mch.cellid, Some(u32::from_str_radix("2B2078", 16).unwrap()));
