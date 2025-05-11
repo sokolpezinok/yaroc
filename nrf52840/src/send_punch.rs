@@ -1,7 +1,6 @@
 use crate::{
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
-    system_info::SystemInfo,
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -20,6 +19,7 @@ use yaroc_common::{
     bg77_hw::{Bg77, ModemHw},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
+    system_info::SystemInfo,
     RawMutex,
 };
 
