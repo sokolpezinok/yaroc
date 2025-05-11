@@ -2,6 +2,7 @@
 
 pub mod at;
 pub mod backoff;
+pub mod bg77_hw;
 pub mod error;
 #[cfg(feature = "receive")]
 pub mod logs;

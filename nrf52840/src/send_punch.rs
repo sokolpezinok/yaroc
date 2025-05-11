@@ -1,5 +1,4 @@
 use crate::{
-    bg77_hw::{Bg77, ModemHw},
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
     system_info::SystemInfo,
@@ -18,6 +17,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{repeated, Message};
 use heapless::format;
 use yaroc_common::{
+    bg77_hw::{Bg77, ModemHw},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     RawMutex,

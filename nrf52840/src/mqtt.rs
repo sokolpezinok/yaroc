@@ -1,5 +1,4 @@
 use crate::{
-    bg77_hw::{ModemHw, ACTIVATION_TIMEOUT},
     error::Error,
     send_punch::{Command, SendPunchMutexType, EVENT_CHANNEL},
 };
@@ -17,6 +16,7 @@ use yaroc_common::{
     backoff::{
         BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
     },
+    bg77_hw::{ModemHw, ACTIVATION_TIMEOUT},
     punch::RawPunch,
     RawMutex,
 };

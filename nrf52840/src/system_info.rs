@@ -8,12 +8,12 @@ use embassy_sync::watch::{Receiver, Sender, Watch};
 use embassy_time::{Duration, Instant, Ticker};
 use heapless::{format, String};
 use yaroc_common::{
+    bg77_hw::ModemHw,
     status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo},
     RawMutex,
 };
 
 use crate::{
-    bg77_hw::ModemHw,
     error::Error,
     send_punch::{Command, EVENT_CHANNEL},
 };

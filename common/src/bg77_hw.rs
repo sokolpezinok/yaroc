@@ -1,27 +1,29 @@
 use core::str::FromStr;
 
+use crate::at::{
+    response::AtResponse,
+    uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
+};
+use crate::error::Error;
+#[cfg(feature = "defmt")]
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_nrf::gpio::Output;
 use embassy_time::{Duration, Timer};
 use heapless::{format, String};
-use yaroc_common::{
-    at::{
-        response::AtResponse,
-        uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
-    },
-    error::Error,
-};
+#[cfg(not(feature = "defmt"))]
+use log::info;
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
+/// PIN for turning on the modem
 pub trait ModemPin {
     fn set_low(&mut self);
     fn set_high(&mut self);
 }
 
-impl ModemPin for Output<'static> {
+#[cfg(feature = "nrf")]
+impl ModemPin for embassy_nrf::gpio::Output<'static> {
     fn set_low(&mut self) {
         self.set_low();
     }
@@ -133,7 +135,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout).await
     }
 
-    async fn call_at(&mut self, cmd: &str, timeout: Duration) -> yaroc_common::Result<AtResponse> {
+    async fn call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
         self.uart1.call_at(cmd, timeout, None).await
     }
 
@@ -142,7 +144,7 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         msg: &[u8],
         command_prefix: &str,
         second_read_timeout: Option<Duration>,
-    ) -> yaroc_common::Result<AtResponse> {
+    ) -> crate::Result<AtResponse> {
         match second_read_timeout {
             None => self.uart1.call(msg, command_prefix, false, BG77_MINIMUM_TIMEOUT).await,
             Some(timeout) => self.uart1.call(msg, command_prefix, true, timeout).await,

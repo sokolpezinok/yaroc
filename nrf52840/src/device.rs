@@ -1,4 +1,3 @@
-use crate::bg77_hw::{Bg77, ModemConfig};
 use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -8,6 +7,7 @@ use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
+use yaroc_common::bg77_hw::{Bg77, ModemConfig};
 
 use {defmt_rtt as _, panic_probe as _};
 

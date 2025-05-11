@@ -7,10 +7,10 @@
 
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
+use yaroc_common::bg77_hw::{Bg77, FakePin, ModemHw};
 use yaroc_common::status::CellNetworkType;
-use yaroc_nrf52840::bg77_hw::{Bg77, FakePin};
+use yaroc_nrf52840 as _;
 use yaroc_nrf52840::system_info::{SystemInfo, TEMPERATURE};
-use yaroc_nrf52840::{self as _, bg77_hw::ModemHw};
 
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
