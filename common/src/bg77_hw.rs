@@ -5,13 +5,9 @@ use crate::at::{
     uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
 };
 use crate::error::Error;
-#[cfg(feature = "defmt")]
-use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use heapless::{format, String};
-#[cfg(not(feature = "defmt"))]
-use log::info;
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
@@ -164,11 +160,13 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
             self.modem_pin.set_high();
             Timer::after_secs(2).await;
             self.modem_pin.set_low();
-            let res = self.uart1.read(Duration::from_secs(5)).await?;
-            info!("Modem response: {=[?]}", res.as_slice());
+            let _res = self.uart1.read(Duration::from_secs(5)).await?;
+            #[cfg(feature = "defmt")]
+            defmt::info!("Modem response: {=[?]}", _res.as_slice());
             self.call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let res = self.uart1.read(Duration::from_secs(5)).await?;
-            info!("Modem response: {=[?]}", res.as_slice());
+            let _res = self.uart1.read(Duration::from_secs(5)).await?;
+            #[cfg(feature = "defmt")]
+            defmt::info!("Modem response: {=[?]}", _res.as_slice());
         }
         Ok(())
     }
