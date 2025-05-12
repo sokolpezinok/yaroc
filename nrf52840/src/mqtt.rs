@@ -272,10 +272,9 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     pub async fn mqtt_connect(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if let Err(err) = self.network_registration(bg77).await {
-            error!("Network registration failed: {}", err);
-            return Err(err);
-        }
+        self.network_registration(bg77)
+            .await
+            .inspect_err(|err| error!("Network registration failed: {}", err))?;
         let cid = MQTT_CLIENT_ID;
         self.mqtt_open(bg77, cid).await?;
 
