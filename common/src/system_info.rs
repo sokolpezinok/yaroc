@@ -116,8 +116,14 @@ impl<M: ModemHw> SystemInfo<M> {
             rssi_dbm = (rsrp_dbm - i16::from(rsrq_dbm)) as i8; // TODO: error if not i8
         }
         let network_type = if network == "NBIoT" {
-            // TODO: add ECL detection
-            CellNetworkType::NbIotEcl0
+            let response =
+                bg77.simple_call_at("+QCFG=\"celevel\"", None).await?.parse1::<u8>([1], None)?;
+            match response {
+                0 => CellNetworkType::NbIotEcl0,
+                1 => CellNetworkType::NbIotEcl1,
+                2 => CellNetworkType::NbIotEcl2,
+                _ => return Err(Error::ModemError),
+            }
         } else {
             CellNetworkType::LteM
         };

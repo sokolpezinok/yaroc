@@ -27,6 +27,7 @@ async fn main(spawner: Spawner) {
         Vec::from_array([
             ("AT+QLTS=2\r", "+QLTS: \"2024/12/24,10:48:23+04,0\"\r\nOK"),
             ("AT+QCSQ\r", "+QCSQ: \"NBIoT\",-107,-134,35,-20\r\nOK"),
+            ("AT+QCFG=\"celevel\"\r", "+QCFG: \"celevel\",1\r\nOK"),
             ("AT+CEREG?\r", "+CEREG: 2,1,\"2008\",\"2B2078\",9\r\nOK"),
         ]),
         &TX_CHANNEL,
@@ -50,7 +51,7 @@ async fn main(spawner: Spawner) {
     assert_eq!(mch.batt_mv, Some(3967));
     assert_eq!(mch.batt_percents, Some(76));
     assert_eq!(mch.cpu_temperature, Some(27.0));
-    assert_eq!(mch.network_type, CellNetworkType::NbIotEcl0);
+    assert_eq!(mch.network_type, CellNetworkType::NbIotEcl1);
     assert_eq!(
         mch.timestamp,
         DateTime::<FixedOffset>::parse_from_str(
