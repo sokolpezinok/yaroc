@@ -190,8 +190,11 @@ pub async fn send_punch_event_handler(
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
-        // TODO: if setup fails, maybe we should panic?
-        send_punch.setup().await.inspect_err(|err| error!("Setup failed: {}", err));
+        send_punch
+            .setup()
+            .await
+            .inspect_err(|err| error!("Setup failed: {}", err))
+            .expect("Setup failed");
     }
 
     loop {

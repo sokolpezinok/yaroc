@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use embassy_executor::Spawner;
 use heapless::String;
-use nrf_softdevice::{ble, raw, temperature_celsius, Softdevice};
+use nrf_softdevice::{ble, raw, temperature_celsius, Flash, Softdevice};
 use yaroc_common::error::Error;
 
 pub struct Ble {
@@ -67,6 +67,10 @@ impl Ble {
             .map(|val| val.to_num::<f32>())
             //TODO: consider propagating the error code
             .map_err(|_| Error::SoftdeviceError)
+    }
+
+    pub fn flash(&self) -> Flash {
+        Flash::take(self.inner)
     }
 }
 

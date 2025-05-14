@@ -29,6 +29,8 @@ pub struct Device {
     pub temp: embassy_nrf::temp::Temp<'static>,
     #[cfg(feature = "bluetooth-le")]
     pub ble: crate::ble::Ble,
+    #[cfg(feature = "bluetooth-le")]
+    pub flash: nrf_softdevice::Flash,
 }
 
 impl Device {
@@ -73,6 +75,8 @@ impl Device {
             temp: embassy_nrf::temp::Temp::new(p.TEMP, Irqs),
             #[cfg(feature = "bluetooth-le")]
             ble,
+            #[cfg(feature = "bluetooth-le")]
+            flash,
         }
     }
 }
