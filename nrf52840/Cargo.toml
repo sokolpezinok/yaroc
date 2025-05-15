@@ -34,5 +34,5 @@ nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev
 
 chrono = { workspace = true }
 femtopb = { workspace = true }
-heapless =  { workspace = true, features = ["defmt-03"] }
+heapless =  { workspace = true, features = ["defmt"] }
 thiserror = { workspace = true }

@@ -926,9 +926,9 @@ dependencies = [
 [[package]]
 name = "heapless"
 version = "0.8.0"
-source = "git+https://github.com/rust-embedded/heapless.git?rev=1a33fec8585f2d82c96ded9c8644059f73e64f62#1a33fec8585f2d82c96ded9c8644059f73e64f62"
+source = "git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e#6067119ed3e3efca6cf778154e3a790d510aa360"
 dependencies = [
- "defmt 0.3.100",
+ "defmt 1.0.1",
  "hash32",
  "stable_deref_trait",
 ]
@@ -2572,7 +2572,7 @@ dependencies = [
  "femtopb",
  "femtopb-build",
  "geoutils",
- "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=1a33fec8585f2d82c96ded9c8644059f73e64f62)",
+ "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e)",
  "log",
  "meshtastic",
  "static_cell",
@@ -2599,7 +2599,7 @@ dependencies = [
  "embedded-io",
  "embedded-io-async",
  "femtopb",
- "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=1a33fec8585f2d82c96ded9c8644059f73e64f62)",
+ "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e)",
  "nrf-softdevice",
  "panic-probe",
  "thiserror 2.0.12",
