@@ -18,7 +18,7 @@ chrono = { workspace = true, default-features = true }
 femtopb = { workspace = true }
 log = { workspace = true }
 meshtastic = { workspace = true, optional = true }
-pyo3 = { version = "0.23", features = ["extension-module", "chrono", "abi3-py311"] }
+pyo3 = { version = "0.25", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-log = "0.12.0"
 regex = "1.11"
 thiserror = { workspace = true, default-features = true }
