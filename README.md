@@ -51,6 +51,7 @@ interval = 8
 
 [client.mqtt]
 enable = true
+broker_url = "broker.emqx.io"
 ```
 
 With a config file present, we are able to run `send-punch`:
@@ -64,7 +65,7 @@ TODO: add meshtastic info
 
 ## Receive punches
 
-First, create a `mqtt-forwarder.toml` file where you configure the MAC addresses to receive the punches from as well as all the clients that should receive the punches: ROC, SIRAP, serial, etc.
+First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should receive the punches: ROC, SIRAP, serial, etc.
 
 TODO: full list of clients
 
@@ -83,10 +84,10 @@ port = 10000
 enable = true
 ```
 
-With a config file present, we are able to run `mqtt-forwarder`:
+With a config file present, we are able to run the YAROC daemon called `yarocd`:
 ```sh
 source .venv/bin/activate
-mqtt-forwarder
+yarocd
 ```
 
 # Development

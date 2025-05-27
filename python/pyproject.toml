@@ -51,7 +51,7 @@ lsp = [
 ]
 
 [project.scripts]
-mqtt-forwarder = "yaroc.scripts.mqtt_forwarder:main"
+yarocd = "yaroc.scripts.yarocd:main"
 send-punch = "yaroc.scripts.send_punch:main"
 
 [build-system]

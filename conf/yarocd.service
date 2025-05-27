@@ -1,8 +1,8 @@
 [Unit]
-Description=YAROC MQTT Forwarder
+Description=YAROC daemon
 
 [Service]
-ExecStart=/home/pi/yaroc/.venv/bin/mqtt-forwarder
+ExecStart=/home/pi/yaroc/.venv/bin/yarocd
 WorkingDirectory=/home/pi
 User=pi
 Restart=always

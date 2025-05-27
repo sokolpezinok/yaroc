@@ -1,9 +1,6 @@
 import asyncio
 import logging
 import re
-import sys
-import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator, List, Tuple
@@ -12,38 +9,34 @@ from aiomqtt import Client as MqttClient
 from aiomqtt import MqttError
 from aiomqtt.types import PayloadType
 
-from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
-from ..pb.status_pb2 import Status as StatusProto
-from ..rs import MessageHandler, SiPunchLog
-from ..utils.status import StatusDrawer
-from .meshtastic import MeshtasticSerial
 
 
 @dataclass
 class PunchMessage:
     mac_addr: int
-    raw: PayloadType
+    raw: bytes
     now: datetime
 
 
 @dataclass
 class StatusMessage:
     mac_addr: int
-    raw: PayloadType
+    raw: bytes
     now: datetime
 
 
 @dataclass
 class MeshtasticStatusMessage:
     recv_mac_addr: int
-    raw: PayloadType
+    raw: bytes
     now: datetime
 
 
 @dataclass
 class MeshtasticSerialMessage:
-    raw: PayloadType
+    raw: bytes
+    now: datetime
 
 
 Message = PunchMessage | StatusMessage | MeshtasticStatusMessage | MeshtasticSerialMessage
@@ -63,6 +56,15 @@ class MqttForwader:
         self.meshtastic_channel = meshtastic_channel
 
     @staticmethod
+    def _payload_to_bytes(payload: PayloadType) -> bytes:
+        if isinstance(payload, bytes):
+            return payload
+        elif isinstance(payload, str):
+            return payload.encode("utf-8")
+        else:
+            raise TypeError("Unexpected type of a message payload")
+
+    @staticmethod
     def extract_mac(topic: str) -> int:
         match = re.match("yar/([0-9a-f]{12})/.*", topic)
         if match is None or len(match.groups()) == 0:
@@ -74,6 +76,7 @@ class MqttForwader:
 
     def _on_message(self, raw: PayloadType, topic: str) -> Message | None:
         now = datetime.now().astimezone()
+        raw = self._payload_to_bytes(raw)
 
         try:
             if topic.endswith("/p"):
@@ -89,7 +92,7 @@ class MqttForwader:
                 recv_mac_addr_int = int(recv_mac_addr, 16)
                 return MeshtasticStatusMessage(recv_mac_addr_int, raw, now)
             elif topic.startswith("yar/2/e/serial/"):
-                return MeshtasticSerialMessage(raw)
+                return MeshtasticSerialMessage(raw, now)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
 
@@ -127,119 +130,3 @@ class MqttForwader:
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{self.broker_url}")
                 await asyncio.sleep(10.0)
-
-
-class YarocDaemon:
-    def __init__(
-        self,
-        dns: List[Tuple[str, str]],
-        client_group: ClientGroup,
-        mqtt_forwarder: MqttForwader,
-        display_model: str | None = None,
-    ):
-        self.client_group = client_group
-        self.handler = MessageHandler(dns)
-        self.drawer = StatusDrawer(self.handler, display_model)
-        self.executor = ThreadPoolExecutor(max_workers=1)
-
-        self.mqtt_forwarder = mqtt_forwarder
-        self.msh_serial = MeshtasticSerial(
-            self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
-        )
-
-    @staticmethod
-    def _payload_to_bytes(payload: PayloadType) -> bytes:
-        if isinstance(payload, bytes):
-            return payload
-        elif isinstance(payload, str):
-            return payload.encode("utf-8")
-        else:
-            raise TypeError("Unexpected type of a message payload")
-
-    async def _process_punch(self, punch: SiPunchLog):
-        logging.info(punch)
-        await self.client_group.send_punch(punch)
-
-    async def _handle_punches(self, msg: PunchMessage):
-        try:
-            punches = self.handler.punches(self._payload_to_bytes(msg.raw), msg.mac_addr)
-        except Exception as err:
-            logging.error(f"Error while constructing SI punches: {err}")
-            return
-
-        tasks = [self._process_punch(punch) for punch in punches]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _handle_meshtastic_serial_mesh_packet(self, msg: MeshtasticSerialMessage):
-        try:
-            punches = self.handler.meshtastic_serial_mesh_packet(self._payload_to_bytes(msg.raw))
-        except Exception as err:
-            logging.error(f"Error while constructing SI punch: {err}")
-            return
-
-        tasks = [self._process_punch(punch) for punch in punches]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _handle_meshtastic_serial(self, msg: MeshtasticSerialMessage):
-        try:
-            punches = self.handler.meshtastic_serial_service_envelope(
-                self._payload_to_bytes(msg.raw)
-            )
-        except Exception as err:
-            logging.error(f"Error while constructing SI punch: {err}")
-            return
-
-        tasks = [self._process_punch(punch) for punch in punches]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _handle_status(self, msg: StatusMessage):
-        try:
-            # We cannot return union types from Rust, so we have to parse the proto to detect the
-            # type
-            status = StatusProto.FromString(self._payload_to_bytes(msg.raw))
-        except Exception as err:
-            logging.error(err)
-            return
-
-        try:
-            oneof = status.WhichOneof("msg")
-            self.handler.status_update(self._payload_to_bytes(msg.raw), msg.mac_addr)
-            if oneof != "disconnected":
-                await self.client_group.send_status(status, f"{msg.mac_addr:0x}")
-        except Exception as err:
-            logging.error(f"Failed to construct proto: {err}")
-
-    def on_msh_status(self, msg: PayloadType, recv_mac_addr: int):
-        now = datetime.now().astimezone()
-        self.handler.meshtastic_status_mesh_packet(self._payload_to_bytes(msg), now, recv_mac_addr)
-
-    def _handle_msh_status_service_envelope(self, msg: MeshtasticStatusMessage):
-        self.handler.meshtastic_status_service_envelope(
-            self._payload_to_bytes(msg.raw), msg.now, msg.recv_mac_addr
-        )
-
-    async def draw_table(self):
-        await asyncio.sleep(20.0)
-        while True:
-            time_start = time.time()
-            self.executor.submit(self.drawer.draw_status)
-            await asyncio.sleep(60 - (time.time() - time_start))
-
-    async def loop(self):
-        asyncio.create_task(self.client_group.loop())
-        asyncio.create_task(self.draw_table())
-        asyncio.create_task(self.msh_serial.loop())
-
-        try:
-            async for msg in self.mqtt_forwarder.messages():
-                if isinstance(msg, PunchMessage):
-                    await self._handle_punches(msg)
-                elif isinstance(msg, StatusMessage):
-                    await self._handle_status(msg)
-                elif isinstance(msg, MeshtasticStatusMessage):
-                    self._handle_meshtastic_serial(msg)
-                else:
-                    await self._handle_meshtastic_serial(msg)
-        except asyncio.exceptions.CancelledError:
-            logging.error("Interrupted, exiting")
-            sys.exit(0)
