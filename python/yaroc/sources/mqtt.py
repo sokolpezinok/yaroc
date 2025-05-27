@@ -25,8 +25,7 @@ from ..utils.sys_info import tty_device_from_usb
 
 # TODO: this doesn't belong in this file
 class MeshtasticSerial:
-    def __init__(self, port: str, status_callback, punch_callback):
-        self.port = port
+    def __init__(self, status_callback, punch_callback):
         self.status_callback = status_callback
         self.punch_callback = punch_callback
         self._loop = asyncio.get_event_loop()
@@ -65,7 +64,7 @@ class MeshtasticSerial:
                     self._serial = SerialInterface(tty_acm)
                     self._device_node = device_node
                     self.recv_mac_addr_int = self._serial.myInfo.my_node_num
-                    logging.info(f"Connected to Meshtastic serial at {self.port}")
+                    logging.info(f"Connected to Meshtastic serial at {tty_acm}")
                     pub.subscribe(self.on_receive, "meshtastic.receive")
                 except Exception as err:
                     logging.error(f"Error while connecting to Meshtastic serial at {err}")
@@ -102,7 +101,6 @@ class MqttForwader:
         broker_url: str | None,
         broker_port: int | None,
         meshtastic_channel: str | None,
-        msh_serial_port: str | None = None,
         display_model: str | None = None,
     ):
         self.client_group = client_group
@@ -114,11 +112,9 @@ class MqttForwader:
         self.drawer = StatusDrawer(self.handler, display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
-        self.msh_serial: MeshtasticSerial | None = None
-        if msh_serial_port is not None:
-            self.msh_serial = MeshtasticSerial(
-                msh_serial_port, self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
-            )
+        self.msh_serial = MeshtasticSerial(
+            self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
+        )
 
     @staticmethod
     def _payload_to_bytes(payload: PayloadType) -> bytes:
