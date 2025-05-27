@@ -78,21 +78,17 @@ class MqttForwader:
         try:
             if topic.endswith("/p"):
                 mac_addr = self.extract_mac(topic)
-                # await self._handle_punches(mac_addr, raw, now)
                 return PunchMessage(mac_addr, raw, now)
             elif topic.endswith("/status"):
                 mac_addr = self.extract_mac(topic)
-                # await self._handle_status(mac_addr, raw, now)
                 return StatusMessage(mac_addr, raw, now)
             elif self.meshtastic_channel is not None and topic.startswith(
                 f"yar/2/e/{self.meshtastic_channel}/"
             ):
                 recv_mac_addr = topic[10 + len(self.meshtastic_channel) :]
                 recv_mac_addr_int = int(recv_mac_addr, 16)
-                # self.handler.meshtastic_status_service_envelope(raw, now, recv_mac_addr_int)
                 return MeshtasticStatusMessage(recv_mac_addr_int, raw, now)
             elif topic.startswith("yar/2/e/serial/"):
-                # await self._handle_meshtastic_serial(raw)
                 return MeshtasticSerialMessage(raw)
         except Exception as err:
             logging.error(f"Failed processing message: {err}")
