@@ -22,6 +22,7 @@ use yaroc_common::{
 };
 
 const MQTT_CLIENT_ID: u8 = 0;
+// Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
 const PUNCHES_INFLIGHT: usize = 5;
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);

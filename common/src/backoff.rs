@@ -83,7 +83,7 @@ pub trait SendPunchFn {
 
     /// Acquire concurrent access to the send punch function.
     ///
-    /// The releaser should be dropped once you received an publish, timeout or error response via
+    /// The releaser should be dropped once you received a publish, timeout or error response via
     /// `STATUS_UPDATES`.
     fn acquire(
         &mut self,
@@ -95,6 +95,8 @@ pub trait SendPunchFn {
         punch: &PunchMsg,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 
+    /// Spawn this send punch function on a `spawner`, trying to send punch message `msg`. The
+    /// total timeout is given as `send_punch_timeout`, after this the message is dropped.
     fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
