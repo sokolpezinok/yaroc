@@ -27,10 +27,7 @@ class MeshtasticSerial:
         if portnum == "SERIAL_APP":
             asyncio.run_coroutine_threadsafe(self.punch_callback(raw), self._loop)
         elif portnum == "TELEMETRY_APP":
-            asyncio.run_coroutine_threadsafe(
-                self.status_callback(raw, self.recv_mac_addr_int),
-                self._loop,
-            )
+            self.status_callback(raw, self.recv_mac_addr_int)
 
     @staticmethod
     def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:

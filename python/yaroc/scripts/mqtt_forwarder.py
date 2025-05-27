@@ -2,7 +2,7 @@ import asyncio
 import logging
 import tomllib
 
-from ..sources.mqtt import MqttForwader
+from ..sources.mqtt import MqttForwader, YarocDaemon
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import is_windows
 
@@ -28,14 +28,13 @@ async def main():
 
     dns = [(mac_address, name) for name, mac_address in config["mac-addresses"].items()]
     forwarder = MqttForwader(
-        client_group,
         dns,
         config.get("broker_url", None),
         config.get("broker_port", None),
         meshtastic_conf.get("main_channel", None),
-        config.get("display", None),
     )
-    await forwarder.loop()
+    yaroc_daemon = YarocDaemon(dns, client_group, forwarder, config.get("display", None))
+    await yaroc_daemon.loop()
 
 
 if is_windows():
