@@ -182,7 +182,7 @@ class UdevSiFactory(SiWorker):
         self._observer.stop()
         self.monitor.stop_monitoring()
 
-    def _add_usb_device(self, device_id: str, device_info: dict[str, Any]):
+    def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         try:
             if not self._is_silabs(device_info) and not self._is_sandberg(device_info):
                 return
@@ -192,7 +192,7 @@ class UdevSiFactory(SiWorker):
         except Exception as err:
             logging.error(err)
 
-    def _remove_usb_device(self, device_id, device_info: dict[str, Any]):
+    def _remove_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         asyncio.run_coroutine_threadsafe(
             self._device_queue.put(("remove", device_info)), self._loop
         )
