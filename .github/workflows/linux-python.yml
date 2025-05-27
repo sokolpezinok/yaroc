@@ -56,11 +56,30 @@ jobs:
           name: wheels-linux-${{ matrix.target }}
           path: python/dist
 
+  linux-armv6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build wheel
+        working-directory: "python"
+        run: |
+          pip install maturin ziglang
+          rustup target add arm-unknown-linux-gnueabihf
+          maturin build -r --target arm-unknown-linux-gnueabihf --zig --out dist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-armv6
+          path: python/dist
+
   release:
     name: Release
     runs-on: ubuntu-latest
     if: "startsWith(github.ref, 'refs/tags/')"
-    needs: linux
+    needs: [linux, linux-armv6]
     steps:
       - uses: actions/download-artifact@v4
         with:
