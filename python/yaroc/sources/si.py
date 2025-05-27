@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import platform
-import re
 import socket
 import time
 from asyncio import Queue
@@ -17,6 +15,7 @@ from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
 
 from ..rs import SiPunch
+from ..utils.sys_info import tty_device_from_usb
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -133,15 +132,6 @@ class UdevSiFactory(SiWorker):
         self._udev_workers: Dict[str, tuple[SerialSiWorker, Task, str]] = {}
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
 
-    @staticmethod
-    def extract_com(device_name: str) -> str:
-        match = re.match(r".*\((COM[0-9]*)\)", device_name)
-        if match is None or len(match.groups()) == 0:
-            logging.error(f"Invalid device name: {device_name}")
-            raise Exception(f"Invalid device name: {device_name}")
-
-        return match.groups()[0]
-
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
         logging.info("Starting USB SportIdent device manager")
@@ -160,22 +150,10 @@ class UdevSiFactory(SiWorker):
             try:
                 if action == "add":
                     await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                    if platform.system().startswith("Linux"):
-                        from pyudev import Context, Device
 
-                        context = Context()
-                        parent_device = Device.from_device_file(context, parent_device_node)
-                        lst = list(
-                            context.list_devices(subsystem="tty").match_parent(parent_device)
-                        )
-                        if len(lst) == 0:
-                            continue
-                        device_node = lst[0].device_node
-                        if device_node in self._udev_workers:
-                            return
-                    elif platform.system().startswith("win"):
-                        device_node = UdevSiFactory.extract_com(parent_device_node)
-
+                    device_node = tty_device_from_usb(parent_device_node)
+                    if device_node is None or device_node in self._udev_workers:
+                        continue
                     logging.info(f"Inserted SportIdent device {device_node}")
 
                     worker = SerialSiWorker(device_node)

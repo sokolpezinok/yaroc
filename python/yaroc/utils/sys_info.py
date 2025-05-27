@@ -1,6 +1,8 @@
 import io
 import logging
 import os
+import platform
+import re
 import shlex
 import socket
 import subprocess
@@ -107,4 +109,26 @@ def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
         return None
     except Exception as err:
         logging.error(f"Failed to check time: {err}")
+        return None
+
+
+def tty_device_from_usb(parent_device_node: str) -> str | None:
+    if platform.system().startswith("Linux"):
+        from pyudev import Context, Device
+
+        context = Context()
+        parent_device = Device.from_device_file(context, parent_device_node)
+        lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
+        if len(lst) == 0:
+            return None
+        return lst[0].device_node
+    elif platform.system().startswith("win"):
+        # Extract COM name from parent_device_node
+        match = re.match(r".*\((COM[0-9]*)\)", parent_device_node)
+        if match is None or len(match.groups()) == 0:
+            logging.error(f"Invalid device name: {parent_device_node}")
+            raise Exception(f"Invalid device name: {parent_device_node}")
+
+        return match.groups()[0]
+    else:
         return None
