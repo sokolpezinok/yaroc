@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 
 from yaroc.rs import SiPunch
-from yaroc.sources.si import UdevSiFactory
+from yaroc.utils.sys_info import extract_com
 
 
 class TestSportident(unittest.TestCase):
@@ -42,5 +42,5 @@ class TestSportident(unittest.TestCase):
 
 class TestUsbDetection(unittest.TestCase):
     def test_com_extraction(self):
-        com_port = UdevSiFactory.extract_com("SportIdent UART to USB (COM12)")
+        com_port = extract_com("SportIdent UART to USB (COM12)")
         self.assertEqual(com_port, "COM12")

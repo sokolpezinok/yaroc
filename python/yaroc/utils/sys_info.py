@@ -112,6 +112,15 @@ def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
         return None
 
 
+def extract_com(parent_device_node: str) -> str:
+    # Extract COM name from parent_device_node
+    match = re.match(r".*\((COM[0-9]*)\)", parent_device_node)
+    if match is None or len(match.groups()) == 0:
+        logging.error(f"Invalid device name: {parent_device_node}")
+        raise Exception(f"Invalid device name: {parent_device_node}")
+    return match.groups()[0]
+
+
 def tty_device_from_usb(parent_device_node: str) -> str | None:
     if platform.system().startswith("Linux"):
         from pyudev import Context, Device
@@ -123,12 +132,6 @@ def tty_device_from_usb(parent_device_node: str) -> str | None:
             return None
         return lst[0].device_node
     elif platform.system().startswith("win"):
-        # Extract COM name from parent_device_node
-        match = re.match(r".*\((COM[0-9]*)\)", parent_device_node)
-        if match is None or len(match.groups()) == 0:
-            logging.error(f"Invalid device name: {parent_device_node}")
-            raise Exception(f"Invalid device name: {parent_device_node}")
-
-        return match.groups()[0]
+        return extract_com(parent_device_node)
     else:
         return None
