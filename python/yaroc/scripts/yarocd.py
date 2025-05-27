@@ -96,7 +96,7 @@ class YarocDaemon:
         now = datetime.now().astimezone()
         self.handler.meshtastic_status_mesh_packet(msg, now, recv_mac_addr)
 
-    def _handle_msh_status_service_envelope(self, msg: MeshtasticStatusMessage):
+    def _handle_meshtastic_status_service_envelope(self, msg: MeshtasticStatusMessage):
         self.handler.meshtastic_status_service_envelope(msg.raw, msg.now, msg.recv_mac_addr)
 
     async def draw_table(self):
@@ -118,7 +118,7 @@ class YarocDaemon:
                 elif isinstance(msg, StatusMessage):
                     await self._handle_status(msg)
                 elif isinstance(msg, MeshtasticStatusMessage):
-                    self._handle_meshtastic_serial(msg)
+                    self._handle_meshtastic_status_service_envelope(msg)
                 else:
                     await self._handle_meshtastic_serial(msg)
         except asyncio.exceptions.CancelledError:
