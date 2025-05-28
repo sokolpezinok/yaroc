@@ -114,13 +114,13 @@ class YarocDaemon:
         try:
             async for msg in self.mqtt_forwarder.messages():
                 if isinstance(msg, PunchMessage):
-                    await self._handle_punches(msg)
+                    asyncio.create_task(self._handle_punches(msg))
                 elif isinstance(msg, StatusMessage):
-                    await self._handle_status(msg)
+                    asyncio.create_task(self._handle_status(msg))
                 elif isinstance(msg, MeshtasticStatusMessage):
                     self._handle_meshtastic_status_service_envelope(msg)
                 else:
-                    await self._handle_meshtastic_serial(msg)
+                    asyncio.create_task(await self._handle_meshtastic_serial(msg))
         except asyncio.exceptions.CancelledError:
             logging.error("Interrupted, exiting")
             sys.exit(0)
