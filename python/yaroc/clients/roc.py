@@ -47,7 +47,7 @@ class RocClient(Client):
         now = datetime.now()
 
         mac_address = punch_log.host_info.mac_address
-        self.mac_override_map.get(mac_address, mac_address)
+        mac_address = self.mac_override_map.get(mac_address, mac_address)
         data = {
             "control1": str(punch.code),
             "sinumber1": str(punch.card),
