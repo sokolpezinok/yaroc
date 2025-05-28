@@ -700,9 +700,9 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "femtopb"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7157c10453c2a2e5fa7a81516ebf64890127f88efb9bcb38995a09964ada2e6d"
+checksum = "7f295e0bface05f3f1b00edc0100c65fe45658e00200a9243b07e59c08a52704"
 dependencies = [
  "femtopb-derive",
 ]
@@ -725,9 +725,9 @@ dependencies = [
 
 [[package]]
 name = "femtopb-derive"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12b5f70fa8215e1e5b093393ac76298cd26f528a28c9feabea286cd113c9ad39"
+checksum = "d124b103593a04be2ec5370029888208873c45026adc3a06dc78752b497a21e2"
 dependencies = [
  "proc-macro2",
  "quote",
