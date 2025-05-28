@@ -120,7 +120,7 @@ class YarocDaemon:
                 elif isinstance(msg, MeshtasticStatusMessage):
                     self._handle_meshtastic_status_service_envelope(msg)
                 else:
-                    asyncio.create_task(await self._handle_meshtastic_serial(msg))
+                    asyncio.create_task(self._handle_meshtastic_serial(msg))
         except asyncio.exceptions.CancelledError:
             logging.error("Interrupted, exiting")
             sys.exit(0)
