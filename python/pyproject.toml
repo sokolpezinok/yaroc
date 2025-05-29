@@ -22,11 +22,11 @@ classifiers = [
 dependencies = [
   'aiohttp-retry==2.8.3',
   'aiohttp==3.9.*',
-  'aiomqtt==2.1.*',
+  'aiomqtt==2.4.*',
   'dbus-next==0.2.*; platform_system == "Linux"',
   'dependency-injector==4.46.*',
   'gpiozero==2.0.*',
-  'meshtastic==2.6.*',
+  'meshtastic==2.6.*; platform_machine != "armv6l"', # Installation takes forever
   'pillow==10.4.*',
   'protobuf==5.28.*',
   'psutil==6.0.*',
