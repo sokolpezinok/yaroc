@@ -2383,6 +2383,7 @@ dependencies = [
  "meshtastic",
  "static_cell",
  "thiserror 2.0.12",
+ "yaroc-common",
 ]
 
 [[package]]

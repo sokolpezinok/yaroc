@@ -34,6 +34,7 @@ embassy-executor = { workspace = true }
 embassy-futures = { workspace = true }
 env_logger = "0.11.6"
 static_cell = "2.1.0"
+yaroc-common = { path = ".", features = ["receive"] } # 'receive' is activated for tests
 
 [[test]]
 name = "backoff"
