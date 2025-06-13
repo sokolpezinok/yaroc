@@ -72,68 +72,89 @@ impl MshLogMessage {
         crate::time::datetime_from_millis(i64::from(posix_time) * 1000, &Local)
     }
 
+    fn parse_telemetry(
+        telemetry: Telemetry,
+        host_info: HostInfo,
+        rssi_snr: Option<RssiSnr>,
+        now: DateTime<FixedOffset>,
+    ) -> Option<Self> {
+        let timestamp = Self::timestamp(telemetry.time);
+        match telemetry.variant {
+            Some(telemetry::Variant::DeviceMetrics(metrics)) => Some(Self {
+                metrics: MshMetrics::VoltageBattery(metrics.voltage?, metrics.battery_level?),
+                host_info,
+                rssi_snr,
+                timestamp,
+                latency: now - timestamp,
+            }),
+            Some(telemetry::Variant::EnvironmentMetrics(metrics)) => Some(Self {
+                metrics: MshMetrics::EnvironmentMetrics(
+                    metrics.temperature?,
+                    metrics.relative_humidity?,
+                ),
+                host_info,
+                rssi_snr,
+                timestamp,
+                latency: now - timestamp,
+            }),
+            _ => None,
+        }
+    }
+
+    fn parse_position(
+        position: PositionProto,
+        host_info: HostInfo,
+        mut rssi_snr: Option<RssiSnr>,
+        now: DateTime<FixedOffset>,
+        recv_position: Option<PositionName>,
+    ) -> Option<Self> {
+        let timestamp = Self::timestamp(position.time);
+        let position = Position {
+            lat: position.latitude_i? as f32 / 10_000_000.,
+            lon: position.longitude_i? as f32 / 10_000_000.,
+            elevation: position.altitude.unwrap(),
+            timestamp: Self::timestamp(position.time),
+        };
+        let distance = recv_position.as_ref().map(|other| position.distance_m(&other.position));
+        if let Some(Ok(distance)) = distance {
+            if let Some(rssi_snr) = rssi_snr.as_mut() {
+                rssi_snr.add_distance(
+                    distance as f32,
+                    &recv_position.map_or(String::new(), |x| x.name),
+                );
+            }
+        }
+
+        Some(Self {
+            metrics: MshMetrics::Position(position),
+            host_info,
+            timestamp,
+            latency: now - timestamp,
+            rssi_snr,
+        })
+    }
+
     fn parse_inner(
         data: Data,
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
-        mut rssi_snr: Option<RssiSnr>,
+        rssi_snr: Option<RssiSnr>,
         recv_position: Option<PositionName>,
     ) -> Result<Option<Self>, std::io::Error> {
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())?;
-                let timestamp = Self::timestamp(telemetry.time);
-                match telemetry.variant {
-                    Some(telemetry::Variant::DeviceMetrics(metrics)) => Ok(Some(Self {
-                        metrics: MshMetrics::VoltageBattery(metrics.voltage, metrics.battery_level),
-                        host_info,
-                        rssi_snr,
-                        timestamp,
-                        latency: now - timestamp,
-                    })),
-                    Some(telemetry::Variant::EnvironmentMetrics(metrics)) => Ok(Some(Self {
-                        metrics: MshMetrics::EnvironmentMetrics(
-                            metrics.temperature,
-                            metrics.relative_humidity,
-                        ),
-                        host_info,
-                        rssi_snr,
-                        timestamp,
-                        latency: now - timestamp,
-                    })),
-                    _ => Ok(None),
-                }
+                Ok(Self::parse_telemetry(telemetry, host_info, rssi_snr, now))
             }
             POSITION_APP => {
                 let position = PositionProto::decode(data.payload.as_slice())?;
-                if position.latitude_i == 0 && position.longitude_i == 0 {
-                    return Ok(None);
-                }
-                let timestamp = Self::timestamp(position.time);
-                let position = Position {
-                    lat: position.latitude_i as f32 / 10_000_000.,
-                    lon: position.longitude_i as f32 / 10_000_000.,
-                    elevation: position.altitude,
-                    timestamp: Self::timestamp(position.time),
-                };
-                let distance =
-                    recv_position.as_ref().map(|other| position.distance_m(&other.position));
-                if let Some(Ok(distance)) = distance {
-                    if let Some(rssi_snr) = rssi_snr.as_mut() {
-                        rssi_snr.add_distance(
-                            distance as f32,
-                            &recv_position.map_or(String::new(), |x| x.name),
-                        );
-                    }
-                }
-
-                Ok(Some(Self {
-                    metrics: MshMetrics::Position(position),
+                Ok(Self::parse_position(
+                    position,
                     host_info,
-                    timestamp,
-                    latency: now - timestamp,
                     rssi_snr,
-                }))
+                    now,
+                    recv_position,
+                ))
             }
             _ => Ok(None),
         }
