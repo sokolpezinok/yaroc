@@ -323,7 +323,7 @@ mod test_punch {
     use chrono::{Local, NaiveDateTime};
     use femtopb::Repeated;
     use meshtastic::protobufs::telemetry::Variant;
-    use meshtastic::protobufs::{MeshPacket, ServiceEnvelope, Telemetry};
+    use meshtastic::protobufs::{DeviceMetrics, MeshPacket, ServiceEnvelope, Telemetry};
     use yaroc_common::proto::Punch;
     use yaroc_common::punch::SiPunch;
 
@@ -414,7 +414,11 @@ mod test_punch {
     fn test_meshtastic_status() {
         let telemetry = Telemetry {
             time: 1735157442,
-            variant: Some(Variant::DeviceMetrics(Default::default())),
+            variant: Some(Variant::DeviceMetrics(DeviceMetrics {
+                battery_level: Some(47),
+                voltage: Some(3.712),
+                ..Default::default()
+            })),
         };
         let data = Data {
             portnum: PortNum::TelemetryApp as i32,

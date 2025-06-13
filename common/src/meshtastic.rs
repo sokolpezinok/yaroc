@@ -379,8 +379,8 @@ mod test_meshtastic {
     #[test]
     fn test_device_metrics_parsing() {
         let device_metrics = DeviceMetrics {
-            voltage: 3.87,
-            battery_level: 76,
+            voltage: Some(3.87),
+            battery_level: Some(76),
             ..Default::default()
         };
         let message = telemetry_service_envelope(
@@ -418,8 +418,8 @@ mod test_meshtastic {
     #[test]
     fn test_environment_metrics_parsing() {
         let environment_metrics = EnvironmentMetrics {
-            temperature: 47.0,
-            relative_humidity: 84.0,
+            temperature: Some(47.0),
+            relative_humidity: Some(84.0),
             ..Default::default()
         };
         let message = telemetry_service_envelope(
