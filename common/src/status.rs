@@ -17,7 +17,9 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
 
     let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
     Ok(naive_date
-        .and_local_timezone(FixedOffset::east_opt(i32::from(offset) * 900).unwrap())
+        .and_local_timezone(
+            FixedOffset::east_opt(i32::from(offset) * 900).ok_or(Error::ParseError)?,
+        )
         .unwrap()
         .fixed_offset())
 }

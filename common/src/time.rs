@@ -5,8 +5,8 @@ pub fn datetime_from_timestamp(timestamp: Timestamp, tz: &impl TimeZone) -> Date
     tz.timestamp_millis_opt(timestamp.millis_epoch as i64).unwrap().fixed_offset()
 }
 
-pub fn datetime_from_millis(timestamp: i64, tz: &impl TimeZone) -> DateTime<FixedOffset> {
-    tz.timestamp_millis_opt(timestamp).unwrap().fixed_offset()
+pub fn datetime_from_secs(timestamp: i64, tz: &impl TimeZone) -> DateTime<FixedOffset> {
+    tz.timestamp_opt(timestamp, 0).unwrap().fixed_offset()
 }
 
 #[cfg(feature = "std")]

@@ -69,7 +69,7 @@ pub struct MshLogMessage {
 
 impl MshLogMessage {
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        crate::time::datetime_from_millis(i64::from(posix_time) * 1000, &Local)
+        crate::time::datetime_from_secs(i64::from(posix_time), &Local)
     }
 
     fn parse_telemetry(
@@ -112,7 +112,7 @@ impl MshLogMessage {
         let position = Position {
             lat: position.latitude_i? as f32 / 10_000_000.,
             lon: position.longitude_i? as f32 / 10_000_000.,
-            elevation: position.altitude.unwrap(),
+            elevation: position.altitude?,
             timestamp: Self::timestamp(position.time),
         };
         let distance = recv_position.as_ref().map(|other| position.distance_m(&other.position));
@@ -134,7 +134,7 @@ impl MshLogMessage {
         })
     }
 
-    fn parse_inner(
+    fn parse_data(
         data: Data,
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
@@ -199,7 +199,7 @@ impl MshLogMessage {
             } => {
                 let mac_address = MacAddress::Meshtastic(from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
-                Self::parse_inner(
+                Self::parse_data(
                     data,
                     HostInfo {
                         name: name.try_into().map_err(|_| {
