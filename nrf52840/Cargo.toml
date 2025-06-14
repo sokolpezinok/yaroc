@@ -8,7 +8,7 @@ rust-version = "1.81"
 
 [features]
 default = ["cortex-m/critical-section-single-core"]
-bluetooth-le = ["dep:nrf-softdevice"]
+bluetooth-le = ["dep:nrf-softdevice"] # Disable default features for BLE support
 
 [dependencies]
 yaroc-common = { path = "../common", features = ["defmt", "nrf"] }

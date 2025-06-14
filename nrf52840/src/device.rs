@@ -1,3 +1,4 @@
+#[cfg(not(feature = "bluetooth-le"))]
 use core::str::FromStr;
 
 use crate::si_uart::SiUart;
@@ -70,6 +71,8 @@ impl Device {
         let ble = crate::ble::Ble::new();
         #[cfg(feature = "bluetooth-le")]
         let mac_address = ble.get_mac_address();
+        #[cfg(feature = "bluetooth-le")]
+        let flash = ble.flash();
 
         #[cfg(not(feature = "bluetooth-le"))]
         let mac_address = String::from_str("cee423506cac").unwrap();
