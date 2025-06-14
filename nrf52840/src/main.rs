@@ -25,6 +25,7 @@ async fn main(spawner: Spawner) {
     let modem_config = ModemConfig::default();
     let device = Device::new(modem_config);
     let Device {
+        mac_address,
         bg77,
         si_uart,
         #[cfg(not(feature = "bluetooth-le"))]
@@ -33,11 +34,6 @@ async fn main(spawner: Spawner) {
         ble,
         ..
     } = device;
-
-    #[cfg(feature = "bluetooth-le")]
-    let mac_address = ble.get_mac_address();
-    #[cfg(not(feature = "bluetooth-le"))]
-    let mac_address: String<12> = String::from_str("cee423506cac").unwrap();
 
     info!("Device initialized, MAC address: {}", mac_address.as_str());
     let mqtt_config = MqttConfig {

@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -7,6 +9,7 @@ use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
+use heapless::String;
 use yaroc_common::bg77_hw::{Bg77, ModemConfig};
 
 use {defmt_rtt as _, panic_probe as _};
@@ -21,6 +24,7 @@ bind_interrupts!(struct Irqs {
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
+    pub mac_address: String<12>,
     pub bg77:
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
     pub saadc: Saadc<'static, 1>,
@@ -64,10 +68,16 @@ impl Device {
 
         #[cfg(feature = "bluetooth-le")]
         let ble = crate::ble::Ble::new();
+        #[cfg(feature = "bluetooth-le")]
+        let mac_address = ble.get_mac_address();
+
+        #[cfg(not(feature = "bluetooth-le"))]
+        let mac_address = String::from_str("cee423506cac").unwrap();
 
         Self {
             _blue_led: blue_led,
             _green_led: green_led,
+            mac_address,
             bg77,
             si_uart: SiUart::new(rx0),
             saadc,
