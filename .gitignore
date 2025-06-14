@@ -1,12 +1,13 @@
 .venv
-build/
 dist/
 target/
-*.egg-info/
-*.egg
 *.py[cod]
 __pycache__/
 *.so
-*~
+
+# neovim config
+.nvim.lua
+
+# YAROC TOML configs
 yarocd.toml
 send-punch.toml
