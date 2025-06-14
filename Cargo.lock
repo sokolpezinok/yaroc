@@ -2405,6 +2405,7 @@ dependencies = [
  "embedded-hal-async",
  "embedded-io",
  "embedded-io-async",
+ "embedded-storage-async",
  "femtopb",
  "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e)",
  "nrf-softdevice",

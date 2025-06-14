@@ -30,6 +30,7 @@ embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
+embedded-storage-async = "0.4.1"
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "6ff81139388c4256c5344ad9167859450abaa97d", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"], optional = true }
 
 chrono = { workspace = true }

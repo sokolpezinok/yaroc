@@ -35,7 +35,7 @@ pub struct Device {
     #[cfg(feature = "bluetooth-le")]
     pub ble: crate::ble::Ble,
     #[cfg(feature = "bluetooth-le")]
-    pub flash: nrf_softdevice::Flash,
+    pub flash: crate::flash::Flash,
 }
 
 impl Device {
@@ -72,7 +72,7 @@ impl Device {
         #[cfg(feature = "bluetooth-le")]
         let mac_address = ble.get_mac_address();
         #[cfg(feature = "bluetooth-le")]
-        let flash = ble.flash();
+        let flash = crate::flash::Flash::new(ble.flash());
 
         #[cfg(not(feature = "bluetooth-le"))]
         let mac_address = String::from_str("cee423506cac").unwrap();

@@ -13,6 +13,8 @@ pub enum Error {
     ValueError,
     #[error("Softdevice (BLE) error")]
     SoftdeviceError,
+    #[error("Flash (NVM) error")]
+    FlashError,
     #[error("Inconsistent AT response")]
     ModemError,
     #[error("UART read error")]
