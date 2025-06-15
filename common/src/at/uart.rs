@@ -43,15 +43,12 @@ impl AtRxBroker {
             let to_send = match line {
                 "OK" | "RDY" | "APP RDY" | "> " => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
-                line => {
-                    if let Ok(command_response) = CommandResponse::new(line) {
-                        Ok(FromModem::CommandResponse(command_response))
-                    } else {
-                        String::from_str(line)
-                            .map(FromModem::Line)
-                            .map_err(|_| Error::BufferTooSmallError)
-                    }
-                }
+                line => match CommandResponse::new(line) {
+                    Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
+                    _ => String::from_str(line)
+                        .map(FromModem::Line)
+                        .map_err(|_| Error::BufferTooSmallError),
+                },
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
