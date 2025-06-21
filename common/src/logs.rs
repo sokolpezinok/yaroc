@@ -4,7 +4,6 @@ use crate::error::Error;
 use crate::proto::status::Msg;
 use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
 use crate::status::{CellNetworkType, HostInfo, MacAddress, MiniCallHome};
-use crate::time::datetime_from_timestamp;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
@@ -45,8 +44,9 @@ impl CellularLogMessage {
                 CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
+                let now = Local::now().with_timezone(tz);
                 let log_message =
-                    MiniCallHomeLog::new(hostname, mac_addr, Local::now().into(), tz, mch)?;
+                    MiniCallHomeLog::new(hostname, mac_addr, now.fixed_offset(), mch)?;
                 Ok(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
@@ -75,38 +75,17 @@ impl MiniCallHomeLog {
         name: &str,
         mac_address: MacAddress,
         now: DateTime<FixedOffset>,
-        tz: &impl TimeZone,
         mch_proto: crate::proto::MiniCallHome,
     ) -> crate::Result<Self> {
-        let timestamp = datetime_from_timestamp(mch_proto.time.ok_or(Error::FormatError)?, tz);
-        let network_type = match mch_proto.network_type {
-            EnumValue::Known(network_type) => network_type.into(),
-            EnumValue::Unknown(_) => CellNetworkType::Unknown,
-        };
-        let mch = MiniCallHome {
-            batt_mv: Some(mch_proto.millivolts as u16),
-            batt_percents: None, // TODO
-            network_type,
-            rssi_dbm: Some(i8::try_from(mch_proto.signal_dbm).map_err(|_| Error::FormatError)?),
-            snr_cb: Some(i16::try_from(mch_proto.signal_snr_cb).map_err(|_| Error::FormatError)?),
-            cellid: if mch_proto.cellid > 0 {
-                Some(mch_proto.cellid)
-            } else {
-                None
-            },
-            cpu_temperature: Some(mch_proto.cpu_temperature),
-            // TODO: is missing timestamp such a big problem? Could we remove the question
-            // mark after `mch.time`?
-            timestamp,
-            ..Default::default()
-        };
+        let mut mch: MiniCallHome = mch_proto.try_into()?;
+        mch.timestamp = mch.timestamp.with_timezone(now.offset());
         Ok(Self {
+            latency: now - mch.timestamp,
             mini_call_home: mch,
             host_info: HostInfo {
                 name: name.try_into().map_err(|_| Error::ValueError)?,
                 mac_address,
             },
-            latency: now - timestamp,
         })
     }
 }
@@ -154,7 +133,7 @@ mod test_logs {
 
     #[test]
     fn test_cellular_dbm() {
-        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap().into();
         let log_message = MiniCallHomeLog {
             mini_call_home: crate::status::MiniCallHome {
                 batt_mv: Some(1260),
@@ -198,7 +177,6 @@ mod test_logs {
             millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
             ..Default::default()
         };
-        let tz = FixedOffset::east_opt(3600).unwrap();
 
         let status = Status {
             msg: Some(Msg::MiniCallHome(MiniCallHome {
@@ -212,6 +190,7 @@ mod test_logs {
             })),
             ..Default::default()
         };
+        let tz = FixedOffset::east_opt(3600).unwrap();
         let cell_log_msg =
             CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
                 .expect("MiniCallHome proto should be valid");

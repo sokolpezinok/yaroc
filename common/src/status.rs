@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 use core::fmt;
+use femtopb::EnumValue;
 #[cfg(feature = "receive")]
 use geoutils::Location;
 use heapless::String;
@@ -211,6 +212,41 @@ impl MiniCallHome {
             })),
             ..Default::default()
         }
+    }
+}
+
+impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
+    type Error = crate::error::Error;
+
+    fn try_from(value: MiniCallHomeProto) -> crate::Result<Self> {
+        // TODO: is missing timestamp such a big problem? Could we remove the question mark
+        // here?
+        let timestamp_millis = value.time.ok_or(Error::FormatError)?.millis_epoch;
+        let timestamp = DateTime::from_timestamp(
+            (timestamp_millis / 1000) as i64,
+            (timestamp_millis % 1000) as u32 * 1_000_000,
+        )
+        .ok_or(Error::FormatError)?
+        .into();
+        let network_type = match value.network_type {
+            EnumValue::Known(network_type) => network_type.into(),
+            EnumValue::Unknown(_) => CellNetworkType::Unknown,
+        };
+        Ok(Self {
+            batt_mv: Some(value.millivolts as u16),
+            batt_percents: None, // TODO
+            network_type,
+            rssi_dbm: Some(i8::try_from(value.signal_dbm).map_err(|_| Error::FormatError)?),
+            snr_cb: Some(i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?),
+            cellid: if value.cellid > 0 {
+                Some(value.cellid)
+            } else {
+                None
+            },
+            cpu_temperature: Some(value.cpu_temperature),
+            timestamp,
+            ..Default::default()
+        })
     }
 }
 
