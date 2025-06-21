@@ -222,12 +222,9 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
         // TODO: is missing timestamp such a big problem? Could we remove the question mark
         // here?
         let timestamp_millis = value.time.ok_or(Error::FormatError)?.millis_epoch;
-        let timestamp = DateTime::from_timestamp(
-            (timestamp_millis / 1000) as i64,
-            (timestamp_millis % 1000) as u32 * 1_000_000,
-        )
-        .ok_or(Error::FormatError)?
-        .into();
+        let timestamp = DateTime::from_timestamp_millis(timestamp_millis as i64)
+            .ok_or(Error::FormatError)?
+            .into();
         let network_type = match value.network_type {
             EnumValue::Known(network_type) => network_type.into(),
             EnumValue::Unknown(_) => CellNetworkType::Unknown,
