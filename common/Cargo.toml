@@ -7,7 +7,8 @@ edition = "2021"
 default = []
 defmt = ["dep:defmt"]
 nrf = ["dep:embassy-nrf"]
-receive = ["std", "dep:meshtastic", "dep:geoutils"]
+receive = ["std", "receive-mqtt", "dep:meshtastic", "dep:geoutils"]
+receive-mqtt = ["std", "dep:rumqttc"]
 std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
 
 [dependencies]
@@ -23,6 +24,7 @@ geoutils = { workspace = true, optional = true }
 heapless =  { workspace = true }
 log = { workspace = true }
 meshtastic = { workspace = true, optional = true }
+rumqttc = { version = "0.24.0", optional = true}
 thiserror = { workspace = true }
 
 [build-dependencies]

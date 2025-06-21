@@ -1,6 +1,5 @@
-use core::fmt;
-
 use chrono::prelude::*;
+use core::fmt;
 #[cfg(feature = "receive")]
 use geoutils::Location;
 use heapless::String;

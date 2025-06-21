@@ -4,10 +4,12 @@ pub mod at;
 pub mod backoff;
 pub mod bg77_hw;
 pub mod error;
-#[cfg(feature = "receive")]
+#[cfg(feature = "receive-mqtt")]
 pub mod logs;
 #[cfg(feature = "receive")]
 pub mod meshtastic;
+#[cfg(feature = "receive-mqtt")]
+pub mod mqtt;
 pub mod punch;
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));
