@@ -8,38 +8,48 @@ use crate::status::MacAddress;
 use chrono::Local;
 use femtopb::Message as _;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
+use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::string::{String, ToString};
 use std::time::Duration;
 
-struct ClientConfig {
+pub struct ClientConfig {
     url: String,
     port: u16,
     keep_alive: Duration,
 }
 
-struct MqttClient {
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            url: "broker.emqx.io".to_owned(),
+            port: 1883,
+            keep_alive: Duration::from_secs(15),
+        }
+    }
+}
+
+pub struct MqttClient {
     event_loop: EventLoop,
     dns: HashMap<String, String>,
 }
 
 const UNKNOWN: &str = "Unknown";
 
-#[allow(dead_code)]
 impl MqttClient {
-    pub async fn new(config: ClientConfig, macs: std::vec::Vec<MacAddress>) -> Self {
+    pub async fn new(config: ClientConfig, dns: std::vec::Vec<(MacAddress, String)>) -> Self {
         let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 10);
-        for mac in &macs {
+        for mac in dns.iter().map(|(mac, _)| mac) {
             client
                 .subscribe(std::format!("yar/{mac}/status"), QoS::AtMostOnce)
                 .await
                 .unwrap();
         }
 
-        let dns = std::collections::HashMap::new();
+        let dns = dns.into_iter().map(|(mac, name)| (mac.to_string(), name)).collect();
         Self { event_loop, dns }
     }
 
@@ -57,6 +67,9 @@ impl MqttClient {
             match notification {
                 Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
                     return self.process_incoming(&payload, &topic);
+                }
+                Event::Incoming(Packet::Disconnect) => {
+                    std::println!("Disconnected");
                 }
                 _ => {
                     // ignored
