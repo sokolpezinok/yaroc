@@ -35,7 +35,9 @@ critical-section = { version = "1", features = ["std"]}
 embassy-executor = { workspace = true }
 embassy-futures = { workspace = true }
 env_logger = "0.11.6"
+clap = { version = "4.0", features = ["derive"] }
 static_cell = "2.1.0"
+tokio = "1.44"
 yaroc-common = { path = ".", features = ["receive"] } # 'receive' is activated for tests
 
 [[test]]
@@ -49,3 +51,7 @@ required-features = ["std"]
 [[test]]
 name = "uart"
 required-features = ["std"]
+
+[[example]]
+name = "mqtt"
+required-features = ["receive-mqtt"]

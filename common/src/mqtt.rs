@@ -37,19 +37,19 @@ pub struct MqttClient {
 const UNKNOWN: &str = "Unknown";
 
 impl MqttClient {
-    pub async fn new(config: ClientConfig, dns: std::vec::Vec<(MacAddress, String)>) -> Self {
+    pub async fn new(config: ClientConfig, dns: std::vec::Vec<(&str, &str)>) -> Self {
         let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 10);
-        for mac in dns.iter().map(|(mac, _)| mac) {
+        for mac in dns.iter().map(|(_, mac)| mac) {
             client
                 .subscribe(std::format!("yar/{mac}/status"), QoS::AtMostOnce)
                 .await
                 .unwrap();
         }
 
-        let dns = dns.into_iter().map(|(mac, name)| (mac.to_string(), name)).collect();
+        let dns = dns.into_iter().map(|(name, mac)| (mac.to_owned(), name.to_owned())).collect();
         Self { event_loop, dns }
     }
 
