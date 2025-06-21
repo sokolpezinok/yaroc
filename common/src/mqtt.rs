@@ -45,9 +45,9 @@ impl MqttClient {
 
     fn process_incoming(&self, payload: &[u8], topic: &str) -> crate::Result<CellularLogMessage> {
         let mac_address = MacAddress::try_from(&topic[4..16])?;
-        let name = self.dns.get(&mac_address.to_string()).map(|s| s.as_str()).unwrap_or(&UNKNOWN);
+        let name = self.dns.get(&mac_address.to_string()).map(|s| s.as_str()).unwrap_or(UNKNOWN);
 
-        let status_proto = Status::decode(&payload).map_err(|_| Error::ParseError)?;
+        let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
         CellularLogMessage::from_proto(status_proto, mac_address, name, &Local)
     }
 
