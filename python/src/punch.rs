@@ -4,7 +4,7 @@ use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
 use yaroc_common::{punch::SiPunch as CommonSiPunch, status::MacAddress};
 
-use crate::status::HostInfoPy;
+use crate::status::HostInfo;
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass]
@@ -28,7 +28,7 @@ pub struct SiPunchLog {
     pub punch: SiPunch,
     pub latency: Duration,
     #[pyo3(get)]
-    pub host_info: HostInfoPy,
+    pub host_info: HostInfo,
 }
 
 #[pymethods]
@@ -79,7 +79,7 @@ impl SiPunch {
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: &HostInfoPy, now: DateTime<FixedOffset>) -> Self {
+    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
         let punch = SiPunch::from_raw(payload);
         Self {
             latency: now - punch.time,
@@ -89,7 +89,7 @@ impl SiPunchLog {
     }
 
     #[staticmethod]
-    pub fn new(punch: SiPunch, host_info: &HostInfoPy, now: DateTime<FixedOffset>) -> Self {
+    pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
         Self {
             latency: now - punch.time,
             punch,

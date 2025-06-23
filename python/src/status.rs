@@ -7,44 +7,44 @@ use chrono::prelude::*;
 use crate::punch::SiPunch;
 #[cfg(feature = "receive")]
 use yaroc_common::meshtastic::RssiSnr;
-use yaroc_common::status::{HostInfo, MacAddress, Position};
+use yaroc_common::status::{HostInfo as HostInfoRs, MacAddress, Position};
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass(name = "HostInfo")]
-pub struct HostInfoPy {
-    host_info: HostInfo,
+#[pyclass]
+pub struct HostInfo {
+    inner: HostInfoRs,
 }
 
 #[pymethods]
-impl HostInfoPy {
+impl HostInfo {
     #[staticmethod]
     pub fn new(name: &str, mac_addr: &str) -> PyResult<Self> {
         let mac_address = MacAddress::try_from(mac_addr)
             .map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
-        Ok(HostInfo::new(name, mac_address)
+        Ok(HostInfoRs::new(name, mac_address)
             .map_err(|_| PyValueError::new_err("Name too long"))?
             .into())
     }
 
     #[getter(mac_address)]
     pub fn mac_address_str(&self) -> String {
-        self.host_info.mac_address.to_string()
+        self.inner.mac_address.to_string()
     }
 }
 
-impl HostInfoPy {
+impl HostInfo {
     pub fn name(&self) -> &str {
-        &self.host_info.name
+        &self.inner.name
     }
 
     pub fn mac_address(&self) -> &MacAddress {
-        &self.host_info.mac_address
+        &self.inner.mac_address
     }
 }
 
-impl From<HostInfo> for HostInfoPy {
-    fn from(value: HostInfo) -> Self {
-        Self { host_info: value }
+impl From<HostInfoRs> for HostInfo {
+    fn from(value: HostInfoRs) -> Self {
+        Self { inner: value }
     }
 }
 
