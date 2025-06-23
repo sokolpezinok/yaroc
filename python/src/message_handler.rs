@@ -167,7 +167,7 @@ impl MessageHandler {
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
-            match Self::construct_punch(punch.raw, &host_info, now) {
+            match SiPunchLog::from_raw(punch.raw, host_info.clone().into(), now) {
                 Ok(si_punch) => {
                     status.punch(&si_punch.punch);
                     result.push(si_punch);
@@ -263,12 +263,12 @@ impl MessageHandler {
         let now = Local::now().fixed_offset();
         let host_info = HostInfo::new(self.resolve(mac_address), mac_address)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Too long name"))?;
-        let punches = match packet.payload_variant {
+        let payload = match packet.payload_variant {
             Some(PayloadVariant::Decoded(Data {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(SiPunch::punches_from_payload(&payload, now)),
+            })) => Ok(payload),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("{}: Encrypted message or wrong portnum", host_info.name),
@@ -276,7 +276,8 @@ impl MessageHandler {
         }?;
 
         let status = self.msh_roc_status(&host_info);
-        let mut result = Vec::with_capacity(punches.len());
+        let mut result = Vec::with_capacity(payload.len() / 20);
+        let punches = SiPunch::punches_from_payload(&payload, now);
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
@@ -294,24 +295,6 @@ impl MessageHandler {
         }
 
         Ok(result)
-    }
-
-    fn construct_punch(
-        payload: &[u8],
-        host_info: &HostInfo,
-        now: DateTime<FixedOffset>,
-    ) -> std::io::Result<SiPunchLog> {
-        let length = payload.len();
-        Ok(SiPunchLog::from_raw(
-            payload.try_into().map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Wrong length of chunk={length}"),
-                )
-            })?,
-            &host_info.clone().into(),
-            now,
-        ))
     }
 
     fn get_position_name(&self, mac_address: MacAddress) -> Option<PositionName> {

@@ -79,13 +79,23 @@ pub struct SiPunchLog {
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
-    pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn from_raw(
+        payload: &[u8],
+        host_info: HostInfo,
+        now: DateTime<FixedOffset>,
+    ) -> PyResult<Self> {
+        let payload = payload.try_into().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Wrong length of chunk={}", payload.len()),
+            )
+        })?;
         let punch = SiPunch::from_raw(payload, now);
-        Self {
+        Ok(Self {
             latency: now - punch.time,
             punch,
             host_info: host_info.clone(),
-        }
+        })
     }
 
     #[staticmethod]
