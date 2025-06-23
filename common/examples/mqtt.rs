@@ -1,7 +1,7 @@
 extern crate yaroc_common;
 
 use clap::Parser;
-use yaroc_common::mqtt::{ClientConfig, MqttClient};
+use yaroc_common::mqtt::{MqttConfig, MqttReceiver};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -19,12 +19,12 @@ async fn main() {
         }
     }
 
-    let config = ClientConfig::default();
+    let config = MqttConfig::default();
     let macs = dns.iter().map(|(_, mac)| *mac).collect();
-    let mut client = MqttClient::new(config, macs).await;
+    let mut receiver = MqttReceiver::new(config, macs).await;
 
     loop {
-        let msg = client.next_message().await;
+        let msg = receiver.next_message().await;
         if let Ok(message) = msg {
             println!("{:?}", message);
         }

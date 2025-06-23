@@ -9,13 +9,13 @@ use std::string::String;
 use std::time::Duration;
 use std::vec::Vec;
 
-pub struct ClientConfig {
+pub struct MqttConfig {
     url: String,
     port: u16,
     keep_alive: Duration,
 }
 
-impl Default for ClientConfig {
+impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: "broker.emqx.io".to_owned(),
@@ -25,7 +25,7 @@ impl Default for ClientConfig {
     }
 }
 
-pub struct MqttClient {
+pub struct MqttReceiver {
     event_loop: EventLoop,
 }
 
@@ -34,8 +34,8 @@ pub enum Message {
     CellularStatus(MacAddress, Vec<u8>),
 }
 
-impl MqttClient {
-    pub async fn new(config: ClientConfig, macs: std::vec::Vec<&str>) -> Self {
+impl MqttReceiver {
+    pub async fn new(config: MqttConfig, macs: std::vec::Vec<&str>) -> Self {
         let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
