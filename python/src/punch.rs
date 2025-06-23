@@ -2,7 +2,8 @@ use std::fmt;
 
 use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
-use yaroc_common::{punch::SiPunch as CommonSiPunch, status::MacAddress};
+use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs};
+use yaroc_common::status::MacAddress;
 
 use crate::status::HostInfo;
 
@@ -18,10 +19,54 @@ pub struct SiPunch {
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get)]
-    raw: [u8; 20],
+    raw: RawPunch,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl From<SiPunchRs> for SiPunch {
+    fn from(punch: SiPunchRs) -> Self {
+        Self {
+            card: punch.card,
+            code: punch.code,
+            time: punch.time,
+            mode: punch.mode,
+            raw: punch.raw,
+        }
+    }
+}
+
+#[pymethods]
+impl SiPunch {
+    #[staticmethod]
+    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
+        SiPunchRs::new(card, code, time, mode).into()
+    }
+
+    #[staticmethod]
+    pub fn from_raw(bytes: [u8; 20], now: DateTime<FixedOffset>) -> Self {
+        SiPunchRs::from_raw(bytes, now.date_naive(), now.offset()).into()
+    }
+}
+
+impl SiPunch {
+    pub fn punches_from_payload(
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+    ) -> Vec<Result<Self, std::io::Error>> {
+        payload
+            .chunks(20)
+            .map(|chunk| {
+                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Wrong length of chunk={}", chunk.len()),
+                    )
+                })?;
+                Ok(Self::from_raw(partial_payload, now))
+            })
+            .collect()
+    }
+}
+
 #[pyclass]
 pub struct SiPunchLog {
     #[pyo3(get)]
@@ -32,55 +77,10 @@ pub struct SiPunchLog {
 }
 
 #[pymethods]
-impl SiPunch {
-    #[staticmethod]
-    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
-        Self {
-            card,
-            code,
-            time,
-            mode,
-            raw: CommonSiPunch::new(card, code, time, mode).raw,
-        }
-    }
-
-    #[staticmethod]
-    pub fn from_raw(bytes: [u8; 20]) -> Self {
-        let now = Local::now();
-        let punch = CommonSiPunch::from_raw(bytes, now.date_naive(), now.offset());
-
-        Self {
-            card: punch.card,
-            code: punch.code,
-            time: punch.time,
-            mode: punch.mode,
-            raw: bytes,
-        }
-    }
-}
-
-impl SiPunch {
-    pub fn punches_from_payload(payload: &[u8]) -> Vec<Result<Self, std::io::Error>> {
-        payload
-            .chunks(20)
-            .map(|chunk| {
-                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Wrong length of chunk={}", chunk.len()),
-                    )
-                })?;
-                Ok(Self::from_raw(partial_payload))
-            })
-            .collect()
-    }
-}
-
-#[pymethods]
 impl SiPunchLog {
     #[staticmethod]
     pub fn from_raw(payload: [u8; 20], host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
-        let punch = SiPunch::from_raw(payload);
+        let punch = SiPunch::from_raw(payload, now);
         Self {
             latency: now - punch.time,
             punch,
@@ -124,25 +124,18 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use chrono::{prelude::*, Duration};
-    use yaroc_common::{
-        punch::SiPunch as CommonSiPunch,
-        status::{HostInfo, MacAddress},
-    };
+    use yaroc_common::status::{HostInfo, MacAddress};
 
     use crate::punch::{SiPunch, SiPunchLog};
 
     #[test]
     fn test_punches_from_payload() {
-        let date = CommonSiPunch::last_dow(4, Local::now().date_naive());
-        let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
-        let datetime =
-            NaiveDateTime::new(date, time).and_local_timezone(Local).unwrap().fixed_offset();
-
-        let punch = SiPunch::new(1715004, 47, datetime, 2);
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch = SiPunch::new(1715004, 47, time, 2);
         let payload =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
 
-        let punches = SiPunch::punches_from_payload(payload);
+        let punches = SiPunch::punches_from_payload(payload, time);
         assert_eq!(punches.len(), 2);
         assert_eq!(*punches[0].as_ref().unwrap(), punch);
         assert_eq!(

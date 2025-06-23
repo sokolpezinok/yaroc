@@ -268,7 +268,7 @@ impl MessageHandler {
                 portnum: SERIAL_APP,
                 payload,
                 ..
-            })) => Ok(SiPunch::punches_from_payload(&payload)),
+            })) => Ok(SiPunch::punches_from_payload(&payload, now)),
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("{}: Encrypted message or wrong portnum", host_info.name),
