@@ -87,38 +87,16 @@ impl MessageHandler {
             .map_err(|err| PyValueError::new_err(format!("{err}")))
     }
 
-    pub fn status_update(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
-        let status_proto = Status::decode(payload)
-            .map_err(|_| PyValueError::new_err("Status proto decoding error"))?;
+    #[pyo3(name = "status_update")]
+    pub fn status_update_py(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
         let mac_addr = MacAddress::Full(mac_addr);
-        let log_message =
-            CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)
-                .map_err(
-                    |err| PyValueError::new_err(format!("{}", err)), // TODO: which?
-                )?;
-        info!("{}", log_message);
-
-        let status = self.get_cellular_status(mac_addr);
-        match log_message {
-            CellularLogMessage::MCH(mch_log) => {
-                let mch = mch_log.mini_call_home;
-                if let Some(rssi_dbm) = mch.rssi_dbm {
-                    status.mqtt_connect_update(
-                        rssi_dbm,
-                        mch.cellid.unwrap_or_default(),
-                        mch.snr_cb,
-                    );
-                }
-                if let Some(batt_mv) = mch.batt_mv {
-                    status.update_voltage(f64::from(batt_mv) / 1000.);
-                }
-            }
-            CellularLogMessage::Disconnected(..) => {
-                status.disconnect();
-            }
-            _ => {}
-        }
-        Ok(())
+        self.status_update(payload, mac_addr)
+            .map_err(|e| match e {
+                Error::ParseError => PyValueError::new_err("Status proto decoding error"),
+                Error::FormatError => PyValueError::new_err("Missing time in status proto"),
+                _ => PyValueError::new_err(format!("{}", e)),
+            })
+            .map(|_| ())
     }
 }
 
@@ -146,6 +124,39 @@ impl MessageHandler {
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
         })
+    }
+
+    pub fn status_update(
+        &mut self,
+        payload: &[u8],
+        mac_addr: MacAddress,
+    ) -> Result<CellularLogMessage, Error> {
+        let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
+        let log_message =
+            CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)?;
+        info!("{}", log_message);
+
+        let status = self.get_cellular_status(mac_addr);
+        match &log_message {
+            CellularLogMessage::MCH(mch_log) => {
+                let mch = &mch_log.mini_call_home;
+                if let Some(rssi_dbm) = mch.rssi_dbm {
+                    status.mqtt_connect_update(
+                        rssi_dbm,
+                        mch.cellid.unwrap_or_default(),
+                        mch.snr_cb,
+                    );
+                }
+                if let Some(batt_mv) = mch.batt_mv {
+                    status.update_voltage(f64::from(batt_mv) / 1000.);
+                }
+            }
+            CellularLogMessage::Disconnected(..) => {
+                status.disconnect();
+            }
+            _ => {}
+        }
+        Ok(log_message)
     }
 
     pub fn punches(&mut self, payload: &[u8], mac_address: u64) -> Result<Vec<SiPunchLog>, Error> {
