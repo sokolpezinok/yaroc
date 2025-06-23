@@ -20,12 +20,13 @@ async fn main() {
     }
 
     let config = ClientConfig::default();
-    let mut client = MqttClient::new(config, dns).await;
+    let macs = dns.iter().map(|(_, mac)| *mac).collect();
+    let mut client = MqttClient::new(config, macs).await;
 
     loop {
         let msg = client.next_message().await;
-        if let Ok(log_message) = msg {
-            println!("{}", log_message);
+        if let Ok(message) = msg {
+            println!("{:?}", message);
         }
     }
 }
