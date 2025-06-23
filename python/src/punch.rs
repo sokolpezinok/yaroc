@@ -40,18 +40,19 @@ impl SiPunch {
             code,
             time,
             mode,
-            raw: CommonSiPunch::new(card, code, time.naive_local(), mode).raw,
+            raw: CommonSiPunch::new(card, code, time, mode).raw,
         }
     }
 
     #[staticmethod]
     pub fn from_raw(bytes: [u8; 20]) -> Self {
-        let punch = CommonSiPunch::from_raw(bytes, Local::now().date_naive());
+        let now = Local::now();
+        let punch = CommonSiPunch::from_raw(bytes, now.date_naive(), now.offset());
 
         Self {
             card: punch.card,
             code: punch.code,
-            time: punch.time.and_local_timezone(Local).unwrap().fixed_offset(),
+            time: punch.time,
             mode: punch.mode,
             raw: bytes,
         }

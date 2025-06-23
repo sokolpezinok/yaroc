@@ -88,7 +88,7 @@ impl<M: ModemHw> SendPunch<M> {
                 let id = self.client.schedule_punch(punch).await;
                 if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
                     let today = time.date_naive();
-                    let punch = SiPunch::from_raw(punch, today);
+                    let punch = SiPunch::from_raw(punch, today, time.offset());
                     info!(
                         "{} punched {} at {}, ID={}",
                         punch.card,

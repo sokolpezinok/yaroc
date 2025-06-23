@@ -331,7 +331,7 @@ impl MessageHandler {
 #[cfg(test)]
 mod test_punch {
     use super::*;
-    use chrono::{Local, NaiveDateTime};
+    use chrono::Local;
     use femtopb::Repeated;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{DeviceMetrics, MeshPacket, ServiceEnvelope, Telemetry};
@@ -360,8 +360,7 @@ mod test_punch {
 
     #[test]
     fn test_punch() {
-        let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
-            .unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let punch = SiPunch::new(1715004, 47, time, 2).raw;
         let punches_slice = &[Punch {
             raw: &punch,
@@ -395,8 +394,7 @@ mod test_punch {
 
     #[test]
     fn test_meshtastic_serial() {
-        let time =
-            NaiveDateTime::parse_from_str("2023-11-23 10:00:03", "%Y-%m-%d %H:%M:%S").unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = SiPunch::new(1715004, 47, time, 2).raw;
 
         let message = envelope(
@@ -472,8 +470,7 @@ mod test_punch {
 
     #[test]
     fn test_meshtastic_serial_and_status() {
-        let time =
-            NaiveDateTime::parse_from_str("2023-11-23 10:00:03", "%Y-%m-%d %H:%M:%S").unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = SiPunch::new(1715004, 47, time, 2).raw;
 
         let message = envelope(

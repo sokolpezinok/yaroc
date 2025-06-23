@@ -10,7 +10,7 @@ pub type RawPunch = [u8; LEN];
 pub struct SiPunch {
     pub card: u32,
     pub code: u16,
-    pub time: NaiveDateTime,
+    pub time: DateTime<FixedOffset>,
     pub mode: u8,
     pub raw: RawPunch,
 }
@@ -19,17 +19,17 @@ const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
 const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 
 impl SiPunch {
-    pub fn new(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> Self {
+    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
         Self {
             card,
             code,
             time,
             mode,
-            raw: Self::punch_to_bytes(card, code, time, mode),
+            raw: Self::punch_to_bytes(card, code, time.naive_local(), mode),
         }
     }
 
-    pub fn from_raw(bytes: RawPunch, today: NaiveDate) -> Self {
+    pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
         let data = &bytes[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
         let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
@@ -38,7 +38,7 @@ impl SiPunch {
             card += series * EARLY_SERIES_COMPLEMENT;
         }
         let data = &data[6..];
-        let datetime = Self::bytes_to_datetime(data, today);
+        let datetime = offset.from_local_datetime(&Self::bytes_to_datetime(data, today)).unwrap();
 
         Self {
             card,
@@ -56,7 +56,11 @@ impl SiPunch {
         }
     }
 
-    pub fn punches_from_payload(payload: &[u8], today: NaiveDate) -> Vec<Result<Self, Error>, 10> {
+    pub fn punches_from_payload(
+        payload: &[u8],
+        today: NaiveDate,
+        offset: &FixedOffset,
+    ) -> Vec<Result<Self, Error>, 10> {
         payload
             .chunks(LEN)
             .map(|chunk| {
@@ -64,7 +68,7 @@ impl SiPunch {
                     //    format!("Wrong length of chunk={}", chunk.len()),
                     Error::BufferTooSmallError
                 })?;
-                Ok(Self::from_raw(partial_payload, today))
+                Ok(Self::from_raw(partial_payload, today, offset))
             })
             .collect()
     }
@@ -217,8 +221,7 @@ mod test_punch {
 
     #[test]
     fn test_punch() {
-        let time = NaiveDateTime::parse_from_str("2023-11-23 10:00:03.793", "%Y-%m-%d %H:%M:%S%.f")
-            .unwrap();
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let punch = SiPunch::new(1715004, 47, time, 2).raw;
         assert_eq!(
             &punch,
@@ -228,18 +231,13 @@ mod test_punch {
 
     #[test]
     fn test_punches_from_payload() {
-        let date = SiPunch::last_dow(
-            4,
-            NaiveDate::from_ymd_opt(2023, 11, 23).expect("Wrong date"),
-        );
-        let time = NaiveTime::from_hms_nano_opt(10, 0, 3, 792968750).expect("Wrong time");
-        let datetime = NaiveDateTime::new(date, time);
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
 
-        let punch = SiPunch::new(1715004, 47, datetime, 2);
+        let punch = SiPunch::new(1715004, 47, time, 2);
         let payload =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
 
-        let punches = SiPunch::punches_from_payload(payload, date);
+        let punches = SiPunch::punches_from_payload(payload, time.date_naive(), time.offset());
         assert_eq!(punches.len(), 2);
         assert_eq!(*punches[0].as_ref().unwrap(), punch);
         assert_eq!(
