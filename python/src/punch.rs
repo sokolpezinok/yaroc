@@ -2,7 +2,7 @@ use std::fmt;
 
 use chrono::{prelude::*, Duration};
 use pyo3::prelude::*;
-use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs};
+use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs, SiPunchLog as SiPunchLogRs};
 use yaroc_common::status::MacAddress;
 
 use crate::status::HostInfo;
@@ -76,26 +76,31 @@ pub struct SiPunchLog {
     pub host_info: HostInfo,
 }
 
+impl From<SiPunchLogRs> for SiPunchLog {
+    fn from(punch_log: SiPunchLogRs) -> Self {
+        Self {
+            punch: punch_log.punch.into(),
+            latency: punch_log.latency,
+            host_info: punch_log.host_info.into(),
+        }
+    }
+}
+
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
     pub fn from_raw(
-        payload: &[u8],
+        bytes: &[u8],
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
     ) -> PyResult<Self> {
-        let payload = payload.try_into().map_err(|_| {
+        let bytes = bytes.try_into().map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Wrong length of chunk={}", payload.len()),
+                format!("Wrong length of chunk={}", bytes.len()),
             )
         })?;
-        let punch = SiPunch::from_raw(payload, now);
-        Ok(Self {
-            latency: now - punch.time,
-            punch,
-            host_info: host_info.clone(),
-        })
+        Ok(SiPunchLogRs::from_raw(bytes, host_info.into(), now).into())
     }
 
     #[staticmethod]

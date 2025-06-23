@@ -1,7 +1,7 @@
-use chrono::{prelude::*, Days};
+use chrono::{prelude::*, Days, Duration};
 use heapless::Vec;
 
-use crate::{error::Error, proto::Punch};
+use crate::{error::Error, proto::Punch, status::HostInfo};
 
 pub const LEN: usize = 20;
 pub type RawPunch = [u8; LEN];
@@ -64,10 +64,8 @@ impl SiPunch {
         payload
             .chunks(LEN)
             .map(|chunk| {
-                let partial_payload: RawPunch = chunk.try_into().map_err(|_| {
-                    //    format!("Wrong length of chunk={}", chunk.len()),
-                    Error::BufferTooSmallError
-                })?;
+                let partial_payload: RawPunch =
+                    chunk.try_into().map_err(|_| Error::BufferTooSmallError)?;
                 Ok(Self::from_raw(partial_payload, today, offset))
             })
             .collect()
@@ -163,6 +161,23 @@ impl SiPunch {
         res[17..19].copy_from_slice(&chksum);
         res[19] = 0x03;
         res
+    }
+}
+
+pub struct SiPunchLog {
+    pub punch: SiPunch,
+    pub latency: Duration,
+    pub host_info: HostInfo,
+}
+
+impl SiPunchLog {
+    pub fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
+        let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());
+        Self {
+            latency: now - punch.time,
+            punch,
+            host_info,
+        }
     }
 }
 

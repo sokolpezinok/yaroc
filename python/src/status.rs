@@ -43,8 +43,14 @@ impl HostInfo {
 }
 
 impl From<HostInfoRs> for HostInfo {
-    fn from(value: HostInfoRs) -> Self {
-        Self { inner: value }
+    fn from(host_info: HostInfoRs) -> Self {
+        Self { inner: host_info }
+    }
+}
+
+impl From<HostInfo> for HostInfoRs {
+    fn from(host_info: HostInfo) -> Self {
+        host_info.inner
     }
 }
 

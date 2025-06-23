@@ -12,6 +12,7 @@ use yaroc_common::logs::CellularLogMessage;
 use yaroc_common::meshtastic::PositionName;
 use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
 use yaroc_common::proto::{Punches, Status};
+use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
 use yaroc_common::status::{HostInfo, MacAddress};
 
 use chrono::prelude::*;
@@ -167,13 +168,15 @@ impl MessageHandler {
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
-            match SiPunchLog::from_raw(punch.raw, host_info.clone().into(), now) {
-                Ok(si_punch) => {
+            match punch.raw.try_into() {
+                Ok(bytes) => {
+                    let si_punch: SiPunchLog =
+                        SiPunchLogRs::from_raw(bytes, host_info.clone(), now).into();
                     status.punch(&si_punch.punch);
                     result.push(si_punch);
                 }
-                Err(err) => {
-                    error!("{}", err);
+                Err(_) => {
+                    error!("Wrong length of chunk={}", punch.raw.len());
                 }
             }
         }
