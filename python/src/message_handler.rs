@@ -266,17 +266,17 @@ impl MessageHandler {
         let now = Local::now().fixed_offset();
         let host_info = HostInfo::new(self.resolve(mac_address), mac_address)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Too long name"))?;
-        let payload = match packet.payload_variant {
-            Some(PayloadVariant::Decoded(Data {
-                portnum: SERIAL_APP,
-                payload,
-                ..
-            })) => Ok(payload),
-            _ => Err(std::io::Error::new(
+        let Some(PayloadVariant::Decoded(Data {
+            portnum: SERIAL_APP,
+            payload,
+            ..
+        })) = packet.payload_variant
+        else {
+            return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("{}: Encrypted message or wrong portnum", host_info.name),
-            )),
-        }?;
+            ));
+        };
 
         let status = self.msh_roc_status(&host_info);
         let mut result = Vec::with_capacity(payload.len() / 20);
