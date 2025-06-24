@@ -8,7 +8,7 @@ use embassy_sync::channel::Channel;
 use heapless::Vec;
 use static_cell::StaticCell;
 use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType};
-use yaroc_common::system_info::{SystemInfo, BATTERY, TEMPERATURE};
+use yaroc_common::system_info::{BATTERY, SystemInfo, TEMPERATURE};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 

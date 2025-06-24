@@ -1,17 +1,17 @@
 use core::marker::PhantomData;
 
 use crate::{
+    RawMutex,
     bg77_hw::ModemHw,
     error::Error,
-    status::{parse_qlts, CellNetworkType, MiniCallHome, SignalInfo},
-    RawMutex,
+    status::{CellNetworkType, MiniCallHome, SignalInfo, parse_qlts},
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
 #[cfg(feature = "defmt")]
 use defmt::{error, info};
 use embassy_sync::watch::{Receiver, Sender, Watch};
 use embassy_time::Instant;
-use heapless::{format, String};
+use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info};
 

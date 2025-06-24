@@ -2,10 +2,10 @@ extern crate std;
 
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
-use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::{telemetry, Data, ServiceEnvelope, Telemetry};
-use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use meshtastic::Message as MeshtaticMessage;
+use meshtastic::protobufs::mesh_packet::PayloadVariant;
+use meshtastic::protobufs::{Data, ServiceEnvelope, Telemetry, telemetry};
+use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
@@ -271,7 +271,7 @@ impl fmt::Display for MshLogMessage {
 #[cfg(test)]
 mod test_meshtastic {
     use super::*;
-    use meshtastic::protobufs::{telemetry::Variant, DeviceMetrics, EnvironmentMetrics};
+    use meshtastic::protobufs::{DeviceMetrics, EnvironmentMetrics, telemetry::Variant};
     use std::format;
     use std::vec::Vec;
 

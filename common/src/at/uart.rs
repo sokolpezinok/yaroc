@@ -1,4 +1,4 @@
-use super::response::{AtResponse, CommandResponse, FromModem, AT_COMMAND_SIZE, AT_LINES};
+use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
 use core::option::Option::Some;
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
@@ -6,11 +6,11 @@ use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, WithTimeout};
-use heapless::{format, String, Vec};
+use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
 
-use crate::{error::Error, RawMutex};
+use crate::{RawMutex, error::Error};
 
 pub type MainRxChannelType = Channel<RawMutex, Result<FromModem, Error>, 5>;
 pub type UrcHandlerType = fn(&CommandResponse) -> bool;

@@ -4,7 +4,7 @@ use crate::{
 };
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{Either3, select3};
 use embassy_nrf::{
     gpio::Output,
     peripherals::{TIMER1, UARTE1},
@@ -13,14 +13,14 @@ use embassy_nrf::{
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use embassy_sync::{channel::Receiver, signal::Signal};
 use embassy_time::{Duration, Instant, Ticker};
-use femtopb::{repeated, Message};
+use femtopb::{Message, repeated};
 use heapless::format;
 use yaroc_common::{
+    RawMutex,
     bg77_hw::{Bg77, ModemHw},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     system_info::SystemInfo,
-    RawMutex,
 };
 
 pub type SendPunchType = SendPunch<

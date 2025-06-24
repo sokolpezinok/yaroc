@@ -7,7 +7,7 @@ use heapless::String;
 
 use crate::{
     error::Error,
-    proto::{self, status, MiniCallHome as MiniCallHomeProto, Status, Timestamp},
+    proto::{self, MiniCallHome as MiniCallHomeProto, Status, Timestamp, status},
 };
 
 /// Parses the output of AT+QLTS=2 command into a date+time.

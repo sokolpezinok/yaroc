@@ -7,7 +7,7 @@ use crate::at::{
 use crate::error::Error;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use heapless::{format, String};
+use heapless::{String, format};
 
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);

@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use embassy_executor::Spawner;
 use heapless::String;
-use nrf_softdevice::{ble, raw, temperature_celsius, Flash, Softdevice};
+use nrf_softdevice::{Flash, Softdevice, ble, raw, temperature_celsius};
 use yaroc_common::error::Error;
 
 pub struct Ble {

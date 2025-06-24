@@ -5,7 +5,7 @@ use embassy_nrf::{
     uarte::{UarteRxWithIdle, UarteTx},
 };
 
-use super::uart::{AtRxBroker, RxWithIdle, Tx, UrcHandlerType, MAIN_RX_CHANNEL};
+use super::uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, Tx, UrcHandlerType};
 
 impl Tx for UarteTx<'static, UARTE1> {
     async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {

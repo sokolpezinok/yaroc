@@ -195,8 +195,10 @@ mod test_logs {
             CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
                 .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
-        assert!(formatted_log_msg
-            .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V"));
+        assert!(
+            formatted_log_msg
+                .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V")
+        );
 
         let status = Status {
             msg: Some(Msg::MiniCallHome(MiniCallHome {

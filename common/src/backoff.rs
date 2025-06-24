@@ -1,12 +1,12 @@
 use crate::{
+    RawMutex,
     at::mqtt::{MqttStatus, StatusCode},
     punch::RawPunch,
-    RawMutex,
 };
 #[cfg(feature = "defmt")]
 use defmt::{error, warn};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{Either, select};
 use embassy_sync::{
     channel::Channel,
     lazy_lock::LazyLock,

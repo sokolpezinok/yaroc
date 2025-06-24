@@ -12,8 +12,8 @@ use yaroc_nrf52840::{
     self as _,
     device::Device,
     mqtt::MqttConfig,
-    send_punch::{minicallhome_loop, send_punch_event_handler, SendPunch, SendPunchMutexType},
-    si_uart::{si_uart_reader, SiUartChannelType},
+    send_punch::{SendPunch, SendPunchMutexType, minicallhome_loop, send_punch_event_handler},
+    si_uart::{SiUartChannelType, si_uart_reader},
     system_info::sysinfo_update,
 };
 

@@ -1,7 +1,7 @@
 use crate::error::Error;
 use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::{Channel, Sender};
-use yaroc_common::{punch::RawPunch, RawMutex};
+use yaroc_common::{RawMutex, punch::RawPunch};
 
 pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
 

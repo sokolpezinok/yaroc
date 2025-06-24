@@ -1,24 +1,24 @@
 use crate::{
     error::Error,
-    send_punch::{Command, SendPunchMutexType, EVENT_CHANNEL},
+    send_punch::{Command, EVENT_CHANNEL, SendPunchMutexType},
 };
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::semaphore::{FairSemaphore, Semaphore};
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
-use heapless::{format, String};
+use heapless::{String, format};
 use yaroc_common::{
+    RawMutex,
     at::{
         mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
     },
     backoff::{
-        BackoffCommand, BackoffRetries, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
+        BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn,
     },
-    bg77_hw::{ModemHw, ACTIVATION_TIMEOUT},
+    bg77_hw::{ACTIVATION_TIMEOUT, ModemHw},
     punch::RawPunch,
-    RawMutex,
 };
 
 const MQTT_CLIENT_ID: u8 = 0;

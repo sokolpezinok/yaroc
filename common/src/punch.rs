@@ -1,4 +1,4 @@
-use chrono::{prelude::*, Days, Duration};
+use chrono::{Days, Duration, prelude::*};
 use heapless::Vec;
 
 use crate::{error::Error, proto::Punch, status::HostInfo};
