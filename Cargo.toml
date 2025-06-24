@@ -6,7 +6,6 @@ members = [
 ]
 default-members = ["common", "python"]
 resolver = "2"
-edition = "2024"
 
 [workspace.dependencies]
 chrono = { version = "0.4.38", default-features = false }

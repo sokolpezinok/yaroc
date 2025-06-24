@@ -1,10 +1,10 @@
 [package]
-edition = "2021"
 name = "yaroc-nrf52840"
 version = "0.1.0"
 authors = ["Lukáš Poláček <lukas@polacek.email>"]
 resolver = "2"
-rust-version = "1.81"
+rust-version = "1.85"
+edition = "2024"
 
 [features]
 default = ["cortex-m/critical-section-single-core"]
