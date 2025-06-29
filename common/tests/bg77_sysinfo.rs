@@ -45,13 +45,17 @@ async fn main(spawner: Spawner) {
     let mut send_punch = SystemInfo::default();
 
     let mch = send_punch.mini_call_home(&mut bg77).await.unwrap();
-    assert_eq!(mch.cellid, Some(u32::from_str_radix("2B2078", 16).unwrap()));
-    assert_eq!(mch.rssi_dbm, Some(-107));
-    assert_eq!(mch.snr_cb, Some(-130));
+    let signal_info = mch.signal_info.unwrap();
+    assert_eq!(signal_info.network_type, CellNetworkType::NbIotEcl1);
+    assert_eq!(signal_info.rssi_dbm, -107);
+    assert_eq!(signal_info.snr_cb, -130);
+    assert_eq!(
+        signal_info.cellid,
+        Some(u32::from_str_radix("2B2078", 16).unwrap())
+    );
     assert_eq!(mch.batt_mv, Some(3967));
     assert_eq!(mch.batt_percents, Some(76));
     assert_eq!(mch.cpu_temperature, Some(27.0));
-    assert_eq!(mch.network_type, CellNetworkType::NbIotEcl1);
     assert_eq!(
         mch.timestamp,
         DateTime::<FixedOffset>::parse_from_str(

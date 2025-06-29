@@ -141,11 +141,11 @@ impl MessageHandler {
         match &log_message {
             CellularLogMessage::MCH(mch_log) => {
                 let mch = &mch_log.mini_call_home;
-                if let Some(rssi_dbm) = mch.rssi_dbm {
+                if let Some(signal_info) = mch.signal_info.as_ref() {
                     status.mqtt_connect_update(
-                        rssi_dbm,
-                        mch.cellid.unwrap_or_default(),
-                        mch.snr_cb,
+                        signal_info.rssi_dbm,
+                        signal_info.cellid.unwrap_or_default(),
+                        Some(signal_info.snr_cb),
                     );
                 }
                 if let Some(batt_mv) = mch.batt_mv {

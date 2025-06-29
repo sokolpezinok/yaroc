@@ -127,14 +127,19 @@ impl<M: ModemHw> SystemInfo<M> {
         } else {
             CellNetworkType::LteM
         };
+        let cellid = Self::cell_id(bg77)
+            .await
+            .inspect_err(|err| error!("Error while getting cell ID: {}", err))
+            .ok();
         Ok(SignalInfo {
             network_type,
             rssi_dbm,
             snr_cb,
+            cellid,
         })
     }
 
-    async fn cellid(bg77: &mut M) -> Result<u32, Error> {
+    async fn cell_id(bg77: &mut M) -> Result<u32, Error> {
         bg77.simple_call_at("+CEREG?", None)
             .await?
             // TODO: support roaming, that's answer 5
@@ -154,10 +159,6 @@ impl<M: ModemHw> SystemInfo<M> {
         }
         if let Ok(signal_info) = Self::signal_info(bg77).await {
             mini_call_home.set_signal_info(signal_info);
-        }
-        match Self::cellid(bg77).await {
-            Ok(cellid) => mini_call_home.set_cellid(cellid),
-            Err(err) => error!("Error while getting cell ID: {}", err),
         }
 
         Some(mini_call_home)

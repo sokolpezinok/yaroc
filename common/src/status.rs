@@ -111,12 +111,15 @@ impl From<proto::CellNetworkType> for CellNetworkType {
     }
 }
 
+#[derive(Default, Debug)]
 pub struct SignalInfo {
     pub network_type: CellNetworkType,
     /// RSSI in dBm
     pub rssi_dbm: i8,
     /// SNR in centibells (instead of decibells)
     pub snr_cb: i16,
+    /// Cell ID
+    pub cellid: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -147,10 +150,7 @@ impl Position {
 
 #[derive(Default, Debug)]
 pub struct MiniCallHome {
-    pub network_type: CellNetworkType,
-    pub rssi_dbm: Option<i8>,
-    pub snr_cb: Option<i16>, // centibells, 1/10th of decibell
-    pub cellid: Option<u32>,
+    pub signal_info: Option<SignalInfo>,
     pub batt_mv: Option<u16>,
     pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<f32>,
@@ -167,9 +167,7 @@ impl MiniCallHome {
     }
 
     pub fn set_signal_info(&mut self, signal_info: SignalInfo) {
-        self.network_type = signal_info.network_type;
-        self.snr_cb = Some(signal_info.snr_cb);
-        self.rssi_dbm = Some(signal_info.rssi_dbm);
+        self.signal_info = Some(signal_info);
     }
 
     pub fn set_battery_info(&mut self, battery_mv: u16, battery_percents: u8) {
@@ -181,12 +179,9 @@ impl MiniCallHome {
         self.cpu_temperature = Some(cpu_temperature);
     }
 
-    pub fn set_cellid(&mut self, cellid: u32) {
-        self.cellid = Some(cellid);
-    }
-
-    pub fn to_proto(&self) -> Status {
-        let network_type = match self.network_type {
+    pub fn to_proto(self) -> Status<'static> {
+        let signal_info = &self.signal_info.unwrap_or_default();
+        let network_type = match signal_info.network_type {
             CellNetworkType::Lte => proto::CellNetworkType::Lte,
             CellNetworkType::Umts => proto::CellNetworkType::Umts,
             CellNetworkType::LteM => proto::CellNetworkType::LteM,
@@ -200,9 +195,9 @@ impl MiniCallHome {
                 freq: 32,
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
                 network_type: femtopb::EnumValue::Unknown(network_type as i32),
-                signal_dbm: self.rssi_dbm.unwrap_or_default() as i32,
-                signal_snr_cb: self.snr_cb.unwrap_or_default() as i32,
-                cellid: self.cellid.unwrap_or_default(),
+                signal_dbm: i32::from(signal_info.rssi_dbm),
+                signal_snr_cb: i32::from(signal_info.snr_cb),
+                cellid: signal_info.cellid.unwrap_or_default(),
                 time: Some(Timestamp {
                     millis_epoch: self.timestamp.timestamp_millis() as u64,
                     ..Default::default()
@@ -229,17 +224,21 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
             EnumValue::Known(network_type) => network_type.into(),
             EnumValue::Unknown(_) => CellNetworkType::Unknown,
         };
-        Ok(Self {
-            batt_mv: Some(value.millivolts as u16),
-            batt_percents: None, // TODO
+        let signal_info = SignalInfo {
             network_type,
-            rssi_dbm: Some(i8::try_from(value.signal_dbm).map_err(|_| Error::FormatError)?),
-            snr_cb: Some(i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?),
+            rssi_dbm: i8::try_from(value.signal_dbm).map_err(|_| Error::FormatError)?,
+            snr_cb: i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?,
             cellid: if value.cellid > 0 {
                 Some(value.cellid)
             } else {
                 None
             },
+        };
+
+        Ok(Self {
+            signal_info: Some(signal_info),
+            batt_mv: Some(value.millivolts as u16),
+            batt_percents: None, // TODO
             cpu_temperature: Some(value.cpu_temperature),
             timestamp,
             ..Default::default()

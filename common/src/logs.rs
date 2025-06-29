@@ -97,12 +97,11 @@ impl fmt::Display for MiniCallHomeLog {
         if let Some(temperature) = &self.mini_call_home.cpu_temperature {
             write!(f, " {temperature:.1}°C")?;
         }
-        if let Some(rssi_dbm) = &self.mini_call_home.rssi_dbm {
-            write!(f, ", RSSI{rssi_dbm:5}")?;
-            if let Some(snr_cb) = &self.mini_call_home.snr_cb {
-                write!(f, " SNR{:5.1}", f32::from(*snr_cb) / 10.)?;
-            }
-            let network_type = match self.mini_call_home.network_type {
+
+        if let Some(signal_info) = &self.mini_call_home.signal_info {
+            write!(f, ", RSSI{:5}", signal_info.rssi_dbm)?;
+            write!(f, " SNR{:5.1}", f32::from(signal_info.snr_cb) / 10.)?;
+            let network_type = match signal_info.network_type {
                 CellNetworkType::NbIotEcl0 => "NB ECL0",
                 CellNetworkType::NbIotEcl1 => "NB ECL1",
                 CellNetworkType::NbIotEcl2 => "NB ECL2",
@@ -112,9 +111,9 @@ impl fmt::Display for MiniCallHomeLog {
                 _ => "",
             };
             write!(f, " {network_type:>7}")?;
-        }
-        if let Some(cellid) = &self.mini_call_home.cellid {
-            write!(f, ", cell {cellid:X}")?;
+            if let Some(cellid) = &signal_info.cellid {
+                write!(f, ", cell {cellid:X}")?;
+            }
         }
         if let Some(batt_mv) = self.mini_call_home.batt_mv {
             write!(f, ", {:.2}V", f32::from(batt_mv) / 1000.0)?;
@@ -127,20 +126,26 @@ impl fmt::Display for MiniCallHomeLog {
 #[cfg(test)]
 mod test_logs {
     use super::*;
-    use crate::proto::{MiniCallHome, Timestamp};
+    use crate::{
+        proto::{MiniCallHome, Timestamp},
+        status::SignalInfo,
+    };
     use femtopb::EnumValue::Known;
     use std::format;
 
     #[test]
     fn test_cellular_dbm() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap().into();
+        let signal_info = Some(SignalInfo {
+            network_type: CellNetworkType::NbIotEcl0,
+            rssi_dbm: -87,
+            snr_cb: 70,
+            cellid: Some(2580590),
+        });
         let log_message = MiniCallHomeLog {
             mini_call_home: crate::status::MiniCallHome {
+                signal_info,
                 batt_mv: Some(1260),
-                network_type: CellNetworkType::NbIotEcl0,
-                rssi_dbm: Some(-87),
-                snr_cb: Some(70),
-                cellid: Some(2580590),
                 cpu_temperature: Some(51.54),
                 timestamp,
                 ..Default::default()
