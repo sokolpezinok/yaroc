@@ -1,7 +1,7 @@
 use defmt::error;
 use embassy_futures::select::{Either3, select3};
 use embassy_time::{Duration, Ticker};
-use yaroc_common::system_info::{TEMPERATURE, Temp};
+use yaroc_common::status::{TEMPERATURE, Temp};
 
 use crate::send_punch::{Command, EVENT_CHANNEL};
 

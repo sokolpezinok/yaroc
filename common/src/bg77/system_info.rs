@@ -4,8 +4,9 @@ use crate::{
     RawMutex,
     bg77::hw::ModemHw,
     error::Error,
-    status::{CellNetworkType, MiniCallHome, SignalInfo, parse_qlts},
-    system_info::{BATTERY, BatteryInfo, TEMPERATURE},
+    status::{
+        BATTERY, BatteryInfo, CellNetworkType, MiniCallHome, SignalInfo, TEMPERATURE, parse_qlts,
+    },
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
 #[cfg(feature = "defmt")]
