@@ -58,7 +58,7 @@ pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
 }
 
 /// Cell network type, currently only NB-IoT and LTE-M is supported
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum CellNetworkType {
     #[default]
     Unknown,
@@ -92,8 +92,8 @@ impl From<proto::CellNetworkType> for CellNetworkType {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct SignalInfo {
+#[derive(Clone, Copy, Default, Debug)]
+pub struct CellSignalInfo {
     pub network_type: CellNetworkType,
     /// RSSI in dBm
     pub rssi_dbm: i8,
@@ -131,7 +131,7 @@ impl Position {
 
 #[derive(Default, Debug)]
 pub struct MiniCallHome {
-    pub signal_info: Option<SignalInfo>,
+    pub signal_info: Option<CellSignalInfo>,
     pub batt_mv: Option<u16>,
     pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<f32>,
@@ -147,7 +147,7 @@ impl MiniCallHome {
         }
     }
 
-    pub fn set_signal_info(&mut self, signal_info: SignalInfo) {
+    pub fn set_signal_info(&mut self, signal_info: CellSignalInfo) {
         self.signal_info = Some(signal_info);
     }
 
@@ -205,7 +205,7 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
             EnumValue::Known(network_type) => network_type.into(),
             EnumValue::Unknown(_) => CellNetworkType::Unknown,
         };
-        let signal_info = SignalInfo {
+        let signal_info = CellSignalInfo {
             network_type,
             rssi_dbm: i8::try_from(value.signal_dbm).map_err(|_| Error::FormatError)?,
             snr_cb: i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?,

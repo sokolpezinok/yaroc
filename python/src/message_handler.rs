@@ -142,12 +142,8 @@ impl MessageHandler {
         match &log_message {
             CellularLogMessage::MCH(mch_log) => {
                 let mch = &mch_log.mini_call_home;
-                if let Some(signal_info) = mch.signal_info.as_ref() {
-                    status.mqtt_connect_update(
-                        signal_info.rssi_dbm,
-                        signal_info.cellid.unwrap_or_default(),
-                        Some(signal_info.snr_cb),
-                    );
+                if let Some(signal_info) = mch.signal_info {
+                    status.mqtt_connect_update(signal_info);
                 }
                 if let Some(batt_mv) = mch.batt_mv {
                     status.update_voltage(f64::from(batt_mv) / 1000.);

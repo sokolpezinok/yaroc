@@ -9,30 +9,28 @@ use chrono::prelude::*;
 #[cfg(feature = "receive")]
 use crate::meshtastic::RssiSnr;
 use crate::punch::SiPunch;
-use crate::status::Position;
+use crate::status::CellSignalInfo;
+
+pub enum SignalInfo {
+    Uknown,
+    Cell(CellSignalInfo),
+    #[cfg(feature = "receive")]
+    Meshtastic(RssiSnr),
+}
 
 #[allow(dead_code)]
 pub struct NodeInfo {
     pub name: String,
-    pub rssi_dbm: Option<i16>,
-    pub snr_db: Option<f32>,
-    pub cellid: Option<u32>,
+    pub signal_info: SignalInfo,
     pub codes: Vec<u16>,
     pub last_update: Option<DateTime<FixedOffset>>,
     pub last_punch: Option<DateTime<FixedOffset>>,
 }
 
-#[derive(Clone, Default)]
-enum CellularConnectionState {
-    #[default]
-    Unknown,
-    MqttConnected(i8, u32, Option<i16>),
-}
-
 #[derive(Default, Clone)]
 pub struct CellularRocStatus {
     pub name: String,
-    state: CellularConnectionState,
+    state: Option<CellSignalInfo>,
     voltage: Option<f64>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
@@ -48,7 +46,7 @@ impl CellularRocStatus {
     }
 
     pub fn disconnect(&mut self) {
-        self.state = CellularConnectionState::Unknown;
+        self.state = None;
         self.last_update = Some(Local::now().into());
     }
 
@@ -56,8 +54,8 @@ impl CellularRocStatus {
         self.voltage = Some(voltage);
     }
 
-    pub fn mqtt_connect_update(&mut self, rssi_dbm: i8, cellid: u32, snr_cb: Option<i16>) {
-        self.state = CellularConnectionState::MqttConnected(rssi_dbm, cellid, snr_cb);
+    pub fn mqtt_connect_update(&mut self, signal_info: CellSignalInfo) {
+        self.state = Some(signal_info);
         self.last_update = Some(Local::now().into());
     }
 
@@ -67,22 +65,14 @@ impl CellularRocStatus {
     }
 
     pub fn serialize(&self) -> NodeInfo {
+        let signal_info = match self.state {
+            Some(signal_info) => SignalInfo::Cell(signal_info),
+            None => SignalInfo::Uknown,
+        };
+
         NodeInfo {
             name: self.name.clone(),
-            rssi_dbm: match self.state {
-                CellularConnectionState::MqttConnected(rssi_dbm, _, _) => Some(i16::from(rssi_dbm)),
-                _ => None,
-            },
-            snr_db: match self.state {
-                CellularConnectionState::MqttConnected(_, _, snr_cb) => {
-                    snr_cb.map(|v| f32::from(v) / 10.0)
-                }
-                _ => None,
-            },
-            cellid: match self.state {
-                CellularConnectionState::MqttConnected(_, cellid, _) if cellid > 0 => Some(cellid),
-                _ => None,
-            },
+            signal_info,
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
@@ -95,8 +85,8 @@ impl CellularRocStatus {
 pub struct MeshtasticRocStatus {
     pub name: String,
     battery: Option<u32>,
-    rssi_snr: Option<RssiSnr>,
-    pub position: Option<Position>,
+    pub rssi_snr: Option<RssiSnr>,
+    pub position: Option<crate::status::Position>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     last_punch: Option<DateTime<FixedOffset>>,
@@ -132,11 +122,13 @@ impl MeshtasticRocStatus {
     }
 
     pub fn serialize(&self) -> NodeInfo {
+        let signal_info = match &self.rssi_snr {
+            Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
+            None => SignalInfo::Uknown,
+        };
         NodeInfo {
             name: self.name.clone(),
-            rssi_dbm: self.rssi_snr.as_ref().map(|x| x.rssi_dbm),
-            snr_db: self.rssi_snr.as_ref().map(|x| x.snr),
-            cellid: None, // TODO: not supported yet
+            signal_info,
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,

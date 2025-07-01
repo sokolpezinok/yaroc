@@ -5,7 +5,8 @@ use crate::{
     bg77::hw::ModemHw,
     error::Error,
     status::{
-        BATTERY, BatteryInfo, CellNetworkType, MiniCallHome, SignalInfo, TEMPERATURE, parse_qlts,
+        BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE,
+        parse_qlts,
     },
 };
 use chrono::{DateTime, FixedOffset, TimeDelta};
@@ -73,7 +74,7 @@ impl<M: ModemHw> SystemInfo<M> {
         Ok(())
     }
 
-    async fn signal_info(bg77: &mut M) -> Result<SignalInfo, Error> {
+    async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
         let response = bg77.simple_call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
@@ -100,7 +101,7 @@ impl<M: ModemHw> SystemInfo<M> {
             .await
             .inspect_err(|err| error!("Error while getting cell ID: {}", err))
             .ok();
-        Ok(SignalInfo {
+        Ok(CellSignalInfo {
             network_type,
             rssi_dbm,
             snr_cb,

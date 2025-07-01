@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
+use yaroc_common::receive::state::{NodeInfo as NodeInfoRs, SignalInfo};
 use yaroc_common::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -57,8 +58,6 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub snr_db: Option<f32>,
     #[pyo3(get)]
-    cellid: Option<u32>,
-    #[pyo3(get)]
     codes: Vec<u16>,
     #[pyo3(get)]
     last_update: Option<DateTime<FixedOffset>>,
@@ -66,16 +65,23 @@ pub struct NodeInfo {
     pub last_punch: Option<DateTime<FixedOffset>>,
 }
 
-impl From<yaroc_common::receive::state::NodeInfo> for NodeInfo {
-    fn from(value: yaroc_common::receive::state::NodeInfo) -> Self {
+impl From<NodeInfoRs> for NodeInfo {
+    fn from(node_info: NodeInfoRs) -> Self {
+        let (rssi_dbm, snr_db) = match node_info.signal_info {
+            SignalInfo::Uknown => (None, None),
+            SignalInfo::Cell(cell_signal_info) => (
+                Some(cell_signal_info.rssi_dbm.into()),
+                Some(cell_signal_info.snr_cb as f32 / 10.0),
+            ),
+            SignalInfo::Meshtastic(rssi_snr) => (Some(rssi_snr.rssi_dbm), Some(rssi_snr.snr)),
+        };
         Self {
-            name: value.name,
-            rssi_dbm: value.rssi_dbm,
-            snr_db: value.snr_db,
-            cellid: value.cellid,
-            codes: value.codes,
-            last_update: value.last_update,
-            last_punch: value.last_punch,
+            name: node_info.name,
+            rssi_dbm,
+            snr_db,
+            codes: node_info.codes,
+            last_update: node_info.last_update,
+            last_punch: node_info.last_punch,
         }
     }
 }
