@@ -17,10 +17,12 @@ use femtopb::{Message, repeated};
 use heapless::format;
 use yaroc_common::{
     RawMutex,
-    bg77::hw::{Bg77, ModemHw},
+    bg77::{
+        hw::{Bg77, ModemHw},
+        system_info::SystemInfo,
+    },
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
-    system_info::SystemInfo,
 };
 
 pub type SendPunchType = SendPunch<

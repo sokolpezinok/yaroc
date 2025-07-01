@@ -1,6 +1,7 @@
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
 use yaroc_common::bg77::hw::{Bg77, FakePin, ModemHw};
+use yaroc_common::bg77::system_info::SystemInfo;
 use yaroc_common::status::CellNetworkType;
 
 use embassy_executor::{Executor, Spawner};
@@ -8,7 +9,7 @@ use embassy_sync::channel::Channel;
 use heapless::Vec;
 use static_cell::StaticCell;
 use yaroc_common::at::uart::{FakeRxWithIdle, FakeTx, TxChannelType};
-use yaroc_common::system_info::{BATTERY, SystemInfo, TEMPERATURE};
+use yaroc_common::system_info::{BATTERY, TEMPERATURE};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
