@@ -141,8 +141,9 @@ impl<M: ModemHw> SendPunch<M> {
         match command {
             Command::MqttConnect(force, _) => {
                 if !force
-                    && self.last_reconnect.map(|t| t + Duration::from_secs(30) > Instant::now())
-                        == Some(true)
+                    && self
+                        .last_reconnect
+                        .is_some_and(|t| t + Duration::from_secs(30) > Instant::now())
                 {
                     return;
                 }
