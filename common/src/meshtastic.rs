@@ -69,8 +69,12 @@ pub struct MshLogMessage {
 }
 
 impl MshLogMessage {
+    fn datetime_from_secs(timestamp: i64, tz: &impl TimeZone) -> DateTime<FixedOffset> {
+        tz.timestamp_opt(timestamp, 0).unwrap().fixed_offset()
+    }
+
     pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
-        crate::time::datetime_from_secs(i64::from(posix_time), &Local)
+        Self::datetime_from_secs(i64::from(posix_time), &Local)
     }
 
     fn parse_telemetry(
@@ -454,6 +458,35 @@ mod test_meshtastic {
         assert_eq!(
             log_message.metrics,
             MshMetrics::EnvironmentMetrics(47.0, 84.0)
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_time {
+    use super::*;
+
+    extern crate alloc;
+    use alloc::string::ToString;
+
+    #[test]
+    fn test_timestamp() {
+        let tz = FixedOffset::east_opt(3600).unwrap();
+        let timestamp = MshLogMessage::datetime_from_secs(1706523131, &tz)
+            .format("%H:%M:%S.%3f")
+            .to_string();
+        assert_eq!("11:12:11.000", timestamp);
+    }
+
+    #[test]
+    fn test_proto_timestamp_now() {
+        let tz = FixedOffset::east_opt(3600).unwrap();
+        let now = Local::now().with_timezone(&tz);
+        let now_through_proto = MshLogMessage::datetime_from_secs(now.timestamp(), &tz);
+        let now_formatted = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        assert_eq!(
+            now_formatted,
+            now_through_proto.format("%Y-%m-%d %H:%M:%S").to_string(),
         );
     }
 }
