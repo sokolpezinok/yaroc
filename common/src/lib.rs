@@ -2,7 +2,7 @@
 
 pub mod at;
 pub mod backoff;
-pub mod bg77_hw;
+pub mod bg77;
 pub mod error;
 #[cfg(feature = "receive-mqtt")]
 pub mod logs;

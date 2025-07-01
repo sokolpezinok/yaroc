@@ -17,7 +17,7 @@ use femtopb::{Message, repeated};
 use heapless::format;
 use yaroc_common::{
     RawMutex,
-    bg77_hw::{Bg77, ModemHw},
+    bg77::hw::{Bg77, ModemHw},
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
     system_info::SystemInfo,

@@ -11,7 +11,7 @@ use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
 use heapless::String;
-use yaroc_common::bg77_hw::{Bg77, ModemConfig};
+use yaroc_common::bg77::hw::{Bg77, ModemConfig};
 
 use {defmt_rtt as _, panic_probe as _};
 

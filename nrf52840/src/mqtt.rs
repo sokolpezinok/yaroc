@@ -17,7 +17,7 @@ use yaroc_common::{
     backoff::{
         BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn,
     },
-    bg77_hw::{ACTIVATION_TIMEOUT, ModemHw},
+    bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
     punch::RawPunch,
 };
 

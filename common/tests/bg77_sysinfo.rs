@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use yaroc_common::at::response::CommandResponse;
-use yaroc_common::bg77_hw::{Bg77, FakePin, ModemHw};
+use yaroc_common::bg77::hw::{Bg77, FakePin, ModemHw};
 use yaroc_common::status::CellNetworkType;
 
 use embassy_executor::{Executor, Spawner};

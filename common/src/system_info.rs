@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use crate::{
     RawMutex,
-    bg77_hw::ModemHw,
+    bg77::hw::ModemHw,
     error::Error,
     status::{CellNetworkType, MiniCallHome, SignalInfo, parse_qlts},
 };

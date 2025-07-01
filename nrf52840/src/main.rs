@@ -7,7 +7,7 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use heapless::String;
-use yaroc_common::bg77_hw::ModemConfig;
+use yaroc_common::bg77::hw::ModemConfig;
 use yaroc_nrf52840::{
     self as _,
     device::Device,
