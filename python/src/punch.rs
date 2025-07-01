@@ -51,6 +51,7 @@ impl SiPunch {
 pub struct SiPunchLog {
     #[pyo3(get)]
     pub punch: SiPunch,
+    #[pyo3(get)]
     pub latency: Duration,
     #[pyo3(get)]
     pub host_info: HostInfo,
@@ -68,21 +69,6 @@ impl From<SiPunchLogRs> for SiPunchLog {
 
 #[pymethods]
 impl SiPunchLog {
-    #[staticmethod]
-    pub fn from_raw(
-        bytes: &[u8],
-        host_info: HostInfo,
-        now: DateTime<FixedOffset>,
-    ) -> PyResult<Self> {
-        let bytes = bytes.try_into().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Wrong length of chunk={}", bytes.len()),
-            )
-        })?;
-        Ok(SiPunchLogRs::from_raw(bytes, host_info.into(), now).into())
-    }
-
     #[staticmethod]
     pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
         Self {
