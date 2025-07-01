@@ -1,7 +1,7 @@
 extern crate yaroc_common;
 
 use clap::Parser;
-use yaroc_common::mqtt::{MqttConfig, MqttReceiver};
+use yaroc_common::receive::mqtt::{MqttConfig, MqttReceiver};
 
 #[derive(Parser, Debug)]
 struct Args {

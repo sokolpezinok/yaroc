@@ -7,8 +7,7 @@ edition = "2024"
 default = []
 defmt = ["dep:defmt"]
 nrf = ["dep:embassy-nrf"]
-receive = ["std", "receive-mqtt", "dep:meshtastic", "dep:geoutils"]
-receive-mqtt = ["std", "dep:rumqttc"]
+receive = ["std", "dep:geoutils", "dep:meshtastic", "dep:rumqttc"]
 std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
 
 [dependencies]
@@ -54,4 +53,4 @@ required-features = ["std"]
 
 [[example]]
 name = "mqtt"
-required-features = ["receive-mqtt"]
+required-features = ["receive"]

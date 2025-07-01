@@ -4,14 +4,12 @@ pub mod at;
 pub mod backoff;
 pub mod bg77;
 pub mod error;
-#[cfg(feature = "receive-mqtt")]
+#[cfg(feature = "receive")]
 pub mod logs;
 #[cfg(feature = "receive")]
 pub mod meshtastic;
-#[cfg(feature = "receive-mqtt")]
-pub mod mqtt;
 pub mod punch;
-#[cfg(feature = "receive-mqtt")]
+#[cfg(feature = "receive")]
 pub mod receive;
 pub mod status;
 pub mod system_info;
