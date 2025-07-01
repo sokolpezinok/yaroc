@@ -1,3 +1,5 @@
+use chrono::DateTime;
+use chrono::prelude::*;
 use femtopb::Message as _;
 use log::error;
 use log::info;
@@ -7,19 +9,17 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
+
 use yaroc_common::error::Error;
 use yaroc_common::logs::CellularLogMessage;
-use yaroc_common::meshtastic::PositionName;
-use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
+use yaroc_common::meshtastic::{MshLogMessage, MshMetrics, PositionName};
 use yaroc_common::proto::{Punches, Status};
-use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
+use yaroc_common::punch::{SiPunch as SiPunchRs, SiPunchLog as SiPunchLogRs};
+use yaroc_common::receive::state::{CellularRocStatus, MeshtasticRocStatus};
 use yaroc_common::system_info::{HostInfo, MacAddress};
 
-use chrono::DateTime;
-use chrono::prelude::*;
-
-use crate::punch::{SiPunch, SiPunchLog};
-use crate::status::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
+use crate::punch::SiPunchLog;
+use crate::status::NodeInfo;
 
 #[pyclass]
 pub struct MessageHandler {
@@ -72,11 +72,12 @@ impl MessageHandler {
     }
 
     pub fn node_infos(&self) -> Vec<NodeInfo> {
-        let mut res: Vec<_> = self
+        let mut res: Vec<NodeInfo> = self
             .meshtastic_statuses
             .values()
             .map(|status| status.serialize())
             .chain(self.cellular_statuses.values().map(|status| status.serialize()))
+            .map(|n| n.into())
             .collect();
         res.sort_by(|a, b| a.name.cmp(&b.name));
         res
@@ -170,10 +171,9 @@ impl MessageHandler {
         for punch in punches.punches.into_iter().flatten() {
             match punch.raw.try_into() {
                 Ok(bytes) => {
-                    let si_punch: SiPunchLog =
-                        SiPunchLogRs::from_raw(bytes, host_info.clone(), now).into();
+                    let si_punch = SiPunchLogRs::from_raw(bytes, host_info.clone(), now);
                     status.punch(&si_punch.punch);
-                    result.push(si_punch);
+                    result.push(si_punch.into());
                 }
                 Err(_) => {
                     error!("Wrong length of chunk={}", punch.raw.len());
@@ -280,14 +280,15 @@ impl MessageHandler {
 
         let status = self.msh_roc_status(&host_info);
         let mut result = Vec::with_capacity(payload.len() / 20);
-        let punches = SiPunch::punches_from_payload(&payload, now);
+
+        let punches = SiPunchRs::punches_from_payload(&payload, now.date_naive(), now.offset());
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
                     status.punch(&punch);
                     result.push(SiPunchLog {
                         latency: now - punch.time,
-                        punch,
+                        punch: punch.into(),
                         host_info: host_info.clone().into(),
                     });
                 }

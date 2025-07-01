@@ -11,11 +11,14 @@ pub mod meshtastic;
 #[cfg(feature = "receive-mqtt")]
 pub mod mqtt;
 pub mod punch;
+#[cfg(feature = "receive-mqtt")]
+pub mod receive;
+pub mod status;
+pub mod system_info;
+
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));
 }
-pub mod status;
-pub mod system_info;
 
 pub type Result<T> = core::result::Result<T, error::Error>;
 

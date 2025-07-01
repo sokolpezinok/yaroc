@@ -175,7 +175,7 @@ impl MiniCallHome {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
                 freq: 32,
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
-                network_type: femtopb::EnumValue::Unknown(network_type as i32),
+                network_type: femtopb::EnumValue::Known(network_type),
                 signal_dbm: i32::from(signal_info.rssi_dbm),
                 signal_snr_cb: i32::from(signal_info.snr_cb),
                 cellid: signal_info.cellid.unwrap_or_default(),

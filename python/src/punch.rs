@@ -47,26 +47,6 @@ impl SiPunch {
     }
 }
 
-impl SiPunch {
-    pub fn punches_from_payload(
-        payload: &[u8],
-        now: DateTime<FixedOffset>,
-    ) -> Vec<Result<Self, std::io::Error>> {
-        payload
-            .chunks(20)
-            .map(|chunk| {
-                let partial_payload: [u8; 20] = chunk.try_into().map_err(|_| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Wrong length of chunk={}", chunk.len()),
-                    )
-                })?;
-                Ok(Self::from_raw(partial_payload, now))
-            })
-            .collect()
-    }
-}
-
 #[pyclass]
 pub struct SiPunchLog {
     #[pyo3(get)]
@@ -140,22 +120,6 @@ impl fmt::Display for SiPunchLog {
 mod test_punch {
     use super::*;
     use yaroc_common::system_info::HostInfo;
-
-    #[test]
-    fn test_punches_from_payload() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2);
-        let payload =
-            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
-
-        let punches = SiPunch::punches_from_payload(payload, time);
-        assert_eq!(punches.len(), 2);
-        assert_eq!(*punches[0].as_ref().unwrap(), punch);
-        assert_eq!(
-            format!("{}", *punches[1].as_ref().unwrap_err()),
-            "Wrong length of chunk=2"
-        );
-    }
 
     #[test]
     fn test_display() {
