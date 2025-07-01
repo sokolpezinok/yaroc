@@ -11,8 +11,9 @@ use crate::meshtastic::RssiSnr;
 use crate::punch::SiPunch;
 use crate::status::CellSignalInfo;
 
+#[derive(Debug, PartialEq)]
 pub enum SignalInfo {
-    Uknown,
+    Unknown,
     Cell(CellSignalInfo),
     #[cfg(feature = "receive")]
     Meshtastic(RssiSnr),
@@ -66,7 +67,7 @@ impl CellularRocStatus {
     pub fn serialize(&self) -> NodeInfo {
         let signal_info = match self.state {
             Some(signal_info) => SignalInfo::Cell(signal_info),
-            None => SignalInfo::Uknown,
+            None => SignalInfo::Unknown,
         };
 
         NodeInfo {
@@ -123,7 +124,7 @@ impl MeshtasticRocStatus {
     pub fn serialize(&self) -> NodeInfo {
         let signal_info = match &self.rssi_snr {
             Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
-            None => SignalInfo::Uknown,
+            None => SignalInfo::Unknown,
         };
         NodeInfo {
             name: self.name.clone(),

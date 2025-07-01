@@ -255,12 +255,16 @@ impl MessageHandler {
 #[cfg(test)]
 mod test_punch {
     use super::*;
+
+    use crate::meshtastic::RssiSnr;
+    use crate::proto::Punch;
+    use crate::punch::SiPunch;
+    use crate::receive::state::SignalInfo;
+
     use chrono::Local;
     use femtopb::Repeated;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{DeviceMetrics, MeshPacket, ServiceEnvelope, Telemetry};
-    use yaroc_common::proto::Punch;
-    use yaroc_common::punch::SiPunch;
 
     #[test]
     fn test_wrong_punch() {
@@ -372,8 +376,14 @@ mod test_punch {
         handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
-        assert_eq!(node_infos[0].rssi_dbm, Some(-98));
-        assert_eq!(node_infos[0].snr_db, Some(4.0));
+        assert_eq!(
+            node_infos[0].signal_info,
+            SignalInfo::Meshtastic(RssiSnr {
+                rssi_dbm: -98,
+                snr: 4.0,
+                distance: None
+            })
+        );
 
         let envelope = ServiceEnvelope {
             packet: Some(MeshPacket {
@@ -389,7 +399,7 @@ mod test_punch {
         );
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
-        assert_eq!(node_infos[0].rssi_dbm, None);
+        assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
     }
 
     #[test]

@@ -68,7 +68,7 @@ pub struct NodeInfo {
 impl From<NodeInfoRs> for NodeInfo {
     fn from(node_info: NodeInfoRs) -> Self {
         let (rssi_dbm, snr_db) = match node_info.signal_info {
-            SignalInfo::Uknown => (None, None),
+            SignalInfo::Unknown => (None, None),
             SignalInfo::Cell(cell_signal_info) => (
                 Some(cell_signal_info.rssi_dbm.into()),
                 Some(cell_signal_info.snr_cb as f32 / 10.0),

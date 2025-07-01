@@ -92,7 +92,7 @@ impl From<proto::CellNetworkType> for CellNetworkType {
     }
 }
 
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct CellSignalInfo {
     pub network_type: CellNetworkType,
     /// RSSI in dBm
