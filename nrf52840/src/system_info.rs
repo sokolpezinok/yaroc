@@ -25,7 +25,7 @@ impl Temp for SoftdeviceTemp {
 }
 
 #[cfg(not(feature = "bluetooth-le"))]
-pub type OwnTemp = yaroc_common::system_info::NrfTemp;
+pub type OwnTemp = yaroc_common::status::NrfTemp;
 #[cfg(feature = "bluetooth-le")]
 pub type OwnTemp = SoftdeviceTemp;
 
