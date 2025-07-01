@@ -13,7 +13,7 @@ use yaroc_common::meshtastic::PositionName;
 use yaroc_common::meshtastic::{MshLogMessage, MshMetrics};
 use yaroc_common::proto::{Punches, Status};
 use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
-use yaroc_common::status::{HostInfo, MacAddress};
+use yaroc_common::system_info::{HostInfo, MacAddress};
 
 use chrono::DateTime;
 use chrono::prelude::*;

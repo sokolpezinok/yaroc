@@ -1,7 +1,7 @@
 extern crate std;
 
 use crate::error::Error;
-use crate::status::MacAddress;
+use crate::system_info::MacAddress;
 
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use std::borrow::ToOwned;

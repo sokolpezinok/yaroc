@@ -12,7 +12,8 @@ use std::fmt;
 use std::io::ErrorKind;
 use std::string::String;
 
-use crate::status::{HostInfo, MacAddress, Position};
+use crate::status::Position;
+use crate::system_info::{HostInfo, MacAddress};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {

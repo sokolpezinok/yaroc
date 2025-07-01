@@ -3,7 +3,7 @@ use std::fmt;
 use chrono::{Duration, prelude::*};
 use pyo3::prelude::*;
 use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs, SiPunchLog as SiPunchLogRs};
-use yaroc_common::status::MacAddress;
+use yaroc_common::system_info::MacAddress;
 
 use crate::status::HostInfo;
 
@@ -138,10 +138,8 @@ impl fmt::Display for SiPunchLog {
 
 #[cfg(test)]
 mod test_punch {
-    use chrono::{Duration, prelude::*};
-    use yaroc_common::status::{HostInfo, MacAddress};
-
-    use crate::punch::{SiPunch, SiPunchLog};
+    use super::*;
+    use yaroc_common::system_info::HostInfo;
 
     #[test]
     fn test_punches_from_payload() {

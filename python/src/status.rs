@@ -7,7 +7,8 @@ use chrono::prelude::*;
 use crate::punch::SiPunch;
 #[cfg(feature = "receive")]
 use yaroc_common::meshtastic::RssiSnr;
-use yaroc_common::status::{HostInfo as HostInfoRs, MacAddress, Position};
+use yaroc_common::status::Position;
+use yaroc_common::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 #[pyclass]

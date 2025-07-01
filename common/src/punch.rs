@@ -1,7 +1,7 @@
 use chrono::{Days, Duration, prelude::*};
 use heapless::Vec;
 
-use crate::{error::Error, proto::Punch, status::HostInfo};
+use crate::{error::Error, proto::Punch, system_info::HostInfo};
 
 pub const LEN: usize = 20;
 pub type RawPunch = [u8; LEN];
