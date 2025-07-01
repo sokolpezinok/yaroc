@@ -18,7 +18,6 @@ pub enum SignalInfo {
     Meshtastic(RssiSnr),
 }
 
-#[allow(dead_code)]
 pub struct NodeInfo {
     pub name: String,
     pub signal_info: SignalInfo,
