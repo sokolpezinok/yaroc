@@ -223,7 +223,6 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
             cpu_temperature: Some(value.cpu_temperature),
             cpu_freq: Some(value.freq),
             timestamp,
-            ..Default::default()
         })
     }
 }

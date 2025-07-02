@@ -1,10 +1,12 @@
 use chrono::DateTime;
 use chrono::prelude::*;
+use log::info;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 use yaroc_common::error::Error;
 use yaroc_common::receive::message_handler::MessageHandler as MessageHandlerRs;
+use yaroc_common::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
 use crate::status::NodeInfo;
@@ -78,13 +80,13 @@ impl MessageHandler {
 
     #[pyo3(name = "status_update")]
     pub fn status_update_py(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
-        self.inner
-            .status_update(payload, mac_addr)
-            .map_err(|e| match e {
-                Error::ParseError => PyValueError::new_err("Status proto decoding error"),
-                Error::FormatError => PyValueError::new_err("Missing time in status proto"),
-                _ => PyValueError::new_err(format!("{}", e)),
-            })
-            .map(|_| ())
+        let mac_addr = MacAddress::Full(mac_addr);
+        let log_message = self.inner.status_update(payload, mac_addr).map_err(|e| match e {
+            Error::ParseError => PyValueError::new_err("Status proto decoding error"),
+            Error::FormatError => PyValueError::new_err("Missing time in status proto"),
+            _ => PyValueError::new_err(format!("{}", e)),
+        })?;
+        info!("{log_message}");
+        Ok(())
     }
 }

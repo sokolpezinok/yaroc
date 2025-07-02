@@ -3,6 +3,7 @@ extern crate std;
 use crate::error::Error;
 use crate::system_info::MacAddress;
 
+use chrono::{DateTime, Local};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use std::borrow::ToOwned;
 use std::string::String;
@@ -31,7 +32,7 @@ pub struct MqttReceiver {
 
 #[derive(Debug)]
 pub enum Message {
-    CellularStatus(MacAddress, Vec<u8>),
+    CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -50,17 +51,22 @@ impl MqttReceiver {
         Self { event_loop }
     }
 
-    fn process_incoming(&self, payload: &[u8], topic: &str) -> crate::Result<Message> {
+    fn process_incoming(
+        now: DateTime<Local>,
+        topic: &str,
+        payload: &[u8],
+    ) -> crate::Result<Message> {
         let mac_address = MacAddress::try_from(&topic[4..16])?;
-        Ok(Message::CellularStatus(mac_address, payload.into()))
+        Ok(Message::CellularStatus(mac_address, now, payload.into()))
     }
 
     pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
             let notification = self.event_loop.poll().await.map_err(|_| Error::ParseError)?;
+            let now = Local::now();
             match notification {
                 Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
-                    return self.process_incoming(&payload, &topic);
+                    return Self::process_incoming(now, &topic, &payload);
                 }
                 Event::Incoming(Packet::Disconnect) => {
                     std::println!("Disconnected");

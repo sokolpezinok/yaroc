@@ -57,13 +57,11 @@ impl MessageHandler {
     pub fn status_update(
         &mut self,
         payload: &[u8],
-        mac_addr: u64,
+        mac_addr: MacAddress,
     ) -> Result<CellularLogMessage, Error> {
-        let mac_addr = MacAddress::Full(mac_addr);
         let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)?;
-        info!("{}", log_message);
 
         let status = self.get_cellular_status(mac_addr);
         match &log_message {

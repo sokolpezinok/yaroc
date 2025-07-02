@@ -1,7 +1,9 @@
 extern crate yaroc_common;
 
 use clap::Parser;
-use yaroc_common::receive::mqtt::{MqttConfig, MqttReceiver};
+use log::{error, info};
+use yaroc_common::receive::message_handler::MessageHandler;
+use yaroc_common::receive::mqtt::{Message, MqttConfig, MqttReceiver};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -11,22 +13,38 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .filter_module("rumqttc::state", log::LevelFilter::Info)
+        .format_timestamp_millis()
+        .init();
+
     let args = Args::parse();
     let mut dns = Vec::new();
     for entry in &args.dns {
         if let Some((name, mac)) = entry.split_once(',') {
-            dns.push((name, mac));
+            dns.push((mac.to_owned(), name.to_owned()));
         }
     }
 
     let config = MqttConfig::default();
-    let macs = dns.iter().map(|(_, mac)| *mac).collect();
+    let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
     let mut receiver = MqttReceiver::new(config, macs).await;
+    let mut handler = MessageHandler::new(dns).unwrap();
 
+    info!("Everything initialized, starting the loop");
     loop {
         let msg = receiver.next_message().await;
         if let Ok(message) = msg {
-            println!("{:?}", message);
+            match message {
+                Message::CellularStatus(mac_address, _, payload) => {
+                    let log_message = handler.status_update(&payload, mac_address);
+                    match log_message {
+                        Ok(log_message) => info!("{log_message}"),
+                        Err(err) => error!("{err}"),
+                    }
+                }
+            }
         }
     }
 }
