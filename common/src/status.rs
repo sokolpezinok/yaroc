@@ -221,6 +221,7 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
             batt_mv: Some(value.millivolts as u16),
             batt_percents: None, // TODO
             cpu_temperature: Some(value.cpu_temperature),
+            cpu_freq: Some(value.freq),
             timestamp,
             ..Default::default()
         })
@@ -231,7 +232,7 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
 mod test {
     use chrono::{NaiveDate, NaiveTime};
 
-    use super::parse_qlts;
+    use super::*;
 
     #[test]
     fn test_cclk() {
@@ -246,5 +247,38 @@ mod test {
             NaiveTime::from_hms_opt(22, 12, 11).unwrap()
         );
         assert_eq!(dt.offset().local_minus_utc(), 3600);
+    }
+
+    #[test]
+    fn test_mini_call_home_proto_conversion() {
+        let mch_proto = MiniCallHomeProto {
+            cpu_temperature: 47.2,
+            freq: 1600,
+            millivolts: 3782,
+            signal_dbm: -93,
+            signal_snr_cb: 38,
+            cellid: 0x2EF46,
+            network_type: EnumValue::Known(proto::CellNetworkType::LteM),
+            time: Some(Timestamp {
+                millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mch: MiniCallHome = mch_proto.try_into().unwrap();
+        assert_eq!(mch.cpu_temperature.unwrap(), 47.2);
+        assert_eq!(mch.cpu_freq.unwrap(), 1600);
+        assert_eq!(mch.batt_mv.unwrap(), 3782);
+        assert_eq!(
+            mch.signal_info.unwrap(),
+            CellSignalInfo {
+                network_type: CellNetworkType::LteM,
+                rssi_dbm: -93,
+                snr_cb: 38,
+                cellid: Some(0x2EF46)
+            }
+        );
+        assert_eq!(mch.timestamp.to_rfc3339(), "2024-01-29T10:12:11.124+00:00");
     }
 }
