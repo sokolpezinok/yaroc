@@ -33,6 +33,7 @@ pub struct MqttReceiver {
 #[derive(Debug)]
 pub enum Message {
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
+    Punches(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -46,6 +47,7 @@ impl MqttReceiver {
                 .subscribe(std::format!("yar/{mac}/status"), QoS::AtMostOnce)
                 .await
                 .unwrap();
+            client.subscribe(std::format!("yar/{mac}/p"), QoS::AtMostOnce).await.unwrap();
         }
 
         Self { event_loop }
@@ -57,7 +59,11 @@ impl MqttReceiver {
         payload: &[u8],
     ) -> crate::Result<Message> {
         let mac_address = MacAddress::try_from(&topic[4..16])?;
-        Ok(Message::CellularStatus(mac_address, now, payload.into()))
+        match &topic[16..] {
+            "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
+            "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
+            _ => Err(Error::ValueError),
+        }
     }
 
     pub async fn next_message(&mut self) -> crate::Result<Message> {

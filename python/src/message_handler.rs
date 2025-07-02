@@ -72,6 +72,7 @@ impl MessageHandler {
     }
 
     pub fn punches(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<Vec<SiPunchLog>> {
+        let mac_addr = MacAddress::Full(mac_addr);
         self.inner
             .punches(payload, mac_addr)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())

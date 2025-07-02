@@ -181,6 +181,19 @@ impl SiPunchLog {
     }
 }
 
+impl core::fmt::Display for SiPunchLog {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "{} {} punched {} ",
+            self.host_info.name, self.punch.card, self.punch.code
+        )?;
+        write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)
+    }
+}
+
 #[cfg(test)]
 mod test_checksum {
     use super::SiPunch;

@@ -44,6 +44,17 @@ async fn main() {
                         Err(err) => error!("{err}"),
                     }
                 }
+                Message::Punches(mac_address, _, payload) => {
+                    let punches = handler.punches(&payload, mac_address);
+                    match punches {
+                        Ok(punches) => {
+                            for punch in &punches {
+                                info!("{punch}");
+                            }
+                        }
+                        Err(err) => error!("{err}"),
+                    }
+                }
             }
         }
     }
