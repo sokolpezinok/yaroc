@@ -82,7 +82,11 @@ impl MessageHandler {
         Ok(log_message)
     }
 
-    pub fn punches(&mut self, payload: &[u8], mac_address: MacAddress) -> Result<Vec<SiPunchLog>, Error> {
+    pub fn punches(
+        &mut self,
+        payload: &[u8],
+        mac_address: MacAddress,
+    ) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
         let host_info = HostInfo::new(self.resolve(mac_address), mac_address)?;
         let status = self.get_cellular_status(mac_address);
