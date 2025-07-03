@@ -39,7 +39,7 @@ pub enum Message {
 }
 
 impl MqttReceiver {
-    pub async fn new(config: MqttConfig, macs: std::vec::Vec<&str>) -> Self {
+    pub fn new(config: MqttConfig, macs: std::vec::Vec<&str>) -> Self {
         let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 

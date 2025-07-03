@@ -29,7 +29,7 @@ async fn main() {
 
     let config = MqttConfig::default();
     let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
-    let mut receiver = MqttReceiver::new(config, macs).await;
+    let mut receiver = MqttReceiver::new(config, macs);
     let mut handler = MessageHandler::new(dns).unwrap();
 
     info!("Everything initialized, starting the loop");

@@ -283,7 +283,7 @@ mod test_punch {
 
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
         // TODO: should propagate errors
-        let punches = handler.punches(&buf[..len], 0x1234).unwrap();
+        let punches = handler.punches(&buf[..len], MacAddress::default()).unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -304,7 +304,7 @@ mod test_punch {
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
-        let punch_logs = handler.punches(&buf[..len], 0x1234).unwrap();
+        let punch_logs = handler.punches(&buf[..len], MacAddress::default()).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
