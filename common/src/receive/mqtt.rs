@@ -27,6 +27,8 @@ impl Default for MqttConfig {
 }
 
 pub struct MqttReceiver {
+    client: AsyncClient,
+    topics: Vec<String>,
     event_loop: EventLoop,
 }
 
@@ -42,15 +44,17 @@ impl MqttReceiver {
         mqttoptions.set_keep_alive(config.keep_alive);
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 10);
+        let mut topics = Vec::new();
         for mac in &macs {
-            client
-                .subscribe(std::format!("yar/{mac}/status"), QoS::AtMostOnce)
-                .await
-                .unwrap();
-            client.subscribe(std::format!("yar/{mac}/p"), QoS::AtMostOnce).await.unwrap();
+            topics.push(std::format!("yar/{mac}/status"));
+            topics.push(std::format!("yar/{mac}/p"));
         }
 
-        Self { event_loop }
+        Self {
+            client,
+            event_loop,
+            topics,
+        }
     }
 
     fn process_incoming(
@@ -75,11 +79,14 @@ impl MqttReceiver {
                     return Self::process_incoming(now, &topic, &payload);
                 }
                 Event::Incoming(Packet::Disconnect) => {
-                    std::println!("Disconnected");
+                    std::println!("MQTT Disconnected");
                 }
-                _ => {
-                    // ignored
+                Event::Incoming(Packet::ConnAck(_)) => {
+                    for topic in &self.topics {
+                        self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
+                    }
                 }
+                _ => {} // ignored
             }
         }
     }
