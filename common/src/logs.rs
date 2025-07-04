@@ -12,7 +12,9 @@ use std::borrow::ToOwned;
 use std::fmt;
 use std::string::String;
 
+#[derive(Debug)]
 pub enum CellularLogMessage {
+    //TODO: use HostInfo instead
     Disconnected(String, String),
     MCH(MiniCallHomeLog),
     DeviceEvent(String, String, bool),
@@ -36,7 +38,7 @@ impl fmt::Display for CellularLogMessage {
 impl CellularLogMessage {
     pub fn from_proto(
         status: Status,
-        mac_addr: MacAddress,
+        mac_address: MacAddress,
         hostname: &str,
         tz: &impl TimeZone,
     ) -> crate::Result<Self> {
@@ -47,7 +49,7 @@ impl CellularLogMessage {
             Some(Msg::MiniCallHome(mch)) => {
                 let now = Local::now().with_timezone(tz);
                 let log_message =
-                    MiniCallHomeLog::new(hostname, mac_addr, now.fixed_offset(), mch)?;
+                    MiniCallHomeLog::new(hostname, mac_address, now.fixed_offset(), mch)?;
                 Ok(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
@@ -65,6 +67,7 @@ impl CellularLogMessage {
     }
 }
 
+#[derive(Debug)]
 pub struct MiniCallHomeLog {
     pub mini_call_home: MiniCallHome,
     pub host_info: HostInfo,

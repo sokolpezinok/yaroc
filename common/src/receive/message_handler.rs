@@ -19,6 +19,7 @@ use crate::logs::CellularLogMessage;
 use crate::meshtastic::{MshLogMessage, MshMetrics, PositionName};
 use crate::proto::{Punches, Status};
 use crate::punch::{SiPunch, SiPunchLog};
+use crate::receive::mqtt::Message as MqttMessage;
 use crate::receive::state::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 use crate::system_info::{HostInfo, MacAddress};
 
@@ -26,6 +27,12 @@ pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
+}
+
+#[derive(Debug)]
+pub enum Message {
+    CellLog(CellularLogMessage),
+    SiPunches(Vec<SiPunchLog>),
 }
 
 impl MessageHandler {
@@ -54,16 +61,33 @@ impl MessageHandler {
         })
     }
 
+    pub fn process_mqtt_message(&mut self, message: MqttMessage) -> Result<Message, Error> {
+        match message {
+            MqttMessage::CellularStatus(mac_address, _, payload) => {
+                let log_message = self.status_update(&payload, mac_address)?;
+                Ok(Message::CellLog(log_message))
+            }
+            MqttMessage::Punches(mac_address, _, payload) => {
+                let punches = self.punches(&payload, mac_address)?;
+                Ok(Message::SiPunches(punches))
+            }
+        }
+    }
+
     pub fn status_update(
         &mut self,
         payload: &[u8],
-        mac_addr: MacAddress,
+        mac_address: MacAddress,
     ) -> Result<CellularLogMessage, Error> {
         let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
-        let log_message =
-            CellularLogMessage::from_proto(status_proto, mac_addr, self.resolve(mac_addr), &Local)?;
+        let log_message = CellularLogMessage::from_proto(
+            status_proto,
+            mac_address,
+            self.resolve(mac_address),
+            &Local,
+        )?;
 
-        let status = self.get_cellular_status(mac_addr);
+        let status = self.get_cellular_status(mac_address);
         match &log_message {
             CellularLogMessage::MCH(mch_log) => {
                 let mch = &mch_log.mini_call_home;

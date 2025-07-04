@@ -164,6 +164,7 @@ impl SiPunch {
     }
 }
 
+#[derive(Debug)]
 pub struct SiPunchLog {
     pub punch: SiPunch,
     pub latency: Duration,

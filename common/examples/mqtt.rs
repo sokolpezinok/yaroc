@@ -2,8 +2,8 @@ extern crate yaroc_common;
 
 use clap::Parser;
 use log::{error, info};
-use yaroc_common::receive::message_handler::MessageHandler;
-use yaroc_common::receive::mqtt::{Message, MqttConfig, MqttReceiver};
+use yaroc_common::receive::message_handler::{Message, MessageHandler};
+use yaroc_common::receive::mqtt::{MqttConfig, MqttReceiver};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -34,28 +34,23 @@ async fn main() {
 
     info!("Everything initialized, starting the loop");
     loop {
-        let msg = receiver.next_message().await;
-        if let Ok(message) = msg {
-            match message {
-                Message::CellularStatus(mac_address, _, payload) => {
-                    let log_message = handler.status_update(&payload, mac_address);
-                    match log_message {
-                        Ok(log_message) => info!("{log_message}"),
-                        Err(err) => error!("{err}"),
+        let log_message = receiver
+            .next_message()
+            .await
+            .and_then(|message| handler.process_mqtt_message(message));
+
+        match log_message {
+            Ok(log) => match log {
+                Message::CellLog(cellular_log_message) => {
+                    info!("{cellular_log_message}");
+                }
+                Message::SiPunches(si_punch_logs) => {
+                    for punch in si_punch_logs {
+                        info!("{punch}");
                     }
                 }
-                Message::Punches(mac_address, _, payload) => {
-                    let punches = handler.punches(&payload, mac_address);
-                    match punches {
-                        Ok(punches) => {
-                            for punch in &punches {
-                                info!("{punch}");
-                            }
-                        }
-                        Err(err) => error!("{err}"),
-                    }
-                }
-            }
+            },
+            Err(err) => error!("{err}"),
         }
     }
 }
