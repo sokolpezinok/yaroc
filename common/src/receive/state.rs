@@ -1,7 +1,7 @@
 extern crate std;
 
 use std::collections::HashSet;
-use std::string::String;
+use std::string::{String, ToString};
 use std::vec::Vec;
 
 use chrono::prelude::*;
@@ -10,6 +10,7 @@ use chrono::prelude::*;
 use crate::meshtastic::RssiSnr;
 use crate::punch::SiPunch;
 use crate::status::CellSignalInfo;
+use crate::system_info::HostInfo;
 
 #[derive(Debug, PartialEq)]
 pub enum SignalInfo {
@@ -29,7 +30,7 @@ pub struct NodeInfo {
 
 #[derive(Default, Clone)]
 pub struct CellularRocStatus {
-    pub name: String,
+    host_info: HostInfo,
     state: Option<CellSignalInfo>,
     voltage: Option<f64>,
     codes: HashSet<u16>,
@@ -38,9 +39,9 @@ pub struct CellularRocStatus {
 }
 
 impl CellularRocStatus {
-    pub fn new(name: String) -> Self {
+    pub fn new(host_info: HostInfo) -> Self {
         Self {
-            name,
+            host_info,
             ..Self::default()
         }
     }
@@ -71,7 +72,7 @@ impl CellularRocStatus {
         };
 
         NodeInfo {
-            name: self.name.clone(),
+            name: self.host_info.name.to_string(),
             signal_info,
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,

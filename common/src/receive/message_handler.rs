@@ -80,12 +80,8 @@ impl MessageHandler {
         mac_address: MacAddress,
     ) -> Result<CellularLogMessage, Error> {
         let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
-        let log_message = CellularLogMessage::from_proto(
-            status_proto,
-            mac_address,
-            self.resolve(mac_address),
-            &Local,
-        )?;
+        let log_message =
+            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address)?, &Local)?;
 
         let status = self.get_cellular_status(mac_address);
         match &log_message {
@@ -112,7 +108,7 @@ impl MessageHandler {
         mac_address: MacAddress,
     ) -> Result<Vec<SiPunchLog>, Error> {
         let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
-        let host_info = HostInfo::new(self.resolve(mac_address), mac_address)?;
+        let host_info = self.resolve(mac_address)?;
         let status = self.get_cellular_status(mac_address);
         let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
@@ -138,8 +134,9 @@ impl MessageHandler {
             .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
     }
 
-    fn resolve(&self, mac_addr: MacAddress) -> &str {
-        self.dns.get(&mac_addr).map(|x| x.as_str()).unwrap_or("Unknown")
+    fn resolve(&self, mac_address: MacAddress) -> crate::Result<HostInfo> {
+        let name = self.dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
+        HostInfo::new(name, mac_address)
     }
 
     pub fn msh_status_mesh_packet(
@@ -215,7 +212,8 @@ impl MessageHandler {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = HostInfo::new(self.resolve(mac_address), mac_address)
+        let host_info = self
+            .resolve(mac_address)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Too long name"))?;
         let Some(PayloadVariant::Decoded(Data {
             portnum: SERIAL_APP,
@@ -272,8 +270,10 @@ impl MessageHandler {
     }
 
     fn get_cellular_status(&mut self, mac_addr: MacAddress) -> &mut CellularRocStatus {
-        let name = self.resolve(mac_addr).to_owned();
-        self.cellular_statuses.entry(mac_addr).or_insert(CellularRocStatus::new(name))
+        let host_info = self.resolve(mac_addr).unwrap();
+        self.cellular_statuses
+            .entry(mac_addr)
+            .or_insert(CellularRocStatus::new(host_info))
     }
 }
 

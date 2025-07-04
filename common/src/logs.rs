@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::proto::status::Msg;
 use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
 use crate::status::{CellNetworkType, MiniCallHome};
-use crate::system_info::{HostInfo, MacAddress};
+use crate::system_info::HostInfo;
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::EnumValue;
@@ -37,11 +37,9 @@ impl fmt::Display for CellularLogMessage {
 impl CellularLogMessage {
     pub fn from_proto(
         status: Status,
-        mac_address: MacAddress,
-        hostname: &str,
+        host_info: HostInfo,
         tz: &impl TimeZone,
     ) -> crate::Result<Self> {
-        let host_info = HostInfo::new(hostname, mac_address)?;
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => Ok(
                 CellularLogMessage::Disconnected(host_info, client_name.to_owned()),
@@ -56,7 +54,7 @@ impl CellularLogMessage {
                     return Err(Error::FormatError);
                 }
                 Ok(CellularLogMessage::DeviceEvent(
-                    hostname.to_owned(),
+                    std::string::ToString::to_string(&host_info.name),
                     port.to_owned(),
                     r#type == EnumValue::Known(EventType::Added),
                 ))
@@ -128,6 +126,7 @@ mod test_logs {
     use crate::{
         proto::{MiniCallHome, Timestamp},
         status::CellSignalInfo,
+        system_info::MacAddress,
     };
     use femtopb::EnumValue::Known;
     use std::format;
@@ -196,9 +195,9 @@ mod test_logs {
             ..Default::default()
         };
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let cell_log_msg =
-            CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz)
-                .expect("MiniCallHome proto should be valid");
+        let host_info = HostInfo::new("spe01", MacAddress::default()).unwrap();
+        let cell_log_msg = CellularLogMessage::from_proto(status, host_info.clone(), &tz)
+            .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
         assert!(
             formatted_log_msg
@@ -212,8 +211,7 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg =
-            CellularLogMessage::from_proto(status, MacAddress::default(), "spe01", &tz);
+        let cell_log_msg = CellularLogMessage::from_proto(status, host_info, &tz);
         assert!(cell_log_msg.is_err());
     }
 }

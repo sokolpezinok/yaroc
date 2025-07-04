@@ -49,7 +49,7 @@ pub struct HostInfo {
 impl HostInfo {
     pub fn new(name: &str, mac_address: MacAddress) -> crate::Result<Self> {
         Ok(Self {
-            name: name.try_into().map_err(|_| Error::ValueError)?,
+            name: name.try_into().map_err(|_| Error::BufferTooSmallError)?,
             mac_address,
         })
     }
