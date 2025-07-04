@@ -108,7 +108,7 @@ class YarocDaemon:
 
     async def loop(self):
         asyncio.create_task(self.client_group.loop())
-        asyncio.create_task(self.draw_table())
+        draw_task = asyncio.create_task(self.draw_table())
         asyncio.create_task(self.msh_serial.loop())
 
         try:
@@ -123,6 +123,9 @@ class YarocDaemon:
                     asyncio.create_task(self._handle_meshtastic_serial(msg))
         except asyncio.exceptions.CancelledError:
             logging.error("Interrupted, exiting")
+            draw_task.cancel()
+            # TODO: also work at process exit/systemd shutdown
+            self.drawer.clear()
             sys.exit(0)
 
 

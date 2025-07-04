@@ -112,3 +112,8 @@ class StatusDrawer:
             self.epd.width,
         )
         self.epd.display(self.epd.getbuffer(image))
+
+    def clear(self):
+        if self.epd is None:
+            return
+        self.epd.Clear()
