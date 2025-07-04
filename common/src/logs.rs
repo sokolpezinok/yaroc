@@ -14,8 +14,7 @@ use std::string::String;
 
 #[derive(Debug)]
 pub enum CellularLogMessage {
-    //TODO: use HostInfo instead
-    Disconnected(String, String),
+    Disconnected(HostInfo, String),
     MCH(MiniCallHomeLog),
     DeviceEvent(String, String, bool),
 }
@@ -24,8 +23,8 @@ impl fmt::Display for CellularLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CellularLogMessage::MCH(mch) => write!(f, "{}", mch),
-            CellularLogMessage::Disconnected(hostname, client_name) => {
-                write!(f, "{hostname} disconnected client: {client_name}")
+            CellularLogMessage::Disconnected(host_info, client_name) => {
+                write!(f, "{} disconnected client: {client_name}", host_info.name)
             }
             CellularLogMessage::DeviceEvent(hostname, port, added) => {
                 let event_type = if *added { "added" } else { "removed" };
@@ -42,14 +41,14 @@ impl CellularLogMessage {
         hostname: &str,
         tz: &impl TimeZone,
     ) -> crate::Result<Self> {
+        let host_info = HostInfo::new(hostname, mac_address)?;
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => Ok(
-                CellularLogMessage::Disconnected(hostname.to_owned(), client_name.to_owned()),
+                CellularLogMessage::Disconnected(host_info, client_name.to_owned()),
             ),
             Some(Msg::MiniCallHome(mch)) => {
                 let now = Local::now().with_timezone(tz);
-                let log_message =
-                    MiniCallHomeLog::new(hostname, mac_address, now.fixed_offset(), mch)?;
+                let log_message = MiniCallHomeLog::new(host_info, now.fixed_offset(), mch)?;
                 Ok(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
@@ -76,8 +75,7 @@ pub struct MiniCallHomeLog {
 
 impl MiniCallHomeLog {
     pub fn new(
-        name: &str,
-        mac_address: MacAddress,
+        host_info: HostInfo,
         now: DateTime<FixedOffset>,
         mch_proto: crate::proto::MiniCallHome,
     ) -> crate::Result<Self> {
@@ -86,10 +84,7 @@ impl MiniCallHomeLog {
         Ok(Self {
             latency: now - mch.timestamp,
             mini_call_home: mch,
-            host_info: HostInfo {
-                name: name.try_into().map_err(|_| Error::ValueError)?,
-                mac_address,
-            },
+            host_info,
         })
     }
 }
@@ -168,8 +163,9 @@ mod test_logs {
 
     #[test]
     fn test_cellular_logmessage_disconnected() {
+        let host_info = HostInfo::new("spe01", MacAddress::default()).unwrap();
         let log_message_disconnected =
-            CellularLogMessage::Disconnected("spe01".to_owned(), "SIM7020-spe01".to_owned());
+            CellularLogMessage::Disconnected(host_info, "SIM7020-spe01".to_owned());
         assert_eq!(
             format!("{log_message_disconnected}"),
             "spe01 disconnected client: SIM7020-spe01"
