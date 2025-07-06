@@ -4,6 +4,7 @@ use clap::Parser;
 use log::{error, info};
 use yaroc_common::receive::message_handler::{Message, MessageHandler};
 use yaroc_common::receive::mqtt::MqttConfig;
+use yaroc_common::system_info::MacAddress;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -23,7 +24,7 @@ async fn main() {
     let mut dns = Vec::new();
     for entry in &args.dns {
         if let Some((name, mac)) = entry.split_once(',') {
-            dns.push((mac.to_owned(), name.to_owned()));
+            dns.push((name.to_owned(), MacAddress::try_from(mac).unwrap()));
         }
     }
 

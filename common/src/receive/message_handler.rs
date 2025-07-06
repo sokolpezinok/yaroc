@@ -39,15 +39,14 @@ pub enum Message {
 }
 
 impl MessageHandler {
-    pub fn new(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> Result<Self, Error> {
+    pub fn new(
+        dns: Vec<(String, MacAddress)>,
+        mqtt_config: Option<MqttConfig>,
+    ) -> Result<Self, Error> {
         let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
         let mqtt_receiver = mqtt_config.map(|config| Mutex::new(MqttReceiver::new(config, macs)));
-        let dns = dns
-            .into_iter()
-            .map(|(mac, name)| Ok((MacAddress::try_from(mac.as_str())?, name)))
-            .collect::<Result<_, Error>>()?;
         Ok(Self {
-            dns,
+            dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
@@ -64,7 +63,7 @@ impl MessageHandler {
         }
     }
 
-    pub fn process_mqtt_message(&mut self, message: MqttMessage) -> Result<Message, Error> {
+    fn process_mqtt_message(&mut self, message: MqttMessage) -> Result<Message, Error> {
         match message {
             MqttMessage::CellularStatus(mac_address, _, payload) => {
                 let log_message = self.status_update(&payload, mac_address)?;

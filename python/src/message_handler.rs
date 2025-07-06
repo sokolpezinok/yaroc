@@ -28,7 +28,18 @@ impl MessageHandler {
     #[new]
     pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
         let (punch_tx, punch_rx) = channel::<SiPunchLog>(Self::CHANNEL_CAPACITY);
-        let inner = MessageHandlerRs::new(dns, None).map_err(|err| match err {
+        let dns: PyResult<Vec<(String, MacAddress)>> = dns
+            .into_iter()
+            .map(|(mac, name)| {
+                Ok((
+                    name,
+                    MacAddress::try_from(mac.as_str()).map_err(|_| {
+                        PyValueError::new_err(format!("Wrong MAC address format: {mac}"))
+                    })?,
+                ))
+            })
+            .collect();
+        let inner = MessageHandlerRs::new(dns?, None).map_err(|err| match err {
             Error::ParseError | Error::ValueError => {
                 PyValueError::new_err("Wrong MAC address format")
             }
