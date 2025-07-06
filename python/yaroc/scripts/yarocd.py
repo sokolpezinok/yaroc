@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import signal
 import sys
 import time
 import tomllib
@@ -99,6 +100,17 @@ class YarocDaemon:
     def _handle_meshtastic_status_service_envelope(self, msg: MeshtasticStatusMessage):
         self.handler.meshtastic_status_service_envelope(msg.raw, msg.now, msg.recv_mac_addr)
 
+    async def handle_mqtt_messages(self):
+        async for msg in self.mqtt_forwarder.messages():
+            if isinstance(msg, PunchMessage):
+                asyncio.create_task(self._handle_punches(msg))
+            elif isinstance(msg, StatusMessage):
+                asyncio.create_task(self._handle_status(msg))
+            elif isinstance(msg, MeshtasticStatusMessage):
+                self._handle_meshtastic_status_service_envelope(msg)
+            else:
+                asyncio.create_task(self._handle_meshtastic_serial(msg))
+
     async def draw_table(self):
         await asyncio.sleep(20.0)
         while True:
@@ -107,29 +119,37 @@ class YarocDaemon:
             await asyncio.sleep(60 - (time.time() - time_start))
 
     async def loop(self):
+        def handle_exception(loop, context):
+            msg = context.get("exception", context["message"])
+            logging.error(f"Caught exception: {msg}")
+
+        asyncio.get_event_loop().set_exception_handler(handle_exception)
+
+        shutdown_event = asyncio.Event()
+
+        def shutdown(signum, frame):
+            signal_name = signal.Signals(signum).name
+            logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
+            shutdown_event.set()
+
+        signal.signal(signal.SIGTERM, shutdown)
+
         asyncio.create_task(self.client_group.loop())
-        draw_task = asyncio.create_task(self.draw_table())
+        asyncio.create_task(self.handle_mqtt_messages())
         asyncio.create_task(self.msh_serial.loop())
+        draw_task = asyncio.create_task(self.draw_table())
 
         try:
-            async for msg in self.mqtt_forwarder.messages():
-                if isinstance(msg, PunchMessage):
-                    asyncio.create_task(self._handle_punches(msg))
-                elif isinstance(msg, StatusMessage):
-                    asyncio.create_task(self._handle_status(msg))
-                elif isinstance(msg, MeshtasticStatusMessage):
-                    self._handle_meshtastic_status_service_envelope(msg)
-                else:
-                    asyncio.create_task(self._handle_meshtastic_serial(msg))
+            await shutdown_event.wait()
         except asyncio.exceptions.CancelledError:
-            logging.error("Interrupted, exiting")
-            draw_task.cancel()
-            # TODO: also work at process exit/systemd shutdown
-            self.drawer.clear()
-            sys.exit(0)
+            logging.error("Interrupted, exiting ...")
+
+        draw_task.cancel()
+        self.drawer.clear()
+        logging.info("Main loop shutting down")
 
 
-async def main():
+async def main_loop():
     with open("yarocd.toml", "rb") as f:
         config = tomllib.load(f)
     config.pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
@@ -161,4 +181,7 @@ if is_windows():
     from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
-asyncio.run(main())
+
+
+def main():
+    asyncio.run(main_loop())
