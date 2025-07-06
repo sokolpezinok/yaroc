@@ -48,6 +48,7 @@ impl SiPunch {
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct SiPunchLog {
     #[pyo3(get)]
     pub punch: SiPunch,

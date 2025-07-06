@@ -21,6 +21,7 @@ heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "6067
 log = "0.4"
 meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "8be44060c6d25c33f17a6b3c6257765f0c2343b6" }
 thiserror = { version = "2.0.0", default-features = false }
+tokio = { version = "1.44" }
 
 
 [profile.release]

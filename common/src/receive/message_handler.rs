@@ -57,7 +57,7 @@ impl MessageHandler {
     pub async fn next_message(&mut self) -> Result<Message, Error> {
         if let Some(mqtt_receiver) = self.mqtt_receiver.as_mut() {
             let message =
-                mqtt_receiver.lock().map_err(|_| Error::TimeoutError)?.next_message().await?;
+                mqtt_receiver.get_mut().map_err(|_| Error::TimeoutError)?.next_message().await?;
             self.process_mqtt_message(message)
         } else {
             Err(Error::ValueError)

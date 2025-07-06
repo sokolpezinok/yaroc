@@ -3,8 +3,11 @@ use chrono::prelude::*;
 use log::info;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use tokio::sync::broadcast::channel;
+use tokio::sync::broadcast::{Receiver, Sender};
 
 use yaroc_common::error::Error;
+use yaroc_common::receive::message_handler::Message;
 use yaroc_common::receive::message_handler::MessageHandler as MessageHandlerRs;
 use yaroc_common::system_info::MacAddress;
 
@@ -14,20 +17,28 @@ use crate::status::NodeInfo;
 #[pyclass]
 pub struct MessageHandler {
     inner: MessageHandlerRs,
+    punch_tx: Sender<SiPunchLog>,
+    punch_rx: Receiver<SiPunchLog>,
 }
 
 #[pymethods]
 impl MessageHandler {
+    const CHANNEL_CAPACITY: usize = 64;
+
     #[new]
     pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
-        MessageHandlerRs::new(dns, None)
-            .map_err(|err| match err {
-                Error::ParseError | Error::ValueError => {
-                    PyValueError::new_err("Wrong MAC address format")
-                }
-                _ => PyRuntimeError::new_err("Unknown error"),
-            })
-            .map(|inner| Self { inner })
+        let (punch_tx, punch_rx) = channel::<SiPunchLog>(Self::CHANNEL_CAPACITY);
+        let inner = MessageHandlerRs::new(dns, None).map_err(|err| match err {
+            Error::ParseError | Error::ValueError => {
+                PyValueError::new_err("Wrong MAC address format")
+            }
+            _ => PyRuntimeError::new_err("Unknown error"),
+        })?;
+        Ok(Self {
+            inner,
+            punch_tx,
+            punch_rx,
+        })
     }
 
     pub fn meshtastic_serial_service_envelope(
@@ -100,5 +111,25 @@ impl MessageHandler {
         })?;
         info!("{log_message}");
         Ok(())
+    }
+}
+
+impl MessageHandler {
+    pub async fn process_message(&mut self) {
+        let message = self.inner.next_message().await.unwrap();
+        match message {
+            Message::CellLog(_) => todo!(),
+            Message::SiPunches(si_punch_logs) => {
+                for si_punch_log in si_punch_logs {
+                    let _ = self.punch_tx.send(si_punch_log.into());
+                }
+            }
+        }
+    }
+
+    //TODO: we want to call multiple `next_*` methods from Python at the same time, these
+    //can't be all `&mut self`.
+    pub async fn next_punch(&mut self) -> SiPunchLog {
+        self.punch_rx.recv().await.unwrap()
     }
 }
