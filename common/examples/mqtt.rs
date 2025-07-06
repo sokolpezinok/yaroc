@@ -3,7 +3,7 @@ extern crate yaroc_common;
 use clap::Parser;
 use log::{error, info};
 use yaroc_common::receive::message_handler::{Message, MessageHandler};
-use yaroc_common::receive::mqtt::{MqttConfig, MqttReceiver};
+use yaroc_common::receive::mqtt::MqttConfig;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -27,17 +27,12 @@ async fn main() {
         }
     }
 
-    let config = MqttConfig::default();
-    let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
-    let mut receiver = MqttReceiver::new(config, macs);
-    let mut handler = MessageHandler::new(dns).unwrap();
+    let mqtt_config = MqttConfig::default();
+    let mut handler = MessageHandler::new(dns, Some(mqtt_config)).unwrap();
 
     info!("Everything initialized, starting the loop");
     loop {
-        let log_message = receiver
-            .next_message()
-            .await
-            .and_then(|message| handler.process_mqtt_message(message));
+        let log_message = handler.next_message().await;
 
         match log_message {
             Ok(log) => match log {

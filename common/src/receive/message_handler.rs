@@ -11,6 +11,7 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::string::String;
+use std::sync::Mutex;
 use std::vec::Vec;
 
 use crate::error::Error;
@@ -18,12 +19,15 @@ use crate::logs::CellularLogMessage;
 use crate::meshtastic::{MshLogMessage, MshMetrics, PositionName};
 use crate::proto::{Punches, Status};
 use crate::punch::{SiPunch, SiPunchLog};
-use crate::receive::mqtt::Message as MqttMessage;
+use crate::receive::mqtt::{Message as MqttMessage, MqttConfig};
 use crate::receive::state::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 use crate::system_info::{HostInfo, MacAddress};
 
+use super::mqtt::MqttReceiver;
+
 pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
+    mqtt_receiver: Option<Mutex<MqttReceiver>>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
 }
@@ -35,16 +39,29 @@ pub enum Message {
 }
 
 impl MessageHandler {
-    pub fn new(dns: Vec<(String, String)>) -> Result<Self, Error> {
+    pub fn new(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> Result<Self, Error> {
+        let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
+        let mqtt_receiver = mqtt_config.map(|config| Mutex::new(MqttReceiver::new(config, macs)));
         let dns = dns
             .into_iter()
             .map(|(mac, name)| Ok((MacAddress::try_from(mac.as_str())?, name)))
             .collect::<Result<_, Error>>()?;
         Ok(Self {
             dns,
+            mqtt_receiver,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
         })
+    }
+
+    pub async fn next_message(&mut self) -> Result<Message, Error> {
+        if let Some(mqtt_receiver) = self.mqtt_receiver.as_mut() {
+            let message =
+                mqtt_receiver.lock().map_err(|_| Error::TimeoutError)?.next_message().await?;
+            self.process_mqtt_message(message)
+        } else {
+            Err(Error::ValueError)
+        }
     }
 
     pub fn process_mqtt_message(&mut self, message: MqttMessage) -> Result<Message, Error> {
@@ -292,7 +309,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
         let now = Local::now();
         // TODO: should propagate errors
         let punches = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
@@ -315,7 +332,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
         let now = Local::now();
         let punch_logs = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punch_logs.len(), 1);
@@ -348,7 +365,7 @@ mod test_punch {
             },
         )
         .encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
         let punch_logs = handler.msh_serial_service_envelope(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -386,7 +403,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
         handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -431,7 +448,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
         handler.msh_serial_service_envelope(&message).unwrap();
 
         let telemetry = Telemetry {

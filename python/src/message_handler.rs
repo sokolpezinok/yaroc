@@ -20,7 +20,7 @@ pub struct MessageHandler {
 impl MessageHandler {
     #[new]
     pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
-        MessageHandlerRs::new(dns)
+        MessageHandlerRs::new(dns, None)
             .map_err(|err| match err {
                 Error::ParseError | Error::ValueError => {
                     PyValueError::new_err("Wrong MAC address format")
