@@ -14,6 +14,7 @@ pub struct MqttConfig {
     url: String,
     port: u16,
     keep_alive: Duration,
+    meshtastic_channel: Option<String>,
 }
 
 impl Default for MqttConfig {
@@ -22,6 +23,7 @@ impl Default for MqttConfig {
             url: "broker.emqx.io".to_owned(),
             port: 1883,
             keep_alive: Duration::from_secs(15),
+            meshtastic_channel: None,
         }
     }
 }
@@ -36,7 +38,8 @@ pub struct MqttReceiver {
 pub enum Message {
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
-    MeshtasticSerialMessage(DateTime<Local>, Vec<u8>),
+    MeshtasticSerial(DateTime<Local>, Vec<u8>),
+    MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -49,7 +52,10 @@ impl MqttReceiver {
         for mac in &macs {
             topics.push(std::format!("yar/{mac}/status"));
             topics.push(std::format!("yar/{mac}/p"));
-            topics.push("yar/2/e/serial".to_owned());
+            topics.push(std::format!("yar/2/e/serial/!{mac}"));
+            if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
+                topics.push(std::format!("yar/2/e/{meshtastic_channel}/!{mac}"));
+            }
         }
 
         Self {
@@ -65,7 +71,18 @@ impl MqttReceiver {
         payload: &[u8],
     ) -> crate::Result<Message> {
         if topic.starts_with("yar/2/e/") {
-            Ok(Message::MeshtasticSerialMessage(now, payload.into()))
+            let topic = &topic[8..];
+            match topic {
+                "serial" => Ok(Message::MeshtasticSerial(now, payload.into())),
+                _ => {
+                    let recv_mac_address = MacAddress::try_from(&topic[topic.len() - 8..])?;
+                    Ok(Message::MeshtasticStatus(
+                        recv_mac_address,
+                        now,
+                        payload.into(),
+                    ))
+                }
+            }
         } else {
             let mac_address = MacAddress::try_from(&topic[4..16])?;
             match &topic[16..] {

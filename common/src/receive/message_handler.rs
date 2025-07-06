@@ -36,6 +36,7 @@ pub struct MessageHandler {
 pub enum Message {
     CellLog(CellularLogMessage),
     SiPunches(Vec<SiPunchLog>),
+    MeshtasticLog,
 }
 
 impl MessageHandler {
@@ -73,9 +74,13 @@ impl MessageHandler {
                 let punches = self.punches(mac_address, now, &payload)?;
                 Ok(Message::SiPunches(punches))
             }
-            MqttMessage::MeshtasticSerialMessage(_, payload) => {
+            MqttMessage::MeshtasticSerial(_, payload) => {
                 let punches = self.msh_serial_service_envelope(&payload)?;
                 Ok(Message::SiPunches(punches))
+            }
+            MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
+                self.msh_status_service_envelope(&payload, now, recv_mac_address);
+                Ok(Message::MeshtasticLog)
             }
         }
     }
@@ -162,13 +167,12 @@ impl MessageHandler {
     pub fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
-        now: DateTime<FixedOffset>,
-        recv_mac_address: Option<u32>,
+        now: DateTime<Local>,
+        recv_mac_address: MacAddress,
     ) {
-        let recv_position = recv_mac_address
-            .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
+        let recv_position = self.get_position_name(recv_mac_address);
         let msh_log_message =
-            MshLogMessage::from_service_envelope(payload, now, &self.dns, recv_position);
+            MshLogMessage::from_service_envelope(payload, now.into(), &self.dns, recv_position);
         self.msh_status_update(msh_log_message)
     }
 
@@ -403,7 +407,7 @@ mod test_punch {
         };
         let message = envelope1.encode_to_vec();
         let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
-        handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
+        handler.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(
@@ -424,8 +428,8 @@ mod test_punch {
         };
         handler.msh_status_service_envelope(
             &envelope.encode_to_vec(),
-            Local::now().fixed_offset(),
-            None,
+            Local::now(),
+            MacAddress::default(),
         );
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -460,7 +464,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope(0xdeadbeef, data).encode_to_vec();
-        handler.msh_status_service_envelope(&message, Local::now().fixed_offset(), None);
+        handler.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
     }

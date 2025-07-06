@@ -45,6 +45,7 @@ async fn main() {
                         info!("{punch}");
                     }
                 }
+                _ => todo!("Add"),
             },
             Err(err) => error!("{err}"),
         }

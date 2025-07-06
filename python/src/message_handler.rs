@@ -79,14 +79,17 @@ impl MessageHandler {
             })
     }
 
-    #[pyo3(signature = (payload, now, recv_mac_address=None))]
     pub fn meshtastic_status_service_envelope(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
-        recv_mac_address: Option<u32>,
+        recv_mac_address: u32,
     ) {
-        self.inner.msh_status_service_envelope(payload, now, recv_mac_address);
+        self.inner.msh_status_service_envelope(
+            payload,
+            now.into(),
+            MacAddress::Meshtastic(recv_mac_address),
+        );
     }
 
     #[pyo3(signature = (payload, now, recv_mac_address=None))]
@@ -135,6 +138,7 @@ impl MessageHandler {
                     let _ = self.punch_tx.send(si_punch_log.into());
                 }
             }
+            Message::MeshtasticLog => {}
         }
     }
 
