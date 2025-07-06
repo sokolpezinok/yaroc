@@ -9,6 +9,8 @@ pub enum Error {
     FormatError,
     #[error("Cannot parse string as the given type")]
     ParseError,
+    #[error("Cannot parse protobuf as the given type")]
+    ProtobufParseError,
     #[error("Supplied wrong function argument")]
     ValueError,
     #[error("Softdevice (BLE) error")]

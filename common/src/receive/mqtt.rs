@@ -36,6 +36,7 @@ pub struct MqttReceiver {
 pub enum Message {
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
+    MeshtasticSerialMessage(DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -48,6 +49,7 @@ impl MqttReceiver {
         for mac in &macs {
             topics.push(std::format!("yar/{mac}/status"));
             topics.push(std::format!("yar/{mac}/p"));
+            topics.push("yar/2/e/serial".to_owned());
         }
 
         Self {
@@ -62,11 +64,15 @@ impl MqttReceiver {
         topic: &str,
         payload: &[u8],
     ) -> crate::Result<Message> {
-        let mac_address = MacAddress::try_from(&topic[4..16])?;
-        match &topic[16..] {
-            "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
-            "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
-            _ => Err(Error::ValueError),
+        if topic.starts_with("yar/2/e/") {
+            Ok(Message::MeshtasticSerialMessage(now, payload.into()))
+        } else {
+            let mac_address = MacAddress::try_from(&topic[4..16])?;
+            match &topic[16..] {
+                "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
+                "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
+                _ => Err(Error::ValueError),
+            }
         }
     }
 

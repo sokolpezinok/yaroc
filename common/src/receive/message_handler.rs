@@ -10,7 +10,6 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::borrow::ToOwned;
 use std::collections::HashMap;
-use std::format;
 use std::string::String;
 use std::vec::Vec;
 
@@ -39,21 +38,8 @@ impl MessageHandler {
     pub fn new(dns: Vec<(String, String)>) -> Result<Self, Error> {
         let dns = dns
             .into_iter()
-            .map(|(mac, name)| match mac.len() {
-                8 => Ok((
-                    // TODO: remove unwrap
-                    MacAddress::Meshtastic(
-                        u32::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?,
-                    ),
-                    name,
-                )),
-                12 => Ok((
-                    MacAddress::Full(u64::from_str_radix(&mac, 16).map_err(|_| Error::ParseError)?),
-                    name,
-                )),
-                _ => Err(Error::ValueError),
-            })
-            .collect::<Result<_, _>>()?;
+            .map(|(mac, name)| Ok((MacAddress::try_from(mac.as_str())?, name)))
+            .collect::<Result<_, Error>>()?;
         Ok(Self {
             dns,
             meshtastic_statuses: HashMap::new(),
@@ -67,8 +53,12 @@ impl MessageHandler {
                 let log_message = self.status_update(&payload, mac_address)?;
                 Ok(Message::CellLog(log_message))
             }
-            MqttMessage::Punches(mac_address, _, payload) => {
-                let punches = self.punches(&payload, mac_address)?;
+            MqttMessage::Punches(mac_address, now, payload) => {
+                let punches = self.punches(mac_address, now, &payload)?;
+                Ok(Message::SiPunches(punches))
+            }
+            MqttMessage::MeshtasticSerialMessage(_, payload) => {
+                let punches = self.msh_serial_service_envelope(&payload)?;
                 Ok(Message::SiPunches(punches))
             }
         }
@@ -79,7 +69,7 @@ impl MessageHandler {
         payload: &[u8],
         mac_address: MacAddress,
     ) -> Result<CellularLogMessage, Error> {
-        let status_proto = Status::decode(payload).map_err(|_| Error::ParseError)?;
+        let status_proto = Status::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, self.resolve(mac_address)?, &Local)?;
 
@@ -104,13 +94,14 @@ impl MessageHandler {
 
     pub fn punches(
         &mut self,
-        payload: &[u8],
         mac_address: MacAddress,
+        now: DateTime<Local>,
+        payload: &[u8],
     ) -> Result<Vec<SiPunchLog>, Error> {
-        let punches = Punches::decode(payload).map_err(|_| Error::ParseError)?;
+        let now = now.into();
+        let punches = Punches::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         let host_info = self.resolve(mac_address)?;
         let status = self.get_cellular_status(mac_address);
-        let now = Local::now().fixed_offset();
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
             match punch.raw.try_into() {
@@ -191,40 +182,36 @@ impl MessageHandler {
         }
     }
 
+    /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
     pub fn msh_serial_service_envelope(
         &mut self,
         payload: &[u8],
-    ) -> std::io::Result<Vec<SiPunchLog>> {
-        let service_envelope = ServiceEnvelope::decode(payload).map_err(std::io::Error::from)?;
-        let packet = service_envelope.packet.ok_or(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Missing packet in ServiceEnvelope",
-        ))?;
+    ) -> crate::Result<Vec<SiPunchLog>> {
+        let service_envelope =
+            ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
+        let packet = service_envelope.packet.ok_or(Error::ProtobufParseError)?;
         self.msh_serial(packet)
     }
 
-    pub fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> std::io::Result<Vec<SiPunchLog>> {
-        let packet = MeshPacket::decode(payload).map_err(std::io::Error::from)?;
+    /// Process Meshtastic message of the serial module given as MeshPacket.
+    pub fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
+        let packet = MeshPacket::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         self.msh_serial(packet)
     }
 
-    fn msh_serial(&mut self, packet: MeshPacket) -> std::io::Result<Vec<SiPunchLog>> {
+    fn msh_serial(&mut self, packet: MeshPacket) -> crate::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = self
-            .resolve(mac_address)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Too long name"))?;
+        let host_info = self.resolve(mac_address)?;
         let Some(PayloadVariant::Decoded(Data {
             portnum: SERIAL_APP,
             payload,
             ..
         })) = packet.payload_variant
         else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("{}: Encrypted message or wrong portnum", host_info.name),
-            ));
+            // Encrypted message or wrong portnum
+            return Err(Error::ParseError);
         };
 
         let status = self.msh_roc_status(&host_info);
@@ -306,8 +293,9 @@ mod test_punch {
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
+        let now = Local::now();
         // TODO: should propagate errors
-        let punches = handler.punches(&buf[..len], MacAddress::default()).unwrap();
+        let punches = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -328,7 +316,8 @@ mod test_punch {
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut handler = MessageHandler::new(Vec::new()).unwrap();
-        let punch_logs = handler.punches(&buf[..len], MacAddress::default()).unwrap();
+        let now = Local::now();
+        let punch_logs = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);

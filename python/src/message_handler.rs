@@ -37,14 +37,24 @@ impl MessageHandler {
         self.inner
             .msh_serial_service_envelope(payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
-            .map_err(PyErr::from)
+            .map_err(|e| {
+                PyErr::from(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Error while processing serial message: {}", e),
+                ))
+            })
     }
 
     pub fn meshtastic_serial_mesh_packet(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
         self.inner
             .msh_serial_mesh_packet(payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
-            .map_err(PyErr::from)
+            .map_err(|e| {
+                PyErr::from(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Error while processing serial message: {}", e),
+                ))
+            })
     }
 
     #[pyo3(signature = (payload, now, recv_mac_address=None))]
@@ -73,8 +83,9 @@ impl MessageHandler {
 
     pub fn punches(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<Vec<SiPunchLog>> {
         let mac_addr = MacAddress::Full(mac_addr);
+        let now = Local::now();
         self.inner
-            .punches(payload, mac_addr)
+            .punches(mac_addr, now, payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
             .map_err(|err| PyValueError::new_err(format!("{err}")))
     }
