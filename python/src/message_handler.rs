@@ -16,10 +16,10 @@ use yaroc_common::receive::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_common::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
-use crate::status::NodeInfo;
+use crate::status::{CellularLog, NodeInfo};
 
 enum MessageVariant {
-    CellularLog,
+    CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
 }
 
@@ -38,6 +38,17 @@ impl Message {
             _ => None,
         }
     }
+
+    pub fn is_cellular_log(&self) -> bool {
+        matches!(self.variant, MessageVariant::CellularLog(_))
+    }
+
+    pub fn cellular_log(self) -> Option<CellularLog> {
+        match self.variant {
+            MessageVariant::CellularLog(log) => Some(log),
+            _ => None,
+        }
+    }
 }
 
 impl From<Vec<SiPunchLogRs>> for Message {
@@ -49,9 +60,9 @@ impl From<Vec<SiPunchLogRs>> for Message {
 }
 
 impl From<CellularLogMessage> for Message {
-    fn from(_log: CellularLogMessage) -> Self {
+    fn from(log: CellularLogMessage) -> Self {
         Self {
-            variant: MessageVariant::CellularLog,
+            variant: MessageVariant::CellularLog(log.into()),
         }
     }
 }
@@ -168,8 +179,7 @@ impl MessageHandler {
             .map_err(|err| PyValueError::new_err(format!("{err}")))
     }
 
-    #[pyo3(name = "status_update")]
-    pub fn status_update_py(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
+    pub fn status_update(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
         let mac_addr = MacAddress::Full(mac_addr);
         let log_message = self.inner.status_update(payload, mac_addr).map_err(|e| match e {
             Error::ParseError => PyValueError::new_err("Status proto decoding error"),

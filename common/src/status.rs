@@ -129,7 +129,7 @@ impl Position {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct MiniCallHome {
     pub signal_info: Option<CellSignalInfo>,
     pub batt_mv: Option<u16>,
