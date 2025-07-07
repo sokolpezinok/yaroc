@@ -29,7 +29,7 @@ async fn main() {
     }
 
     let mqtt_config = MqttConfig::default();
-    let mut handler = MessageHandler::new(dns, Some(mqtt_config)).unwrap();
+    let mut handler = MessageHandler::new(dns, Some(mqtt_config));
 
     info!("Everything initialized, starting the loop");
     loop {

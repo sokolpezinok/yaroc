@@ -72,8 +72,7 @@ impl CellularLog {
     pub fn to_proto(&self) -> Vec<u8> {
         match &self.inner {
             CellularLogMessageRs::MCH(mini_call_home_log) => {
-                let mut buf = Vec::with_capacity(1024);
-                buf.resize(1024, 0u8);
+                let mut buf = vec![0; 1024];
                 let msg = mini_call_home_log.mini_call_home.to_proto();
                 let _ = msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError);
                 buf

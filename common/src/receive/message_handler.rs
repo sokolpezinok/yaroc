@@ -309,7 +309,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None);
         let now = Local::now();
         // TODO: should propagate errors
         let punches = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
@@ -332,7 +332,7 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None);
         let now = Local::now();
         let punch_logs = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punch_logs.len(), 1);
@@ -365,7 +365,7 @@ mod test_punch {
             },
         )
         .encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None);
         let punch_logs = handler.msh_serial_service_envelope(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
@@ -403,7 +403,7 @@ mod test_punch {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None);
         handler.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -448,7 +448,7 @@ mod test_punch {
         )
         .encode_to_vec();
 
-        let mut handler = MessageHandler::new(Vec::new(), None).unwrap();
+        let mut handler = MessageHandler::new(Vec::new(), None);
         handler.msh_serial_service_envelope(&message).unwrap();
 
         let telemetry = Telemetry {
