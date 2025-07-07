@@ -1,7 +1,9 @@
+use std::time::Duration;
+
 use chrono::DateTime;
 use chrono::prelude::*;
 use log::info;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use yaroc_common::error::Error;
@@ -10,6 +12,7 @@ use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
 use yaroc_common::receive::message_handler::{
     Message as MessageRs, MessageHandler as MessageHandlerRs,
 };
+use yaroc_common::receive::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_common::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
@@ -54,6 +57,30 @@ impl From<CellularLogMessage> for Message {
 }
 
 #[pyclass]
+#[derive(Clone)]
+pub struct MqttConfig {
+    #[pyo3(get, set)]
+    url: String,
+    #[pyo3(get, set)]
+    port: u16,
+    #[pyo3(get, set)]
+    keep_alive: Duration,
+    #[pyo3(get, set)]
+    meshtastic_channel: Option<String>,
+}
+
+impl From<MqttConfig> for MqttConfigRs {
+    fn from(config: MqttConfig) -> Self {
+        Self {
+            url: config.url,
+            port: config.port,
+            keep_alive: config.keep_alive,
+            meshtastic_channel: config.meshtastic_channel,
+        }
+    }
+}
+
+#[pyclass]
 pub struct MessageHandler {
     inner: MessageHandlerRs,
 }
@@ -61,7 +88,8 @@ pub struct MessageHandler {
 #[pymethods]
 impl MessageHandler {
     #[new]
-    pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
+    #[pyo3(signature = (dns, mqtt_config=None))]
+    pub fn new_py(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> PyResult<Self> {
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
             .map(|(mac, name)| {
@@ -73,12 +101,7 @@ impl MessageHandler {
                 ))
             })
             .collect();
-        let inner = MessageHandlerRs::new(dns?, None).map_err(|err| match err {
-            Error::ParseError | Error::ValueError => {
-                PyValueError::new_err("Wrong MAC address format")
-            }
-            _ => PyRuntimeError::new_err("Unknown error"),
-        })?;
+        let inner = MessageHandlerRs::new(dns?, mqtt_config.map(|config| config.into()));
         Ok(Self { inner })
     }
 

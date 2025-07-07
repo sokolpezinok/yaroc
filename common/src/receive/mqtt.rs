@@ -11,10 +11,10 @@ use std::time::Duration;
 use std::vec::Vec;
 
 pub struct MqttConfig {
-    url: String,
-    port: u16,
-    keep_alive: Duration,
-    meshtastic_channel: Option<String>,
+    pub url: String,
+    pub port: u16,
+    pub keep_alive: Duration,
+    pub meshtastic_channel: Option<String>,
 }
 
 impl Default for MqttConfig {

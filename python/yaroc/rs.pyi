@@ -68,8 +68,14 @@ class NodeInfo(object):
     last_update: datetime
     last_punch: datetime
 
+class MqttConfig(object):
+    url: str
+    port: int
+    keep_alive: timedelta
+    meshtastic_channel: str | None
+
 class MessageHandler(object):
-    def __init__(self, dns: List[Tuple[str, str]]): ...
+    def __init__(self, dns: List[Tuple[str, str]], config: MqttConfig | None): ...
     def meshtastic_serial_service_envelope(self, payload: bytes) -> list[SiPunchLog]: ...
     def meshtastic_serial_mesh_packet(self, payload: bytes) -> list[SiPunchLog]: ...
     def meshtastic_status_service_envelope(
