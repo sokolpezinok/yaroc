@@ -133,7 +133,7 @@ mod test_logs {
 
     #[test]
     fn test_cellular_dbm() {
-        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap().into();
+        let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
         let signal_info = Some(CellSignalInfo {
             network_type: CellNetworkType::NbIotEcl0,
             rssi_dbm: -87,

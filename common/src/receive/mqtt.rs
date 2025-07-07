@@ -70,8 +70,7 @@ impl MqttReceiver {
         topic: &str,
         payload: &[u8],
     ) -> crate::Result<Message> {
-        if topic.starts_with("yar/2/e/") {
-            let topic = &topic[8..];
+        if let Some(topic) = topic.strip_prefix("yar/2/e/") {
             match topic {
                 "serial" => Ok(Message::MeshtasticSerial(now, payload.into())),
                 _ => {

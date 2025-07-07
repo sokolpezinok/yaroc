@@ -371,7 +371,7 @@ mod test_meshtastic {
             rssi_snr: Some(RssiSnr {
                 rssi_dbm: -80,
                 snr: 4.25,
-                distance: Some((813., "spr02".try_into().unwrap())),
+                distance: Some((813., "spr02".into())),
             }),
         };
         assert_eq!(
