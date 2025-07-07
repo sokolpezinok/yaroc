@@ -224,19 +224,25 @@ impl MessageHandler {
         info!("{log_message}");
         Ok(())
     }
+
+    pub fn next_message<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let handler = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py::<_, Message>(py, async move {
+            let mut handler = handler.lock().await;
+            let message = handler
+                .next_message()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            match message {
+                MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
+                MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
+                MessageRs::MeshtasticLog => todo!(),
+            }
+        })
+    }
 }
 
 impl MessageHandler {
-    pub async fn process_message(&mut self) -> PyResult<Message> {
-        let handler = self.inner.clone();
-        let message = handler.lock().await.next_message().await.unwrap();
-        match message {
-            MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
-            MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-            MessageRs::MeshtasticLog => todo!(),
-        }
-    }
-
     fn get_inner(&mut self) -> PyResult<tokio::sync::MutexGuard<'_, MessageHandlerRs>> {
         self.inner
             .try_lock()
