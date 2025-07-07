@@ -34,7 +34,7 @@ pub struct MessageHandler {
 
 #[derive(Debug)]
 pub enum Message {
-    CellLog(CellularLogMessage),
+    CellularLog(CellularLogMessage),
     SiPunches(Vec<SiPunchLog>),
     MeshtasticLog,
 }
@@ -68,7 +68,7 @@ impl MessageHandler {
         match message {
             MqttMessage::CellularStatus(mac_address, _, payload) => {
                 let log_message = self.status_update(&payload, mac_address)?;
-                Ok(Message::CellLog(log_message))
+                Ok(Message::CellularLog(log_message))
             }
             MqttMessage::Punches(mac_address, now, payload) => {
                 let punches = self.punches(mac_address, now, &payload)?;

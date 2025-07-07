@@ -3,31 +3,65 @@ use chrono::prelude::*;
 use log::info;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use tokio::sync::broadcast::channel;
-use tokio::sync::broadcast::{Receiver, Sender};
 
 use yaroc_common::error::Error;
-use yaroc_common::receive::message_handler::Message;
-use yaroc_common::receive::message_handler::MessageHandler as MessageHandlerRs;
+use yaroc_common::logs::CellularLogMessage;
+use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
+use yaroc_common::receive::message_handler::{
+    Message as MessageRs, MessageHandler as MessageHandlerRs,
+};
 use yaroc_common::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
 use crate::status::NodeInfo;
 
+enum MessageVariant {
+    CellularLog,
+    SiPunchLogs(Vec<SiPunchLog>),
+}
+
+pub struct Message {
+    variant: MessageVariant,
+}
+
+impl Message {
+    pub fn is_si_punch_logs(&self) -> bool {
+        matches!(self.variant, MessageVariant::SiPunchLogs(_))
+    }
+
+    pub fn si_punch_logs(self) -> Option<Vec<SiPunchLog>> {
+        match self.variant {
+            MessageVariant::SiPunchLogs(si_punch_logs) => Some(si_punch_logs),
+            _ => None,
+        }
+    }
+}
+
+impl From<Vec<SiPunchLogRs>> for Message {
+    fn from(logs: Vec<SiPunchLogRs>) -> Self {
+        Self {
+            variant: MessageVariant::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect()),
+        }
+    }
+}
+
+impl From<CellularLogMessage> for Message {
+    fn from(_log: CellularLogMessage) -> Self {
+        Self {
+            variant: MessageVariant::CellularLog,
+        }
+    }
+}
+
 #[pyclass]
 pub struct MessageHandler {
     inner: MessageHandlerRs,
-    punch_tx: Sender<SiPunchLog>,
-    punch_rx: Receiver<SiPunchLog>,
 }
 
 #[pymethods]
 impl MessageHandler {
-    const CHANNEL_CAPACITY: usize = 64;
-
     #[new]
     pub fn new_py(dns: Vec<(String, String)>) -> PyResult<Self> {
-        let (punch_tx, punch_rx) = channel::<SiPunchLog>(Self::CHANNEL_CAPACITY);
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
             .map(|(mac, name)| {
@@ -45,11 +79,7 @@ impl MessageHandler {
             }
             _ => PyRuntimeError::new_err("Unknown error"),
         })?;
-        Ok(Self {
-            inner,
-            punch_tx,
-            punch_rx,
-        })
+        Ok(Self { inner })
     }
 
     pub fn meshtastic_serial_service_envelope(
@@ -129,22 +159,12 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    pub async fn process_message(&mut self) {
+    pub async fn process_message(&mut self) -> PyResult<Message> {
         let message = self.inner.next_message().await.unwrap();
         match message {
-            Message::CellLog(_) => todo!(),
-            Message::SiPunches(si_punch_logs) => {
-                for si_punch_log in si_punch_logs {
-                    let _ = self.punch_tx.send(si_punch_log.into());
-                }
-            }
-            Message::MeshtasticLog => {}
+            MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
+            MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
+            MessageRs::MeshtasticLog => todo!(),
         }
-    }
-
-    //TODO: we want to call multiple `next_*` methods from Python at the same time, these
-    //can't be all `&mut self`.
-    pub async fn next_punch(&mut self) -> SiPunchLog {
-        self.punch_rx.recv().await.unwrap()
     }
 }

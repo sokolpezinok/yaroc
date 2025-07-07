@@ -37,7 +37,7 @@ async fn main() {
 
         match log_message {
             Ok(log) => match log {
-                Message::CellLog(cellular_log_message) => {
+                Message::CellularLog(cellular_log_message) => {
                     info!("{cellular_log_message}");
                 }
                 Message::SiPunches(si_punch_logs) => {
