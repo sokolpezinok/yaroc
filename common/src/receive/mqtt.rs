@@ -116,3 +116,30 @@ impl MqttReceiver {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        let macs = std::vec![
+            MacAddress::Meshtastic(0x12345678),
+            MacAddress::Full(0xdeadbeef9876)
+        ];
+        let config = MqttConfig {
+            meshtastic_channel: Some("cha".to_owned()),
+            ..Default::default()
+        };
+        let receiver = MqttReceiver::new(config, macs.iter());
+        assert_eq!(
+            receiver.topics,
+            std::vec![
+                "yar/2/e/serial/!12345678",
+                "yar/2/e/cha/!12345678",
+                "yar/deadbeef9876/status",
+                "yar/deadbeef9876/p",
+            ]
+        );
+    }
+}
