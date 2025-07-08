@@ -43,7 +43,7 @@ pub struct PositionName {
 impl PositionName {
     pub fn new(position: &Position, name: &str) -> Self {
         Self {
-            position: position.clone(),
+            position: *position,
             name: name.to_owned(),
         }
     }

@@ -103,7 +103,7 @@ pub struct CellSignalInfo {
     pub cellid: Option<u32>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
     pub lat: f32,
     pub lon: f32,

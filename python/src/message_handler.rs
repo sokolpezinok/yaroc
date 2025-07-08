@@ -151,7 +151,8 @@ impl MessageHandler {
             match message {
                 MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-                MessageRs::MeshtasticLog => Ok(Message::MeshtasticLog()),
+                //TODO: forward to Python
+                MessageRs::MeshtasticLog(_) => Ok(Message::MeshtasticLog()),
             }
         })
     }
