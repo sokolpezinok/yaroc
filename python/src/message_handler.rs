@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::DateTime;
@@ -7,6 +7,7 @@ use log::info;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
+use tokio::sync::Mutex;
 use yaroc_common::error::Error;
 use yaroc_common::logs::CellularLogMessage;
 use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
@@ -94,7 +95,6 @@ impl From<MqttConfig> for MqttConfigRs {
 
 #[pyclass]
 pub struct MessageHandler {
-    //TODO: consider using tokio Mutex
     inner: Arc<Mutex<MessageHandlerRs>>,
 }
 
@@ -202,7 +202,7 @@ impl MessageHandler {
 impl MessageHandler {
     pub async fn process_message(&mut self) -> PyResult<Message> {
         let handler = self.inner.clone();
-        let message = handler.lock().unwrap().next_message().await.unwrap();
+        let message = handler.lock().await.next_message().await.unwrap();
         match message {
             MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
             MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
@@ -210,9 +210,9 @@ impl MessageHandler {
         }
     }
 
-    fn get_inner(&mut self) -> PyResult<std::sync::MutexGuard<'_, MessageHandlerRs>> {
+    fn get_inner(&mut self) -> PyResult<tokio::sync::MutexGuard<'_, MessageHandlerRs>> {
         self.inner
-            .lock()
+            .try_lock()
             .map_err(|_| PyRuntimeError::new_err("Failed to lock message handler".to_owned()))
     }
 }
