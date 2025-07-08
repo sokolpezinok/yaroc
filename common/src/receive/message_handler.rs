@@ -40,8 +40,9 @@ pub enum Message {
 
 impl MessageHandler {
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
-        let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
-        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
+        let macs: Vec<String> = dns.iter().map(|(_, mac)| std::format!("{mac}")).collect();
+        let mac_refs = macs.iter().map(|s| s.as_str()).collect();
+        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, mac_refs));
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
