@@ -68,6 +68,21 @@ impl MqttReceiver {
         }
     }
 
+    fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
+        if topic.len() < 16 {
+            return Err(Error::ParseError);
+        }
+        MacAddress::try_from(&topic[4..16])
+    }
+
+    fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
+        if topic.len() <= 18 {
+            // 8 for MAC, 10 for yar/2/e/.../!
+            return Err(Error::ParseError);
+        }
+        MacAddress::try_from(&topic[topic.len() - 8..])
+    }
+
     fn process_incoming(
         now: DateTime<Local>,
         topic: &str,
@@ -77,7 +92,7 @@ impl MqttReceiver {
             match topic {
                 "serial" => Ok(Message::MeshtasticSerial(now, payload.into())),
                 _ => {
-                    let recv_mac_address = MacAddress::try_from(&topic[topic.len() - 8..])?;
+                    let recv_mac_address = Self::extract_msh_mac(topic)?;
                     Ok(Message::MeshtasticStatus(
                         recv_mac_address,
                         now,
@@ -86,7 +101,7 @@ impl MqttReceiver {
                 }
             }
         } else {
-            let mac_address = MacAddress::try_from(&topic[4..16])?;
+            let mac_address = Self::extract_cell_mac(topic)?;
             match &topic[16..] {
                 "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
                 "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
@@ -141,5 +156,20 @@ mod test {
                 "yar/deadbeef9876/p",
             ]
         );
+    }
+
+    #[test]
+    fn test_extract_cell_mac() {
+        let mac_address = MqttReceiver::extract_cell_mac("yar/deadbeef9876/p").unwrap();
+        assert_eq!("deadbeef9876", std::format!("{mac_address}"));
+        assert!(MqttReceiver::extract_cell_mac("yar/deadbeef987").is_err());
+    }
+
+    #[test]
+    fn test_extract_msh_mac() {
+        let mac_address = MqttReceiver::extract_msh_mac("yar/2/e/cha/!12345678").unwrap();
+        assert_eq!("12345678", std::format!("{mac_address}"));
+        assert!(MqttReceiver::extract_cell_mac("yar/2/e/cha/!1234567").is_err());
+        assert!(MqttReceiver::extract_cell_mac("yar/2/e//!12345678").is_err());
     }
 }
