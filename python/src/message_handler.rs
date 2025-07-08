@@ -25,18 +25,20 @@ enum MessageVariant {
     SiPunchLogs(Vec<SiPunchLog>),
 }
 
+#[pyclass]
 pub struct Message {
     variant: MessageVariant,
 }
 
+#[pymethods]
 impl Message {
     pub fn is_si_punch_logs(&self) -> bool {
         matches!(self.variant, MessageVariant::SiPunchLogs(_))
     }
 
-    pub fn si_punch_logs(self) -> Option<Vec<SiPunchLog>> {
-        match self.variant {
-            MessageVariant::SiPunchLogs(si_punch_logs) => Some(si_punch_logs),
+    pub fn si_punch_logs(&self) -> Option<Vec<SiPunchLog>> {
+        match &self.variant {
+            MessageVariant::SiPunchLogs(si_punch_logs) => Some(si_punch_logs.clone()),
             _ => None,
         }
     }
@@ -45,9 +47,9 @@ impl Message {
         matches!(self.variant, MessageVariant::CellularLog(_))
     }
 
-    pub fn cellular_log(self) -> Option<CellularLog> {
-        match self.variant {
-            MessageVariant::CellularLog(log) => Some(log),
+    pub fn cellular_log(&self) -> Option<CellularLog> {
+        match &self.variant {
+            MessageVariant::CellularLog(log) => Some(log.clone()),
             _ => None,
         }
     }
@@ -80,6 +82,31 @@ pub struct MqttConfig {
     keep_alive: Duration,
     #[pyo3(get, set)]
     meshtastic_channel: Option<String>,
+}
+
+#[pymethods]
+impl MqttConfig {
+    #[new]
+    pub fn new() -> Self {
+        MqttConfigRs::default().into()
+    }
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        MqttConfigRs::default().into()
+    }
+}
+
+impl From<MqttConfigRs> for MqttConfig {
+    fn from(config: MqttConfigRs) -> Self {
+        Self {
+            url: config.url,
+            port: config.port,
+            keep_alive: config.keep_alive,
+            meshtastic_channel: config.meshtastic_channel,
+        }
+    }
 }
 
 impl From<MqttConfig> for MqttConfigRs {

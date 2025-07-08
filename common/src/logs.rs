@@ -12,7 +12,7 @@ use std::borrow::ToOwned;
 use std::fmt;
 use std::string::String;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CellularLogMessage {
     Disconnected(HostInfo, String),
     MCH(MiniCallHomeLog),
@@ -64,7 +64,7 @@ impl CellularLogMessage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MiniCallHomeLog {
     pub mini_call_home: MiniCallHome,
     pub host_info: HostInfo,

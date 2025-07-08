@@ -53,6 +53,7 @@ impl From<HostInfo> for HostInfoRs {
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct CellularLog {
     inner: CellularLogMessageRs,
 }

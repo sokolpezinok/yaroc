@@ -10,7 +10,7 @@ from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import Status as StatusProto
-from ..rs import MessageHandler, SiPunchLog
+from ..rs import MessageHandler, MqttConfig, SiPunchLog
 from ..sources.meshtastic import MeshtasticSerial
 from ..sources.mqtt import (
     MeshtasticSerialMessage,
@@ -31,9 +31,10 @@ class YarocDaemon:
         client_group: ClientGroup,
         mqtt_forwarder: MqttForwader,
         display_model: str | None = None,
+        mqtt_config: MqttConfig | None = None
     ):
         self.client_group = client_group
-        self.handler = MessageHandler(dns)
+        self.handler = MessageHandler(dns, mqtt_config)
         self.drawer = StatusDrawer(self.handler, display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
