@@ -51,15 +51,8 @@ impl MessageHandler {
     }
 
     pub async fn next_message(&mut self) -> Result<Message, Error> {
-        if let Some(mqtt_receiver) = self.mqtt_receiver.as_mut() {
-            let message = mqtt_receiver.next_message().await?;
-            self.process_mqtt_message(message)
-        } else {
-            Err(Error::ValueError)
-        }
-    }
-
-    fn process_mqtt_message(&mut self, message: MqttMessage) -> Result<Message, Error> {
+        let receiver = self.mqtt_receiver.as_mut().ok_or(Error::ValueError)?;
+        let message = receiver.next_message().await?;
         match message {
             MqttMessage::CellularStatus(mac_address, _, payload) => {
                 let log_message = self.status_update(&payload, mac_address)?;
