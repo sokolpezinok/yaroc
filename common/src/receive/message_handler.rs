@@ -11,7 +11,6 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::string::String;
-use std::sync::Mutex;
 use std::vec::Vec;
 
 use crate::error::Error;
@@ -27,7 +26,7 @@ use super::mqtt::MqttReceiver;
 
 pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
-    mqtt_receiver: Option<Mutex<MqttReceiver>>,
+    mqtt_receiver: Option<MqttReceiver>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
 }
@@ -42,7 +41,7 @@ pub enum Message {
 impl MessageHandler {
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
         let macs = dns.iter().map(|(mac, _)| mac.as_str()).collect();
-        let mqtt_receiver = mqtt_config.map(|config| Mutex::new(MqttReceiver::new(config, macs)));
+        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
@@ -53,8 +52,7 @@ impl MessageHandler {
 
     pub async fn next_message(&mut self) -> Result<Message, Error> {
         if let Some(mqtt_receiver) = self.mqtt_receiver.as_mut() {
-            let message =
-                mqtt_receiver.get_mut().map_err(|_| Error::TimeoutError)?.next_message().await?;
+            let message = mqtt_receiver.next_message().await?;
             self.process_mqtt_message(message)
         } else {
             Err(Error::ValueError)

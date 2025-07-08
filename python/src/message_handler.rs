@@ -1,9 +1,10 @@
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::DateTime;
 use chrono::prelude::*;
 use log::info;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 use yaroc_common::error::Error;
@@ -93,7 +94,8 @@ impl From<MqttConfig> for MqttConfigRs {
 
 #[pyclass]
 pub struct MessageHandler {
-    inner: MessageHandlerRs,
+    //TODO: consider using tokio Mutex
+    inner: Arc<Mutex<MessageHandlerRs>>,
 }
 
 #[pymethods]
@@ -112,7 +114,10 @@ impl MessageHandler {
                 ))
             })
             .collect();
-        let inner = MessageHandlerRs::new(dns?, mqtt_config.map(|config| config.into()));
+        let inner = Arc::new(Mutex::new(MessageHandlerRs::new(
+            dns?,
+            mqtt_config.map(|config| config.into()),
+        )));
         Ok(Self { inner })
     }
 
@@ -120,7 +125,7 @@ impl MessageHandler {
         &mut self,
         payload: &[u8],
     ) -> PyResult<Vec<SiPunchLog>> {
-        self.inner
+        self.get_inner()?
             .msh_serial_service_envelope(payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
             .map_err(|e| {
@@ -132,7 +137,7 @@ impl MessageHandler {
     }
 
     pub fn meshtastic_serial_mesh_packet(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
-        self.inner
+        self.get_inner()?
             .msh_serial_mesh_packet(payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
             .map_err(|e| {
@@ -148,12 +153,13 @@ impl MessageHandler {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: u32,
-    ) {
-        self.inner.msh_status_service_envelope(
+    ) -> PyResult<()> {
+        self.get_inner()?.msh_status_service_envelope(
             payload,
             now.into(),
             MacAddress::Meshtastic(recv_mac_address),
         );
+        Ok(())
     }
 
     #[pyo3(signature = (payload, now, recv_mac_address=None))]
@@ -162,18 +168,19 @@ impl MessageHandler {
         payload: &[u8],
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<u32>,
-    ) {
-        self.inner.msh_status_mesh_packet(payload, now, recv_mac_address);
+    ) -> PyResult<()> {
+        self.get_inner()?.msh_status_mesh_packet(payload, now, recv_mac_address);
+        Ok(())
     }
 
-    pub fn node_infos(&self) -> Vec<NodeInfo> {
-        self.inner.node_infos().into_iter().map(|n| n.into()).collect()
+    pub fn node_infos(&mut self) -> PyResult<Vec<NodeInfo>> {
+        Ok(self.get_inner()?.node_infos().into_iter().map(|n| n.into()).collect())
     }
 
     pub fn punches(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<Vec<SiPunchLog>> {
         let mac_addr = MacAddress::Full(mac_addr);
         let now = Local::now();
-        self.inner
+        self.get_inner()?
             .punches(mac_addr, now, payload)
             .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
             .map_err(|err| PyValueError::new_err(format!("{err}")))
@@ -181,11 +188,12 @@ impl MessageHandler {
 
     pub fn status_update(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
         let mac_addr = MacAddress::Full(mac_addr);
-        let log_message = self.inner.status_update(payload, mac_addr).map_err(|e| match e {
-            Error::ParseError => PyValueError::new_err("Status proto decoding error"),
-            Error::FormatError => PyValueError::new_err("Missing time in status proto"),
-            _ => PyValueError::new_err(format!("{}", e)),
-        })?;
+        let log_message =
+            self.get_inner()?.status_update(payload, mac_addr).map_err(|e| match e {
+                Error::ParseError => PyValueError::new_err("Status proto decoding error"),
+                Error::FormatError => PyValueError::new_err("Missing time in status proto"),
+                _ => PyValueError::new_err(format!("{}", e)),
+            })?;
         info!("{log_message}");
         Ok(())
     }
@@ -193,11 +201,18 @@ impl MessageHandler {
 
 impl MessageHandler {
     pub async fn process_message(&mut self) -> PyResult<Message> {
-        let message = self.inner.next_message().await.unwrap();
+        let handler = self.inner.clone();
+        let message = handler.lock().unwrap().next_message().await.unwrap();
         match message {
             MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
             MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
             MessageRs::MeshtasticLog => todo!(),
         }
+    }
+
+    fn get_inner(&mut self) -> PyResult<std::sync::MutexGuard<'_, MessageHandlerRs>> {
+        self.inner
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("Failed to lock message handler".to_owned()))
     }
 }
