@@ -97,7 +97,7 @@ impl MqttReceiver {
 
     pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
-            let notification = self.event_loop.poll().await.map_err(|_| Error::ParseError)?;
+            let notification = self.event_loop.poll().await.map_err(|_| Error::ConnectionError)?;
             let now = Local::now();
             match notification {
                 Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
