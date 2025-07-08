@@ -9,6 +9,16 @@ pub enum MacAddress {
     Full(u64),
 }
 
+impl MacAddress {
+    pub fn is_meshtastic(&self) -> bool {
+        matches!(self, MacAddress::Meshtastic(_))
+    }
+
+    pub fn is_full(&self) -> bool {
+        matches!(self, MacAddress::Full(_))
+    }
+}
+
 impl TryFrom<&str> for MacAddress {
     type Error = Error;
 

@@ -3,7 +3,6 @@ use std::fmt;
 use chrono::{Duration, prelude::*};
 use pyo3::prelude::*;
 use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs, SiPunchLog as SiPunchLogRs};
-use yaroc_common::system_info::MacAddress;
 
 use crate::status::HostInfo;
 
@@ -80,7 +79,7 @@ impl SiPunchLog {
     }
 
     pub fn is_meshtastic(&self) -> bool {
-        matches!(self.host_info.mac_address(), MacAddress::Meshtastic(_))
+        self.host_info.mac_address().is_meshtastic()
     }
 
     pub fn __repr__(&self) -> String {
@@ -106,7 +105,7 @@ impl fmt::Display for SiPunchLog {
 #[cfg(test)]
 mod test_punch {
     use super::*;
-    use yaroc_common::system_info::HostInfo;
+    use yaroc_common::system_info::{HostInfo, MacAddress};
 
     #[test]
     fn test_display() {

@@ -43,18 +43,21 @@ pub enum Message {
 }
 
 impl MqttReceiver {
-    pub fn new(config: MqttConfig, macs: std::vec::Vec<&str>) -> Self {
+    pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(config: MqttConfig, macs: I) -> Self {
         let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
-        let (client, event_loop) = AsyncClient::new(mqttoptions, 10);
+        let (client, event_loop) = AsyncClient::new(mqttoptions, 128);
         let mut topics = Vec::new();
-        for mac in &macs {
-            topics.push(std::format!("yar/{mac}/status"));
-            topics.push(std::format!("yar/{mac}/p"));
-            topics.push(std::format!("yar/2/e/serial/!{mac}"));
-            if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
-                topics.push(std::format!("yar/2/e/{meshtastic_channel}/!{mac}"));
+        for mac in macs {
+            if mac.is_full() {
+                topics.push(std::format!("yar/{mac}/status"));
+                topics.push(std::format!("yar/{mac}/p"));
+            } else {
+                topics.push(std::format!("yar/2/e/serial/!{mac}"));
+                if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
+                    topics.push(std::format!("yar/2/e/{meshtastic_channel}/!{mac}"));
+                }
             }
         }
 
