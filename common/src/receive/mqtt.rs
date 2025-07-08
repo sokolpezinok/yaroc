@@ -159,6 +159,14 @@ mod test {
     }
 
     #[test]
+    fn test_new_without_msh() {
+        let macs = std::vec![MacAddress::Meshtastic(0x12345678),];
+        let config = MqttConfig::default();
+        let receiver = MqttReceiver::new(config, macs.iter());
+        assert_eq!(receiver.topics, std::vec!["yar/2/e/serial/!12345678"]);
+    }
+
+    #[test]
     fn test_extract_cell_mac() {
         let mac_address = MqttReceiver::extract_cell_mac("yar/deadbeef9876/p").unwrap();
         assert_eq!("deadbeef9876", std::format!("{mac_address}"));
