@@ -64,9 +64,11 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
 
     #[cfg(feature = "receive")]
-    m.add_class::<crate::message_handler::MessageHandler>()?;
-    #[cfg(feature = "receive")]
-    m.add_class::<crate::message_handler::MqttConfig>()?;
+    {
+        m.add_class::<crate::message_handler::MessageHandler>()?;
+        m.add_class::<crate::message_handler::MqttConfig>()?;
+        m.add_class::<crate::status::CellularLog>()?;
+    }
 
     pyo3_log::init();
     Ok(())
