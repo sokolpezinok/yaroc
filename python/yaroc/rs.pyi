@@ -74,6 +74,12 @@ class MqttConfig(object):
     keep_alive: timedelta
     meshtastic_channel: str | None
 
+class CellularLog(object):
+    def __repr__(self) -> str: ...
+
+class Message(object):
+    pass
+
 class MessageHandler(object):
     def __init__(self, dns: List[Tuple[str, str]], config: MqttConfig | None = None): ...
     def meshtastic_serial_service_envelope(self, payload: bytes) -> list[SiPunchLog]: ...

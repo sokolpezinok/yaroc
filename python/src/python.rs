@@ -65,6 +65,7 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[cfg(feature = "receive")]
     {
+        m.add_class::<crate::message_handler::Message>()?;
         m.add_class::<crate::message_handler::MessageHandler>()?;
         m.add_class::<crate::message_handler::MqttConfig>()?;
         m.add_class::<crate::status::CellularLog>()?;

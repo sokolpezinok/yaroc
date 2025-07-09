@@ -27,31 +27,6 @@ pub enum Message {
     MeshtasticLog(),
 }
 
-#[pymethods]
-impl Message {
-    pub fn is_si_punch_logs(&self) -> bool {
-        matches!(self, Message::SiPunchLogs(_))
-    }
-
-    pub fn si_punch_logs(&self) -> Option<Vec<SiPunchLog>> {
-        match &self {
-            Message::SiPunchLogs(si_punch_logs) => Some(si_punch_logs.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn is_cellular_log(&self) -> bool {
-        matches!(self, Message::CellularLog(_))
-    }
-
-    pub fn cellular_log(&self) -> Option<CellularLog> {
-        match &self {
-            Message::CellularLog(log) => Some(log.clone()),
-            _ => None,
-        }
-    }
-}
-
 impl From<Vec<SiPunchLogRs>> for Message {
     fn from(logs: Vec<SiPunchLogRs>) -> Self {
         Self::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect())
