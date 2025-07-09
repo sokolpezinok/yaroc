@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
-from ..rs import CellularLog, MessageHandler, Message, MqttConfig, SiPunchLog
+from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import is_windows
