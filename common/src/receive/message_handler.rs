@@ -73,7 +73,7 @@ impl MessageHandler {
         }
     }
 
-    pub fn status_update(
+    fn status_update(
         &mut self,
         payload: &[u8],
         mac_address: MacAddress,
@@ -101,7 +101,7 @@ impl MessageHandler {
         Ok(log_message)
     }
 
-    pub fn punches(
+    fn punches(
         &mut self,
         mac_address: MacAddress,
         now: DateTime<Local>,
@@ -139,7 +139,8 @@ impl MessageHandler {
         HostInfo::new(name, mac_address)
     }
 
-    pub fn msh_status_mesh_packet(
+    #[allow(dead_code)]
+    fn msh_status_mesh_packet(
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
@@ -152,7 +153,7 @@ impl MessageHandler {
         self.msh_status_update(meshtastic_log)
     }
 
-    pub fn msh_status_service_envelope(
+    fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
         now: DateTime<Local>,
@@ -191,10 +192,7 @@ impl MessageHandler {
     }
 
     /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
-    pub fn msh_serial_service_envelope(
-        &mut self,
-        payload: &[u8],
-    ) -> crate::Result<Vec<SiPunchLog>> {
+    fn msh_serial_service_envelope(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
         let service_envelope =
             ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         let packet = service_envelope.packet.ok_or(Error::ProtobufParseError)?;
@@ -202,7 +200,8 @@ impl MessageHandler {
     }
 
     /// Process Meshtastic message of the serial module given as MeshPacket.
-    pub fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
+    #[allow(dead_code)]
+    fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
         let packet = MeshPacket::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         self.msh_serial(packet)
     }

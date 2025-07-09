@@ -1,14 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::DateTime;
-use chrono::prelude::*;
-use log::info;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 use tokio::sync::Mutex;
-use yaroc_common::error::Error;
 use yaroc_common::logs::CellularLogMessage;
 use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
 use yaroc_common::receive::message_handler::{
@@ -116,81 +112,8 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
-    pub fn meshtastic_serial_service_envelope(
-        &mut self,
-        payload: &[u8],
-    ) -> PyResult<Vec<SiPunchLog>> {
-        self.get_inner()?
-            .msh_serial_service_envelope(payload)
-            .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
-            .map_err(|e| {
-                PyErr::from(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Error while processing serial message: {}", e),
-                ))
-            })
-    }
-
-    pub fn meshtastic_serial_mesh_packet(&mut self, payload: &[u8]) -> PyResult<Vec<SiPunchLog>> {
-        self.get_inner()?
-            .msh_serial_mesh_packet(payload)
-            .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
-            .map_err(|e| {
-                PyErr::from(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Error while processing serial message: {}", e),
-                ))
-            })
-    }
-
-    pub fn meshtastic_status_service_envelope(
-        &mut self,
-        payload: &[u8],
-        now: DateTime<FixedOffset>,
-        recv_mac_address: u32,
-    ) -> PyResult<()> {
-        self.get_inner()?.msh_status_service_envelope(
-            payload,
-            now.into(),
-            MacAddress::Meshtastic(recv_mac_address),
-        );
-        Ok(())
-    }
-
-    #[pyo3(signature = (payload, now, recv_mac_address=None))]
-    pub fn meshtastic_status_mesh_packet(
-        &mut self,
-        payload: &[u8],
-        now: DateTime<FixedOffset>,
-        recv_mac_address: Option<u32>,
-    ) -> PyResult<()> {
-        self.get_inner()?.msh_status_mesh_packet(payload, now, recv_mac_address);
-        Ok(())
-    }
-
     pub fn node_infos(&mut self) -> PyResult<Vec<NodeInfo>> {
         Ok(self.get_inner()?.node_infos().into_iter().map(|n| n.into()).collect())
-    }
-
-    pub fn punches(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<Vec<SiPunchLog>> {
-        let mac_addr = MacAddress::Full(mac_addr);
-        let now = Local::now();
-        self.get_inner()?
-            .punches(mac_addr, now, payload)
-            .map(|punches| punches.into_iter().map(SiPunchLog::from).collect())
-            .map_err(|err| PyValueError::new_err(format!("{err}")))
-    }
-
-    pub fn status_update(&mut self, payload: &[u8], mac_addr: u64) -> PyResult<()> {
-        let mac_addr = MacAddress::Full(mac_addr);
-        let log_message =
-            self.get_inner()?.status_update(payload, mac_addr).map_err(|e| match e {
-                Error::ParseError => PyValueError::new_err("Status proto decoding error"),
-                Error::FormatError => PyValueError::new_err("Missing time in status proto"),
-                _ => PyValueError::new_err(format!("{}", e)),
-            })?;
-        info!("{log_message}");
-        Ok(())
     }
 
     pub fn next_message<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
