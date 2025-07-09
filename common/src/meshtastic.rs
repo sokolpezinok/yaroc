@@ -60,7 +60,7 @@ pub enum MshMetrics {
     EnvironmentMetrics(f32, f32),
 }
 
-pub struct MshLogMessage {
+pub struct MeshtasticLog {
     pub metrics: MshMetrics,
     pub host_info: HostInfo,
     pub rssi_snr: Option<RssiSnr>,
@@ -68,7 +68,7 @@ pub struct MshLogMessage {
     latency: Duration,
 }
 
-impl MshLogMessage {
+impl MeshtasticLog {
     fn datetime_from_secs(timestamp: i64, tz: &impl TimeZone) -> DateTime<FixedOffset> {
         tz.timestamp_opt(timestamp, 0).unwrap().fixed_offset()
     }
@@ -232,7 +232,7 @@ impl MshLogMessage {
 const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
 const POSITION_APP: i32 = PortNum::PositionApp as i32;
 
-impl fmt::Display for MshLogMessage {
+impl fmt::Display for MeshtasticLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
@@ -312,7 +312,7 @@ mod test_meshtastic {
     #[test]
     fn test_volt_batt() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T21:34:49+01:00").unwrap();
-        let log_message = MshLogMessage {
+        let log_message = MeshtasticLog {
             host_info: HostInfo {
                 name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
@@ -331,7 +331,7 @@ mod test_meshtastic {
     #[test]
     fn test_position_format() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
-        let log_message = MshLogMessage {
+        let log_message = MeshtasticLog {
             host_info: HostInfo {
                 name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
@@ -355,7 +355,7 @@ mod test_meshtastic {
     #[test]
     fn test_position_dbm_format() {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
-        let log_message = MshLogMessage {
+        let log_message = MeshtasticLog {
             host_info: HostInfo {
                 name: "spr01".try_into().unwrap(),
                 mac_address: MacAddress::Meshtastic(0x1234),
@@ -397,7 +397,7 @@ mod test_meshtastic {
         );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
         let dns = HashMap::from([(MacAddress::Meshtastic(0x123456), "yaroc1".to_owned())]);
-        let log_message = MshLogMessage::from_service_envelope(&message, now, &dns, None)
+        let log_message = MeshtasticLog::from_service_envelope(&message, now, &dns, None)
             .unwrap()
             .unwrap();
 
@@ -436,7 +436,7 @@ mod test_meshtastic {
         );
         let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
         let log_message =
-            MshLogMessage::from_service_envelope(&message, now, &HashMap::new(), None)
+            MeshtasticLog::from_service_envelope(&message, now, &HashMap::new(), None)
                 .unwrap()
                 .unwrap();
 
@@ -472,7 +472,7 @@ mod test_time {
     #[test]
     fn test_timestamp() {
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let timestamp = MshLogMessage::datetime_from_secs(1706523131, &tz)
+        let timestamp = MeshtasticLog::datetime_from_secs(1706523131, &tz)
             .format("%H:%M:%S.%3f")
             .to_string();
         assert_eq!("11:12:11.000", timestamp);
@@ -482,7 +482,7 @@ mod test_time {
     fn test_proto_timestamp_now() {
         let tz = FixedOffset::east_opt(3600).unwrap();
         let now = Local::now().with_timezone(&tz);
-        let now_through_proto = MshLogMessage::datetime_from_secs(now.timestamp(), &tz);
+        let now_through_proto = MeshtasticLog::datetime_from_secs(now.timestamp(), &tz);
         let now_formatted = now.format("%Y-%m-%d %H:%M:%S").to_string();
         assert_eq!(
             now_formatted,

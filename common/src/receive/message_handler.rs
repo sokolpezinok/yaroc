@@ -15,7 +15,7 @@ use std::vec::Vec;
 
 use crate::error::Error;
 use crate::logs::CellularLogMessage;
-use crate::meshtastic::{MshLogMessage, MshMetrics, PositionName};
+use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
 use crate::proto::{Punches, Status};
 use crate::punch::{SiPunch, SiPunchLog};
 use crate::receive::mqtt::{Message as MqttMessage, MqttConfig};
@@ -147,9 +147,9 @@ impl MessageHandler {
     ) {
         let recv_position = recv_mac_address
             .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
-        let msh_log_message =
-            MshLogMessage::from_mesh_packet(payload, now, &self.dns, recv_position);
-        self.msh_status_update(msh_log_message)
+        let meshtastic_log =
+            MeshtasticLog::from_mesh_packet(payload, now, &self.dns, recv_position);
+        self.msh_status_update(meshtastic_log)
     }
 
     pub fn msh_status_service_envelope(
@@ -159,12 +159,12 @@ impl MessageHandler {
         recv_mac_address: MacAddress,
     ) {
         let recv_position = self.get_position_name(recv_mac_address);
-        let msh_log_message =
-            MshLogMessage::from_service_envelope(payload, now.into(), &self.dns, recv_position);
-        self.msh_status_update(msh_log_message)
+        let meshtastic_log =
+            MeshtasticLog::from_service_envelope(payload, now.into(), &self.dns, recv_position);
+        self.msh_status_update(meshtastic_log)
     }
 
-    fn msh_status_update(&mut self, log_message: Result<Option<MshLogMessage>, std::io::Error>) {
+    fn msh_status_update(&mut self, log_message: Result<Option<MeshtasticLog>, std::io::Error>) {
         match log_message {
             Ok(Some(log_message)) => {
                 info!("{}", log_message);

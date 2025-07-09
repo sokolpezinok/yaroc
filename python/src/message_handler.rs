@@ -23,6 +23,7 @@ use crate::status::{CellularLog, NodeInfo};
 enum MessageVariant {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
+    MeshtasticLog,
 }
 
 #[pyclass]
@@ -236,7 +237,9 @@ impl MessageHandler {
             match message {
                 MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-                MessageRs::MeshtasticLog => todo!(),
+                MessageRs::MeshtasticLog => Ok(Message {
+                    variant: MessageVariant::MeshtasticLog,
+                }),
             }
         })
     }
