@@ -7,7 +7,7 @@ edition = "2024"
 default = []
 defmt = ["dep:defmt"]
 nrf = ["dep:embassy-nrf"]
-receive = ["std", "dep:geoutils", "dep:meshtastic", "dep:rumqttc"]
+receive = ["std", "dep:geoutils", "dep:meshtastic", "dep:rumqttc", "dep:tokio"]
 std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
 
 [dependencies]
@@ -25,6 +25,7 @@ log = { workspace = true }
 meshtastic = { workspace = true, optional = true }
 rumqttc = { version = "0.24.0", optional = true}
 thiserror = { workspace = true }
+tokio = { workspace = true, optional = true }
 
 [build-dependencies]
 femtopb-build = "0.5.0"
@@ -36,7 +37,6 @@ embassy-futures = { workspace = true }
 env_logger = "0.11.6"
 clap = { version = "4.0", features = ["derive"] }
 static_cell = "2.1.0"
-tokio.workspace = true
 yaroc-common = { path = ".", features = ["receive"] } # 'receive' is activated for tests
 
 [[test]]

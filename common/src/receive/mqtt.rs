@@ -4,6 +4,7 @@ use crate::error::Error;
 use crate::system_info::MacAddress;
 
 use chrono::{DateTime, Local};
+use log::error;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use std::borrow::ToOwned;
 use std::string::String;
@@ -113,7 +114,13 @@ impl MqttReceiver {
 
     pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
-            let notification = self.event_loop.poll().await.map_err(|_| Error::ConnectionError)?;
+            let Ok(notification) = self.event_loop.poll().await else {
+                error!("MQTT Connection error");
+                // TODO: consider also exponential backoff up to the "keep alive" value.
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            };
+
             let now = Local::now();
             match notification {
                 Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
