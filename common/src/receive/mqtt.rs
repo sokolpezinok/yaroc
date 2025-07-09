@@ -76,8 +76,8 @@ impl MqttReceiver {
     }
 
     fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
-        if topic.len() <= 18 {
-            // 8 for MAC, 10 for yar/2/e/.../!
+        if topic.len() <= 10 {
+            // 8 for MAC, 2 for '/!'
             return Err(Error::ParseError);
         }
         MacAddress::try_from(&topic[topic.len() - 8..])
@@ -89,8 +89,9 @@ impl MqttReceiver {
         payload: &[u8],
     ) -> crate::Result<Message> {
         if let Some(topic) = topic.strip_prefix("yar/2/e/") {
-            match topic {
-                "serial" => Ok(Message::MeshtasticSerial(now, payload.into())),
+            let channel = topic.split_once("/");
+            match channel {
+                Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
                 _ => {
                     let recv_mac_address = Self::extract_msh_mac(topic)?;
                     Ok(Message::MeshtasticStatus(
@@ -175,9 +176,9 @@ mod test {
 
     #[test]
     fn test_extract_msh_mac() {
-        let mac_address = MqttReceiver::extract_msh_mac("yar/2/e/cha/!12345678").unwrap();
+        let mac_address = MqttReceiver::extract_msh_mac("cha/!12345678").unwrap();
         assert_eq!("12345678", std::format!("{mac_address}"));
-        assert!(MqttReceiver::extract_cell_mac("yar/2/e/cha/!1234567").is_err());
-        assert!(MqttReceiver::extract_cell_mac("yar/2/e//!12345678").is_err());
+        assert!(MqttReceiver::extract_cell_mac("cha/!1234567").is_err());
+        assert!(MqttReceiver::extract_cell_mac("!12345678").is_err());
     }
 }

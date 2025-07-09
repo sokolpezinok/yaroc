@@ -50,7 +50,9 @@ async fn main() {
                         info!("{punch}");
                     }
                 }
-                _ => todo!("Add"),
+                Message::MeshtasticLog => {
+                    info!("Got Meshtastic log, currently unsupported");
+                }
             },
             Err(err) => error!("{err}"),
         }
