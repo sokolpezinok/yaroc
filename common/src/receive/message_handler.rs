@@ -80,7 +80,7 @@ impl MessageHandler {
     ) -> Result<CellularLogMessage, Error> {
         let status_proto = Status::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         let log_message =
-            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address)?, &Local)?;
+            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), &Local)?;
 
         let status = self.get_cellular_status(mac_address);
         match &log_message {
@@ -109,7 +109,7 @@ impl MessageHandler {
     ) -> Result<Vec<SiPunchLog>, Error> {
         let now = now.into();
         let punches = Punches::decode(payload).map_err(|_| Error::ProtobufParseError)?;
-        let host_info = self.resolve(mac_address)?;
+        let host_info = self.resolve(mac_address);
         let status = self.get_cellular_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
@@ -134,7 +134,7 @@ impl MessageHandler {
             .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
     }
 
-    fn resolve(&self, mac_address: MacAddress) -> crate::Result<HostInfo> {
+    fn resolve(&self, mac_address: MacAddress) -> HostInfo {
         let name = self.dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
         HostInfo::new(name, mac_address)
     }
@@ -210,7 +210,7 @@ impl MessageHandler {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
-        let host_info = self.resolve(mac_address)?;
+        let host_info = self.resolve(mac_address);
         let Some(PayloadVariant::Decoded(Data {
             portnum: SERIAL_APP,
             payload,
@@ -264,7 +264,7 @@ impl MessageHandler {
     }
 
     fn get_cellular_status(&mut self, mac_addr: MacAddress) -> &mut CellularRocStatus {
-        let host_info = self.resolve(mac_addr).unwrap();
+        let host_info = self.resolve(mac_addr);
         self.cellular_statuses
             .entry(mac_addr)
             .or_insert(CellularRocStatus::new(host_info))

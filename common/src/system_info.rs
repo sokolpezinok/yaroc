@@ -1,7 +1,8 @@
-use core::fmt;
-use heapless::String;
+extern crate std;
 
 use crate::error::Error;
+use core::fmt;
+use std::borrow::ToOwned;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum MacAddress {
@@ -52,15 +53,15 @@ impl core::fmt::Display for MacAddress {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HostInfo {
-    pub name: String<20>,
+    pub name: std::string::String,
     pub mac_address: MacAddress,
 }
 
 impl HostInfo {
-    pub fn new(name: &str, mac_address: MacAddress) -> crate::Result<Self> {
-        Ok(Self {
-            name: name.try_into().map_err(|_| Error::BufferTooSmallError)?,
+    pub fn new(name: &str, mac_address: MacAddress) -> Self {
+        Self {
+            name: name.to_owned(),
             mac_address,
-        })
+        }
     }
 }

@@ -207,9 +207,7 @@ impl MeshtasticLog {
                 Self::parse_data(
                     data,
                     HostInfo {
-                        name: name.try_into().map_err(|_| {
-                            std::io::Error::new(ErrorKind::InvalidInput, "Too long name")
-                        })?,
+                        name: name.to_owned(),
                         mac_address,
                     },
                     now,
@@ -314,7 +312,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T21:34:49+01:00").unwrap();
         let log_message = MeshtasticLog {
             host_info: HostInfo {
-                name: "spr01".try_into().unwrap(),
+                name: "spr01".into(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
@@ -333,7 +331,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MeshtasticLog {
             host_info: HostInfo {
-                name: "spr01".try_into().unwrap(),
+                name: "spr01".into(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,
@@ -357,7 +355,7 @@ mod test_meshtastic {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T13:15:25+01:00").unwrap();
         let log_message = MeshtasticLog {
             host_info: HostInfo {
-                name: "spr01".try_into().unwrap(),
+                name: "spr01".into(),
                 mac_address: MacAddress::Meshtastic(0x1234),
             },
             timestamp,

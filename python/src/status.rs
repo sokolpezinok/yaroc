@@ -19,9 +19,7 @@ impl HostInfo {
     pub fn new(name: &str, mac_addr: &str) -> PyResult<Self> {
         let mac_address = MacAddress::try_from(mac_addr)
             .map_err(|_| PyValueError::new_err("MAC address malformatted"))?;
-        Ok(HostInfoRs::new(name, mac_address)
-            .map_err(|_| PyValueError::new_err("Name too long"))?
-            .into())
+        Ok(HostInfoRs::new(name, mac_address).into())
     }
 
     #[getter(mac_address)]

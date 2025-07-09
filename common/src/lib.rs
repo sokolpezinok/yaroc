@@ -12,6 +12,7 @@ pub mod punch;
 #[cfg(feature = "receive")]
 pub mod receive;
 pub mod status;
+#[cfg(feature = "std")]
 pub mod system_info;
 
 pub mod proto {

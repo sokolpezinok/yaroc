@@ -1,7 +1,9 @@
-use chrono::{Days, Duration, prelude::*};
+use chrono::{Days, prelude::*};
 use heapless::Vec;
 
-use crate::{error::Error, proto::Punch, system_info::HostInfo};
+#[cfg(feature = "std")]
+use crate::system_info::HostInfo;
+use crate::{error::Error, proto::Punch};
 
 pub const LEN: usize = 20;
 pub type RawPunch = [u8; LEN];
@@ -164,13 +166,15 @@ impl SiPunch {
     }
 }
 
+#[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct SiPunchLog {
     pub punch: SiPunch,
-    pub latency: Duration,
+    pub latency: chrono::Duration,
     pub host_info: HostInfo,
 }
 
+#[cfg(feature = "std")]
 impl SiPunchLog {
     pub fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
         let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());

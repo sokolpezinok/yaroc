@@ -149,7 +149,7 @@ mod test_logs {
                 ..Default::default()
             },
             host_info: HostInfo {
-                name: "spe01".try_into().unwrap(),
+                name: "spe01".into(),
                 mac_address: MacAddress::Full(0x1234),
             },
             latency: Duration::milliseconds(1390),
@@ -162,7 +162,7 @@ mod test_logs {
 
     #[test]
     fn test_cellular_logmessage_disconnected() {
-        let host_info = HostInfo::new("spe01", MacAddress::default()).unwrap();
+        let host_info = HostInfo::new("spe01", MacAddress::default());
         let log_message_disconnected =
             CellularLogMessage::Disconnected(host_info, "SIM7020-spe01".to_owned());
         assert_eq!(
@@ -195,7 +195,7 @@ mod test_logs {
             ..Default::default()
         };
         let tz = FixedOffset::east_opt(3600).unwrap();
-        let host_info = HostInfo::new("spe01", MacAddress::default()).unwrap();
+        let host_info = HostInfo::new("spe01", MacAddress::default());
         let cell_log_msg = CellularLogMessage::from_proto(status, host_info.clone(), &tz)
             .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
