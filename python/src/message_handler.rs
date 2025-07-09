@@ -20,37 +20,33 @@ use yaroc_common::system_info::MacAddress;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularLog, NodeInfo};
 
-enum MessageVariant {
+#[pyclass]
+pub enum Message {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
-    MeshtasticLog,
-}
-
-#[pyclass]
-pub struct Message {
-    variant: MessageVariant,
+    MeshtasticLog(),
 }
 
 #[pymethods]
 impl Message {
     pub fn is_si_punch_logs(&self) -> bool {
-        matches!(self.variant, MessageVariant::SiPunchLogs(_))
+        matches!(self, Message::SiPunchLogs(_))
     }
 
     pub fn si_punch_logs(&self) -> Option<Vec<SiPunchLog>> {
-        match &self.variant {
-            MessageVariant::SiPunchLogs(si_punch_logs) => Some(si_punch_logs.clone()),
+        match &self {
+            Message::SiPunchLogs(si_punch_logs) => Some(si_punch_logs.clone()),
             _ => None,
         }
     }
 
     pub fn is_cellular_log(&self) -> bool {
-        matches!(self.variant, MessageVariant::CellularLog(_))
+        matches!(self, Message::CellularLog(_))
     }
 
     pub fn cellular_log(&self) -> Option<CellularLog> {
-        match &self.variant {
-            MessageVariant::CellularLog(log) => Some(log.clone()),
+        match &self {
+            Message::CellularLog(log) => Some(log.clone()),
             _ => None,
         }
     }
@@ -58,17 +54,13 @@ impl Message {
 
 impl From<Vec<SiPunchLogRs>> for Message {
     fn from(logs: Vec<SiPunchLogRs>) -> Self {
-        Self {
-            variant: MessageVariant::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect()),
-        }
+        Self::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect())
     }
 }
 
 impl From<CellularLogMessage> for Message {
     fn from(log: CellularLogMessage) -> Self {
-        Self {
-            variant: MessageVariant::CellularLog(log.into()),
-        }
+        Self::CellularLog(log.into())
     }
 }
 
@@ -237,9 +229,7 @@ impl MessageHandler {
             match message {
                 MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-                MessageRs::MeshtasticLog => Ok(Message {
-                    variant: MessageVariant::MeshtasticLog,
-                }),
+                MessageRs::MeshtasticLog => Ok(Message::MeshtasticLog()),
             }
         })
     }
