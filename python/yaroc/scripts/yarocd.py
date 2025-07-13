@@ -33,12 +33,11 @@ class YarocDaemon:
         #     self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
         # )
 
-    async def _process_punch(self, punch: SiPunchLog):
-        logging.info(punch)
-        await self.client_group.send_punch(punch)
-
     async def _handle_punches(self, punches: list[SiPunchLog]):
-        tasks = [self._process_punch(punch) for punch in punches]
+        tasks = []
+        for punch in punches:
+            logging.info(punch)
+            tasks.append(self.client_group.send_punch(punch))
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_cellular_log(self, log: CellularLog):

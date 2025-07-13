@@ -4,7 +4,7 @@ from asyncio import Queue
 from typing import Any
 
 from meshtastic.serial_interface import SerialInterface
-from pubsub import pub
+from pubsub import pub  # type: ignore[import-untyped]
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME
 

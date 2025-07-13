@@ -78,7 +78,6 @@ impl CellularLogMessage {
         }
     }
 
-    // TODO: test to_proto followed by from_proto
     pub fn to_proto(&self) -> Option<Vec<u8>> {
         let status = match self {
             CellularLogMessage::DeviceEvent {
