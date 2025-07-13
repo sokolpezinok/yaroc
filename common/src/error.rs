@@ -33,10 +33,12 @@ pub enum Error {
     NetworkRegistrationError,
     #[error("MQTT error {0}")]
     MqttError(i8),
-    #[error("Connection error")]
-    ConnectionError,
     #[error("Semaphore synchronization error")]
     SemaphoreError,
+    #[error("Connection error")]
+    ConnectionError,
+    #[error("Channel send error")]
+    ChannelSendError,
 }
 
 impl From<core::fmt::Error> for Error {

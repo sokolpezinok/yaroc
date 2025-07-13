@@ -12,23 +12,24 @@ use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::string::String;
 use std::vec::Vec;
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 use crate::error::Error;
 use crate::logs::CellularLogMessage;
 use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
 use crate::proto::{Punches, Status};
 use crate::punch::{SiPunch, SiPunchLog};
-use crate::receive::mqtt::{Message as MqttMessage, MqttConfig};
+use crate::receive::mqtt::{Message as MqttMessage, MqttConfig, MqttReceiver};
 use crate::receive::state::{CellularRocStatus, MeshtasticRocStatus, NodeInfo};
 use crate::system_info::{HostInfo, MacAddress};
-
-use super::mqtt::MqttReceiver;
 
 pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     mqtt_receiver: Option<MqttReceiver>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
+    _msh_dev_event_rx: Receiver<String>,
+    msh_dev_event_tx: Sender<String>,
 }
 
 #[derive(Debug)]
@@ -38,38 +39,58 @@ pub enum Message {
     MeshtasticLog,
 }
 
+pub struct MshDevNotifier {
+    dev_event_tx: Sender<String>,
+}
+
+impl MshDevNotifier {
+    pub async fn add_device(&self, port: String) -> crate::Result<()> {
+        self.dev_event_tx.send(port).await.map_err(|_| Error::ChannelSendError)
+    }
+}
+
 impl MessageHandler {
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
         let macs: Vec<&MacAddress> = dns.iter().map(|(_, mac)| mac).collect();
         let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs.into_iter()));
+        let (tx, rx) = channel(10);
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
+            msh_dev_event_tx: tx,
+            _msh_dev_event_rx: rx,
         }
     }
 
     pub async fn next_message(&mut self) -> Result<Message, Error> {
         let receiver = self.mqtt_receiver.as_mut().ok_or(Error::ValueError)?;
-        let message = receiver.next_message().await?;
-        match message {
+        let mqtt_message = receiver.next_message().await?;
+        self.process_message(mqtt_message)
+    }
+
+    fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Message> {
+        match mqtt_message {
             MqttMessage::CellularStatus(mac_address, _, payload) => {
-                let log_message = self.status_update(&payload, mac_address)?;
-                Ok(Message::CellularLog(log_message))
+                self.status_update(&payload, mac_address).map(Message::CellularLog)
             }
             MqttMessage::Punches(mac_address, now, payload) => {
-                let punches = self.punches(mac_address, now, &payload)?;
-                Ok(Message::SiPunches(punches))
+                self.punches(mac_address, now, &payload).map(Message::SiPunches)
             }
             MqttMessage::MeshtasticSerial(_, payload) => {
-                let punches = self.msh_serial_service_envelope(&payload)?;
-                Ok(Message::SiPunches(punches))
+                self.msh_serial_service_envelope(&payload).map(Message::SiPunches)
             }
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
                 self.msh_status_service_envelope(&payload, now, recv_mac_address);
                 Ok(Message::MeshtasticLog)
             }
+        }
+    }
+
+    pub fn meshtastic_device_notifier(&self) -> MshDevNotifier {
+        MshDevNotifier {
+            dev_event_tx: self.msh_dev_event_tx.clone(),
         }
     }
 
