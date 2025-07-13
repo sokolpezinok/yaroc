@@ -8,6 +8,7 @@ from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
+from ..pb.status_pb2 import Status
 from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
@@ -42,23 +43,22 @@ class YarocDaemon:
 
     async def _handle_cellular_log(self, log: CellularLog):
         logging.info(log)
-        # TODO: Fix forwarding to ROC
-        # try:
-        #     if log.type != "disconnected":
-        #         await self.client_group.send_status(log.to_proto(), log.mac_address)
-        # except Exception as err:
-        #     logging.error(f"Failed to forward status: {err}")
+        proto_bytes = log.to_proto()
+        if proto_bytes is not None:
+            try:
+                status = Status.FromString(proto_bytes)
+                await self.client_group.send_status(status, log.mac_address())
+            except Exception as err:
+                logging.error(f"Failed to forward status: {err}")
 
     async def handle_messages(self):
         while True:
             msg = await self.handler.next_message()
             match msg:
                 case Message.SiPunchLogs():
-                    await self._handle_punches(msg[0])
+                    asyncio.create_task(self._handle_punches(msg[0]))
                 case Message.CellularLog():
-                    await self._handle_cellular_log(msg[0])
-
-            await asyncio.sleep(5)
+                    asyncio.create_task(self._handle_cellular_log(msg[0]))
 
     async def draw_table(self):
         await asyncio.sleep(20.0)

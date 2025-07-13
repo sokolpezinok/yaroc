@@ -4,13 +4,14 @@ use crate::error::Error;
 use crate::proto::status::Msg;
 use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
 use crate::status::{CellNetworkType, MiniCallHome};
-use crate::system_info::HostInfo;
+use crate::system_info::{HostInfo, MacAddress};
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
-use femtopb::EnumValue;
+use femtopb::{EnumValue, Message};
 use std::borrow::ToOwned;
 use std::fmt;
 use std::string::String;
+use std::vec::Vec;
 
 #[derive(Clone, Debug)]
 pub enum CellularLogMessage {
@@ -20,7 +21,7 @@ pub enum CellularLogMessage {
     },
     MCH(MiniCallHomeLog),
     DeviceEvent {
-        hostname: String,
+        host_info: HostInfo,
         device_port: String,
         added: bool,
     },
@@ -34,12 +35,12 @@ impl fmt::Display for CellularLogMessage {
                 write!(f, "{} disconnected client: {client}", host_info.name)
             }
             CellularLogMessage::DeviceEvent {
-                hostname,
+                host_info,
                 device_port,
                 added,
             } => {
                 let event_type = if *added { "added" } else { "removed" };
-                write!(f, "{hostname} {device_port} {event_type}")
+                write!(f, "{} {device_port} {event_type}", host_info.name)
             }
         }
     }
@@ -68,12 +69,52 @@ impl CellularLogMessage {
                     return Err(Error::FormatError);
                 }
                 Ok(CellularLogMessage::DeviceEvent {
-                    hostname: host_info.name.to_owned(),
+                    host_info,
                     device_port: port.to_owned(),
                     added: r#type == EnumValue::Known(EventType::Added),
                 })
             }
             _ => Err(Error::FormatError),
+        }
+    }
+
+    // TODO: test to_proto followed by from_proto
+    pub fn to_proto(&self) -> Option<Vec<u8>> {
+        let status = match self {
+            CellularLogMessage::DeviceEvent {
+                device_port, added, ..
+            } => Some(Status {
+                msg: Some(Msg::DevEvent(DeviceEvent {
+                    port: device_port,
+                    r#type: EnumValue::Known(if *added {
+                        EventType::Added
+                    } else {
+                        EventType::Removed
+                    }),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
+            CellularLogMessage::MCH(mini_call_home_log) => {
+                Some(mini_call_home_log.mini_call_home.to_proto())
+            }
+            _ => None,
+        }?;
+
+        let len = status.encoded_len();
+        let mut buffer = std::vec![0u8; len];
+        if status.encode(&mut buffer.as_mut_slice()).is_ok() {
+            Some(buffer)
+        } else {
+            None
+        }
+    }
+
+    pub fn mac_address(&self) -> MacAddress {
+        match self {
+            CellularLogMessage::Disconnected { host_info, .. } => host_info.mac_address,
+            CellularLogMessage::MCH(mini_call_home_log) => mini_call_home_log.host_info.mac_address,
+            CellularLogMessage::DeviceEvent { host_info, .. } => host_info.mac_address,
         }
     }
 }
@@ -178,7 +219,7 @@ mod test_logs {
     fn test_cellular_logmessage_disconnected() {
         let host_info = HostInfo::new("spe01", MacAddress::default());
         let log_message_disconnected = CellularLogMessage::Disconnected {
-            host_info,
+            host_info: host_info.clone(),
             client: "SIM7020-spe01".to_owned(),
         };
         assert_eq!(
@@ -187,7 +228,7 @@ mod test_logs {
         );
 
         let log_message_event = CellularLogMessage::DeviceEvent {
-            hostname: "spe01".to_owned(),
+            host_info,
             device_port: "/dev/ttyUSB0".to_owned(),
             added: true,
         };

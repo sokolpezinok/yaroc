@@ -1,8 +1,6 @@
 use chrono::prelude::*;
-use femtopb::Message as _;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
-use yaroc_common::error::Error;
 use yaroc_common::logs::CellularLogMessage as CellularLogMessageRs;
 use yaroc_common::receive::state::{NodeInfo as NodeInfoRs, SignalInfo};
 use yaroc_common::system_info::{HostInfo as HostInfoRs, MacAddress};
@@ -68,16 +66,12 @@ impl CellularLog {
         format!("{}", self.inner)
     }
 
-    pub fn to_proto(&self) -> Vec<u8> {
-        match &self.inner {
-            CellularLogMessageRs::MCH(mini_call_home_log) => {
-                let mut buf = vec![0; 1024];
-                let msg = mini_call_home_log.mini_call_home.to_proto();
-                let _ = msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError);
-                buf
-            }
-            _ => Vec::new(),
-        }
+    pub fn to_proto(&self) -> Option<Vec<u8>> {
+        self.inner.to_proto()
+    }
+
+    pub fn mac_address(&self) -> String {
+        self.inner.mac_address().to_string()
     }
 }
 
