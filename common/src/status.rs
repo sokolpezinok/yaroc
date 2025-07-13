@@ -137,6 +137,8 @@ pub struct MiniCallHome {
     pub cpu_temperature: Option<f32>,
     pub cpu_freq: Option<u32>,
     pub timestamp: DateTime<FixedOffset>,
+    pub totaldatarx: u64,
+    pub totaldatatx: u64,
 }
 
 impl MiniCallHome {
@@ -173,7 +175,7 @@ impl MiniCallHome {
         };
         Status {
             msg: Some(status::Msg::MiniCallHome(MiniCallHomeProto {
-                freq: 32,
+                freq: self.cpu_freq.unwrap_or(32), // 32 is the default for nrf52840
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
                 network_type: femtopb::EnumValue::Known(network_type),
                 signal_dbm: i32::from(signal_info.rssi_dbm),
@@ -184,6 +186,8 @@ impl MiniCallHome {
                     ..Default::default()
                 }),
                 cpu_temperature: self.cpu_temperature.unwrap_or_default(),
+                totaldatarx: self.totaldatarx,
+                totaldatatx: self.totaldatatx,
                 ..Default::default()
             })),
             ..Default::default()
@@ -223,15 +227,19 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
             cpu_temperature: Some(value.cpu_temperature),
             cpu_freq: Some(value.freq),
             timestamp,
+            totaldatarx: value.totaldatarx,
+            totaldatatx: value.totaldatatx,
         })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use chrono::{NaiveDate, NaiveTime};
+    extern crate std;
 
     use super::*;
+    use crate::proto::status::Msg;
+    use chrono::{NaiveDate, NaiveTime};
 
     #[test]
     fn test_cclk() {
@@ -279,5 +287,31 @@ mod test {
             }
         );
         assert_eq!(mch.timestamp.to_rfc3339(), "2024-01-29T10:12:11.124+00:00");
+    }
+
+    #[test]
+    fn test_mch_to_and_from_proto() {
+        let mch_proto_expected = MiniCallHomeProto {
+            cpu_temperature: 47.2,
+            freq: 1600,
+            millivolts: 3782,
+            signal_dbm: -93,
+            signal_snr_cb: 38,
+            cellid: 0x2EF46,
+            network_type: EnumValue::Known(proto::CellNetworkType::LteM),
+            time: Some(Timestamp {
+                millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mch: MiniCallHome = mch_proto_expected.clone().try_into().unwrap();
+        let status_proto = mch.to_proto();
+
+        let Msg::MiniCallHome(mch_proto) = status_proto.msg.unwrap() else {
+            panic!("Wrong proto type");
+        };
+        assert!(mch_proto == mch_proto_expected);
     }
 }

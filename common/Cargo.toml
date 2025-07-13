@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = []
-defmt = ["dep:defmt"]
+defmt = ["dep:defmt", "femtopb/defmt"]
 nrf = ["dep:embassy-nrf"]
 receive = ["std", "dep:geoutils", "dep:meshtastic", "dep:rumqttc", "dep:tokio"]
 std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]

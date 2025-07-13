@@ -768,6 +768,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f295e0bface05f3f1b00edc0100c65fe45658e00200a9243b07e59c08a52704"
 dependencies = [
+ "defmt 0.3.100",
  "femtopb-derive",
 ]
 
