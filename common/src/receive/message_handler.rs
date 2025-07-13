@@ -93,7 +93,7 @@ impl MessageHandler {
                     status.update_voltage(f64::from(batt_mv) / 1000.);
                 }
             }
-            CellularLogMessage::Disconnected(..) => {
+            CellularLogMessage::Disconnected { .. } => {
                 status.disconnect();
             }
             _ => {}

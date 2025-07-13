@@ -14,21 +14,32 @@ use std::string::String;
 
 #[derive(Clone, Debug)]
 pub enum CellularLogMessage {
-    Disconnected(HostInfo, String),
+    Disconnected {
+        host_info: HostInfo,
+        client: String,
+    },
     MCH(MiniCallHomeLog),
-    DeviceEvent(String, String, bool),
+    DeviceEvent {
+        hostname: String,
+        device_port: String,
+        added: bool,
+    },
 }
 
 impl fmt::Display for CellularLogMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CellularLogMessage::MCH(mch) => write!(f, "{}", mch),
-            CellularLogMessage::Disconnected(host_info, client_name) => {
-                write!(f, "{} disconnected client: {client_name}", host_info.name)
+            CellularLogMessage::Disconnected { host_info, client } => {
+                write!(f, "{} disconnected client: {client}", host_info.name)
             }
-            CellularLogMessage::DeviceEvent(hostname, port, added) => {
+            CellularLogMessage::DeviceEvent {
+                hostname,
+                device_port,
+                added,
+            } => {
                 let event_type = if *added { "added" } else { "removed" };
-                write!(f, "{hostname} {port} {event_type}")
+                write!(f, "{hostname} {device_port} {event_type}")
             }
         }
     }
@@ -41,9 +52,12 @@ impl CellularLogMessage {
         tz: &impl TimeZone,
     ) -> crate::Result<Self> {
         match status.msg {
-            Some(Msg::Disconnected(Disconnected { client_name, .. })) => Ok(
-                CellularLogMessage::Disconnected(host_info, client_name.to_owned()),
-            ),
+            Some(Msg::Disconnected(Disconnected { client_name, .. })) => {
+                Ok(CellularLogMessage::Disconnected {
+                    host_info,
+                    client: client_name.to_owned(),
+                })
+            }
             Some(Msg::MiniCallHome(mch)) => {
                 let now = Local::now().with_timezone(tz);
                 let log_message = MiniCallHomeLog::new(host_info, now.fixed_offset(), mch)?;
@@ -53,11 +67,11 @@ impl CellularLogMessage {
                 if let EnumValue::Unknown(_) = r#type {
                     return Err(Error::FormatError);
                 }
-                Ok(CellularLogMessage::DeviceEvent(
-                    std::string::ToString::to_string(&host_info.name),
-                    port.to_owned(),
-                    r#type == EnumValue::Known(EventType::Added),
-                ))
+                Ok(CellularLogMessage::DeviceEvent {
+                    hostname: host_info.name.to_owned(),
+                    device_port: port.to_owned(),
+                    added: r#type == EnumValue::Known(EventType::Added),
+                })
             }
             _ => Err(Error::FormatError),
         }
@@ -163,15 +177,20 @@ mod test_logs {
     #[test]
     fn test_cellular_logmessage_disconnected() {
         let host_info = HostInfo::new("spe01", MacAddress::default());
-        let log_message_disconnected =
-            CellularLogMessage::Disconnected(host_info, "SIM7020-spe01".to_owned());
+        let log_message_disconnected = CellularLogMessage::Disconnected {
+            host_info,
+            client: "SIM7020-spe01".to_owned(),
+        };
         assert_eq!(
             format!("{log_message_disconnected}"),
             "spe01 disconnected client: SIM7020-spe01"
         );
 
-        let log_message_event =
-            CellularLogMessage::DeviceEvent("spe01".to_owned(), "/dev/ttyUSB0".to_owned(), true);
+        let log_message_event = CellularLogMessage::DeviceEvent {
+            hostname: "spe01".to_owned(),
+            device_port: "/dev/ttyUSB0".to_owned(),
+            added: true,
+        };
         assert_eq!(format!("{log_message_event}"), "spe01 /dev/ttyUSB0 added");
     }
 
