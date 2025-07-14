@@ -22,14 +22,23 @@ use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
 use crate::mqtt::{Message as MqttMessage, MqttConfig, MqttReceiver};
 use crate::state::CellularRocStatus;
 
+pub struct MshDevNotifier {
+    dev_event_tx: Sender<MshDevEvent>,
+}
+
+pub enum MshDevEvent {
+    DeviceAdded(String),
+    DeviceRemoved(String),
+}
+
 pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     mqtt_receiver: Option<MqttReceiver>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     #[cfg(feature = "meshtastic")]
     meshtastic_statuses: HashMap<MacAddress, crate::state::MeshtasticRocStatus>,
-    _msh_dev_event_rx: Receiver<String>,
-    msh_dev_event_tx: Sender<String>,
+    msh_dev_event_rx: Receiver<MshDevEvent>,
+    msh_dev_event_tx: Sender<MshDevEvent>,
 }
 
 #[derive(Debug)]
@@ -40,13 +49,12 @@ pub enum Message {
     MeshtasticLog,
 }
 
-pub struct MshDevNotifier {
-    dev_event_tx: Sender<String>,
-}
-
 impl MshDevNotifier {
     pub async fn add_device(&self, port: String) -> yaroc_common::Result<()> {
-        self.dev_event_tx.send(port).await.map_err(|_| Error::ChannelSendError)
+        self.dev_event_tx
+            .send(MshDevEvent::DeviceAdded(port))
+            .await
+            .map_err(|_| Error::ChannelSendError)
     }
 }
 
@@ -62,14 +70,22 @@ impl MessageHandler {
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
             msh_dev_event_tx: tx,
-            _msh_dev_event_rx: rx,
+            msh_dev_event_rx: rx,
         }
     }
 
-    pub async fn next_message(&mut self) -> Result<Message, Error> {
-        let receiver = self.mqtt_receiver.as_mut().ok_or(Error::ValueError)?;
-        let mqtt_message = receiver.next_message().await?;
-        self.process_message(mqtt_message)
+    pub async fn next_message(&mut self) -> yaroc_common::Result<Message> {
+        loop {
+            let receiver = self.mqtt_receiver.as_mut().ok_or(Error::ValueError)?;
+            tokio::select! {
+                mqtt_message = receiver.next_message() => {
+                    return self.process_message(mqtt_message?);
+                }
+                msh_dev_event = self.msh_dev_event_rx.recv() => {
+                    self.process_msh_dev_event(msh_dev_event);
+                }
+            }
+        }
     }
 
     fn process_message(&mut self, mqtt_message: MqttMessage) -> yaroc_common::Result<Message> {
@@ -88,6 +104,15 @@ impl MessageHandler {
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
                 self.msh_status_service_envelope(&payload, now, recv_mac_address);
                 Ok(Message::MeshtasticLog)
+            }
+        }
+    }
+
+    fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
+        if let Some(dev_event) = msh_dev_event {
+            match dev_event {
+                MshDevEvent::DeviceAdded(_) => {}
+                MshDevEvent::DeviceRemoved(_) => {}
             }
         }
     }
