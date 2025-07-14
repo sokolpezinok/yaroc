@@ -7,8 +7,7 @@ edition = "2024"
 default = []
 defmt = ["dep:defmt", "femtopb/defmt"]
 nrf = ["dep:embassy-nrf"]
-receive = ["std", "dep:geoutils", "dep:meshtastic", "dep:rumqttc", "dep:tokio"]
-std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc"]
+std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc", "dep:geoutils"]
 
 [dependencies]
 chrono = { workspace = true }
@@ -22,10 +21,7 @@ femtopb = { workspace = true }
 geoutils = { workspace = true, optional = true }
 heapless =  { workspace = true }
 log = { workspace = true }
-meshtastic = { workspace = true, optional = true }
-rumqttc = { version = "0.24.0", optional = true}
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true }
 
 [build-dependencies]
 femtopb-build = "0.5.0"
@@ -35,9 +31,7 @@ critical-section = { version = "1", features = ["std"]}
 embassy-executor = { workspace = true }
 embassy-futures = { workspace = true }
 env_logger = "0.11.6"
-clap = { version = "4.0", features = ["derive"] }
 static_cell = "2.1.0"
-yaroc-common = { path = ".", features = ["receive"] } # 'receive' is activated for tests
 
 [[test]]
 name = "backoff"
@@ -50,7 +44,3 @@ required-features = ["std"]
 [[test]]
 name = "uart"
 required-features = ["std"]
-
-[[example]]
-name = "mqtt"
-required-features = ["receive"]

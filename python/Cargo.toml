@@ -5,19 +5,18 @@ edition = "2024"
 rust-version = "1.85"
 
 [features]
-default = ["receive"]
-receive = ["yaroc-common/receive", "dep:meshtastic"]
+default = []
 
 [build-dependencies]
 walkdir = "2.3.2"
 
 [dependencies]
-yaroc-common = { path = "../common", features = ["std"] }
+yaroc-common = { path = "../common" }
+yaroc-receiver = { path = "../receiver", features = ["meshtastic"] }
 
 chrono = { workspace = true, default-features = true }
 femtopb = { workspace = true }
 log = { workspace = true }
-meshtastic = { workspace = true, optional = true }
 pyo3 = { version = "0.25", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-async-runtimes = { version = "0.25", features = ["attributes", "tokio-runtime"] }
 pyo3-log = "0.12.0"

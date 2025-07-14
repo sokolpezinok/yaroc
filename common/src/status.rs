@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use embassy_sync::watch::Watch;
 use femtopb::EnumValue;
-#[cfg(feature = "receive")]
+#[cfg(feature = "std")]
 use geoutils::Location;
 
 use crate::RawMutex;
@@ -121,7 +121,7 @@ impl Position {
         }
     }
 
-    #[cfg(feature = "receive")]
+    #[cfg(feature = "std")]
     pub fn distance_m(&self, other: &Position) -> crate::Result<f64> {
         let me = Location::new(self.lat, self.lon);
         let other = Location::new(other.lat, other.lon);

@@ -1,17 +1,13 @@
-extern crate std;
-
-use crate::error::Error;
-use crate::proto::status::Msg;
-use crate::proto::{DeviceEvent, Disconnected, EventType, Status};
-use crate::status::{CellNetworkType, MiniCallHome};
-use crate::system_info::{HostInfo, MacAddress};
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use femtopb::{EnumValue, Message};
-use std::borrow::ToOwned;
 use std::fmt;
-use std::string::String;
-use std::vec::Vec;
+
+use yaroc_common::error::Error;
+use yaroc_common::proto::status::Msg;
+use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
+use yaroc_common::status::{CellNetworkType, MiniCallHome};
+use yaroc_common::system_info::{HostInfo, MacAddress};
 
 #[derive(Clone, Debug)]
 pub enum CellularLogMessage {
@@ -51,7 +47,7 @@ impl CellularLogMessage {
         status: Status,
         host_info: HostInfo,
         tz: &impl TimeZone,
-    ) -> crate::Result<Self> {
+    ) -> yaroc_common::Result<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => {
                 Ok(CellularLogMessage::Disconnected {
@@ -129,8 +125,8 @@ impl MiniCallHomeLog {
     pub fn new(
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
-        mch_proto: crate::proto::MiniCallHome,
-    ) -> crate::Result<Self> {
+        mch_proto: yaroc_common::proto::MiniCallHome,
+    ) -> yaroc_common::Result<Self> {
         let mut mch: MiniCallHome = mch_proto.try_into()?;
         mch.timestamp = mch.timestamp.with_timezone(now.offset());
         Ok(Self {
@@ -177,13 +173,12 @@ impl fmt::Display for MiniCallHomeLog {
 #[cfg(test)]
 mod test_logs {
     use super::*;
-    use crate::{
+    use femtopb::EnumValue::Known;
+    use yaroc_common::{
         proto::{MiniCallHome, Timestamp},
         status::CellSignalInfo,
         system_info::MacAddress,
     };
-    use femtopb::EnumValue::Known;
-    use std::format;
 
     #[test]
     fn test_cellular_dbm() {
@@ -195,7 +190,7 @@ mod test_logs {
             cellid: Some(2580590),
         });
         let log_message = MiniCallHomeLog {
-            mini_call_home: crate::status::MiniCallHome {
+            mini_call_home: yaroc_common::status::MiniCallHome {
                 signal_info,
                 batt_mv: Some(1260),
                 cpu_temperature: Some(51.54),
@@ -245,7 +240,7 @@ mod test_logs {
             msg: Some(Msg::MiniCallHome(MiniCallHome {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
-                network_type: Known(crate::proto::CellNetworkType::LteM),
+                network_type: Known(yaroc_common::proto::CellNetworkType::LteM),
                 signal_dbm: -80,
                 signal_snr_cb: 120,
                 time: Some(timestamp),

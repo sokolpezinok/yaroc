@@ -1,8 +1,5 @@
 extern crate std;
 
-use crate::error::Error;
-use crate::system_info::MacAddress;
-
 use chrono::{DateTime, Local};
 use log::error;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
@@ -10,6 +7,9 @@ use std::borrow::ToOwned;
 use std::string::String;
 use std::time::Duration;
 use std::vec::Vec;
+use yaroc_common::Result;
+use yaroc_common::error::Error;
+use yaroc_common::system_info::MacAddress;
 
 pub struct MqttConfig {
     pub url: String,
@@ -39,7 +39,9 @@ pub struct MqttReceiver {
 pub enum Message {
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
+    #[cfg(feature = "meshtastic")]
     MeshtasticSerial(DateTime<Local>, Vec<u8>),
+    #[cfg(feature = "meshtastic")]
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
@@ -69,14 +71,15 @@ impl MqttReceiver {
         }
     }
 
-    fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
+    fn extract_cell_mac(topic: &str) -> Result<MacAddress> {
         if topic.len() < 16 {
             return Err(Error::ParseError);
         }
         MacAddress::try_from(&topic[4..16])
     }
 
-    fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
+    #[cfg(feature = "meshtastic")]
+    fn extract_msh_mac(topic: &str) -> Result<MacAddress> {
         if topic.len() <= 10 {
             // 8 for MAC, 2 for '/!'
             return Err(Error::ParseError);
@@ -88,18 +91,25 @@ impl MqttReceiver {
         now: DateTime<Local>,
         topic: &str,
         payload: &[u8],
-    ) -> crate::Result<Message> {
+    ) -> yaroc_common::Result<Message> {
         if let Some(topic) = topic.strip_prefix("yar/2/e/") {
-            let channel = topic.split_once("/");
-            match channel {
-                Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
-                _ => {
-                    let recv_mac_address = Self::extract_msh_mac(topic)?;
-                    Ok(Message::MeshtasticStatus(
-                        recv_mac_address,
-                        now,
-                        payload.into(),
-                    ))
+            #[cfg(not(feature = "meshtastic"))]
+            {
+                Err(Error::ValueError)
+            }
+            #[cfg(feature = "meshtastic")]
+            {
+                let channel = topic.split_once("/");
+                match channel {
+                    Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
+                    _ => {
+                        let recv_mac_address = Self::extract_msh_mac(topic)?;
+                        Ok(Message::MeshtasticStatus(
+                            recv_mac_address,
+                            now,
+                            payload.into(),
+                        ))
+                    }
                 }
             }
         } else {
@@ -112,7 +122,7 @@ impl MqttReceiver {
         }
     }
 
-    pub async fn next_message(&mut self) -> crate::Result<Message> {
+    pub async fn next_message(&mut self) -> Result<Message> {
         loop {
             let Ok(notification) = self.event_loop.poll().await else {
                 error!("MQTT Connection error");

@@ -1,0 +1,27 @@
+[package]
+name = "yaroc-receiver"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+meshtastic = ["dep:meshtastic"]
+
+[dependencies]
+yaroc-common = { path = "../common", features = ["std"] }
+
+chrono = { workspace = true, features = ["clock", "alloc"] }
+femtopb = { workspace = true }
+log = { workspace = true }
+meshtastic = { workspace = true, optional = true }
+rumqttc = { version = "0.24.0" }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+clap = { version = "4.0", features = ["derive"] }
+env_logger = "0.11.6"
+
+[[example]]
+name = "mqtt"
+required-features = ["receive"]
