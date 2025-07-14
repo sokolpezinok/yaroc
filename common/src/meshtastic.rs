@@ -9,9 +9,9 @@ use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::ErrorKind;
 use std::string::String;
 
+use crate::error::Error;
 use crate::status::Position;
 use crate::system_info::{HostInfo, MacAddress};
 
@@ -60,6 +60,7 @@ pub enum MshMetrics {
     EnvironmentMetrics(f32, f32),
 }
 
+#[derive(Debug)]
 pub struct MeshtasticLog {
     pub metrics: MshMetrics,
     pub host_info: HostInfo,
@@ -148,14 +149,16 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         rssi_snr: Option<RssiSnr>,
         recv_position: Option<PositionName>,
-    ) -> Result<Option<Self>, std::io::Error> {
+    ) -> crate::Result<Option<Self>> {
         match data.portnum {
             TELEMETRY_APP => {
-                let telemetry = Telemetry::decode(data.payload.as_slice())?;
+                let telemetry = Telemetry::decode(data.payload.as_slice())
+                    .map_err(|_| Error::ProtobufParseError)?;
                 Ok(Self::parse_telemetry(telemetry, host_info, rssi_snr, now))
             }
             POSITION_APP => {
-                let position = PositionProto::decode(data.payload.as_slice())?;
+                let position = PositionProto::decode(data.payload.as_slice())
+                    .map_err(|_| Error::ProtobufParseError)?;
                 Ok(Self::parse_position(
                     position,
                     host_info,
@@ -173,8 +176,9 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> Result<Option<Self>, std::io::Error> {
-        let service_envelope = ServiceEnvelope::decode(payload)?;
+    ) -> crate::Result<Option<Self>> {
+        let service_envelope =
+            ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         match service_envelope.packet {
             Some(packet) => Self::from_parsed_mesh_packet(packet, now, dns, recv_position),
             None => Ok(None),
@@ -186,8 +190,8 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> Result<Option<Self>, std::io::Error> {
-        let packet = MeshPacket::decode(payload)?;
+    ) -> crate::Result<Option<Self>> {
+        let packet = MeshPacket::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         Self::from_parsed_mesh_packet(packet, now, dns, recv_position)
     }
 
@@ -196,7 +200,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> Result<Option<Self>, std::io::Error> {
+    ) -> crate::Result<Option<Self>> {
         match packet {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
@@ -221,10 +225,7 @@ impl MeshtasticLog {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            } => Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                "Encrypted message, disable encryption in MQTT!",
-            )),
+            } => Err(Error::ValueError),
             _ => Ok(None),
         }
     }

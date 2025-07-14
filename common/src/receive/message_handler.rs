@@ -186,7 +186,7 @@ impl MessageHandler {
         self.msh_status_update(meshtastic_log)
     }
 
-    fn msh_status_update(&mut self, log_message: Result<Option<MeshtasticLog>, std::io::Error>) {
+    fn msh_status_update(&mut self, log_message: crate::Result<Option<MeshtasticLog>>) {
         match log_message {
             Ok(Some(log_message)) => {
                 info!("{}", log_message);
