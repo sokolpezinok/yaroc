@@ -1,15 +1,11 @@
-extern crate std;
-
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use meshtastic::Message as MeshtaticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, ServiceEnvelope, Telemetry, telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
-use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::fmt;
-use std::string::String;
 
 use yaroc_common::error::Error;
 use yaroc_common::status::Position;

@@ -1,12 +1,8 @@
-extern crate std;
+use std::time::Duration;
 
 use chrono::{DateTime, Local};
-use log::error;
+use log::{error, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
-use std::borrow::ToOwned;
-use std::string::String;
-use std::time::Duration;
-use std::vec::Vec;
 use yaroc_common::Result;
 use yaroc_common::error::Error;
 use yaroc_common::system_info::MacAddress;
@@ -54,12 +50,12 @@ impl MqttReceiver {
         let mut topics = Vec::new();
         for mac in macs {
             if mac.is_full() {
-                topics.push(std::format!("yar/{mac}/status"));
-                topics.push(std::format!("yar/{mac}/p"));
+                topics.push(format!("yar/{mac}/status"));
+                topics.push(format!("yar/{mac}/p"));
             } else {
-                topics.push(std::format!("yar/2/e/serial/!{mac}"));
+                topics.push(format!("yar/2/e/serial/!{mac}"));
                 if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
-                    topics.push(std::format!("yar/2/e/{meshtastic_channel}/!{mac}"));
+                    topics.push(format!("yar/2/e/{meshtastic_channel}/!{mac}"));
                 }
             }
         }
@@ -137,7 +133,7 @@ impl MqttReceiver {
                     return Self::process_incoming(now, &topic, &payload);
                 }
                 Event::Incoming(Packet::Disconnect) => {
-                    std::println!("MQTT Disconnected");
+                    warn!("MQTT Disconnected");
                 }
                 Event::Incoming(Packet::ConnAck(_)) => {
                     for topic in &self.topics {
@@ -156,9 +152,9 @@ mod test {
 
     #[test]
     fn test_new() {
-        let macs = std::vec![
+        let macs = vec![
             MacAddress::Meshtastic(0x12345678),
-            MacAddress::Full(0xdeadbeef9876)
+            MacAddress::Full(0xdeadbeef9876),
         ];
         let config = MqttConfig {
             meshtastic_channel: Some("cha".to_owned()),
@@ -167,7 +163,7 @@ mod test {
         let receiver = MqttReceiver::new(config, macs.iter());
         assert_eq!(
             receiver.topics,
-            std::vec![
+            vec![
                 "yar/2/e/serial/!12345678",
                 "yar/2/e/cha/!12345678",
                 "yar/deadbeef9876/status",
@@ -178,23 +174,24 @@ mod test {
 
     #[test]
     fn test_new_without_msh() {
-        let macs = std::vec![MacAddress::Meshtastic(0x12345678),];
+        let macs = vec![MacAddress::Meshtastic(0x12345678)];
         let config = MqttConfig::default();
         let receiver = MqttReceiver::new(config, macs.iter());
-        assert_eq!(receiver.topics, std::vec!["yar/2/e/serial/!12345678"]);
+        assert_eq!(receiver.topics, vec!["yar/2/e/serial/!12345678"]);
     }
 
     #[test]
     fn test_extract_cell_mac() {
         let mac_address = MqttReceiver::extract_cell_mac("yar/deadbeef9876/p").unwrap();
-        assert_eq!("deadbeef9876", std::format!("{mac_address}"));
+        assert_eq!("deadbeef9876", format!("{mac_address}"));
         assert!(MqttReceiver::extract_cell_mac("yar/deadbeef987").is_err());
     }
 
+    #[cfg(feature = "meshtastic")]
     #[test]
     fn test_extract_msh_mac() {
         let mac_address = MqttReceiver::extract_msh_mac("cha/!12345678").unwrap();
-        assert_eq!("12345678", std::format!("{mac_address}"));
+        assert_eq!("12345678", format!("{mac_address}"));
         assert!(MqttReceiver::extract_cell_mac("cha/!1234567").is_err());
         assert!(MqttReceiver::extract_cell_mac("!12345678").is_err());
     }
