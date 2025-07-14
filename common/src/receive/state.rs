@@ -102,8 +102,8 @@ impl MeshtasticRocStatus {
         }
     }
 
-    pub fn update_battery(&mut self, battery: u32) {
-        self.battery = Some(battery);
+    pub fn update_battery(&mut self, percent: u32) {
+        self.battery = Some(percent);
         self.last_update = Some(Local::now().into());
     }
 

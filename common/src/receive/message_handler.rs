@@ -192,8 +192,8 @@ impl MessageHandler {
                 info!("{}", log_message);
                 let status = self.msh_roc_status(&log_message.host_info);
                 match log_message.metrics {
-                    MshMetrics::VoltageBattery(_, battery) => {
-                        status.update_battery(battery);
+                    MshMetrics::Battery { percent, .. } => {
+                        status.update_battery(percent);
                     }
                     MshMetrics::Position(position) => status.position = Some(position),
                     // TODO: handle temperature

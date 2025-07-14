@@ -56,7 +56,7 @@ impl PositionName {
 #[derive(Debug, PartialEq)]
 pub enum MshMetrics {
     Position(Position),
-    VoltageBattery(f32, u32),
+    Battery { voltage: f32, percent: u32 },
     EnvironmentMetrics(f32, f32),
 }
 
@@ -86,7 +86,10 @@ impl MeshtasticLog {
         let timestamp = Self::timestamp(telemetry.time);
         match telemetry.variant {
             Some(telemetry::Variant::DeviceMetrics(metrics)) => Some(Self {
-                metrics: MshMetrics::VoltageBattery(metrics.voltage?, metrics.battery_level?),
+                metrics: MshMetrics::Battery {
+                    voltage: metrics.voltage?,
+                    percent: metrics.battery_level?,
+                },
                 host_info,
                 rssi_snr,
                 timestamp,
@@ -235,8 +238,8 @@ impl fmt::Display for MeshtasticLog {
         let timestamp = self.timestamp.format("%H:%M:%S");
         write!(f, "{} {timestamp}:", self.host_info.name)?;
         match self.metrics {
-            MshMetrics::VoltageBattery(voltage, battery) => {
-                write!(f, " batt {:.3}V {}%", voltage, battery)?;
+            MshMetrics::Battery { voltage, percent } => {
+                write!(f, " batt {:.3}V {}%", voltage, percent)?;
             }
             MshMetrics::EnvironmentMetrics(temperature, relative_humidity) => {
                 write!(f, " {temperature}°C {relative_humidity}% humid.")?;
@@ -317,7 +320,10 @@ mod test_meshtastic {
             },
             timestamp,
             latency: Duration::milliseconds(1230),
-            metrics: MshMetrics::VoltageBattery(4.012, 82),
+            metrics: MshMetrics::Battery {
+                voltage: 4.012,
+                percent: 82,
+            },
             rssi_snr: None,
         };
         assert_eq!(
@@ -414,7 +420,13 @@ mod test_meshtastic {
         );
         let timestamp = DateTime::from_timestamp(1735157442, 0).unwrap();
         assert_eq!(log_message.timestamp, timestamp);
-        assert_eq!(log_message.metrics, MshMetrics::VoltageBattery(3.87, 76));
+        assert_eq!(
+            log_message.metrics,
+            MshMetrics::Battery {
+                voltage: 3.87,
+                percent: 76
+            }
+        );
         assert_eq!(log_message.latency, Duration::seconds(5));
     }
 
