@@ -1,5 +1,3 @@
-extern crate std;
-
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;

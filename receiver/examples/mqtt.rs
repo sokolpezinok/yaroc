@@ -2,9 +2,9 @@ extern crate yaroc_common;
 
 use clap::Parser;
 use log::{error, info};
-use yaroc_common::receive::message_handler::{Message, MessageHandler};
-use yaroc_common::receive::mqtt::MqttConfig;
 use yaroc_common::system_info::MacAddress;
+use yaroc_receiver::message_handler::{Message, MessageHandler};
+use yaroc_receiver::mqtt::MqttConfig;
 
 #[derive(Parser, Debug)]
 struct Args {
