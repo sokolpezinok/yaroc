@@ -16,7 +16,7 @@ log = { workspace = true }
 meshtastic = { workspace = true, optional = true }
 rumqttc = { version = "0.24.0" }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }

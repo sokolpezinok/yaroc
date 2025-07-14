@@ -27,6 +27,6 @@ jobs:
       run: cargo fmt --check
     - name: Run tests
       run: |
-        cargo test --verbose
+        cargo test --verbose --features meshtastic
     - name: Run clippy
       run: cargo clippy -- -D warnings
