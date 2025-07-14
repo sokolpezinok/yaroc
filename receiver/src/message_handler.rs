@@ -368,13 +368,15 @@ mod test_punch {
     }
 }
 
-#[cfg(feature = "meshtastic")]
 #[cfg(test)]
+#[cfg(feature = "meshtastic")]
 mod test_meshtastic {
+    use super::*;
+
     use crate::meshtastic::RssiSnr;
     use crate::state::SignalInfo;
     use meshtastic::protobufs::telemetry::Variant;
-    use meshtastic::protobufs::{DeviceMetrics, MeshPacket, ServiceEnvelope, Telemetry};
+    use meshtastic::protobufs::{DeviceMetrics, ServiceEnvelope, Telemetry};
 
     fn envelope(from: u32, data: Data) -> ServiceEnvelope {
         ServiceEnvelope {
@@ -390,7 +392,7 @@ mod test_meshtastic {
     #[test]
     fn test_meshtastic_serial() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = yaroc_common::punch::SiPunch::new(1715004, 47, time, 2).raw;
 
         let message = envelope(
             0xdeadbeef,
@@ -472,7 +474,7 @@ mod test_meshtastic {
     #[test]
     fn test_meshtastic_serial_and_status() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = yaroc_common::punch::SiPunch::new(1715004, 47, time, 2).raw;
 
         let message = envelope(
             0xdeadbeef,
