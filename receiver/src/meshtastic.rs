@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::string::String;
 
-use crate::error::Error;
-use crate::status::Position;
-use crate::system_info::{HostInfo, MacAddress};
+use yaroc_common::error::Error;
+use yaroc_common::status::Position;
+use yaroc_common::system_info::{HostInfo, MacAddress};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {
@@ -149,7 +149,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         rssi_snr: Option<RssiSnr>,
         recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
+    ) -> yaroc_common::Result<Option<Self>> {
         match data.portnum {
             TELEMETRY_APP => {
                 let telemetry = Telemetry::decode(data.payload.as_slice())
@@ -176,7 +176,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
+    ) -> yaroc_common::Result<Option<Self>> {
         let service_envelope =
             ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         match service_envelope.packet {
@@ -190,7 +190,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
+    ) -> yaroc_common::Result<Option<Self>> {
         let packet = MeshPacket::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         Self::from_parsed_mesh_packet(packet, now, dns, recv_position)
     }
@@ -200,7 +200,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
+    ) -> yaroc_common::Result<Option<Self>> {
         match packet {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),

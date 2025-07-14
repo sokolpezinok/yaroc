@@ -4,13 +4,7 @@ pub mod at;
 pub mod backoff;
 pub mod bg77;
 pub mod error;
-#[cfg(feature = "receive")]
-pub mod logs;
-#[cfg(feature = "receive")]
-pub mod meshtastic;
 pub mod punch;
-#[cfg(feature = "receive")]
-pub mod receive;
 pub mod status;
 #[cfg(feature = "std")]
 pub mod system_info;

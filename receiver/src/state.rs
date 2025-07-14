@@ -1,22 +1,18 @@
-extern crate std;
-
-use std::collections::HashSet;
-use std::string::{String, ToString};
-use std::vec::Vec;
-
 use chrono::prelude::*;
+use std::collections::HashSet;
 
-#[cfg(feature = "receive")]
+use yaroc_common::punch::SiPunch;
+use yaroc_common::status::CellSignalInfo;
+use yaroc_common::system_info::HostInfo;
+
+#[cfg(feature = "meshtastic")]
 use crate::meshtastic::RssiSnr;
-use crate::punch::SiPunch;
-use crate::status::CellSignalInfo;
-use crate::system_info::HostInfo;
 
 #[derive(Debug, PartialEq)]
 pub enum SignalInfo {
     Unknown,
     Cell(CellSignalInfo),
-    #[cfg(feature = "receive")]
+    #[cfg(feature = "meshtastic")]
     Meshtastic(RssiSnr),
 }
 
@@ -81,19 +77,19 @@ impl CellularRocStatus {
     }
 }
 
-#[cfg(feature = "receive")]
+#[cfg(feature = "meshtastic")]
 #[derive(Default, Clone)]
 pub struct MeshtasticRocStatus {
     pub name: String,
     battery: Option<u32>,
     pub rssi_snr: Option<RssiSnr>,
-    pub position: Option<crate::status::Position>,
+    pub position: Option<yaroc_common::status::Position>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-#[cfg(feature = "receive")]
+#[cfg(feature = "meshtastic")]
 impl MeshtasticRocStatus {
     pub fn new(name: String) -> Self {
         Self {

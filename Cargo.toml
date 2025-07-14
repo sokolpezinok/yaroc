@@ -3,8 +3,9 @@ members = [
   "common",
   "nrf52840",
   "python",
+  "receiver",
 ]
-default-members = ["common", "python"]
+default-members = ["common", "python", "receiver"]
 resolver = "2"
 
 [workspace.dependencies]
