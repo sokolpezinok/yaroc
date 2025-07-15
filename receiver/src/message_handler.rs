@@ -31,6 +31,7 @@ pub enum MshDevEvent {
 pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     mqtt_receiver: Option<MqttReceiver>,
+    meshtastic_serial: Option<MeshtasticSerial>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, crate::state::MeshtasticRocStatus>,
     msh_dev_event_rx: Receiver<MshDevEvent>,
@@ -61,6 +62,7 @@ impl MessageHandler {
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
+            meshtastic_serial: None,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
             msh_dev_event_tx: tx,
@@ -75,6 +77,8 @@ impl MessageHandler {
                 mqtt_message = receiver.next_message() => {
                     return self.process_message(mqtt_message?);
                 }
+                // mesh_packet = self.meshtastic_serial.next_message() {
+                // }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
                     self.process_msh_dev_event(msh_dev_event).await;
                 }
@@ -103,8 +107,14 @@ impl MessageHandler {
     async fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
         if let Some(dev_event) = msh_dev_event {
             match dev_event {
-                MshDevEvent::DeviceAdded(_) => {}
-                MshDevEvent::DeviceRemoved(_) => {}
+                MshDevEvent::DeviceAdded(port) => {
+                    // TODO: handle errors better
+                    self.meshtastic_serial = MeshtasticSerial::new(&port).await.ok();
+                }
+                MshDevEvent::DeviceRemoved(_) => {
+                    // TODO: check if the same port
+                    self.meshtastic_serial = None;
+                }
             }
         }
     }
@@ -184,14 +194,14 @@ impl MessageHandler {
     #[allow(dead_code)]
     fn msh_status_mesh_packet(
         &mut self,
-        payload: &[u8],
+        mesh_packet: MeshPacket,
         now: DateTime<FixedOffset>,
         recv_mac_address: Option<u32>,
     ) {
         let recv_position = recv_mac_address
             .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
         let meshtastic_log =
-            MeshtasticLog::from_mesh_packet(payload, now, &self.dns, recv_position);
+            MeshtasticLog::from_mesh_packet(mesh_packet, now, &self.dns, recv_position);
         self.msh_status_update(meshtastic_log)
     }
 
