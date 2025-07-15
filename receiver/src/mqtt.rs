@@ -35,9 +35,7 @@ pub struct MqttReceiver {
 pub enum Message {
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
-    #[cfg(feature = "meshtastic")]
     MeshtasticSerial(DateTime<Local>, Vec<u8>),
-    #[cfg(feature = "meshtastic")]
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
@@ -74,7 +72,6 @@ impl MqttReceiver {
         MacAddress::try_from(&topic[4..16])
     }
 
-    #[cfg(feature = "meshtastic")]
     fn extract_msh_mac(topic: &str) -> Result<MacAddress> {
         if topic.len() <= 10 {
             // 8 for MAC, 2 for '/!'
@@ -89,23 +86,16 @@ impl MqttReceiver {
         payload: &[u8],
     ) -> yaroc_common::Result<Message> {
         if let Some(topic) = topic.strip_prefix("yar/2/e/") {
-            #[cfg(not(feature = "meshtastic"))]
-            {
-                Err(Error::ValueError)
-            }
-            #[cfg(feature = "meshtastic")]
-            {
-                let channel = topic.split_once("/");
-                match channel {
-                    Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
-                    _ => {
-                        let recv_mac_address = Self::extract_msh_mac(topic)?;
-                        Ok(Message::MeshtasticStatus(
-                            recv_mac_address,
-                            now,
-                            payload.into(),
-                        ))
-                    }
+            let channel = topic.split_once("/");
+            match channel {
+                Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
+                _ => {
+                    let recv_mac_address = Self::extract_msh_mac(topic)?;
+                    Ok(Message::MeshtasticStatus(
+                        recv_mac_address,
+                        now,
+                        payload.into(),
+                    ))
                 }
             }
         } else {
@@ -187,7 +177,6 @@ mod test {
         assert!(MqttReceiver::extract_cell_mac("yar/deadbeef987").is_err());
     }
 
-    #[cfg(feature = "meshtastic")]
     #[test]
     fn test_extract_msh_mac() {
         let mac_address = MqttReceiver::extract_msh_mac("cha/!12345678").unwrap();

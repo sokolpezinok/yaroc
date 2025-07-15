@@ -5,14 +5,12 @@ use yaroc_common::punch::SiPunch;
 use yaroc_common::status::CellSignalInfo;
 use yaroc_common::system_info::HostInfo;
 
-#[cfg(feature = "meshtastic")]
 use crate::meshtastic::RssiSnr;
 
 #[derive(Debug, PartialEq)]
 pub enum SignalInfo {
     Unknown,
     Cell(CellSignalInfo),
-    #[cfg(feature = "meshtastic")]
     Meshtastic(RssiSnr),
 }
 
@@ -77,7 +75,6 @@ impl CellularRocStatus {
     }
 }
 
-#[cfg(feature = "meshtastic")]
 #[derive(Default, Clone)]
 pub struct MeshtasticRocStatus {
     pub name: String,
@@ -89,7 +86,6 @@ pub struct MeshtasticRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-#[cfg(feature = "meshtastic")]
 impl MeshtasticRocStatus {
     pub fn new(name: String) -> Self {
         Self {

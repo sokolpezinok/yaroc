@@ -5,7 +5,6 @@ edition = "2024"
 
 [features]
 default = []
-meshtastic = ["dep:meshtastic"]
 
 [dependencies]
 yaroc-common = { path = "../common", features = ["std"] }
@@ -13,7 +12,7 @@ yaroc-common = { path = "../common", features = ["std"] }
 chrono = { workspace = true, features = ["clock", "alloc"] }
 femtopb = { workspace = true }
 log = { workspace = true }
-meshtastic = { workspace = true, optional = true }
+meshtastic = { workspace = true }
 rumqttc = { version = "0.24.0" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

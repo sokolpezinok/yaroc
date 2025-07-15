@@ -2,11 +2,8 @@ use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
 use log::error;
-#[cfg(feature = "meshtastic")]
 use meshtastic::Message as MeshtasticMessage;
-#[cfg(feature = "meshtastic")]
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
-#[cfg(feature = "meshtastic")]
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender, channel};
@@ -17,8 +14,8 @@ use yaroc_common::punch::SiPunchLog;
 use yaroc_common::system_info::{HostInfo, MacAddress};
 
 use crate::logs::CellularLogMessage;
-#[cfg(feature = "meshtastic")]
 use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
+use crate::meshtastic_serial::MeshtasticSerial;
 use crate::mqtt::{Message as MqttMessage, MqttConfig, MqttReceiver};
 use crate::state::CellularRocStatus;
 
@@ -35,7 +32,6 @@ pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     mqtt_receiver: Option<MqttReceiver>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
-    #[cfg(feature = "meshtastic")]
     meshtastic_statuses: HashMap<MacAddress, crate::state::MeshtasticRocStatus>,
     msh_dev_event_rx: Receiver<MshDevEvent>,
     msh_dev_event_tx: Sender<MshDevEvent>,
@@ -45,7 +41,6 @@ pub struct MessageHandler {
 pub enum Message {
     CellularLog(CellularLogMessage),
     SiPunches(Vec<SiPunchLog>),
-    #[cfg(feature = "meshtastic")]
     MeshtasticLog,
 }
 
@@ -66,7 +61,6 @@ impl MessageHandler {
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
-            #[cfg(feature = "meshtastic")]
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
             msh_dev_event_tx: tx,
@@ -82,7 +76,7 @@ impl MessageHandler {
                     return self.process_message(mqtt_message?);
                 }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
-                    self.process_msh_dev_event(msh_dev_event);
+                    self.process_msh_dev_event(msh_dev_event).await;
                 }
             }
         }
@@ -96,11 +90,9 @@ impl MessageHandler {
             MqttMessage::Punches(mac_address, now, payload) => {
                 self.punches(mac_address, now, &payload).map(Message::SiPunches)
             }
-            #[cfg(feature = "meshtastic")]
             MqttMessage::MeshtasticSerial(_, payload) => {
                 self.msh_serial_service_envelope(&payload).map(Message::SiPunches)
             }
-            #[cfg(feature = "meshtastic")]
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
                 self.msh_status_service_envelope(&payload, now, recv_mac_address);
                 Ok(Message::MeshtasticLog)
@@ -108,7 +100,7 @@ impl MessageHandler {
         }
     }
 
-    fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
+    async fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
         if let Some(dev_event) = msh_dev_event {
             match dev_event {
                 MshDevEvent::DeviceAdded(_) => {}
@@ -178,7 +170,6 @@ impl MessageHandler {
         Ok(result)
     }
 
-    #[cfg(feature = "meshtastic")]
     fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut crate::state::MeshtasticRocStatus {
         self.meshtastic_statuses.entry(host_info.mac_address).or_insert(
             crate::state::MeshtasticRocStatus::new(host_info.name.as_str().to_owned()),
@@ -191,7 +182,6 @@ impl MessageHandler {
     }
 
     #[allow(dead_code)]
-    #[cfg(feature = "meshtastic")]
     fn msh_status_mesh_packet(
         &mut self,
         payload: &[u8],
@@ -205,7 +195,6 @@ impl MessageHandler {
         self.msh_status_update(meshtastic_log)
     }
 
-    #[cfg(feature = "meshtastic")]
     fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
@@ -218,7 +207,6 @@ impl MessageHandler {
         self.msh_status_update(meshtastic_log)
     }
 
-    #[cfg(feature = "meshtastic")]
     fn msh_status_update(&mut self, log_message: yaroc_common::Result<Option<MeshtasticLog>>) {
         match log_message {
             Ok(Some(log_message)) => {
@@ -245,7 +233,6 @@ impl MessageHandler {
         }
     }
 
-    #[cfg(feature = "meshtastic")]
     /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
     fn msh_serial_service_envelope(
         &mut self,
@@ -257,7 +244,6 @@ impl MessageHandler {
         self.msh_serial(packet)
     }
 
-    #[cfg(feature = "meshtastic")]
     /// Process Meshtastic message of the serial module given as MeshPacket.
     #[allow(dead_code)]
     fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> yaroc_common::Result<Vec<SiPunchLog>> {
@@ -265,7 +251,6 @@ impl MessageHandler {
         self.msh_serial(packet)
     }
 
-    #[cfg(feature = "meshtastic")]
     fn msh_serial(&mut self, packet: MeshPacket) -> yaroc_common::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
@@ -308,7 +293,6 @@ impl MessageHandler {
         Ok(result)
     }
 
-    #[cfg(feature = "meshtastic")]
     pub fn node_infos(&self) -> Vec<crate::state::NodeInfo> {
         let mut res: Vec<_> = self
             .meshtastic_statuses
@@ -320,7 +304,6 @@ impl MessageHandler {
         res
     }
 
-    #[cfg(feature = "meshtastic")]
     fn get_position_name(&self, mac_address: MacAddress) -> Option<PositionName> {
         let status = self.meshtastic_statuses.get(&mac_address)?;
         status
@@ -394,7 +377,6 @@ mod test_punch {
 }
 
 #[cfg(test)]
-#[cfg(feature = "meshtastic")]
 mod test_meshtastic {
     use super::*;
 

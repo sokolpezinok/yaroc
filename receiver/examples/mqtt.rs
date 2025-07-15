@@ -50,7 +50,6 @@ async fn main() {
                         info!("{punch}");
                     }
                 }
-                #[cfg(feature = "meshtastic")]
                 Message::MeshtasticLog => {
                     info!("Got Meshtastic log, currently unsupported");
                 }
