@@ -91,7 +91,7 @@ pub struct MessageHandler {
 impl MessageHandler {
     #[new]
     #[pyo3(signature = (dns, mqtt_config=None))]
-    pub fn new_py(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> PyResult<Self> {
+    pub fn new(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> PyResult<Self> {
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
             .map(|(mac, name)| {

@@ -15,6 +15,7 @@ use yaroc_common::system_info::{HostInfo, MacAddress};
 
 use crate::logs::CellularLogMessage;
 use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
+use crate::meshtastic::{POSITION_APP, SERIAL_APP, TELEMETRY_APP};
 use crate::meshtastic_serial::MeshtasticSerial;
 use crate::mqtt::{Message as MqttMessage, MqttConfig, MqttReceiver};
 use crate::state::CellularRocStatus;
@@ -77,8 +78,17 @@ impl MessageHandler {
                 mqtt_message = receiver.next_message() => {
                     return self.process_message(mqtt_message?);
                 }
-                // mesh_packet = self.meshtastic_serial.next_message() {
-                // }
+                mesh_packet = async {
+                    if let Some(meshtastic_serial) = self.meshtastic_serial.as_mut() {
+                        meshtastic_serial.next_message().await
+                    } else {
+                        std::future::pending().await
+                    }
+                } => {
+                    if let Some(mesh_packet) = mesh_packet {
+                        self.process_mesh_packet(mesh_packet);
+                    }
+                }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
                     self.process_msh_dev_event(msh_dev_event).await;
                 }
@@ -101,6 +111,34 @@ impl MessageHandler {
                 self.msh_status_service_envelope(&payload, now, recv_mac_address);
                 Ok(Message::MeshtasticLog)
             }
+        }
+    }
+
+    fn process_mesh_packet(&mut self, mesh_packet: MeshPacket) {
+        let now = Local::now().fixed_offset();
+        match mesh_packet {
+            MeshPacket {
+                payload_variant:
+                    Some(PayloadVariant::Decoded(Data {
+                        portnum: TELEMETRY_APP | POSITION_APP,
+                        ..
+                    })),
+                ..
+            } => {
+                self.msh_status_mesh_packet(mesh_packet, now, None);
+            }
+            MeshPacket {
+                payload_variant:
+                    Some(PayloadVariant::Decoded(Data {
+                        portnum: SERIAL_APP,
+                        ..
+                    })),
+                ..
+            } => {
+                // TODO: forward
+                let _ = self.msh_serial_mesh_packet(mesh_packet);
+            }
+            _ => {}
         }
     }
 
@@ -191,7 +229,6 @@ impl MessageHandler {
         HostInfo::new(name, mac_address)
     }
 
-    #[allow(dead_code)]
     fn msh_status_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
@@ -251,17 +288,14 @@ impl MessageHandler {
         let service_envelope =
             ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
         let packet = service_envelope.packet.ok_or(Error::ProtobufParseError)?;
-        self.msh_serial(packet)
+        self.msh_serial_mesh_packet(packet)
     }
 
     /// Process Meshtastic message of the serial module given as MeshPacket.
-    #[allow(dead_code)]
-    fn msh_serial_mesh_packet(&mut self, payload: &[u8]) -> yaroc_common::Result<Vec<SiPunchLog>> {
-        let packet = MeshPacket::decode(payload).map_err(|_| Error::ProtobufParseError)?;
-        self.msh_serial(packet)
-    }
-
-    fn msh_serial(&mut self, packet: MeshPacket) -> yaroc_common::Result<Vec<SiPunchLog>> {
+    pub fn msh_serial_mesh_packet(
+        &mut self,
+        packet: MeshPacket,
+    ) -> yaroc_common::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();

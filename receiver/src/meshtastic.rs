@@ -217,8 +217,9 @@ impl MeshtasticLog {
     }
 }
 
-const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
-const POSITION_APP: i32 = PortNum::PositionApp as i32;
+pub(crate) const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
+pub(crate) const POSITION_APP: i32 = PortNum::PositionApp as i32;
+pub(crate) const SERIAL_APP: i32 = PortNum::SerialApp as i32;
 
 impl fmt::Display for MeshtasticLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
