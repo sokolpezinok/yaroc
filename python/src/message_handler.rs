@@ -8,7 +8,9 @@ use tokio::sync::Mutex;
 use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
 use yaroc_common::system_info::MacAddress;
 use yaroc_receiver::logs::CellularLogMessage;
-use yaroc_receiver::message_handler::{Message as MessageRs, MessageHandler as MessageHandlerRs};
+use yaroc_receiver::message_handler::{
+    Message as MessageRs, MessageHandler as MessageHandlerRs, MshDevNotifier as MshDevNotifierRs,
+};
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 
 use crate::punch::SiPunchLog;
@@ -83,6 +85,20 @@ impl From<MqttConfig> for MqttConfigRs {
 }
 
 #[pyclass]
+pub struct MshDevNotifier {
+    inner: MshDevNotifierRs,
+}
+
+#[pymethods]
+impl MshDevNotifier {
+    pub fn add_device(&self, port: String) -> PyResult<()> {
+        self.inner
+            .add_device(port)
+            .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
+    }
+}
+
+#[pyclass]
 pub struct MessageHandler {
     inner: Arc<Mutex<MessageHandlerRs>>,
 }
@@ -110,8 +126,13 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
-    pub fn node_infos(&mut self) -> PyResult<Vec<NodeInfo>> {
+    pub fn node_infos(&self) -> PyResult<Vec<NodeInfo>> {
         Ok(self.get_inner()?.node_infos().into_iter().map(|n| n.into()).collect())
+    }
+
+    pub fn msh_dev_notifier(&self) -> PyResult<MshDevNotifier> {
+        let notifier = self.get_inner()?.meshtastic_device_notifier();
+        Ok(MshDevNotifier { inner: notifier })
     }
 
     pub fn next_message<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
@@ -132,7 +153,7 @@ impl MessageHandler {
 }
 
 impl MessageHandler {
-    fn get_inner(&mut self) -> PyResult<tokio::sync::MutexGuard<'_, MessageHandlerRs>> {
+    fn get_inner(&self) -> PyResult<tokio::sync::MutexGuard<'_, MessageHandlerRs>> {
         self.inner
             .try_lock()
             .map_err(|_| PyRuntimeError::new_err("Failed to lock message handler".to_owned()))

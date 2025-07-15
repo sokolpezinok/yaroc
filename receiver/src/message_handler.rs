@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
-use log::error;
+use log::{error, info};
 use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
@@ -47,10 +47,9 @@ pub enum Message {
 }
 
 impl MshDevNotifier {
-    pub async fn add_device(&self, port: String) -> yaroc_common::Result<()> {
+    pub fn add_device(&self, port: String) -> yaroc_common::Result<()> {
         self.dev_event_tx
-            .send(MshDevEvent::DeviceAdded(port))
-            .await
+            .try_send(MshDevEvent::DeviceAdded(port))
             .map_err(|_| Error::ChannelSendError)
     }
 }
@@ -145,10 +144,15 @@ impl MessageHandler {
     async fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
         if let Some(dev_event) = msh_dev_event {
             match dev_event {
-                MshDevEvent::DeviceAdded(port) => {
-                    // TODO: handle errors better
-                    self.meshtastic_serial = MeshtasticSerial::new(&port).await.ok();
-                }
+                MshDevEvent::DeviceAdded(port) => match MeshtasticSerial::new(&port).await {
+                    Ok(msh_serial) => {
+                        self.meshtastic_serial = Some(msh_serial);
+                        info!("Connected to device: {port}");
+                    }
+                    Err(err) => {
+                        error!("Error connecting to {port}: {err}");
+                    }
+                },
                 MshDevEvent::DeviceRemoved(_) => {
                     // TODO: check if the same port
                     self.meshtastic_serial = None;

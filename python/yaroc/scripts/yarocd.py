@@ -10,6 +10,7 @@ from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
 from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog
+from ..sources.meshtastic import MeshtasticSerial
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import is_windows
@@ -25,13 +26,9 @@ class YarocDaemon:
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
+        self.msh_serial = MeshtasticSerial(self.handler.msh_dev_notifier())
         self.drawer = StatusDrawer(self.handler, display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
-
-        # Disabled temporarily
-        # self.msh_serial = MeshtasticSerial(
-        #     self.on_msh_status, self._handle_meshtastic_serial_mesh_packet
-        # )
 
     async def _handle_punches(self, punches: list[SiPunchLog]):
         tasks = []
@@ -84,8 +81,7 @@ class YarocDaemon:
 
         asyncio.create_task(self.client_group.loop())
         asyncio.create_task(self.handle_messages())
-        # Not compatible with self.handle_messages(), which takes the whole MessageHandler
-        # asyncio.create_task(self.msh_serial.loop())
+        asyncio.create_task(self.msh_serial.loop())
         draw_task = asyncio.create_task(self.draw_table())
 
         try:

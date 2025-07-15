@@ -1,5 +1,7 @@
 use chrono::Local;
+use log::LevelFilter;
 use pyo3::prelude::*;
+use pyo3_log::{Caching, Logger};
 
 #[pyclass(eq, eq_int)]
 #[derive(PartialEq)]
@@ -66,8 +68,18 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::message_handler::Message>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<crate::message_handler::MqttConfig>()?;
+    m.add_class::<crate::message_handler::MshDevNotifier>()?;
     m.add_class::<crate::status::CellularLog>()?;
 
-    pyo3_log::init();
+    let _ = Logger::new(m.py(), Caching::LoggersAndLevels)?
+        .filter(LevelFilter::Trace)
+        // TODO: remove `.filter_target` once https://github.com/meshtastic/rust/issues/27 is fixed
+        .filter_target(
+            "meshtastic::connections::stream_buffer".to_owned(),
+            LevelFilter::Off,
+        )
+        .install()
+        .expect("Someone installed a logger before us");
+
     Ok(())
 }

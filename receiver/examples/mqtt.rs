@@ -19,6 +19,11 @@ async fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .filter_module("rumqttc::state", log::LevelFilter::Info)
+        //TODO: remove this once the logging problem is fixed
+        .filter_module(
+            "meshtastic::connections::stream_buffer",
+            log::LevelFilter::Off,
+        )
         .format_timestamp_millis()
         .init();
 

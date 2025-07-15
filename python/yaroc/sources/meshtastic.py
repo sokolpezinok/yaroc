@@ -3,31 +3,18 @@ import logging
 from asyncio import Queue
 from typing import Any
 
-from meshtastic.serial_interface import SerialInterface
-from pubsub import pub  # type: ignore[import-untyped]
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME
 
+from ..rs import MshDevNotifier
 from ..utils.sys_info import tty_device_from_usb
 
 
 class MeshtasticSerial:
-    def __init__(self, status_callback, punch_callback):
-        self.status_callback = status_callback
-        self.punch_callback = punch_callback
+    def __init__(self, msh_dev_notifier: MshDevNotifier):
         self._loop = asyncio.get_event_loop()
-        self.recv_mac_addr_int = 0
         self._device_queue: Queue[tuple[bool, str, str]] = Queue()
-        self._serial = None
-        self._device_node = None
-
-    def on_receive(self, packet, interface):
-        portnum = packet.get("decoded", {}).get("portnum", "")
-        raw = packet["raw"].SerializeToString()
-        if portnum == "SERIAL_APP":
-            asyncio.run_coroutine_threadsafe(self.punch_callback(raw), self._loop)
-        elif portnum == "TELEMETRY_APP":
-            self.status_callback(raw, self.recv_mac_addr_int)
+        self._notifier = msh_dev_notifier
 
     @staticmethod
     def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:
@@ -44,22 +31,11 @@ class MeshtasticSerial:
             added, tty_acm, device_node = await self._device_queue.get()
             if added:
                 await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                try:
-                    self._serial = SerialInterface(tty_acm)
-                    self._device_node = device_node
-                    self.recv_mac_addr_int = self._serial.myInfo.my_node_num
-                    logging.info(f"Connected to Meshtastic serial at {tty_acm}")
-                    pub.subscribe(self.on_receive, "meshtastic.receive")
-                except Exception as err:
-                    logging.error(f"Error while connecting to Meshtastic serial at {err}")
+                self._notifier.add_device(tty_acm)
             else:
-                if self._device_node == device_node:
-                    # TODO: We should also close when this object is destroyed
-                    self._serial.close()
-                    self._serial = None
-                    self._device_node = None
+                pass  # TODO
 
-        await asyncio.sleep(1000000)
+        await asyncio.sleep(10000000)
 
     def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         try:
