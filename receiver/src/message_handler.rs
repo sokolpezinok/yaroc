@@ -282,7 +282,7 @@ impl MessageHandler {
         self.msh_status_update(meshtastic_log)
     }
 
-    fn msh_status_update(&mut self, log_message: yaroc_common::Result<Option<MeshtasticLog>>) {
+    fn msh_status_update(&mut self, log_message: crate::Result<Option<MeshtasticLog>>) {
         match log_message {
             Ok(Some(log_message)) => {
                 log::info!("{}", log_message);

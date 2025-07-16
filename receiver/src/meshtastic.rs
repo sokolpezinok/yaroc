@@ -145,16 +145,14 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         rssi_snr: Option<RssiSnr>,
         recv_position: Option<PositionName>,
-    ) -> yaroc_common::Result<Option<Self>> {
+    ) -> crate::Result<Option<Self>> {
         match data.portnum {
             TELEMETRY_APP => {
-                let telemetry = Telemetry::decode(data.payload.as_slice())
-                    .map_err(|_| Error::ProtobufParseError)?;
+                let telemetry = Telemetry::decode(data.payload.as_slice())?;
                 Ok(Self::parse_telemetry(telemetry, host_info, rssi_snr, now))
             }
             POSITION_APP => {
-                let position = PositionProto::decode(data.payload.as_slice())
-                    .map_err(|_| Error::ProtobufParseError)?;
+                let position = PositionProto::decode(data.payload.as_slice())?;
                 Ok(Self::parse_position(
                     position,
                     host_info,
@@ -172,9 +170,8 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> yaroc_common::Result<Option<Self>> {
-        let service_envelope =
-            ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
+    ) -> crate::Result<Option<Self>> {
+        let service_envelope = ServiceEnvelope::decode(payload)?;
         match service_envelope.packet {
             Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
             None => Ok(None),
@@ -186,7 +183,7 @@ impl MeshtasticLog {
         now: DateTime<FixedOffset>,
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
-    ) -> yaroc_common::Result<Option<Self>> {
+    ) -> crate::Result<Option<Self>> {
         match packet {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
@@ -211,7 +208,7 @@ impl MeshtasticLog {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            } => Err(Error::ValueError),
+            } => Err(Error::ValueError)?,
             _ => Ok(None),
         }
     }
