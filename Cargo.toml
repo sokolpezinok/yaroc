@@ -16,7 +16,7 @@ embassy-futures = "0.1.1"
 embassy-nrf = { version = "0.4", features = ["defmt", "nrf52840", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
 embassy-sync = "0.7"
 embassy-time = { version = "0.4" }
-femtopb = "0.8.0"
+femtopb = { version = "0.8.0", features = ["thiserror"] }
 geoutils = "0.5.1"
 heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "6067119ed3e" }
 log = "0.4"

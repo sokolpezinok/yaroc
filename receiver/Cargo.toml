@@ -13,6 +13,7 @@ chrono = { workspace = true, features = ["clock", "alloc"] }
 femtopb = { workspace = true }
 log = { workspace = true }
 meshtastic = { workspace = true }
+prost = "0.13"
 rumqttc = { version = "0.24.0" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

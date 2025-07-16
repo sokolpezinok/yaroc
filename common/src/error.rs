@@ -35,10 +35,6 @@ pub enum Error {
     MqttError(i8),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
-    #[error("Connection error")]
-    ConnectionError,
-    #[error("Channel send error")]
-    ChannelSendError,
 }
 
 impl From<core::fmt::Error> for Error {

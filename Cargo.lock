@@ -771,6 +771,7 @@ checksum = "7f295e0bface05f3f1b00edc0100c65fe45658e00200a9243b07e59c08a52704"
 dependencies = [
  "defmt 0.3.100",
  "femtopb-derive",
+ "thiserror-no-std",
 ]
 
 [[package]]
@@ -2236,6 +2237,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "thiserror-impl-no-std"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58e6318948b519ba6dc2b442a6d0b904ebfb8d411a3ad3e07843615a72249758"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "thiserror-no-std"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3ad459d94dd517257cc96add8a43190ee620011bb6e6cdc82dafd97dfafafea"
+dependencies = [
+ "thiserror-impl-no-std",
+]
+
+[[package]]
 name = "tokio"
 version = "1.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2703,6 +2724,7 @@ dependencies = [
  "femtopb",
  "log",
  "meshtastic",
+ "prost",
  "rumqttc",
  "thiserror 2.0.12",
  "tokio",

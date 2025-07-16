@@ -8,11 +8,11 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 
-use yaroc_common::error::Error;
 use yaroc_common::proto::{Punches, Status};
 use yaroc_common::punch::SiPunchLog;
 use yaroc_common::system_info::{HostInfo, MacAddress};
 
+use crate::error::Error;
 use crate::logs::CellularLogMessage;
 use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName};
 use crate::meshtastic::{POSITION_APP, SERIAL_APP, TELEMETRY_APP};
@@ -47,13 +47,13 @@ pub enum Message {
 }
 
 impl MshDevNotifier {
-    pub fn add_device(&self, port: String, device_node: String) -> yaroc_common::Result<()> {
+    pub fn add_device(&self, port: String, device_node: String) -> crate::Result<()> {
         self.dev_event_tx
             .try_send(MshDevEvent::DeviceAdded { port, device_node })
             .map_err(|_| Error::ChannelSendError)
     }
 
-    pub fn remove_device(&self, device_node: String) -> yaroc_common::Result<()> {
+    pub fn remove_device(&self, device_node: String) -> crate::Result<()> {
         self.dev_event_tx
             .try_send(MshDevEvent::DeviceRemoved { device_node })
             .map_err(|_| Error::ChannelSendError)
@@ -76,18 +76,21 @@ impl MessageHandler {
         }
     }
 
-    pub async fn next_message(&mut self) -> yaroc_common::Result<Message> {
+    pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
-            let receiver = self.mqtt_receiver.as_mut().ok_or(Error::ValueError)?;
             tokio::select! {
-                mqtt_message = receiver.next_message() => {
+                mqtt_message = async {
+                    match self.mqtt_receiver.as_mut() {
+                        Some(receiver) => receiver.next_message().await,
+                        None => std::future::pending().await
+                    }
+                } => {
                     return self.process_message(mqtt_message?);
                 }
                 mesh_packet = async {
-                    if let Some(meshtastic_serial) = self.meshtastic_serial.as_mut() {
-                        meshtastic_serial.next_message().await
-                    } else {
-                        std::future::pending().await
+                    match self.meshtastic_serial.as_mut() {
+                        Some(meshtastic_serial) => meshtastic_serial.next_message().await,
+                        None => std::future::pending().await
                     }
                 } => {
                     if let Some(mesh_packet) = mesh_packet {
@@ -101,7 +104,7 @@ impl MessageHandler {
         }
     }
 
-    fn process_message(&mut self, mqtt_message: MqttMessage) -> yaroc_common::Result<Message> {
+    fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Message> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, _, payload) => {
                 self.status_update(&payload, mac_address).map(Message::CellularLog)
@@ -192,8 +195,8 @@ impl MessageHandler {
         &mut self,
         payload: &[u8],
         mac_address: MacAddress,
-    ) -> Result<CellularLogMessage, Error> {
-        let status_proto = Status::decode(payload).map_err(|_| Error::ProtobufParseError)?;
+    ) -> crate::Result<CellularLogMessage> {
+        let status_proto = Status::decode(payload).map_err(Error::FemtopbDecodeError)?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), &Local)?;
 
@@ -223,7 +226,7 @@ impl MessageHandler {
         payload: &[u8],
     ) -> Result<Vec<SiPunchLog>, Error> {
         let now = now.into();
-        let punches = Punches::decode(payload).map_err(|_| Error::ProtobufParseError)?;
+        let punches = Punches::decode(payload).map_err(Error::FemtopbDecodeError)?;
         let host_info = self.resolve(mac_address);
         let status = self.get_cellular_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
@@ -306,21 +309,14 @@ impl MessageHandler {
     }
 
     /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
-    fn msh_serial_service_envelope(
-        &mut self,
-        payload: &[u8],
-    ) -> yaroc_common::Result<Vec<SiPunchLog>> {
-        let service_envelope =
-            ServiceEnvelope::decode(payload).map_err(|_| Error::ProtobufParseError)?;
-        let packet = service_envelope.packet.ok_or(Error::ProtobufParseError)?;
+    fn msh_serial_service_envelope(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
+        let service_envelope = ServiceEnvelope::decode(payload)?;
+        let packet = service_envelope.packet.ok_or(yaroc_common::error::Error::ValueError)?;
         self.msh_serial_mesh_packet(packet)
     }
 
     /// Process Meshtastic message of the serial module given as MeshPacket.
-    pub fn msh_serial_mesh_packet(
-        &mut self,
-        packet: MeshPacket,
-    ) -> yaroc_common::Result<Vec<SiPunchLog>> {
+    pub fn msh_serial_mesh_packet(&mut self, packet: MeshPacket) -> crate::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let now = Local::now().fixed_offset();
@@ -332,7 +328,7 @@ impl MessageHandler {
         })) = packet.payload_variant
         else {
             // Encrypted message or wrong portnum
-            return Err(Error::ParseError);
+            return Err(yaroc_common::error::Error::ParseError)?;
         };
 
         let status = self.msh_roc_status(&host_info);
