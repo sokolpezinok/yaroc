@@ -96,6 +96,12 @@ impl MshDevNotifier {
             .add_device(port)
             .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
     }
+
+    pub fn remove_device(&self, port: String) -> PyResult<()> {
+        self.inner
+            .remove_device(port)
+            .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
+    }
 }
 
 #[pyclass]

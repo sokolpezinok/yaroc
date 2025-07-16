@@ -33,7 +33,7 @@ class MeshtasticSerial:
                 await asyncio.sleep(3.0)  # Give the TTY subystem more time
                 self._notifier.add_device(tty_acm)
             else:
-                pass  # TODO
+                self._notifier.remove_device(tty_acm)
 
         await asyncio.sleep(10000000)
 

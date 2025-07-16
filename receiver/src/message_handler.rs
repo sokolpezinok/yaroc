@@ -52,6 +52,12 @@ impl MshDevNotifier {
             .try_send(MshDevEvent::DeviceAdded(port))
             .map_err(|_| Error::ChannelSendError)
     }
+
+    pub fn remove_device(&self, port: String) -> yaroc_common::Result<()> {
+        self.dev_event_tx
+            .try_send(MshDevEvent::DeviceRemoved(port))
+            .map_err(|_| Error::ChannelSendError)
+    }
 }
 
 impl MessageHandler {
@@ -153,9 +159,10 @@ impl MessageHandler {
                         error!("Error connecting to {port}: {err}");
                     }
                 },
-                MshDevEvent::DeviceRemoved(_) => {
+                MshDevEvent::DeviceRemoved(port) => {
                     // TODO: check if the same port
                     self.meshtastic_serial = None;
+                    info!("Removed device: {port}");
                 }
             }
         }
