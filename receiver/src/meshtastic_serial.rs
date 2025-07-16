@@ -4,12 +4,13 @@ use meshtastic::utils;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 pub struct MeshtasticSerial {
+    device_node: String,
     stream_api: ConnectedStreamApi,
     listener: UnboundedReceiver<FromRadio>,
 }
 
 impl MeshtasticSerial {
-    pub async fn new(port: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(port: &str, device_node: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let stream_api = StreamApi::new();
         let serial_stream = utils::stream::build_serial_stream(port.to_owned(), None, None, None)?;
         let (listener, stream_api) = stream_api.connect(serial_stream).await;
@@ -17,9 +18,14 @@ impl MeshtasticSerial {
         let config_id = utils::generate_rand_id();
         let stream_api = stream_api.configure(config_id).await?;
         Ok(Self {
+            device_node: device_node.to_owned(),
             stream_api,
             listener,
         })
+    }
+
+    pub fn device_node(&self) -> &str {
+        &self.device_node
     }
 
     pub async fn disconnect(self) -> Result<(), Box<dyn std::error::Error>> {

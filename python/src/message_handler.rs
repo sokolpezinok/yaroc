@@ -91,15 +91,15 @@ pub struct MshDevNotifier {
 
 #[pymethods]
 impl MshDevNotifier {
-    pub fn add_device(&self, port: String) -> PyResult<()> {
+    pub fn add_device(&self, port: String, device_node: String) -> PyResult<()> {
         self.inner
-            .add_device(port)
+            .add_device(port, device_node)
             .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
     }
 
-    pub fn remove_device(&self, port: String) -> PyResult<()> {
+    pub fn remove_device(&self, device_node: String) -> PyResult<()> {
         self.inner
-            .remove_device(port)
+            .remove_device(device_node)
             .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
     }
 }

@@ -31,16 +31,16 @@ class MeshtasticSerial:
             added, tty_acm, device_node = await self._device_queue.get()
             if added:
                 await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                self._notifier.add_device(tty_acm)
+                self._notifier.add_device(tty_acm, device_node)
             else:
-                self._notifier.remove_device(tty_acm)
+                self._notifier.remove_device(device_node)
 
         await asyncio.sleep(10000000)
 
     def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         try:
             tty_acm, device_node = self._tty_acm(device_info)
-            if tty_acm is not None and "ACM" in tty_acm:
+            if not device_node.endswith("001") and tty_acm is not None and "ACM" in tty_acm:
                 asyncio.run_coroutine_threadsafe(
                     self._device_queue.put((True, tty_acm, device_node)), self._loop
                 )

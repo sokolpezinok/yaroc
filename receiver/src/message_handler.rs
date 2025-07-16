@@ -25,8 +25,8 @@ pub struct MshDevNotifier {
 }
 
 pub enum MshDevEvent {
-    DeviceAdded(String),
-    DeviceRemoved(String),
+    DeviceAdded { port: String, device_node: String },
+    DeviceRemoved { device_node: String },
 }
 
 pub struct MessageHandler {
@@ -47,15 +47,15 @@ pub enum Message {
 }
 
 impl MshDevNotifier {
-    pub fn add_device(&self, port: String) -> yaroc_common::Result<()> {
+    pub fn add_device(&self, port: String, device_node: String) -> yaroc_common::Result<()> {
         self.dev_event_tx
-            .try_send(MshDevEvent::DeviceAdded(port))
+            .try_send(MshDevEvent::DeviceAdded { port, device_node })
             .map_err(|_| Error::ChannelSendError)
     }
 
-    pub fn remove_device(&self, port: String) -> yaroc_common::Result<()> {
+    pub fn remove_device(&self, device_node: String) -> yaroc_common::Result<()> {
         self.dev_event_tx
-            .try_send(MshDevEvent::DeviceRemoved(port))
+            .try_send(MshDevEvent::DeviceRemoved { device_node })
             .map_err(|_| Error::ChannelSendError)
     }
 }
@@ -148,23 +148,37 @@ impl MessageHandler {
     }
 
     async fn process_msh_dev_event(&mut self, msh_dev_event: Option<MshDevEvent>) {
-        if let Some(dev_event) = msh_dev_event {
-            match dev_event {
-                MshDevEvent::DeviceAdded(port) => match MeshtasticSerial::new(&port).await {
+        match msh_dev_event {
+            Some(MshDevEvent::DeviceAdded { port, device_node }) => {
+                if self.meshtastic_serial.is_some() {
+                    return;
+                }
+                match MeshtasticSerial::new(&port, &device_node).await {
                     Ok(msh_serial) => {
                         self.meshtastic_serial = Some(msh_serial);
-                        info!("Connected to device: {port}");
+                        info!("Connected to device: {port} at {device_node}");
                     }
                     Err(err) => {
                         error!("Error connecting to {port}: {err}");
                     }
-                },
-                MshDevEvent::DeviceRemoved(port) => {
-                    // TODO: check if the same port
-                    self.meshtastic_serial = None;
-                    info!("Removed device: {port}");
                 }
             }
+            Some(MshDevEvent::DeviceRemoved { device_node }) => {
+                if self
+                    .meshtastic_serial
+                    .as_ref()
+                    .is_some_and(|msh_serial| msh_serial.device_node() == device_node)
+                {
+                    if let Some(meshtastic_serial) = self.meshtastic_serial.take() {
+                        let _ = meshtastic_serial
+                            .disconnect()
+                            .await
+                            .inspect_err(|e| error!("Error while disconnecting: {e}"));
+                    }
+                    info!("Removed device: {device_node}");
+                }
+            }
+            _ => {}
         }
     }
 
