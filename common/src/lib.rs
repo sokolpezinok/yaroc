@@ -6,8 +6,6 @@ pub mod bg77;
 pub mod error;
 pub mod punch;
 pub mod status;
-#[cfg(feature = "std")]
-pub mod system_info;
 
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));

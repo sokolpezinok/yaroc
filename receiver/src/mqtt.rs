@@ -1,10 +1,10 @@
 use std::time::Duration;
 
+use crate::system_info::MacAddress;
 use chrono::{DateTime, Local};
 use log::{error, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use yaroc_common::error::Error;
-use yaroc_common::system_info::MacAddress;
 
 pub struct MqttConfig {
     pub url: String,
@@ -68,7 +68,7 @@ impl MqttReceiver {
         if topic.len() < 16 {
             return Err(Error::ParseError.into());
         }
-        Ok(MacAddress::try_from(&topic[4..16])?)
+        MacAddress::try_from(&topic[4..16])
     }
 
     fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
@@ -76,7 +76,7 @@ impl MqttReceiver {
             // 8 for MAC, 2 for '/!'
             return Err(Error::ParseError.into());
         }
-        Ok(MacAddress::try_from(&topic[topic.len() - 8..])?)
+        MacAddress::try_from(&topic[topic.len() - 8..])
     }
 
     fn process_incoming(

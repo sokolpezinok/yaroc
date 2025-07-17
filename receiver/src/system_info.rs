@@ -1,5 +1,3 @@
-extern crate std;
-
 use crate::error::Error;
 use core::fmt;
 use std::borrow::ToOwned;
@@ -31,7 +29,7 @@ impl TryFrom<&str> for MacAddress {
             12 => Ok(MacAddress::Full(
                 u64::from_str_radix(mac_address, 16).map_err(|_| Error::ParseError)?,
             )),
-            _ => Err(Error::ValueError),
+            _ => Err(Error::ParseError),
         }
     }
 }
@@ -53,7 +51,7 @@ impl core::fmt::Display for MacAddress {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HostInfo {
-    pub name: std::string::String,
+    pub name: String,
     pub mac_address: MacAddress,
 }
 

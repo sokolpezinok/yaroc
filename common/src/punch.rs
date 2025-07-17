@@ -1,8 +1,6 @@
 use chrono::{Days, prelude::*};
 use heapless::Vec;
 
-#[cfg(feature = "std")]
-use crate::system_info::HostInfo;
 use crate::{error::Error, proto::Punch};
 
 pub const LEN: usize = 20;
@@ -163,40 +161,6 @@ impl SiPunch {
         res[17..19].copy_from_slice(&chksum);
         res[19] = 0x03;
         res
-    }
-}
-
-#[cfg(feature = "std")]
-#[derive(Debug)]
-pub struct SiPunchLog {
-    pub punch: SiPunch,
-    pub latency: chrono::Duration,
-    pub host_info: HostInfo,
-}
-
-#[cfg(feature = "std")]
-impl SiPunchLog {
-    pub fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
-        let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());
-        Self {
-            latency: now - punch.time,
-            punch,
-            host_info,
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl core::fmt::Display for SiPunchLog {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{} {} punched {} ",
-            self.host_info.name, self.punch.card, self.punch.code
-        )?;
-        write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
-        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
-        write!(f, ", latency {:4.2}s", millis)
     }
 }
 

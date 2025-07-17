@@ -3,11 +3,43 @@ use chrono::{DateTime, Duration};
 use femtopb::{EnumValue, Message};
 use std::fmt;
 
+use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
+use yaroc_common::punch::{RawPunch, SiPunch};
 use yaroc_common::status::{CellNetworkType, MiniCallHome};
-use yaroc_common::system_info::{HostInfo, MacAddress};
+
+#[derive(Debug)]
+pub struct SiPunchLog {
+    pub punch: SiPunch,
+    pub latency: chrono::Duration,
+    pub host_info: HostInfo,
+}
+
+impl SiPunchLog {
+    pub fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
+        let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());
+        Self {
+            latency: now - punch.time,
+            punch,
+            host_info,
+        }
+    }
+}
+
+impl core::fmt::Display for SiPunchLog {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "{} {} punched {} ",
+            self.host_info.name, self.punch.card, self.punch.code
+        )?;
+        write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum CellularLogMessage {
@@ -177,7 +209,6 @@ mod test_logs {
     use yaroc_common::{
         proto::{MiniCallHome, Timestamp},
         status::CellSignalInfo,
-        system_info::MacAddress,
     };
 
     #[test]

@@ -1,12 +1,11 @@
 use log::{error, info};
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 
-use yaroc_common::system_info::MacAddress;
-
 use crate::error::Error;
 use crate::meshtastic_serial::{MeshProto, MeshtasticSerial};
 use crate::mqtt::{MqttConfig, MqttReceiver};
 use crate::state::{FleetState, Message};
+use crate::system_info::MacAddress;
 
 pub struct MshDevNotifier {
     dev_event_tx: Sender<MshDevEvent>,

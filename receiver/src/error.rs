@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Common error: {0}")]
     CommonError(#[from] yaroc_common::error::Error),
+    #[error("Parse error")]
+    ParseError,
     #[error("Protobuf parse error: {0}")]
     ProstDecodeError(#[from] prost::DecodeError),
     #[error("Protobuf parse error: {0}")]

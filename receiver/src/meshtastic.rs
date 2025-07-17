@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::error::Error;
+use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::status::Position;
-use yaroc_common::system_info::{HostInfo, MacAddress};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {
