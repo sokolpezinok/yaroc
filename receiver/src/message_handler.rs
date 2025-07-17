@@ -328,7 +328,7 @@ impl MessageHandler {
         })) = packet.payload_variant
         else {
             // Encrypted message or wrong portnum
-            return Err(yaroc_common::error::Error::ParseError)?;
+            return Err(Error::EncryptionError);
         };
 
         let status = self.msh_roc_status(&host_info);

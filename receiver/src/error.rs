@@ -12,4 +12,6 @@ pub enum Error {
     ConnectionError,
     #[error("Channel send error")]
     ChannelSendError,
+    #[error("Encryption error: cannot decrypt without a key")]
+    EncryptionError,
 }

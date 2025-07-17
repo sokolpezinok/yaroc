@@ -7,7 +7,7 @@ use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use std::collections::HashMap;
 use std::fmt;
 
-use yaroc_common::error::Error;
+use crate::error::Error;
 use yaroc_common::status::Position;
 use yaroc_common::system_info::{HostInfo, MacAddress};
 
@@ -208,7 +208,7 @@ impl MeshtasticLog {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
                 ..
-            } => Err(Error::ValueError)?,
+            } => Err(Error::EncryptionError),
             _ => Ok(None),
         }
     }
