@@ -133,6 +133,7 @@ impl MessageHandler {
                     })),
                 ..
             } => {
+                //TODO: get receiving MAC address from NodeInfo
                 self.msh_status_mesh_packet(mesh_packet, now, None);
             }
             MeshPacket {
@@ -261,10 +262,9 @@ impl MessageHandler {
         &mut self,
         mesh_packet: MeshPacket,
         now: DateTime<FixedOffset>,
-        recv_mac_address: Option<u32>,
+        recv_mac_address: Option<MacAddress>,
     ) {
-        let recv_position = recv_mac_address
-            .and_then(|mac_addr| self.get_position_name(MacAddress::Meshtastic(mac_addr)));
+        let recv_position = recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr));
         let meshtastic_log =
             MeshtasticLog::from_mesh_packet(mesh_packet, now, &self.dns, recv_position);
         self.msh_status_update(meshtastic_log)
@@ -526,17 +526,14 @@ mod test_meshtastic {
             })
         );
 
-        let envelope = ServiceEnvelope {
-            packet: Some(MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(data)),
-                ..Default::default()
-            }),
+        let mesh_packet = MeshPacket {
+            payload_variant: Some(PayloadVariant::Decoded(data)),
             ..Default::default()
         };
-        handler.msh_status_service_envelope(
-            &envelope.encode_to_vec(),
-            Local::now(),
-            MacAddress::default(),
+        handler.msh_status_mesh_packet(
+            mesh_packet,
+            Local::now().fixed_offset(),
+            Some(MacAddress::default()),
         );
         let node_infos = handler.node_infos();
         assert_eq!(node_infos.len(), 1);
