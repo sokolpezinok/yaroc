@@ -9,9 +9,10 @@ use yaroc_common::punch::SiPunchLog as SiPunchLogRs;
 use yaroc_common::system_info::MacAddress;
 use yaroc_receiver::logs::CellularLogMessage;
 use yaroc_receiver::message_handler::{
-    Message as MessageRs, MessageHandler as MessageHandlerRs, MshDevNotifier as MshDevNotifierRs,
+    MessageHandler as MessageHandlerRs, MshDevNotifier as MshDevNotifierRs,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
+use yaroc_receiver::state::Message as MessageRs;
 
 use crate::punch::SiPunchLog;
 use crate::status::{CellularLog, NodeInfo};
