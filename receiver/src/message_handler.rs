@@ -102,7 +102,7 @@ impl MessageHandler {
                 match MeshtasticSerial::new(&port, &device_node).await {
                     Ok(msh_serial) => {
                         self.meshtastic_serial = Some(msh_serial);
-                        info!("Connected to device: {port} at {device_node}");
+                        info!("Connected to meshtastic device: {port} at {device_node}");
                     }
                     Err(err) => {
                         error!("Error connecting to {port}: {err}");

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::system_info::MacAddress;
 use chrono::{DateTime, Local};
-use log::{error, warn};
+use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use yaroc_common::error::Error;
 
@@ -125,6 +125,7 @@ impl MqttReceiver {
                     warn!("MQTT Disconnected");
                 }
                 Event::Incoming(Packet::ConnAck(_)) => {
+                    info!("Connected to MQTT");
                     for topic in &self.topics {
                         self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
                     }
