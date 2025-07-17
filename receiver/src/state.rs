@@ -163,11 +163,11 @@ impl FleetState {
 
     pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Message> {
         match mqtt_message {
-            MqttMessage::CellularStatus(mac_address, _, payload) => {
-                self.status_update(&payload, mac_address).map(Message::CellularLog)
+            MqttMessage::CellularStatus(mac_address, now, payload) => {
+                self.status_update(&payload, mac_address, now).map(Message::CellularLog)
             }
             MqttMessage::Punches(mac_address, now, payload) => {
-                self.punches(mac_address, now, &payload).map(Message::SiPunches)
+                self.punches(&payload, mac_address, now).map(Message::SiPunches)
             }
             MqttMessage::MeshtasticSerial(_, payload) => {
                 self.msh_serial_service_envelope(&payload).map(Message::SiPunches)
@@ -179,6 +179,12 @@ impl FleetState {
         }
     }
 
+    /// Process a MeshPacket from a meshtastic mesh.
+    ///
+    /// # Aguments
+    ///
+    /// * `mesh_packet` - The MeshPacket parsed proto.
+    /// * `recv_mac_address` - Optional receiver MAC address (if known).
     pub fn process_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
@@ -200,14 +206,22 @@ impl FleetState {
         }
     }
 
+    /// Parse the Status proto.
+    ///
+    /// # Aguments
+    ///
+    /// * `payload` - The serialized proto.
+    /// * `mac_address` - The MAC address of the device the Status belongs to.
+    /// * `now` - The timestamp when this proto was received.
     fn status_update(
         &mut self,
         payload: &[u8],
         mac_address: MacAddress,
+        now: DateTime<Local>,
     ) -> crate::Result<CellularLogMessage> {
         let status_proto = Status::decode(payload).map_err(Error::FemtopbDecodeError)?;
         let log_message =
-            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), &Local)?;
+            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), now.into())?;
 
         let status = self.get_cellular_status(mac_address);
         match &log_message {
@@ -228,11 +242,18 @@ impl FleetState {
         Ok(log_message)
     }
 
+    /// Parse the Punches proto
+    ///
+    /// # Aguments
+    ///
+    /// * `payload` - The serialized proto.
+    /// * `mac_address` - The MAC address of the device the Punches proto belongs to.
+    /// * `now` - The timestamp when this proto was received.
     fn punches(
         &mut self,
+        payload: &[u8],
         mac_address: MacAddress,
         now: DateTime<Local>,
-        payload: &[u8],
     ) -> Result<Vec<SiPunchLog>, Error> {
         let now = now.into();
         let punches = Punches::decode(payload).map_err(Error::FemtopbDecodeError)?;
@@ -261,6 +282,7 @@ impl FleetState {
             .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
     }
 
+    /// Resolve a given MAC address into a full HostInfo, which also includes a name.
     fn resolve(&self, mac_address: MacAddress) -> HostInfo {
         let name = self.dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
         HostInfo::new(name, mac_address)
@@ -279,6 +301,7 @@ impl FleetState {
         self.msh_status_update(meshtastic_log)
     }
 
+    /// Process Meshtastic status message given as ServiceEnvelope.
     fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
@@ -367,6 +390,7 @@ impl FleetState {
         Ok(result)
     }
 
+    /// Generate NodeInfo for all nodes.
     pub fn node_infos(&self) -> Vec<NodeInfo> {
         let mut res: Vec<_> = self
             .meshtastic_statuses
@@ -414,14 +438,13 @@ mod test_punch {
             punches: Repeated::from_slice(punches_slice),
             ..Default::default()
         };
-        let mut buf = [0u8; 30];
-        let len = punches.encoded_len();
+        let mut buf = vec![0u8; punches.encoded_len()];
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut state = FleetState::new(Vec::new());
         let now = Local::now();
         // TODO: should propagate errors
-        let punches = state.punches(MacAddress::default(), now, &buf[..len]).unwrap();
+        let punches = state.punches(&buf, MacAddress::default(), now).unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -437,13 +460,12 @@ mod test_punch {
             punches: Repeated::from_slice(punches_slice),
             ..Default::default()
         };
-        let mut buf = [0u8; 30];
-        let len = punches.encoded_len();
+        let mut buf = vec![0u8; punches.encoded_len()];
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
         let mut state = FleetState::new(Vec::new());
         let now = Local::now();
-        let punch_logs = state.punches(MacAddress::default(), now, &buf[..len]).unwrap();
+        let punch_logs = state.punches(&buf, MacAddress::default(), now).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);

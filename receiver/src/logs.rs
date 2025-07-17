@@ -78,7 +78,7 @@ impl CellularLogMessage {
     pub fn from_proto(
         status: Status,
         host_info: HostInfo,
-        tz: &impl TimeZone,
+        now: DateTime<FixedOffset>,
     ) -> crate::Result<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => {
@@ -88,8 +88,7 @@ impl CellularLogMessage {
                 })
             }
             Some(Msg::MiniCallHome(mch)) => {
-                let now = Local::now().with_timezone(tz);
-                let log_message = MiniCallHomeLog::new(host_info, now.fixed_offset(), mch)?;
+                let log_message = MiniCallHomeLog::new(host_info, now, mch)?;
                 Ok(CellularLogMessage::MCH(log_message))
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
@@ -280,8 +279,9 @@ mod test_logs {
             ..Default::default()
         };
         let tz = FixedOffset::east_opt(3600).unwrap();
+        let now = Local::now().with_timezone(&tz);
         let host_info = HostInfo::new("spe01", MacAddress::default());
-        let cell_log_msg = CellularLogMessage::from_proto(status, host_info.clone(), &tz)
+        let cell_log_msg = CellularLogMessage::from_proto(status, host_info.clone(), now)
             .expect("MiniCallHome proto should be valid");
         let formatted_log_msg = format!("{cell_log_msg}");
         assert!(
@@ -296,7 +296,7 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, host_info, &tz);
+        let cell_log_msg = CellularLogMessage::from_proto(status, host_info, now);
         assert!(cell_log_msg.is_err());
     }
 }

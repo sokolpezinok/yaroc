@@ -72,7 +72,7 @@ impl MeshtasticLog {
     /// * `payload` - The serialized ServiceEnvelope proto.
     /// * `now` - The timestamp when this proto was received.
     /// * `dns` - DNS records, mapping MAC addresses to strings
-    /// * `recv_position` - Position of the node which received the proto last.
+    /// * `recv_position` - Optional position of the node which received the proto last (if known).
     pub fn from_service_envelope(
         payload: &[u8],
         now: DateTime<FixedOffset>,
@@ -86,6 +86,13 @@ impl MeshtasticLog {
         }
     }
 
+    /// Parse MeshtasticLog from a MeshPacket proto.
+    ///
+    /// # Arguments
+    /// * `packet` - The MeshPacket.
+    /// * `now` - The timestamp when this proto was received.
+    /// * `dns` - DNS records, mapping MAC addresses to strings
+    /// * `recv_position` - Optional position of the node which received the proto last (if known).
     pub fn from_mesh_packet(
         packet: MeshPacket,
         now: DateTime<FixedOffset>,
