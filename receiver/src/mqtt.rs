@@ -3,7 +3,6 @@ use std::time::Duration;
 use chrono::{DateTime, Local};
 use log::{error, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
-use yaroc_common::Result;
 use yaroc_common::error::Error;
 use yaroc_common::system_info::MacAddress;
 
@@ -65,26 +64,26 @@ impl MqttReceiver {
         }
     }
 
-    fn extract_cell_mac(topic: &str) -> Result<MacAddress> {
+    fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
         if topic.len() < 16 {
-            return Err(Error::ParseError);
+            return Err(Error::ParseError.into());
         }
-        MacAddress::try_from(&topic[4..16])
+        Ok(MacAddress::try_from(&topic[4..16])?)
     }
 
-    fn extract_msh_mac(topic: &str) -> Result<MacAddress> {
+    fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
         if topic.len() <= 10 {
             // 8 for MAC, 2 for '/!'
-            return Err(Error::ParseError);
+            return Err(Error::ParseError.into());
         }
-        MacAddress::try_from(&topic[topic.len() - 8..])
+        Ok(MacAddress::try_from(&topic[topic.len() - 8..])?)
     }
 
     fn process_incoming(
         now: DateTime<Local>,
         topic: &str,
         payload: &[u8],
-    ) -> yaroc_common::Result<Message> {
+    ) -> crate::Result<Message> {
         if let Some(topic) = topic.strip_prefix("yar/2/e/") {
             let channel = topic.split_once("/");
             match channel {
@@ -103,12 +102,12 @@ impl MqttReceiver {
             match &topic[16..] {
                 "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
                 "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
-                _ => Err(Error::ValueError),
+                _ => Err(Error::ValueError.into()),
             }
         }
     }
 
-    pub async fn next_message(&mut self) -> Result<Message> {
+    pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
             let Ok(notification) = self.event_loop.poll().await else {
                 error!("MQTT Connection error");

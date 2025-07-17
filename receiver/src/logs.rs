@@ -47,7 +47,7 @@ impl CellularLogMessage {
         status: Status,
         host_info: HostInfo,
         tz: &impl TimeZone,
-    ) -> yaroc_common::Result<Self> {
+    ) -> crate::Result<Self> {
         match status.msg {
             Some(Msg::Disconnected(Disconnected { client_name, .. })) => {
                 Ok(CellularLogMessage::Disconnected {
@@ -62,7 +62,7 @@ impl CellularLogMessage {
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
                 if let EnumValue::Unknown(_) = r#type {
-                    return Err(Error::FormatError);
+                    return Err(Error::FormatError.into());
                 }
                 Ok(CellularLogMessage::DeviceEvent {
                     host_info,
@@ -70,7 +70,7 @@ impl CellularLogMessage {
                     added: r#type == EnumValue::Known(EventType::Added),
                 })
             }
-            _ => Err(Error::FormatError),
+            _ => Err(Error::FormatError.into()),
         }
     }
 
@@ -126,7 +126,7 @@ impl MiniCallHomeLog {
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
         mch_proto: yaroc_common::proto::MiniCallHome,
-    ) -> yaroc_common::Result<Self> {
+    ) -> crate::Result<Self> {
         let mut mch: MiniCallHome = mch_proto.try_into()?;
         mch.timestamp = mch.timestamp.with_timezone(now.offset());
         Ok(Self {
