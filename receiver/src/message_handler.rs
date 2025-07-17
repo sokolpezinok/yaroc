@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{Receiver, Sender, channel};
 use yaroc_common::system_info::MacAddress;
 
 use crate::error::Error;
-use crate::meshtastic_serial::MeshtasticSerial;
+use crate::meshtastic_serial::{MeshProto, MeshtasticSerial};
 use crate::mqtt::{MqttConfig, MqttReceiver};
 use crate::state::{FleetState, Message};
 
@@ -73,12 +73,12 @@ impl MessageHandler {
                     }
                 } => {
                     match mesh_proto {
-                        crate::meshtastic_serial::MeshProto::MeshPacket(mesh_packet) => self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac),
-                        crate::meshtastic_serial::MeshProto::MyNodeInfo(node_info) => {
+                        MeshProto::MeshPacket(mesh_packet) => self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac),
+                        MeshProto::MyNodeInfo(node_info) => {
                             let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
                             self.meshtastic_mac = Some(mac_address);
                         }
-                        crate::meshtastic_serial::MeshProto::Disconnected => todo!(),
+                        MeshProto::Disconnected => todo!(),
                     }
                 }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {

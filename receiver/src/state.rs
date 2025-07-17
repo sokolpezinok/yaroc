@@ -268,10 +268,10 @@ impl FleetState {
         Ok(result)
     }
 
-    fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut crate::state::MeshtasticRocStatus {
-        self.meshtastic_statuses.entry(host_info.mac_address).or_insert(
-            crate::state::MeshtasticRocStatus::new(host_info.name.as_str().to_owned()),
-        )
+    fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
+        self.meshtastic_statuses
+            .entry(host_info.mac_address)
+            .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
     }
 
     fn resolve(&self, mac_address: MacAddress) -> HostInfo {
@@ -379,7 +379,7 @@ impl FleetState {
         Ok(result)
     }
 
-    pub fn node_infos(&self) -> Vec<crate::state::NodeInfo> {
+    pub fn node_infos(&self) -> Vec<NodeInfo> {
         let mut res: Vec<_> = self
             .meshtastic_statuses
             .values()
@@ -467,7 +467,6 @@ mod test_meshtastic {
     use super::*;
 
     use crate::meshtastic::RssiSnr;
-    use crate::state::SignalInfo;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{DeviceMetrics, ServiceEnvelope, Telemetry};
 
