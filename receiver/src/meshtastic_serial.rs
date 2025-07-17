@@ -1,5 +1,5 @@
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
+use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -7,6 +7,12 @@ pub struct MeshtasticSerial {
     device_node: String,
     stream_api: ConnectedStreamApi,
     listener: UnboundedReceiver<FromRadio>,
+}
+
+pub enum MeshProto {
+    MeshPacket(MeshPacket),
+    MyNodeInfo(MyNodeInfo),
+    Disconnected,
 }
 
 impl MeshtasticSerial {
@@ -33,17 +39,23 @@ impl MeshtasticSerial {
         Ok(())
     }
 
-    pub async fn next_message(&mut self) -> Option<MeshPacket> {
+    pub async fn next_message(&mut self) -> MeshProto {
         loop {
             match self.listener.recv().await {
                 Some(FromRadio {
                     payload_variant: Some(from_radio::PayloadVariant::Packet(packet)),
                     ..
                 }) => {
-                    return Some(packet);
+                    return MeshProto::MeshPacket(packet);
+                }
+                Some(FromRadio {
+                    payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
+                    ..
+                }) => {
+                    return MeshProto::MyNodeInfo(my_node_info);
                 }
                 None => {
-                    return None;
+                    return MeshProto::Disconnected;
                 }
                 _ => {}
             }

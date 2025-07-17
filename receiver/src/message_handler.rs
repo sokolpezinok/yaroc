@@ -33,6 +33,7 @@ pub struct MessageHandler {
     dns: HashMap<MacAddress, String>,
     mqtt_receiver: Option<MqttReceiver>,
     meshtastic_serial: Option<MeshtasticSerial>,
+    meshtastic_mac: Option<MacAddress>,
     cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
     meshtastic_statuses: HashMap<MacAddress, crate::state::MeshtasticRocStatus>,
     msh_dev_event_rx: Receiver<MshDevEvent>,
@@ -69,6 +70,7 @@ impl MessageHandler {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             mqtt_receiver,
             meshtastic_serial: None,
+            meshtastic_mac: None,
             meshtastic_statuses: HashMap::new(),
             cellular_statuses: HashMap::new(),
             msh_dev_event_tx: tx,
@@ -87,14 +89,19 @@ impl MessageHandler {
                 } => {
                     return self.process_message(mqtt_message?);
                 }
-                mesh_packet = async {
+                mesh_proto = async {
                     match self.meshtastic_serial.as_mut() {
                         Some(meshtastic_serial) => meshtastic_serial.next_message().await,
                         None => std::future::pending().await
                     }
                 } => {
-                    if let Some(mesh_packet) = mesh_packet {
-                        self.process_mesh_packet(mesh_packet);
+                    match mesh_proto {
+                        crate::meshtastic_serial::MeshProto::MeshPacket(mesh_packet) => self.process_mesh_packet(mesh_packet),
+                        crate::meshtastic_serial::MeshProto::MyNodeInfo(node_info) => {
+                            let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
+                            self.meshtastic_mac = Some(mac_address);
+                        }
+                        crate::meshtastic_serial::MeshProto::Disconnected => todo!(),
                     }
                 }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
@@ -134,7 +141,7 @@ impl MessageHandler {
                 ..
             } => {
                 //TODO: get receiving MAC address from NodeInfo
-                self.msh_status_mesh_packet(mesh_packet, now, None);
+                self.msh_status_mesh_packet(mesh_packet, now, self.meshtastic_mac);
             }
             MeshPacket {
                 payload_variant:
