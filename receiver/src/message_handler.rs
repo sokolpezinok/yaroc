@@ -72,7 +72,13 @@ impl MessageHandler {
                     }
                 } => {
                     match mesh_proto {
-                        MeshProto::MeshPacket(mesh_packet) => self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac),
+                        MeshProto::MeshPacket(mesh_packet) => {
+                            if let Some(message) =
+                                self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac)?
+                            {
+                                return Ok(message);
+                            }
+                        }
                         MeshProto::MyNodeInfo(node_info) => {
                             let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
                             self.meshtastic_mac = Some(mac_address);

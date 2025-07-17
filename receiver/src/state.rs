@@ -183,7 +183,7 @@ impl FleetState {
         &mut self,
         mesh_packet: MeshPacket,
         recv_mac_address: Option<MacAddress>,
-    ) {
+    ) -> crate::Result<Option<Message>> {
         let now = Local::now().fixed_offset();
         match mesh_packet {
             MeshPacket {
@@ -195,6 +195,7 @@ impl FleetState {
                 ..
             } => {
                 self.msh_status_mesh_packet(mesh_packet, now, recv_mac_address);
+                Ok(Some(Message::MeshtasticLog))
             }
             MeshPacket {
                 payload_variant:
@@ -204,10 +205,11 @@ impl FleetState {
                     })),
                 ..
             } => {
-                // TODO: forward
-                let _ = self.msh_serial_mesh_packet(mesh_packet);
+                let si_punch_logs = self.msh_serial_mesh_packet(mesh_packet)?;
+                Ok(Some(Message::SiPunches(si_punch_logs)))
             }
-            _ => {}
+            // TODO: check for encrypted data
+            _ => Ok(None),
         }
     }
 
