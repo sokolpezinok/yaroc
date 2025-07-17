@@ -195,7 +195,6 @@ impl FleetState {
                     })),
                 ..
             } => {
-                //TODO: get receiving MAC address from NodeInfo
                 self.msh_status_mesh_packet(mesh_packet, now, recv_mac_address);
             }
             MeshPacket {
@@ -430,10 +429,10 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = FleetState::new(Vec::new());
+        let mut state = FleetState::new(Vec::new());
         let now = Local::now();
         // TODO: should propagate errors
-        let punches = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
+        let punches = state.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punches.len(), 0);
     }
 
@@ -453,9 +452,9 @@ mod test_punch {
         let len = punches.encoded_len();
         punches.encode(&mut buf.as_mut_slice()).unwrap();
 
-        let mut handler = FleetState::new(Vec::new());
+        let mut state = FleetState::new(Vec::new());
         let now = Local::now();
-        let punch_logs = handler.punches(MacAddress::default(), now, &buf[..len]).unwrap();
+        let punch_logs = state.punches(MacAddress::default(), now, &buf[..len]).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -495,12 +494,12 @@ mod test_meshtastic {
             },
         )
         .encode_to_vec();
-        let mut handler = FleetState::new(Vec::new());
-        let punch_logs = handler.msh_serial_service_envelope(&message).unwrap();
+        let mut state = FleetState::new(Vec::new());
+        let punch_logs = state.msh_serial_service_envelope(&message).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
-        let node_infos = handler.node_infos();
+        let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(
             node_infos[0].last_punch.unwrap().time(),
@@ -533,9 +532,9 @@ mod test_meshtastic {
             ..Default::default()
         };
         let message = envelope1.encode_to_vec();
-        let mut handler = FleetState::new(Vec::new());
-        handler.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
-        let node_infos = handler.node_infos();
+        let mut state = FleetState::new(Vec::new());
+        state.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
+        let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(
             node_infos[0].signal_info,
@@ -550,12 +549,12 @@ mod test_meshtastic {
             payload_variant: Some(PayloadVariant::Decoded(data)),
             ..Default::default()
         };
-        handler.msh_status_mesh_packet(
+        state.msh_status_mesh_packet(
             mesh_packet,
             Local::now().fixed_offset(),
             Some(MacAddress::default()),
         );
-        let node_infos = handler.node_infos();
+        let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
     }
@@ -575,8 +574,8 @@ mod test_meshtastic {
         )
         .encode_to_vec();
 
-        let mut handler = FleetState::new(Vec::new());
-        handler.msh_serial_service_envelope(&message).unwrap();
+        let mut state = FleetState::new(Vec::new());
+        state.msh_serial_service_envelope(&message).unwrap();
 
         let telemetry = Telemetry {
             time: 1735157442,
@@ -588,8 +587,8 @@ mod test_meshtastic {
             ..Default::default()
         };
         let message = envelope(0xdeadbeef, data).encode_to_vec();
-        handler.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
-        let node_infos = handler.node_infos();
+        state.msh_status_service_envelope(&message, Local::now(), MacAddress::default());
+        let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
     }
 }

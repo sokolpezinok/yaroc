@@ -141,7 +141,7 @@ mod test {
 
     #[test]
     fn test_new() {
-        let macs = vec![
+        let macs = [
             MacAddress::Meshtastic(0x12345678),
             MacAddress::Full(0xdeadbeef9876),
         ];
@@ -163,7 +163,7 @@ mod test {
 
     #[test]
     fn test_new_without_msh() {
-        let macs = vec![MacAddress::Meshtastic(0x12345678)];
+        let macs = [MacAddress::Meshtastic(0x12345678)];
         let config = MqttConfig::default();
         let receiver = MqttReceiver::new(config, macs.iter());
         assert_eq!(receiver.topics, vec!["yar/2/e/serial/!12345678"]);

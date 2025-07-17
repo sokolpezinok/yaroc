@@ -42,8 +42,8 @@ impl MshDevNotifier {
 
 impl MessageHandler {
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
-        let macs: Vec<&MacAddress> = dns.iter().map(|(_, mac)| mac).collect();
-        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs.into_iter()));
+        let macs = dns.iter().map(|(_, mac)| mac);
+        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
         let (tx, rx) = channel(10);
         Self {
             fleet_state: FleetState::new(dns),
