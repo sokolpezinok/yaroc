@@ -26,4 +26,7 @@ tokio = { version = "1.44" }
 
 
 [profile.release]
-debug = 2
+overflow-checks = false
+lto = true
+strip = true
+codegen-units = 1
