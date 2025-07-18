@@ -185,26 +185,13 @@ impl FleetState {
         recv_mac_address: Option<MacAddress>,
     ) -> crate::Result<Option<Message>> {
         let now = Local::now().fixed_offset();
-        match mesh_packet {
-            MeshPacket {
-                payload_variant:
-                    Some(PayloadVariant::Decoded(Data {
-                        portnum: TELEMETRY_APP | POSITION_APP,
-                        ..
-                    })),
-                ..
-            } => {
+        let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet);
+        match portnum {
+            Some(TELEMETRY_APP | POSITION_APP) => {
                 self.msh_status_mesh_packet(mesh_packet, now, recv_mac_address);
                 Ok(Some(Message::MeshtasticLog))
             }
-            MeshPacket {
-                payload_variant:
-                    Some(PayloadVariant::Decoded(Data {
-                        portnum: SERIAL_APP,
-                        ..
-                    })),
-                ..
-            } => {
+            Some(SERIAL_APP) => {
                 let si_punch_logs = self.msh_serial_mesh_packet(mesh_packet)?;
                 Ok(Some(Message::SiPunches(si_punch_logs)))
             }
@@ -279,6 +266,7 @@ impl FleetState {
         HostInfo::new(name, mac_address)
     }
 
+    /// Process Meshtastic status message given as MeshPacket.
     fn msh_status_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,

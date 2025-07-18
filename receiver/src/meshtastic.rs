@@ -66,6 +66,72 @@ pub struct MeshtasticLog {
 }
 
 impl MeshtasticLog {
+    /// Parse MeshtasticLog from a serialized ServiceEnvelope proto.
+    ///
+    /// # Arguments
+    /// * `payload` - The serialized ServiceEnvelope proto.
+    /// * `now` - The timestamp when this proto was received.
+    /// * `dns` - DNS records, mapping MAC addresses to strings
+    /// * `recv_position` - Position of the node which received the proto last.
+    pub fn from_service_envelope(
+        payload: &[u8],
+        now: DateTime<FixedOffset>,
+        dns: &HashMap<MacAddress, String>,
+        recv_position: Option<PositionName>,
+    ) -> crate::Result<Option<Self>> {
+        let service_envelope = ServiceEnvelope::decode(payload)?;
+        match service_envelope.packet {
+            Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
+            None => Ok(None),
+        }
+    }
+
+    pub fn from_mesh_packet(
+        packet: MeshPacket,
+        now: DateTime<FixedOffset>,
+        dns: &HashMap<MacAddress, String>,
+        recv_position: Option<PositionName>,
+    ) -> crate::Result<Option<Self>> {
+        match packet {
+            MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(data)),
+                from,
+                rx_rssi,
+                rx_snr,
+                ..
+            } => {
+                let mac_address = MacAddress::Meshtastic(from);
+                let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
+                Self::parse_data(
+                    data,
+                    HostInfo {
+                        name: name.to_owned(),
+                        mac_address,
+                    },
+                    now,
+                    RssiSnr::new(rx_rssi, rx_snr),
+                    recv_position,
+                )
+            }
+            MeshPacket {
+                payload_variant: Some(PayloadVariant::Encrypted(_)),
+                ..
+            } => Err(Error::EncryptionError),
+            _ => Ok(None),
+        }
+    }
+
+    /// Get portnum inside MeshPacket, if it exists and can be decoded.
+    pub fn get_mesh_packet_portnum(mesh_packet: &MeshPacket) -> Option<i32> {
+        match mesh_packet {
+            MeshPacket {
+                payload_variant: Some(PayloadVariant::Decoded(Data { portnum, .. })),
+                ..
+            } => Some(*portnum),
+            _ => None,
+        }
+    }
+
     fn datetime_from_secs(timestamp: i64, tz: &impl TimeZone) -> DateTime<FixedOffset> {
         tz.timestamp_opt(timestamp, 0).unwrap().fixed_offset()
     }
@@ -161,54 +227,6 @@ impl MeshtasticLog {
                     recv_position,
                 ))
             }
-            _ => Ok(None),
-        }
-    }
-
-    pub fn from_service_envelope(
-        payload: &[u8],
-        now: DateTime<FixedOffset>,
-        dns: &HashMap<MacAddress, String>,
-        recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
-        let service_envelope = ServiceEnvelope::decode(payload)?;
-        match service_envelope.packet {
-            Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
-            None => Ok(None),
-        }
-    }
-
-    pub fn from_mesh_packet(
-        packet: MeshPacket,
-        now: DateTime<FixedOffset>,
-        dns: &HashMap<MacAddress, String>,
-        recv_position: Option<PositionName>,
-    ) -> crate::Result<Option<Self>> {
-        match packet {
-            MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(data)),
-                from,
-                rx_rssi,
-                rx_snr,
-                ..
-            } => {
-                let mac_address = MacAddress::Meshtastic(from);
-                let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
-                Self::parse_data(
-                    data,
-                    HostInfo {
-                        name: name.to_owned(),
-                        mac_address,
-                    },
-                    now,
-                    RssiSnr::new(rx_rssi, rx_snr),
-                    recv_position,
-                )
-            }
-            MeshPacket {
-                payload_variant: Some(PayloadVariant::Encrypted(_)),
-                ..
-            } => Err(Error::EncryptionError),
             _ => Ok(None),
         }
     }
