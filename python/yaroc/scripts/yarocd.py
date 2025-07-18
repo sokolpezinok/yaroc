@@ -9,7 +9,7 @@ from typing import List, Tuple
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
-from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog, MeshtasticLog
+from ..rs import CellularLog, MeshtasticLog, Message, MessageHandler, MqttConfig, SiPunchLog
 from ..sources.meshtastic import MeshtasticSerial
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer

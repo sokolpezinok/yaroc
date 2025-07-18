@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{error, info, warn};
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 use crate::error::Error;
@@ -85,7 +85,9 @@ impl MessageHandler {
                             let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
                             self.meshtastic_mac = Some(mac_address);
                         }
-                        MeshProto::Disconnected => todo!(),
+                        MeshProto::Disconnected => {
+                            self.disconnect_meshtastic(true).await;
+                        }
                     }
                 }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
@@ -117,16 +119,20 @@ impl MessageHandler {
                     .as_ref()
                     .is_some_and(|msh_serial| msh_serial.device_node() == device_node)
                 {
-                    if let Some(meshtastic_serial) = self.meshtastic_serial.take() {
-                        let _ = meshtastic_serial
-                            .disconnect()
-                            .await
-                            .inspect_err(|e| error!("Error while disconnecting: {e}"));
-                    }
+                    self.disconnect_meshtastic(false).await;
                     info!("Removed device: {device_node}");
                 }
             }
             _ => {}
+        }
+    }
+
+    async fn disconnect_meshtastic(&mut self, expect_err: bool) {
+        if let Some(meshtastic_serial) = self.meshtastic_serial.take() {
+            let res = meshtastic_serial.disconnect().await;
+            if expect_err && res.is_err() {
+                warn!("Disconnected meshtastic device");
+            }
         }
     }
 
