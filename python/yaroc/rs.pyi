@@ -79,6 +79,9 @@ class CellularLog(object):
     def to_proto(self) -> bytes | None: ...
     def mac_address(self) -> str: ...
 
+class MeshtasticLog(object):
+    def __repr__(self) -> str: ...
+
 class Message(object):
     pass
 

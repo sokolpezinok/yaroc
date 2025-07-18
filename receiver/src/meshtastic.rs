@@ -49,14 +49,14 @@ impl PositionName {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MshMetrics {
     Position(Position),
     Battery { voltage: f32, percent: u32 },
     EnvironmentMetrics(f32, f32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MeshtasticLog {
     pub metrics: MshMetrics,
     pub host_info: HostInfo,

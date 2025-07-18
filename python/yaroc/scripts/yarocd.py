@@ -9,7 +9,7 @@ from typing import List, Tuple
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
-from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog
+from ..rs import CellularLog, Message, MessageHandler, MqttConfig, SiPunchLog, MeshtasticLog
 from ..sources.meshtastic import MeshtasticSerial
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
@@ -47,6 +47,9 @@ class YarocDaemon:
             except Exception as err:
                 logging.error(f"Failed to forward status: {err}")
 
+    async def _handle_meshtastic_log(self, log: MeshtasticLog):
+        logging.info(log)
+
     async def handle_messages(self):
         while True:
             msg = await self.handler.next_message()
@@ -55,6 +58,8 @@ class YarocDaemon:
                     asyncio.create_task(self._handle_punches(msg[0]))
                 case Message.CellularLog():
                     asyncio.create_task(self._handle_cellular_log(msg[0]))
+                case Message.MeshtasticLog():
+                    asyncio.create_task(self._handle_meshtastic_log(msg[0]))
 
     async def draw_table(self):
         await asyncio.sleep(20.0)

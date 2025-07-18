@@ -70,6 +70,7 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::message_handler::MqttConfig>()?;
     m.add_class::<crate::message_handler::MshDevNotifier>()?;
     m.add_class::<crate::status::CellularLog>()?;
+    m.add_class::<crate::status::MeshtasticLog>()?;
 
     let _ = Logger::new(m.py(), Caching::LoggersAndLevels)?
         .filter(LevelFilter::Trace)

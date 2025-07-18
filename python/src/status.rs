@@ -2,6 +2,7 @@ use chrono::prelude::*;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use yaroc_receiver::logs::CellularLogMessage as CellularLogMessageRs;
+use yaroc_receiver::meshtastic::MeshtasticLog as MeshtasticLogRs;
 use yaroc_receiver::state::{NodeInfo as NodeInfoRs, SignalInfo};
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
@@ -72,6 +73,25 @@ impl CellularLog {
 
     pub fn mac_address(&self) -> String {
         self.inner.mac_address().to_string()
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct MeshtasticLog {
+    inner: MeshtasticLogRs,
+}
+
+#[pymethods]
+impl MeshtasticLog {
+    pub fn __repr__(&self) -> String {
+        format!("{}", self.inner)
+    }
+}
+
+impl From<MeshtasticLogRs> for MeshtasticLog {
+    fn from(value: MeshtasticLogRs) -> Self {
+        Self { inner: value }
     }
 }
 

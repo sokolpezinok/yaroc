@@ -13,13 +13,13 @@ use yaroc_receiver::state::Message as MessageRs;
 use yaroc_receiver::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
-use crate::status::{CellularLog, NodeInfo};
+use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
 #[pyclass]
 pub enum Message {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
-    MeshtasticLog(),
+    MeshtasticLog(MeshtasticLog),
 }
 
 impl From<Vec<SiPunchLogRs>> for Message {
@@ -144,15 +144,23 @@ impl MessageHandler {
         let handler = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, Message>(py, async move {
             let mut handler = handler.lock().await;
-            let message = handler
-                .next_message()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-            match message {
-                MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
-                MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-                //TODO: forward to Python
-                MessageRs::MeshtasticLog(_) => Ok(Message::MeshtasticLog()),
+            loop {
+                let message = handler
+                    .next_message()
+                    .await
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                match message {
+                    MessageRs::CellularLog(cellular_log) => {
+                        return Ok(cellular_log.into());
+                    }
+                    MessageRs::SiPunches(si_punch_logs) => {
+                        return Ok(si_punch_logs.into());
+                    }
+                    MessageRs::MeshtasticLog(Some(meshtastic_log)) => {
+                        return Ok(Message::MeshtasticLog(meshtastic_log.into()));
+                    }
+                    MessageRs::MeshtasticLog(None) => {}
+                }
             }
         })
     }
