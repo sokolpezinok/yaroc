@@ -143,7 +143,7 @@ impl MeshtasticRocStatus {
 pub enum Message {
     CellularLog(CellularLogMessage),
     SiPunches(Vec<SiPunchLog>),
-    MeshtasticLog(Option<MeshtasticLog>),
+    MeshtasticLog(MeshtasticLog),
 }
 
 #[derive(Default)]
@@ -161,20 +161,20 @@ impl FleetState {
         }
     }
 
-    pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Message> {
+    pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Option<Message>> {
         match mqtt_message {
-            MqttMessage::CellularStatus(mac_address, now, payload) => {
-                self.status_update(&payload, mac_address, now).map(Message::CellularLog)
-            }
-            MqttMessage::Punches(mac_address, now, payload) => {
-                self.punches(&payload, mac_address, now).map(Message::SiPunches)
-            }
-            MqttMessage::MeshtasticSerial(_, payload) => {
-                self.msh_serial_service_envelope(&payload).map(Message::SiPunches)
-            }
+            MqttMessage::CellularStatus(mac_address, now, payload) => self
+                .status_update(&payload, mac_address, now)
+                .map(|msg| Some(Message::CellularLog(msg))),
+            MqttMessage::Punches(mac_address, now, payload) => self
+                .punches(&payload, mac_address, now)
+                .map(|msg| Some(Message::SiPunches(msg))),
+            MqttMessage::MeshtasticSerial(_, payload) => self
+                .msh_serial_service_envelope(&payload)
+                .map(|msg| Some(Message::SiPunches(msg))),
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => self
                 .msh_status_service_envelope(&payload, now, recv_mac_address)
-                .map(Message::MeshtasticLog),
+                .map(|msg| msg.map(Message::MeshtasticLog)),
         }
     }
 
@@ -190,15 +190,14 @@ impl FleetState {
         recv_mac_address: Option<MacAddress>,
     ) -> crate::Result<Option<Message>> {
         let now = Local::now().fixed_offset();
-        let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet);
+        let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet)?;
         match portnum {
-            Some(TELEMETRY_APP | POSITION_APP) => self
+            TELEMETRY_APP | POSITION_APP => self
                 .msh_status_mesh_packet(mesh_packet, now, recv_mac_address)
-                .map(|log| Some(Message::MeshtasticLog(log))),
-            Some(SERIAL_APP) => self
+                .map(|log| log.map(Message::MeshtasticLog)),
+            SERIAL_APP => self
                 .msh_serial_mesh_packet(mesh_packet)
                 .map(|log| Some(Message::SiPunches(log))),
-            // TODO: check for encrypted data
             _ => Ok(None),
         }
     }

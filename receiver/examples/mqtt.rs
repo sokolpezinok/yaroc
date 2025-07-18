@@ -56,10 +56,9 @@ async fn main() {
                         info!("{punch}");
                     }
                 }
-                Message::MeshtasticLog(Some(log)) => {
+                Message::MeshtasticLog(log) => {
                     info!("{log}");
                 }
-                Message::MeshtasticLog(None) => {} // Ignored
             },
             Err(err) => error!("{err}"),
         }

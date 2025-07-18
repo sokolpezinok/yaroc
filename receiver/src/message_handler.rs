@@ -63,7 +63,9 @@ impl MessageHandler {
                         None => std::future::pending().await
                     }
                 } => {
-                    return self.fleet_state.process_message(mqtt_message?);
+                    if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
+                        return Ok(message);
+                    }
                 }
                 mesh_proto = async {
                     match self.meshtastic_serial.as_mut() {

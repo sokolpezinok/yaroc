@@ -129,13 +129,20 @@ impl MeshtasticLog {
     }
 
     /// Get portnum inside MeshPacket, if it exists and can be decoded.
-    pub fn get_mesh_packet_portnum(mesh_packet: &MeshPacket) -> Option<i32> {
+    pub fn get_mesh_packet_portnum(mesh_packet: &MeshPacket) -> crate::Result<i32> {
         match mesh_packet {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(Data { portnum, .. })),
                 ..
-            } => Some(*portnum),
-            _ => None,
+            } => Ok(*portnum),
+            MeshPacket {
+                payload_variant: Some(PayloadVariant::Encrypted(_)),
+                ..
+            } => Err(Error::EncryptionError),
+            MeshPacket {
+                payload_variant: None,
+                ..
+            } => Err(Error::ValueError),
         }
     }
 

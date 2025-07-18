@@ -144,22 +144,15 @@ impl MessageHandler {
         let handler = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, Message>(py, async move {
             let mut handler = handler.lock().await;
-            loop {
-                let message = handler
-                    .next_message()
-                    .await
-                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-                match message {
-                    MessageRs::CellularLog(cellular_log) => {
-                        return Ok(cellular_log.into());
-                    }
-                    MessageRs::SiPunches(si_punch_logs) => {
-                        return Ok(si_punch_logs.into());
-                    }
-                    MessageRs::MeshtasticLog(Some(meshtastic_log)) => {
-                        return Ok(Message::MeshtasticLog(meshtastic_log.into()));
-                    }
-                    MessageRs::MeshtasticLog(None) => {}
+            let message = handler
+                .next_message()
+                .await
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            match message {
+                MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
+                MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
+                MessageRs::MeshtasticLog(meshtastic_log) => {
+                    Ok(Message::MeshtasticLog(meshtastic_log.into()))
                 }
             }
         })
