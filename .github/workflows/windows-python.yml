@@ -31,6 +31,8 @@ jobs:
           architecture: ${{ matrix.target }}
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.CI_GITHUB_ACCESS_TOKEN }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
