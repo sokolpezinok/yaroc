@@ -17,6 +17,7 @@ prost = "0.14"
 rumqttc = { version = "0.24.0" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+uuid = { version = "1.17.0", features = ["v4"] }
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }

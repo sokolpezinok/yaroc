@@ -4,6 +4,7 @@ use crate::system_info::MacAddress;
 use chrono::{DateTime, Local};
 use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
+use uuid::Uuid;
 use yaroc_common::error::Error;
 
 pub struct MqttConfig {
@@ -40,7 +41,8 @@ pub enum Message {
 
 impl MqttReceiver {
     pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(config: MqttConfig, macs: I) -> Self {
-        let mut mqttoptions = MqttOptions::new("rumqtt-async", config.url, config.port);
+        let client_id = format!("yaroc-{}", Uuid::new_v4());
+        let mut mqttoptions = MqttOptions::new(client_id.as_str(), config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 128);
