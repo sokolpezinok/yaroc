@@ -73,26 +73,33 @@ impl MessageHandler {
                         None => std::future::pending().await
                     }
                 } => {
-                    match mesh_proto {
-                        MeshProto::MeshPacket(mesh_packet) => {
-                            if let Some(message) =
-                                self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac)?
-                            {
-                                return Ok(message);
-                            }
-                        }
-                        MeshProto::MyNodeInfo(node_info) => {
-                            let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
-                            self.meshtastic_mac = Some(mac_address);
-                        }
-                        MeshProto::Disconnected => {
-                            self.disconnect_meshtastic(true).await;
-                        }
+                    if let Some(message) = self.process_mesh_proto(mesh_proto).await? {
+                        return Ok(message);
                     }
                 }
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
                     self.process_msh_dev_event(msh_dev_event).await;
                 }
+            }
+        }
+    }
+
+    async fn process_mesh_proto(
+        &mut self,
+        mesh_proto: MeshProto,
+    ) -> crate::Result<Option<Message>> {
+        match mesh_proto {
+            MeshProto::MeshPacket(mesh_packet) => {
+                self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac)
+            }
+            MeshProto::MyNodeInfo(node_info) => {
+                let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
+                self.meshtastic_mac = Some(mac_address);
+                Ok(None)
+            }
+            MeshProto::Disconnected => {
+                self.disconnect_meshtastic(true).await;
+                Ok(None)
             }
         }
     }
