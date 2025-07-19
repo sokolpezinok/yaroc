@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use log::{error, info, warn};
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 use crate::error::Error;
 use crate::meshtastic_serial::{MeshProto, MeshtasticSerial};
 use crate::mqtt::{MqttConfig, MqttReceiver};
-use crate::state::{FleetState, Message};
+use crate::state::{Event, FleetState};
 use crate::system_info::MacAddress;
 
 pub struct MshDevNotifier {
@@ -45,7 +47,7 @@ impl MessageHandler {
         let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
         let (tx, rx) = channel(10);
         Self {
-            fleet_state: FleetState::new(dns),
+            fleet_state: FleetState::new(dns, Duration::from_secs(60)),
             mqtt_receiver,
             meshtastic_serial: None,
             meshtastic_mac: None,
@@ -54,7 +56,7 @@ impl MessageHandler {
         }
     }
 
-    pub async fn next_message(&mut self) -> crate::Result<Message> {
+    pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
             tokio::select! {
                 mqtt_message = async {
@@ -80,14 +82,14 @@ impl MessageHandler {
                 msh_dev_event = self.msh_dev_event_rx.recv() => {
                     self.process_msh_dev_event(msh_dev_event).await;
                 }
+                node_infos = self.fleet_state.publish_node_infos() => {
+                    return Ok(Event::NodeInfos(node_infos));
+                }
             }
         }
     }
 
-    async fn process_mesh_proto(
-        &mut self,
-        mesh_proto: MeshProto,
-    ) -> crate::Result<Option<Message>> {
+    async fn process_mesh_proto(&mut self, mesh_proto: MeshProto) -> crate::Result<Option<Event>> {
         match mesh_proto {
             MeshProto::MeshPacket(mesh_packet) => {
                 self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac)
@@ -147,9 +149,5 @@ impl MessageHandler {
         MshDevNotifier {
             dev_event_tx: self.msh_dev_event_tx.clone(),
         }
-    }
-
-    pub fn node_infos(&self) -> Vec<crate::state::NodeInfo> {
-        self.fleet_state.node_infos()
     }
 }

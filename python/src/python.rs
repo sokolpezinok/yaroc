@@ -65,12 +65,13 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RaspberryModel>()?;
     m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
 
-    m.add_class::<crate::message_handler::Message>()?;
+    m.add_class::<crate::message_handler::Event>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<crate::message_handler::MqttConfig>()?;
     m.add_class::<crate::message_handler::MshDevNotifier>()?;
     m.add_class::<crate::status::CellularLog>()?;
     m.add_class::<crate::status::MeshtasticLog>()?;
+    m.add_class::<crate::status::NodeInfo>()?;
 
     let _ = Logger::new(m.py(), Caching::LoggersAndLevels)?
         .filter(LevelFilter::Trace)

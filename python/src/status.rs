@@ -96,6 +96,7 @@ impl From<MeshtasticLogRs> for MeshtasticLog {
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import signal
-import time
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
@@ -9,7 +8,7 @@ from typing import List, Tuple
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
-from ..rs import CellularLog, MeshtasticLog, Message, MessageHandler, MqttConfig, SiPunchLog
+from ..rs import CellularLog, Event, MeshtasticLog, MessageHandler, MqttConfig, NodeInfo, SiPunchLog
 from ..sources.meshtastic import MeshtasticSerial
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
@@ -27,7 +26,7 @@ class YarocDaemon:
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
         self.msh_serial = MeshtasticSerial(self.handler.msh_dev_notifier())
-        self.drawer = StatusDrawer(self.handler, display_model)
+        self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
     async def _handle_punches(self, punches: list[SiPunchLog]):
@@ -52,21 +51,19 @@ class YarocDaemon:
 
     async def handle_messages(self):
         while True:
-            msg = await self.handler.next_message()
-            match msg:
-                case Message.SiPunchLogs():
-                    asyncio.create_task(self._handle_punches(msg[0]))
-                case Message.CellularLog():
-                    asyncio.create_task(self._handle_cellular_log(msg[0]))
-                case Message.MeshtasticLog():
-                    asyncio.create_task(self._handle_meshtastic_log(msg[0]))
+            ev = await self.handler.next_event()
+            match ev:
+                case Event.SiPunchLogs():
+                    asyncio.create_task(self._handle_punches(ev[0]))
+                case Event.CellularLog():
+                    asyncio.create_task(self._handle_cellular_log(ev[0]))
+                case Event.MeshtasticLog():
+                    asyncio.create_task(self._handle_meshtastic_log(ev[0]))
+                case Event.NodeInfos():
+                    asyncio.create_task(self._draw_table(ev[0]))
 
-    async def draw_table(self):
-        await asyncio.sleep(20.0)
-        while True:
-            time_start = time.time()
-            self.executor.submit(self.drawer.draw_status)
-            await asyncio.sleep(60 - (time.time() - time_start))
+    async def _draw_table(self, node_infos: list[NodeInfo]):
+        self.executor.submit(self.drawer.draw_status, node_infos)
 
     async def loop(self):
         def handle_exception(loop, context):
@@ -87,14 +84,12 @@ class YarocDaemon:
         asyncio.create_task(self.client_group.loop())
         asyncio.create_task(self.handle_messages())
         asyncio.create_task(self.msh_serial.loop())
-        draw_task = asyncio.create_task(self.draw_table())
 
         try:
             await shutdown_event.wait()
         except asyncio.exceptions.CancelledError:
             logging.error("Interrupted, exiting ...")
 
-        draw_task.cancel()
         self.drawer.clear()
         logging.info("Main loop shutting down")
 

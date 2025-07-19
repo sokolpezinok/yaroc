@@ -4,7 +4,7 @@ from itertools import accumulate
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..rs import MessageHandler
+from ..rs import NodeInfo
 
 
 class StatusDrawer:
@@ -12,10 +12,8 @@ class StatusDrawer:
 
     def __init__(
         self,
-        message_handler: MessageHandler,
         display_model: str | None = None,
     ):
-        self.message_handler = message_handler
         if display_model is not None:
             import epaper
 
@@ -25,7 +23,7 @@ class StatusDrawer:
         else:
             self.epd = None
 
-    def generate_info_table(self) -> list[list[str]]:
+    def generate_info_table(self, node_infos: list[NodeInfo]) -> list[list[str]]:
         def human_time(timestamp: datetime | None) -> str:
             if timestamp is None:
                 return ""
@@ -42,7 +40,7 @@ class StatusDrawer:
             return f"{minutes / 60:.1f}h ago"
 
         table = []
-        for node_info in self.message_handler.node_infos():
+        for node_info in node_infos:
             node_info.codes.sort()
             table.append(
                 [
@@ -99,7 +97,7 @@ class StatusDrawer:
 
         return image
 
-    def draw_status(self):
+    def draw_status(self, node_infos: list[NodeInfo]):
         if self.epd is None:
             return
         logging.info("Drawing new status table")
@@ -107,7 +105,7 @@ class StatusDrawer:
             [
                 ["name", "rssi", "SNR", "code", "last info", "last punch"],
             ]
-            + self.generate_info_table(),
+            + self.generate_info_table(node_infos),
             self.epd.height,
             self.epd.width,
         )

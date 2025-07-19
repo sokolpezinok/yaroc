@@ -9,26 +9,27 @@ use yaroc_receiver::message_handler::{
     MessageHandler as MessageHandlerRs, MshDevNotifier as MshDevNotifierRs,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
-use yaroc_receiver::state::Message as MessageRs;
+use yaroc_receiver::state::Event as EventRs;
 use yaroc_receiver::system_info::MacAddress;
 
 use crate::punch::SiPunchLog;
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
 #[pyclass]
-pub enum Message {
+pub enum Event {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
     MeshtasticLog(MeshtasticLog),
+    NodeInfos(Vec<NodeInfo>),
 }
 
-impl From<Vec<SiPunchLogRs>> for Message {
+impl From<Vec<SiPunchLogRs>> for Event {
     fn from(logs: Vec<SiPunchLogRs>) -> Self {
         Self::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect())
     }
 }
 
-impl From<CellularLogMessage> for Message {
+impl From<CellularLogMessage> for Event {
     fn from(log: CellularLogMessage) -> Self {
         Self::CellularLog(log.into())
     }
@@ -131,29 +132,26 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
-    pub fn node_infos(&self) -> PyResult<Vec<NodeInfo>> {
-        Ok(self.get_inner()?.node_infos().into_iter().map(|n| n.into()).collect())
-    }
-
     pub fn msh_dev_notifier(&self) -> PyResult<MshDevNotifier> {
         let notifier = self.get_inner()?.meshtastic_device_notifier();
         Ok(MshDevNotifier { inner: notifier })
     }
 
-    pub fn next_message<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+    pub fn next_event<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let handler = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py::<_, Message>(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py::<_, Event>(py, async move {
             let mut handler = handler.lock().await;
-            let message = handler
-                .next_message()
-                .await
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            let message =
+                handler.next_event().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             match message {
-                MessageRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
-                MessageRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
-                MessageRs::MeshtasticLog(meshtastic_log) => {
-                    Ok(Message::MeshtasticLog(meshtastic_log.into()))
+                EventRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
+                EventRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
+                EventRs::MeshtasticLog(meshtastic_log) => {
+                    Ok(Event::MeshtasticLog(meshtastic_log.into()))
                 }
+                EventRs::NodeInfos(node_infos) => Ok(Event::NodeInfos(
+                    node_infos.into_iter().map(|info| info.into()).collect(),
+                )),
             }
         })
     }

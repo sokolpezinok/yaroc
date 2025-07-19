@@ -4,7 +4,7 @@ use clap::Parser;
 use log::{error, info};
 use yaroc_receiver::message_handler::MessageHandler;
 use yaroc_receiver::mqtt::MqttConfig;
-use yaroc_receiver::state::Message;
+use yaroc_receiver::state::Event;
 use yaroc_receiver::system_info::MacAddress;
 
 #[derive(Parser, Debug)]
@@ -44,20 +44,22 @@ async fn main() {
 
     info!("Everything initialized, starting the loop");
     loop {
-        let log_message = handler.next_message().await;
-
-        match log_message {
-            Ok(log) => match log {
-                Message::CellularLog(cellular_log_message) => {
+        let event = handler.next_event().await;
+        match event {
+            Ok(event) => match event {
+                Event::CellularLog(cellular_log_message) => {
                     info!("{cellular_log_message}");
                 }
-                Message::SiPunches(si_punch_logs) => {
+                Event::SiPunches(si_punch_logs) => {
                     for punch in si_punch_logs {
                         info!("{punch}");
                     }
                 }
-                Message::MeshtasticLog(log) => {
+                Event::MeshtasticLog(log) => {
                     info!("{log}");
+                }
+                Event::NodeInfos(node_infos) => {
+                    info!("{node_infos:?}");
                 }
             },
             Err(err) => error!("{err}"),
