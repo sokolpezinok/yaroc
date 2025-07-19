@@ -169,8 +169,8 @@ impl FleetState {
             MqttMessage::Punches(mac_address, now, payload) => self
                 .punches(&payload, mac_address, now)
                 .map(|msg| Some(Message::SiPunches(msg))),
-            MqttMessage::MeshtasticSerial(_, payload) => self
-                .msh_serial_service_envelope(&payload)
+            MqttMessage::MeshtasticSerial(now, payload) => self
+                .msh_serial_service_envelope(&payload, now)
                 .map(|msg| Some(Message::SiPunches(msg))),
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => self
                 .msh_status_service_envelope(&payload, now, recv_mac_address)
@@ -189,14 +189,14 @@ impl FleetState {
         mesh_packet: MeshPacket,
         recv_mac_address: Option<MacAddress>,
     ) -> crate::Result<Option<Message>> {
-        let now = Local::now().fixed_offset();
+        let now = Local::now();
         let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet)?;
         match portnum {
             TELEMETRY_APP | POSITION_APP => self
                 .msh_status_mesh_packet(mesh_packet, now, recv_mac_address)
                 .map(|log| log.map(Message::MeshtasticLog)),
             SERIAL_APP => self
-                .msh_serial_mesh_packet(mesh_packet)
+                .msh_serial_mesh_packet(mesh_packet, now)
                 .map(|log| Some(Message::SiPunches(log))),
             _ => Ok(None),
         }
@@ -288,12 +288,12 @@ impl FleetState {
     fn msh_status_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
-        now: DateTime<FixedOffset>,
+        now: DateTime<Local>,
         recv_mac_address: Option<MacAddress>,
     ) -> crate::Result<Option<MeshtasticLog>> {
         let recv_position = recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr));
         let meshtastic_log =
-            MeshtasticLog::from_mesh_packet(mesh_packet, now, &self.dns, recv_position)?;
+            MeshtasticLog::from_mesh_packet(mesh_packet, now.into(), &self.dns, recv_position)?;
         self.msh_status_update(&meshtastic_log);
         Ok(meshtastic_log)
     }
@@ -337,17 +337,24 @@ impl FleetState {
     }
 
     /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
-    fn msh_serial_service_envelope(&mut self, payload: &[u8]) -> crate::Result<Vec<SiPunchLog>> {
+    fn msh_serial_service_envelope(
+        &mut self,
+        payload: &[u8],
+        now: DateTime<Local>,
+    ) -> crate::Result<Vec<SiPunchLog>> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
         let packet = service_envelope.packet.ok_or(yaroc_common::error::Error::ValueError)?;
-        self.msh_serial_mesh_packet(packet)
+        self.msh_serial_mesh_packet(packet, now)
     }
 
     /// Process Meshtastic message of the serial module given as MeshPacket.
-    pub fn msh_serial_mesh_packet(&mut self, packet: MeshPacket) -> crate::Result<Vec<SiPunchLog>> {
+    pub fn msh_serial_mesh_packet(
+        &mut self,
+        packet: MeshPacket,
+        now: DateTime<Local>,
+    ) -> crate::Result<Vec<SiPunchLog>> {
         let mac_address = MacAddress::Meshtastic(packet.from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
-        let now = Local::now().fixed_offset();
         let host_info = self.resolve(mac_address);
         let Some(PayloadVariant::Decoded(Data {
             portnum: SERIAL_APP,
@@ -362,6 +369,7 @@ impl FleetState {
         let status = self.msh_roc_status(&host_info);
         let mut result = Vec::with_capacity(payload.len() / 20);
 
+        let now = now.fixed_offset();
         let punches = yaroc_common::punch::SiPunch::punches_from_payload(
             &payload,
             now.date_naive(),
@@ -502,7 +510,7 @@ mod test_meshtastic {
         )
         .encode_to_vec();
         let mut state = FleetState::new(Vec::new());
-        let punch_logs = state.msh_serial_service_envelope(&message).unwrap();
+        let punch_logs = state.msh_serial_service_envelope(&message, Local::now()).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
@@ -559,11 +567,7 @@ mod test_meshtastic {
             ..Default::default()
         };
         state
-            .msh_status_mesh_packet(
-                mesh_packet,
-                Local::now().fixed_offset(),
-                Some(MacAddress::default()),
-            )
+            .msh_status_mesh_packet(mesh_packet, Local::now(), Some(MacAddress::default()))
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
@@ -586,7 +590,7 @@ mod test_meshtastic {
         .encode_to_vec();
 
         let mut state = FleetState::new(Vec::new());
-        state.msh_serial_service_envelope(&message).unwrap();
+        state.msh_serial_service_envelope(&message, Local::now()).unwrap();
 
         let telemetry = Telemetry {
             time: 1735157442,
