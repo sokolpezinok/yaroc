@@ -36,7 +36,7 @@ pub struct NodeInfo {
 }
 
 #[derive(Default, Clone)]
-pub struct CellularRocStatus {
+pub struct CellularNodeStatus {
     host_info: HostInfo,
     state: Option<CellSignalInfo>,
     voltage: Option<f64>,
@@ -45,7 +45,7 @@ pub struct CellularRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-impl CellularRocStatus {
+impl CellularNodeStatus {
     pub fn new(host_info: HostInfo) -> Self {
         Self {
             host_info,
@@ -89,7 +89,7 @@ impl CellularRocStatus {
 }
 
 #[derive(Default, Clone)]
-pub struct MeshtasticRocStatus {
+pub struct MeshtasticNodeStatus {
     pub name: String,
     battery: Option<u32>,
     pub rssi_snr: Option<RssiSnr>,
@@ -99,7 +99,7 @@ pub struct MeshtasticRocStatus {
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
-impl MeshtasticRocStatus {
+impl MeshtasticNodeStatus {
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -152,8 +152,8 @@ pub enum Event {
 
 pub struct FleetState {
     dns: HashMap<MacAddress, String>,
-    cellular_statuses: HashMap<MacAddress, CellularRocStatus>,
-    meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
+    cellular_statuses: HashMap<MacAddress, CellularNodeStatus>,
+    meshtastic_statuses: HashMap<MacAddress, MeshtasticNodeStatus>,
     node_infos_interval: Duration,
     last_node_info_push: Instant,
     new_node: Notify,
@@ -244,7 +244,7 @@ impl FleetState {
         let log_message =
             CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), now.into())?;
 
-        let status = self.get_cellular_status(mac_address);
+        let status = self.cellular_node_status(mac_address);
         match &log_message {
             CellularLogMessage::MCH(mch_log) => {
                 let mch = &mch_log.mini_call_home;
@@ -279,7 +279,7 @@ impl FleetState {
         let now = now.into();
         let punches = Punches::decode(payload).map_err(Error::FemtopbDecodeError)?;
         let host_info = self.resolve(mac_address);
-        let status = self.get_cellular_status(mac_address);
+        let status = self.cellular_node_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
             match punch.raw.try_into() {
@@ -297,10 +297,10 @@ impl FleetState {
         Ok(result)
     }
 
-    fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
+    fn msh_node_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticNodeStatus {
         self.meshtastic_statuses.entry(host_info.mac_address).or_insert_with(|| {
             self.new_node.notify_one();
-            MeshtasticRocStatus::new(host_info.name.as_str().to_owned())
+            MeshtasticNodeStatus::new(host_info.name.as_str().to_owned())
         })
     }
 
@@ -341,7 +341,7 @@ impl FleetState {
     fn msh_status_update(&mut self, log_message: &Option<MeshtasticLog>) {
         match log_message {
             Some(log_message) => {
-                let status = self.msh_roc_status(&log_message.host_info);
+                let status = self.msh_node_status(&log_message.host_info);
                 match log_message.metrics {
                     MshMetrics::Battery { percent, .. } => {
                         status.update_battery(percent);
@@ -392,7 +392,7 @@ impl FleetState {
             return Err(Error::EncryptionError);
         };
 
-        let status = self.msh_roc_status(&host_info);
+        let status = self.msh_node_status(&host_info);
         let mut result = Vec::with_capacity(payload.len() / 20);
 
         let now = now.fixed_offset();
@@ -452,11 +452,11 @@ impl FleetState {
             .map(|position| PositionName::new(position, &status.name))
     }
 
-    fn get_cellular_status(&mut self, mac_addr: MacAddress) -> &mut CellularRocStatus {
+    fn cellular_node_status(&mut self, mac_addr: MacAddress) -> &mut CellularNodeStatus {
         let host_info = self.resolve(mac_addr);
         self.cellular_statuses.entry(mac_addr).or_insert_with(|| {
             self.new_node.notify_one();
-            CellularRocStatus::new(host_info)
+            CellularNodeStatus::new(host_info)
         })
     }
 }
