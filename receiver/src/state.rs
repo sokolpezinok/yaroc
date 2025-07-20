@@ -1,12 +1,13 @@
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
-use log::{error, trace};
+use log::{error, info, trace};
 use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
+use tokio::sync::Notify;
 
 use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
@@ -155,6 +156,7 @@ pub struct FleetState {
     meshtastic_statuses: HashMap<MacAddress, MeshtasticRocStatus>,
     node_infos_interval: Duration,
     last_node_info_push: Instant,
+    new_node: Notify,
 }
 
 impl Default for FleetState {
@@ -165,6 +167,7 @@ impl Default for FleetState {
             meshtastic_statuses: HashMap::new(),
             node_infos_interval: Duration::from_secs(60),
             last_node_info_push: Instant::now(),
+            new_node: Notify::new(),
         }
     }
 }
@@ -295,9 +298,10 @@ impl FleetState {
     }
 
     fn msh_roc_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticRocStatus {
-        self.meshtastic_statuses
-            .entry(host_info.mac_address)
-            .or_insert(MeshtasticRocStatus::new(host_info.name.as_str().to_owned()))
+        self.meshtastic_statuses.entry(host_info.mac_address).or_insert_with(|| {
+            self.new_node.notify_one();
+            MeshtasticRocStatus::new(host_info.name.as_str().to_owned())
+        })
     }
 
     /// Resolve a given MAC address into a full HostInfo, which also includes a name.
@@ -430,7 +434,12 @@ impl FleetState {
 
     pub async fn publish_node_infos(&mut self) -> Vec<NodeInfo> {
         let next_node_infos = self.last_node_info_push + self.node_infos_interval;
-        tokio::time::sleep_until(next_node_infos.into()).await;
+        tokio::select! {
+            _ = tokio::time::sleep_until(next_node_infos.into()) => {}
+            _ = self.new_node.notified() => {
+                info!("New node discovered!");
+            }
+        }
         self.last_node_info_push = Instant::now();
         self.node_infos()
     }
@@ -445,9 +454,10 @@ impl FleetState {
 
     fn get_cellular_status(&mut self, mac_addr: MacAddress) -> &mut CellularRocStatus {
         let host_info = self.resolve(mac_addr);
-        self.cellular_statuses
-            .entry(mac_addr)
-            .or_insert(CellularRocStatus::new(host_info))
+        self.cellular_statuses.entry(mac_addr).or_insert_with(|| {
+            self.new_node.notify_one();
+            CellularRocStatus::new(host_info)
+        })
     }
 }
 
