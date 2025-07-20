@@ -189,7 +189,7 @@ impl FleetState {
     pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Option<Event>> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, now, payload) => self
-                .status_update(&payload, mac_address, now)
+                .status_update(&payload, mac_address, now.into())
                 .map(|msg| Some(Event::CellularLog(msg))),
             MqttMessage::Punches(mac_address, now, payload) => {
                 self.punches(&payload, mac_address, now).map(|msg| Some(Event::SiPunches(msg)))
@@ -238,11 +238,11 @@ impl FleetState {
         &mut self,
         payload: &[u8],
         mac_address: MacAddress,
-        now: DateTime<Local>,
+        now: DateTime<FixedOffset>,
     ) -> crate::Result<CellularLogMessage> {
         let status_proto = Status::decode(payload).map_err(Error::FemtopbDecodeError)?;
         let log_message =
-            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), now.into())?;
+            CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), now)?;
 
         let status = self.cellular_node_status(mac_address);
         match &log_message {
@@ -465,11 +465,12 @@ impl FleetState {
 mod test_punch {
     use super::*;
 
-    use yaroc_common::proto::Punch;
+    use yaroc_common::proto::status::Msg;
+    use yaroc_common::proto::{MiniCallHome, Punch, Timestamp};
     use yaroc_common::punch::SiPunch;
 
     use chrono::Local;
-    use femtopb::Repeated;
+    use femtopb::{EnumValue, Repeated};
 
     #[test]
     fn test_wrong_punch() {
@@ -512,6 +513,39 @@ mod test_punch {
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
+    }
+
+    #[test]
+    fn test_cellular_status() {
+        let timestamp = Timestamp {
+            millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+            ..Default::default()
+        };
+        let status = Status {
+            msg: Some(Msg::MiniCallHome(MiniCallHome {
+                cpu_temperature: 47.0,
+                millivolts: 3847,
+                network_type: EnumValue::Known(yaroc_common::proto::CellNetworkType::LteM),
+                signal_dbm: -80,
+                signal_snr_cb: 120,
+                time: Some(timestamp),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut state = FleetState::new(
+            vec![("spe01".to_owned(), MacAddress::default())],
+            Duration::from_secs(1),
+        );
+        let mut buffer = vec![0u8; status.encoded_len()];
+        status.encode(&mut buffer.as_mut_slice()).unwrap();
+        let tz = FixedOffset::east_opt(3600).unwrap();
+        let now = Local::now().with_timezone(&tz);
+        let log_message = state.status_update(&buffer, MacAddress::default(), now).unwrap();
+        assert!(
+            format!("{log_message}")
+                .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V")
+        );
     }
 }
 
