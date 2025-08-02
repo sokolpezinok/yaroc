@@ -39,6 +39,7 @@ pip install yaroc
 ## Send punches from an online control
 
 First, create a `send-punch.toml` file where you configure punch sources and clients for sending the punches.
+
 ```toml
 log_level = "info"
 
@@ -61,7 +62,46 @@ send-punch
 ```
 
 ## Send punches using LoRa radio
-TODO: add meshtastic info
+
+Follow the official [Meshtastic documentation](https://meshtastic.org/sk-SK/docs/introduction/):
+
+1. [Flash firmware](https://meshtastic.org/docs/getting-started/flashing-firmware)
+2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/), we recommend a private encrypted channel.
+
+    1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison).
+    2. Use the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode)
+    3. Add a channel named `serial`, it'll be used to transport punches through LoRa.
+
+3. Attach SportIdent's SRR module to a UART port, a photo will be added later. Configure it using instructions below.
+
+### Configure receiving punches over UART
+
+First, enable the right serial mode.
+
+```sh
+meshtastic --set serial.mode SIMPLE --set serial.enabled true -set serial.baud BAUD_38400 \
+           --set serial.timeout 100
+```
+
+Next, configure the correct pins based on the device you own.
+
+#### RAK4631
+We recommend using UART1: RXD1 (15) and TXD1 (16).
+
+```sh
+meshtastic --set serial.rxd 15 --set serial.txd 16
+```
+
+You can also use UART0: RXD0 (19) and TXD0 (20).
+
+#### Lilygo T-Beam
+We recommend using RXD 13 and TXD 14 for Lilygo T-Beam.
+
+```sh
+meshtastic --set serial.rxd 13 --set serial.txd 14
+```
+
+
 
 ## Receive punches
 
@@ -103,6 +143,7 @@ pip install -e .
 The last line installs the package in edit mode, so you can test each file modification immediately.
 
 To use LSPs, also run the following:
+
 ```sh
 pip install ".[lsp]"
 ```
