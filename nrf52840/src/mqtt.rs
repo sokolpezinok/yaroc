@@ -141,6 +141,7 @@ impl<M: ModemHw> MqttClient<M> {
             Duration::from_secs(10),
             send_punch_timeout,
             23,
+            spawner,
         );
         spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
