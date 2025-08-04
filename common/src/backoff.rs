@@ -119,6 +119,7 @@ pub struct BackoffRetries<S: SendPunchFn> {
     initial_backoff: Duration,
     send_punch_timeout: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
+    spawner: Spawner,
 }
 
 impl<S: SendPunchFn + Copy> BackoffRetries<S> {
@@ -127,6 +128,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         initial_backoff: Duration,
         send_punch_timeout: Duration,
         capacity: usize,
+        spawner: Spawner,
     ) -> Self {
         let mut unpublished_msgs = Vec::new();
         unpublished_msgs.resize(capacity + 1, false).expect("capacity set too high");
@@ -137,6 +139,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
             initial_backoff,
             send_punch_timeout,
             mqtt_events,
+            spawner,
         }
     }
 
@@ -155,18 +158,14 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         self.unpublished_msgs[idx as usize] = false;
     }
 
-    async fn handle_publish_request(&mut self, punch: RawPunch, punch_id: u16) {
+    fn handle_publish_request(&mut self, punch: RawPunch, punch_id: u16) {
         match self.vacant_idx() {
             // We skip the first element corresponding to ID=0
             Some(msg_id) if msg_id > 0 => {
                 let msg = PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
-                self.send_punch_fn.spawn(
-                    msg,
-                    Spawner::for_current_executor().await,
-                    self.send_punch_timeout,
-                );
+                self.send_punch_fn.spawn(msg, self.spawner, self.send_punch_timeout);
             }
             _ => {
                 error!("Message queue is full");
@@ -193,8 +192,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         loop {
             match CMD_FOR_BACKOFF.receive().await {
                 BackoffCommand::PublishPunch(punch, punch_id) => {
-                    self.handle_publish_request(punch, punch_id).await
+                    self.handle_publish_request(punch, punch_id)
                 }
+
                 BackoffCommand::Status(status) => self.handle_status(status),
                 BackoffCommand::MqttDisconnected => self.mqtt_disconnected(),
                 BackoffCommand::MqttConnected => self.mqtt_connected(),
