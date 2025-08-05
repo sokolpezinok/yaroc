@@ -28,8 +28,6 @@ femtopb-build = "0.5.0"
 
 [dev-dependencies]
 critical-section = { version = "1", features = ["std"]}
-embassy-executor = { workspace = true }
-embassy-futures = { workspace = true }
 env_logger = "0.11.6"
 static_cell = "2.1.0"
 
