@@ -51,16 +51,19 @@ class YarocDaemon:
 
     async def handle_messages(self):
         while True:
-            ev = await self.handler.next_event()
-            match ev:
-                case Event.SiPunchLogs():
-                    asyncio.create_task(self._handle_punches(ev[0]))
-                case Event.CellularLog():
-                    asyncio.create_task(self._handle_cellular_log(ev[0]))
-                case Event.MeshtasticLog():
-                    asyncio.create_task(self._handle_meshtastic_log(ev[0]))
-                case Event.NodeInfos():
-                    asyncio.create_task(self._draw_table(ev[0]))
+            try:
+                ev = await self.handler.next_event()
+                match ev:
+                    case Event.SiPunchLogs():
+                        asyncio.create_task(self._handle_punches(ev[0]))
+                    case Event.CellularLog():
+                        asyncio.create_task(self._handle_cellular_log(ev[0]))
+                    case Event.MeshtasticLog():
+                        asyncio.create_task(self._handle_meshtastic_log(ev[0]))
+                    case Event.NodeInfos():
+                        asyncio.create_task(self._draw_table(ev[0]))
+            except Exception as e:
+                logging.error(f"Error while getting next message: {e}")
 
     async def _draw_table(self, node_infos: list[NodeInfo]):
         self.executor.submit(self.drawer.draw_status, node_infos)
