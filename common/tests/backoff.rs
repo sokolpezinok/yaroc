@@ -168,7 +168,7 @@ async fn main(spawner: Spawner) {
         Duration::from_millis(100),
         Duration::from_millis(1000),
         2,
-        spawner
+        spawner,
     );
     spawner.must_spawn(backoff_loop(backoff));
 
