@@ -11,14 +11,21 @@ use crate::error::Error;
 use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::status::Position;
 
+/// RSSI and SNR of a received LoRa packet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {
+    /// Received Signal Strength Indicator, in dBm.
     pub rssi_dbm: i16,
+    /// Signal-to-Noise Ratio.
     pub snr: f32,
+    /// Optional distance to the sender, in meters, and the name of the receiver.
     pub distance: Option<(f32, String)>,
 }
 
 impl RssiSnr {
+    /// Creates a new `RssiSnr` if the RSSI is not zero.
+    ///
+    /// Meshtastic devices report 0 RSSI for packets that they originate.
     pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
         match rssi_dbm {
             0 => None,
@@ -30,6 +37,7 @@ impl RssiSnr {
         }
     }
 
+    /// Adds distance information to the `RssiSnr`.
     pub fn add_distance(&mut self, dist_m: f32, name: &str) {
         self.distance = Some((dist_m, name.to_owned()));
     }
@@ -41,6 +49,7 @@ pub struct PositionName {
 }
 
 impl PositionName {
+    /// Creates a new `PositionName`.
     pub fn new(position: &Position, name: &str) -> Self {
         Self {
             position: *position,
@@ -49,19 +58,29 @@ impl PositionName {
     }
 }
 
+/// Metrics from a Meshtastic node.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MshMetrics {
+    /// Geographical position.
     Position(Position),
+    /// Battery level.
     Battery { voltage: f32, percent: u32 },
+    /// Environmental metrics: temperature in Celsius and relative humidity in percent.
     EnvironmentMetrics(f32, f32),
 }
 
+/// A log entry originating from a Meshtastic device.
 #[derive(Debug, Clone)]
 pub struct MeshtasticLog {
+    /// The actual metrics data.
     pub metrics: MshMetrics,
+    /// Information about the host that sent the data.
     pub host_info: HostInfo,
+    /// RSSI and SNR of the packet.
     pub rssi_snr: Option<RssiSnr>,
+    /// The timestamp of the data, according to the device.
     pub timestamp: DateTime<FixedOffset>,
+    /// The latency of the message.
     latency: Duration,
 }
 
@@ -160,7 +179,8 @@ impl MeshtasticLog {
         tz.timestamp_opt(timestamp, 0).unwrap().fixed_offset()
     }
 
-    pub fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
+    /// Creates a `DateTime<FixedOffset>` from a unix timestamp (seconds).
+    fn timestamp(posix_time: u32) -> DateTime<FixedOffset> {
         Self::datetime_from_secs(i64::from(posix_time), &Local)
     }
 
@@ -256,8 +276,11 @@ impl MeshtasticLog {
     }
 }
 
+/// Port number for the telemetry app.
 pub(crate) const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
+/// Port number for the position app.
 pub(crate) const POSITION_APP: i32 = PortNum::PositionApp as i32;
+/// Port number for the serial app.
 pub(crate) const SERIAL_APP: i32 = PortNum::SerialApp as i32;
 
 impl fmt::Display for MeshtasticLog {
