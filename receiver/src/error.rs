@@ -15,7 +15,12 @@ pub enum Error {
     #[error("Channel send error")]
     ChannelSendError,
     #[error("Encryption error: cannot decrypt without a key")]
-    EncryptionError,
+    EncryptionError {
+        /// Node ID of the Meshtastic node sending this message
+        node_id: u32,
+        /// Meshtastic channel ID
+        channel_id: u32,
+    },
     #[error("Value error: wrong or missing data")]
     ValueError,
 }

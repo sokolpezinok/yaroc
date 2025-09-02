@@ -122,8 +122,13 @@ impl MeshtasticLog {
             }
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
+                from,
+                channel,
                 ..
-            } => Err(Error::EncryptionError),
+            } => Err(Error::EncryptionError {
+                node_id: from,
+                channel_id: channel,
+            }),
             _ => Ok(None),
         }
     }
@@ -137,8 +142,13 @@ impl MeshtasticLog {
             } => Ok(*portnum),
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Encrypted(_)),
+                from,
+                channel,
                 ..
-            } => Err(Error::EncryptionError),
+            } => Err(Error::EncryptionError {
+                node_id: *from,
+                channel_id: *channel,
+            }),
             MeshPacket {
                 payload_variant: None,
                 ..

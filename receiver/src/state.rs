@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
@@ -215,7 +215,14 @@ impl FleetState {
         recv_mac_address: Option<MacAddress>,
     ) -> crate::Result<Option<Event>> {
         let now = Local::now();
-        let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet)?;
+        let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet);
+        if let Err(Error::EncryptionError { node_id, .. }) = portnum {
+            debug!(
+                "Ignoring encrypted message, cannot decrypt without a key. From node ID={node_id:x}."
+            );
+            return Ok(None);
+        }
+        let portnum = portnum?;
         match portnum {
             TELEMETRY_APP | POSITION_APP => self
                 .msh_status_mesh_packet(mesh_packet, now, recv_mac_address)
@@ -388,8 +395,11 @@ impl FleetState {
             ..
         })) = packet.payload_variant
         else {
-            // Encrypted message or wrong portnum
-            return Err(Error::EncryptionError);
+            // Encrypted message or wrong portnum (but wrong portnum should be filtered away)
+            return Err(Error::EncryptionError {
+                node_id: packet.from,
+                channel_id: packet.channel,
+            });
         };
 
         let status = self.msh_node_status(&host_info);
