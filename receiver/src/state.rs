@@ -406,7 +406,7 @@ impl FleetState {
         let mut result = Vec::with_capacity(payload.len() / 20);
 
         let now = now.fixed_offset();
-        let punches = yaroc_common::punch::SiPunch::punches_from_payload(
+        let punches = yaroc_common::punch::SiPunch::punches_from_payload::<100>(
             &payload,
             now.date_naive(),
             now.offset(),
