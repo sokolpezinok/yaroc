@@ -607,7 +607,7 @@ dependencies = [
  "embedded-io-async",
  "futures-sink",
  "futures-util",
- "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless 0.8.0",
 ]
 
 [[package]]
@@ -622,7 +622,7 @@ dependencies = [
  "embedded-io-async",
  "futures-core",
  "futures-sink",
- "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless 0.8.0",
 ]
 
 [[package]]
@@ -659,7 +659,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80e2ee86063bd028a420a5fb5898c18c87a8898026da1d4c852af2c443d0a454"
 dependencies = [
  "embassy-executor-timer-queue",
- "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless 0.8.0",
 ]
 
 [[package]]
@@ -1006,8 +1006,9 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.8.0"
-source = "git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e#6067119ed3e3efca6cf778154e3a790d510aa360"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1edcd5a338e64688fbdcb7531a846cfd3476a54784dcb918a0844682bc7ada5"
 dependencies = [
  "defmt 1.0.1",
  "hash32",
@@ -1381,7 +1382,7 @@ dependencies = [
  "embedded-storage-async",
  "fixed",
  "futures",
- "heapless 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless 0.8.0",
  "nrf-softdevice-macro",
  "nrf-softdevice-s140",
  "num_enum",
@@ -2835,7 +2836,7 @@ dependencies = [
  "femtopb",
  "femtopb-build",
  "geoutils",
- "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e)",
+ "heapless 0.9.1",
  "log",
  "static_cell",
  "thiserror 2.0.12",
@@ -2862,7 +2863,7 @@ dependencies = [
  "embedded-io-async",
  "embedded-storage-async",
  "femtopb",
- "heapless 0.8.0 (git+https://github.com/rust-embedded/heapless.git?rev=6067119ed3e)",
+ "heapless 0.9.1",
  "nrf-softdevice",
  "panic-probe",
  "thiserror 2.0.12",

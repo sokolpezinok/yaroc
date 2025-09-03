@@ -18,7 +18,7 @@ embassy-sync = "0.7"
 embassy-time = { version = "0.5" }
 femtopb = { version = "0.8.0", features = ["thiserror"] }
 geoutils = "0.5.1"
-heapless =  { git = "https://github.com/rust-embedded/heapless.git", rev = "6067119ed3e" }
+heapless = "0.9.1"
 log = "0.4"
 meshtastic = { version = "0.1.7" }
 thiserror = { version = "2.0.0", default-features = false }
