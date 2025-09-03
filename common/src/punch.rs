@@ -26,6 +26,7 @@ pub struct SiPunch {
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
 /// Precision of SportIdent timing is 1/256 of a second.
 const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
+const HALF_DAY_SECS: u32 = 12 * 60 * 60;
 
 impl SiPunch {
     /// Creates a new `SiPunch` and serializes it to raw bytes.
@@ -98,7 +99,7 @@ impl SiPunch {
 
         // Lowest byte of data is a switch for AM/PM. data[1] and data[2] encode seconds within
         // each 12-hour period (AM or PM).
-        let seconds: u32 = u32::from(data[0] & 1) * (12 * 60 * 60)
+        let seconds: u32 = u32::from(data[0] & 1) * HALF_DAY_SECS
             + u32::from(u16::from_be_bytes([data[1], data[2]]));
         let nanos = u32::from(data[3]) * BILLION_BY_256;
         let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
@@ -116,9 +117,9 @@ impl SiPunch {
             msg.push(0).unwrap();
         }
 
-        let mut chksum = u16::from_be_bytes(msg[..2].try_into().unwrap());
+        let mut chksum = u16::from_be_bytes([msg[0], msg[1]]);
         for i in (2..message.len()).step_by(2) {
-            let mut val = u16::from_be_bytes(msg[i..i + 2].try_into().unwrap());
+            let mut val = u16::from_be_bytes([msg[i], msg[i + 1]]);
             for _ in 0..16 {
                 if chksum & 0x08000 > 0 {
                     chksum <<= 1;
@@ -153,7 +154,6 @@ impl SiPunch {
         res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
         let secs = if time.hour() >= 12 {
             res[0] |= 1;
-            const HALF_DAY_SECS: u32 = 12 * 60 * 60;
             time.num_seconds_from_midnight() - HALF_DAY_SECS
         } else {
             time.num_seconds_from_midnight()
