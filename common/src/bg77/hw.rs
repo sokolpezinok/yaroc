@@ -9,7 +9,9 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use heapless::{String, format};
 
+/// Minimum timeout for BG77 AT-command responses.
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
+/// Timeout for network activation.
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// PIN for turning on the modem
@@ -29,12 +31,14 @@ impl ModemPin for embassy_nrf::gpio::Output<'static> {
     }
 }
 
+/// A fake modem pin for testing purposes, it does nothing.
 pub struct FakePin {}
 impl ModemPin for FakePin {
     fn set_low(&mut self) {}
     fn set_high(&mut self) {}
 }
 
+/// Radio Access Technology
 pub enum RAT {
     Ltem,      // LTE-M
     NbIot,     // NB-IoT
@@ -42,11 +46,14 @@ pub enum RAT {
 }
 
 pub struct ModemConfig {
+    /// Access point name (APN)
     pub apn: String<30>,
+    /// Radio access technology (RAT)
     pub rat: RAT,
 }
 
 impl Default for ModemConfig {
+    /// Creates a default modem configuration.
     fn default() -> Self {
         Self {
             apn: String::from_str("internet.iot").unwrap(),
@@ -100,7 +107,7 @@ pub trait ModemHw {
         second_read_timeout: Option<Duration>,
     ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
-    /// TODO: docstring
+    /// Reads an AT response from the modem.
     fn read(&mut self) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Turns on the modem.
@@ -108,6 +115,7 @@ pub trait ModemHw {
 }
 
 impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
+    /// Creates a new `Bg77` modem instance.
     pub fn new(tx: T, rx: R, modem_pin: P, config: ModemConfig) -> Self {
         let uart1 = AtUart::new(tx, rx);
         Self {

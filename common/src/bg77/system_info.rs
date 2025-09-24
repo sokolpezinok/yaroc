@@ -18,6 +18,7 @@ use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info};
 
+/// Gathers and provides system information from the Quectel BG77 modem.
 pub struct SystemInfo<M: ModemHw> {
     temp: Receiver<'static, RawMutex, f32, 1>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
@@ -45,6 +46,11 @@ impl<M: ModemHw> SystemInfo<M> {
         parse_qlts(&modem_clock)
     }
 
+    /// Returns the current time from the modem.
+    ///
+    /// The time is fetched from the modem on the first call or when `cached` is false.
+    /// Subsequent calls with `cached` as true will return a locally calculated time based on the
+    /// boot time and the time elapsed since.
     pub async fn current_time(
         &mut self,
         bg77: &mut M,
@@ -67,6 +73,7 @@ impl<M: ModemHw> SystemInfo<M> {
         })
     }
 
+    /// Fetches the battery state from the modem and updates the global `BATTERY` status.
     pub async fn update_battery_state(&self, bg77: &mut M) -> Result<(), Error> {
         let (percents, mv) =
             bg77.simple_call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
@@ -117,6 +124,7 @@ impl<M: ModemHw> SystemInfo<M> {
             .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
     }
 
+    /// Gathers various pieces of system information into a `MiniCallHome` struct.
     pub async fn mini_call_home(&mut self, bg77: &mut M) -> Option<MiniCallHome> {
         let timestamp = self.current_time(bg77, true).await?;
         let cpu_temperature = self.temp.try_get();
