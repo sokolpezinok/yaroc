@@ -51,12 +51,12 @@ impl AtRxBroker {
                 },
             };
 
-            if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref() {
-                if (self.urc_handler)(command_response) {
-                    #[cfg(feature = "defmt")]
-                    debug!("Got URC {}", line);
-                    continue;
-                }
+            if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref()
+                && (self.urc_handler)(command_response)
+            {
+                #[cfg(feature = "defmt")]
+                debug!("Got URC {}", line);
+                continue;
             }
 
             if let Ok(from_modem) = to_send.as_ref() {

@@ -57,12 +57,12 @@ impl CommandResponse {
     }
 
     fn split_at_response(line: &str) -> Option<(&str, &str)> {
-        if line.starts_with('+') {
-            if let Some(prefix_len) = line.find(": ") {
-                let prefix = &line[1..prefix_len];
-                let rest = &line[prefix_len + 2..];
-                return Some((prefix, rest));
-            }
+        if line.starts_with('+')
+            && let Some(prefix_len) = line.find(": ")
+        {
+            let prefix = &line[1..prefix_len];
+            let rest = &line[prefix_len + 2..];
+            return Some((prefix, rest));
         }
         None
     }
@@ -207,19 +207,19 @@ impl AtResponse {
         filter: Option<(T, usize)>,
     ) -> Result<&CommandResponse, Error> {
         for line in &self.lines {
-            if let FromModem::CommandResponse(command_response) = line {
-                if command_response.command() == &self.command[1..] {
-                    let values = command_response.values();
-                    match filter.as_ref() {
-                        Some((t, idx)) => {
-                            let val: Option<T> = str::parse(values[*idx]).ok();
-                            if val.as_ref() == Some(t) {
-                                return Ok(command_response);
-                            }
-                        }
-                        None => {
+            if let FromModem::CommandResponse(command_response) = line
+                && command_response.command() == &self.command[1..]
+            {
+                let values = command_response.values();
+                match filter.as_ref() {
+                    Some((t, idx)) => {
+                        let val: Option<T> = str::parse(values[*idx]).ok();
+                        if val.as_ref() == Some(t) {
                             return Ok(command_response);
                         }
+                    }
+                    None => {
+                        return Ok(command_response);
                     }
                 }
             }

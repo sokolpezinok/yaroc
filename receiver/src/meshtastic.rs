@@ -231,13 +231,13 @@ impl MeshtasticLog {
             timestamp: Self::timestamp(position.time),
         };
         let distance = recv_position.as_ref().map(|other| position.distance_m(&other.position));
-        if let Some(Ok(distance)) = distance {
-            if let Some(rssi_snr) = rssi_snr.as_mut() {
-                rssi_snr.add_distance(
-                    distance as f32,
-                    &recv_position.map_or(String::new(), |x| x.name),
-                );
-            }
+        if let Some(Ok(distance)) = distance
+            && let Some(rssi_snr) = rssi_snr.as_mut()
+        {
+            rssi_snr.add_distance(
+                distance as f32,
+                &recv_position.map_or(String::new(), |x| x.name),
+            );
         }
 
         Some(Self {
