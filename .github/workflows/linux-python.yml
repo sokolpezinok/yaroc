@@ -26,14 +26,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: -r --out dist --find-interpreter --strip
           sccache: 'false'  # TODO: sccache is broken on 2_28
           working-directory: "python"
           before-script-linux: yum install -y dbus-devel pkgconfig protobuf-devel protobuf-compiler && yum -y clean all
@@ -62,13 +62,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
       - name: Build wheel
         working-directory: "python"
         run: |
           pip install maturin ziglang
           rustup target add arm-unknown-linux-gnueabihf
-          maturin build -r --target arm-unknown-linux-gnueabihf --zig --out dist
+          maturin build -r --strip --target arm-unknown-linux-gnueabihf --zig --out dist
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

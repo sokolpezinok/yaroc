@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
           architecture: ${{ matrix.target }}
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -38,7 +38,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           working-directory: "python"
-          args: --release --out dist --find-interpreter
+          args: -r --strip --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
