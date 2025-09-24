@@ -25,7 +25,7 @@ thiserror = { version = "2.0.0", default-features = false }
 tokio = { version = "1.44" }
 
 [profile.release]
+debug = 2
 overflow-checks = false
 lto = true
-strip = true
 codegen-units = 1
