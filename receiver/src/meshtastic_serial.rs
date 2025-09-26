@@ -1,23 +1,23 @@
 use std::time::Duration;
 
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
+use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::{Instant, timeout_at};
 
 use crate::error::Error;
+use crate::system_info::MacAddress;
 
 pub struct MeshtasticSerial {
     device_node: String,
     stream_api: ConnectedStreamApi,
     listener: UnboundedReceiver<FromRadio>,
-    node_num: u32,
+    mac_address: MacAddress,
 }
 
 pub enum MeshProto {
     MeshPacket(MeshPacket),
-    MyNodeInfo(MyNodeInfo),
     Disconnected,
 }
 
@@ -48,7 +48,7 @@ impl MeshtasticSerial {
             device_node: device_node.to_owned(),
             stream_api,
             listener,
-            node_num: my_node_info.my_node_num,
+            mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
         })
     }
 
@@ -61,8 +61,8 @@ impl MeshtasticSerial {
         Ok(())
     }
 
-    pub fn node_num(&self) -> u32 {
-        self.node_num
+    pub fn mac_address(&self) -> MacAddress {
+        self.mac_address
     }
 
     pub async fn next_message(&mut self) -> MeshProto {
@@ -73,12 +73,6 @@ impl MeshtasticSerial {
                     ..
                 }) => {
                     return MeshProto::MeshPacket(packet);
-                }
-                Some(FromRadio {
-                    payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
-                    ..
-                }) => {
-                    return MeshProto::MyNodeInfo(my_node_info);
                 }
                 None => {
                     return MeshProto::Disconnected;

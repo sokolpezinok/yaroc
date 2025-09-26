@@ -94,11 +94,6 @@ impl MessageHandler {
             MeshProto::MeshPacket(mesh_packet) => {
                 self.fleet_state.process_mesh_packet(mesh_packet, self.meshtastic_mac)
             }
-            MeshProto::MyNodeInfo(node_info) => {
-                let mac_address = MacAddress::Meshtastic(node_info.my_node_num);
-                self.meshtastic_mac = Some(mac_address);
-                Ok(None)
-            }
             MeshProto::Disconnected => {
                 self.disconnect_meshtastic(true).await;
                 Ok(None)
@@ -115,8 +110,10 @@ impl MessageHandler {
                 //TODO: make timeout configurable
                 match MeshtasticSerial::new(&port, &device_node, Duration::from_secs(12)).await {
                     Ok(msh_serial) => {
-                        let mac_address = MacAddress::Meshtastic(msh_serial.node_num());
+                        let mac_address = msh_serial.mac_address();
                         info!("Connected to meshtastic device: {mac_address} at {port}");
+                        // TODO: these are paired Option's, they are either Some or None at the
+                        // same time. Remove this relationship.
                         self.meshtastic_mac = Some(mac_address);
                         self.meshtastic_serial = Some(msh_serial);
                     }
@@ -141,6 +138,7 @@ impl MessageHandler {
 
     async fn disconnect_meshtastic(&mut self, expect_err: bool) {
         if let Some(meshtastic_serial) = self.meshtastic_serial.take() {
+            self.meshtastic_mac = None;
             let res = meshtastic_serial.disconnect().await;
             if expect_err && res.is_err() {
                 warn!("Disconnected meshtastic device");
