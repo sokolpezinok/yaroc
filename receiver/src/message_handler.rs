@@ -112,10 +112,13 @@ impl MessageHandler {
                 if self.meshtastic_serial.is_some() {
                     return;
                 }
-                match MeshtasticSerial::new(&port, &device_node).await {
+                //TODO: make timeout configurable
+                match MeshtasticSerial::new(&port, &device_node, Duration::from_secs(12)).await {
                     Ok(msh_serial) => {
+                        let mac_address = MacAddress::Meshtastic(msh_serial.node_num());
+                        info!("Connected to meshtastic device: {mac_address} at {port}");
+                        self.meshtastic_mac = Some(mac_address);
                         self.meshtastic_serial = Some(msh_serial);
-                        info!("Connected to meshtastic device: {port} at {device_node}");
                     }
                     Err(err) => {
                         error!("Error connecting to {port}: {err}");
