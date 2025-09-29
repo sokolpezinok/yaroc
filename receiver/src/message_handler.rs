@@ -3,7 +3,8 @@ use std::collections::hash_map::Entry;
 use std::time::Duration;
 
 use log::{error, info, warn};
-use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender, channel};
+use meshtastic::protobufs::MeshPacket;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
@@ -13,7 +14,7 @@ use crate::state::{Event, FleetState};
 use crate::system_info::MacAddress;
 
 pub struct MshDevNotifier {
-    dev_event_tx: Sender<MshDevEvent>,
+    dev_event_tx: UnboundedSender<MshDevEvent>,
 }
 
 pub enum MshDevEvent {
@@ -24,23 +25,23 @@ pub enum MshDevEvent {
 pub struct MessageHandler {
     fleet_state: FleetState,
     mqtt_receiver: Option<MqttReceiver>,
-    msh_dev_event_rx: Receiver<MshDevEvent>,
-    msh_dev_event_tx: Sender<MshDevEvent>,
-    mesh_proto_tx: UnboundedSender<(MeshProto, MacAddress)>,
-    mesh_proto_rx: UnboundedReceiver<(MeshProto, MacAddress)>,
+    msh_dev_event_rx: UnboundedReceiver<MshDevEvent>,
+    msh_dev_event_tx: UnboundedSender<MshDevEvent>,
+    mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+    mesh_proto_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     cancellation_tokens: HashMap<String, CancellationToken>,
 }
 
 impl MshDevNotifier {
     pub fn add_device(&self, port: String, device_node: String) -> crate::Result<()> {
         self.dev_event_tx
-            .try_send(MshDevEvent::DeviceAdded { port, device_node })
+            .send(MshDevEvent::DeviceAdded { port, device_node })
             .map_err(|_| Error::ChannelSendError)
     }
 
     pub fn remove_device(&self, device_node: String) -> crate::Result<()> {
         self.dev_event_tx
-            .try_send(MshDevEvent::DeviceRemoved { device_node })
+            .send(MshDevEvent::DeviceRemoved { device_node })
             .map_err(|_| Error::ChannelSendError)
     }
 }
@@ -49,9 +50,8 @@ impl MessageHandler {
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
         let macs = dns.iter().map(|(_, mac)| mac);
         let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
-        let (dev_tx, dev_rx) = channel(10);
-        let (mesh_proto_tx, mesh_proto_rx) =
-            tokio::sync::mpsc::unbounded_channel::<(MeshProto, MacAddress)>();
+        let (dev_tx, dev_rx) = unbounded_channel();
+        let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         Self {
             fleet_state: FleetState::new(dns, Duration::from_secs(60)),
             mqtt_receiver,
@@ -78,8 +78,8 @@ impl MessageHandler {
                 }
                 mesh_recv = self.mesh_proto_rx.recv() => {
                     match mesh_recv {
-                        Some((mesh_proto, mac_address)) => {
-                            if let Some(message) = self.process_mesh_proto(mesh_proto, mac_address).await? {
+                        Some((mesh_packet, mac_address)) => {
+                            if let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)? {
                                 return Ok(message);
                             }
                         }
@@ -100,32 +100,26 @@ impl MessageHandler {
         }
     }
 
-    async fn process_mesh_proto(
-        &mut self,
-        mesh_proto: MeshProto,
-        mac_address: MacAddress,
-    ) -> crate::Result<Option<Event>> {
-        match mesh_proto {
-            MeshProto::MeshPacket(mesh_packet) => {
-                self.fleet_state.process_mesh_packet(mesh_packet, mac_address)
-            }
-            MeshProto::Disconnected(device_node) => {
-                self.process_msh_dev_event(MshDevEvent::DeviceRemoved { device_node }).await;
-                Ok(None)
-            }
-        }
-    }
-
     fn spawn_serial(&mut self, mut meshtastic_serial: MeshtasticSerial) -> CancellationToken {
         let mac_address = meshtastic_serial.mac_address();
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let mesh_proto_tx = self.mesh_proto_tx.clone();
+        let msh_dev_event_tx = self.msh_dev_event_tx.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     msg = meshtastic_serial.next_message() => {
-                        mesh_proto_tx.send((msg, mac_address)).expect("Channel unexpectedly closed");
+                        match msg {
+                            MeshProto::MeshPacket(mesh_packet) => {
+                                mesh_proto_tx.send((mesh_packet, mac_address))
+                                    .expect("Channel unexpectedly closed");
+                            }
+                            MeshProto::Disconnected(device_node) => {
+                                msh_dev_event_tx.send(MshDevEvent::DeviceRemoved { device_node })
+                                    .expect("Channel unexpectedly closed");
+                            }
+                        }
                     }
                     _ = cancellation_token.cancelled() => {
                         break;
