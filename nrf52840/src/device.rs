@@ -21,19 +21,27 @@ bind_interrupts!(struct Irqs {
     UARTE1 => uarte::InterruptHandler<UARTE1>;
 });
 
+/// A struct containing all the initialized drivers and peripherals of the device
 pub struct Device {
     _blue_led: Output<'static>,
     _green_led: Output<'static>,
+    /// The MAC address of the device
     pub mac_address: String<12>,
+    /// The BG77 modem driver
     pub bg77:
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
+    /// The SAADC driver
     pub saadc: Saadc<'static, 1>,
+    /// The SportIdent UART driver
     pub si_uart: SiUart,
+    /// The Bluetooth Low Energy driver
     pub ble: Ble,
+    /// The flash memory driver
     pub flash: Flash,
 }
 
 impl Device {
+    /// Initializes all the drivers and peripherals of the device
     pub fn new(modem_config: ModemConfig) -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
@@ -43,7 +51,7 @@ impl Device {
         config.baudrate = uarte::Baudrate::BAUD38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
         Interrupt::UARTE1.set_priority(Priority::P2);
-        // P0.14 is SCL, use it for UART0. P0.20 is TX, so it's unused.
+        // P0.14 is SCL, use it for UART0. P0.20 is UART0 TX, so it's unused.
         let uart0 = uarte::Uarte::new(p.UARTE0, p.P0_14, p.P0_20, Irqs, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, Default::default());
         let (_tx0, rx0) = uart0.split();
@@ -63,7 +71,7 @@ impl Device {
 
         let ble = Ble::new();
         let mac_address = ble.get_mac_address();
-        let flash = crate::flash::Flash::new(ble.flash());
+        let flash = Flash::new(ble.flash());
 
         Self {
             _blue_led: blue_led,

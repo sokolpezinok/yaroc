@@ -8,11 +8,13 @@ use crate::{
     send_punch::{Command, EVENT_CHANNEL},
 };
 
+/// A struct for reading the temperature from the softdevice.
 pub struct SoftdeviceTemp {
     ble: Ble,
 }
 
 impl SoftdeviceTemp {
+    /// Creates a new `SoftdeviceTemp`.
     pub fn new(ble: Ble) -> Self {
         Self { ble }
     }
@@ -24,8 +26,10 @@ impl Temp for SoftdeviceTemp {
     }
 }
 
+/// The type of the temperature sensor.
 pub type OwnTemp = SoftdeviceTemp;
 
+/// A task that periodically updates the system info.
 #[embassy_executor::task]
 pub async fn sysinfo_update(mut temp: OwnTemp) {
     // Initial commands in the beginning

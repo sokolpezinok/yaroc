@@ -17,9 +17,12 @@ use yaroc_nrf52840::{
     system_info::sysinfo_update,
 };
 
+/// A mutex for the `SendPunch` struct.
 static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
+/// A channel for the SI UART.
 static SI_UART_CHANNEL: SiUartChannelType = Channel::new();
 
+/// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let modem_config = ModemConfig::default();

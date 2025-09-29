@@ -29,13 +29,17 @@ static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
     FairSemaphore::new(PUNCHES_INFLIGHT);
 
+/// Quality of Service for MQTT messages.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MqttQos {
+    /// At most once.
     Q0 = 0,
+    /// At least once.
     Q1 = 1,
     // 2 is unsupported
 }
 
+/// Configuration for the MQTT client.
 #[derive(Clone)]
 pub struct MqttConfig {
     pub url: String<40>,
@@ -57,11 +61,13 @@ impl Default for MqttConfig {
     }
 }
 
+/// A task that runs the backoff retries loop.
 #[embassy_executor::task]
 pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
     backoff_retries.r#loop().await;
 }
 
+/// A function that sends a punch using the BG77 modem.
 #[derive(Clone, Copy)]
 pub struct Bg77SendPunchFn {
     send_punch_mutex: &'static SendPunchMutexType,
@@ -70,6 +76,7 @@ pub struct Bg77SendPunchFn {
 }
 
 impl Bg77SendPunchFn {
+    /// Creates a new `Bg77SendPunchFn`.
     pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
         Self {
             send_punch_mutex,
@@ -79,6 +86,7 @@ impl Bg77SendPunchFn {
     }
 }
 
+/// A task that sends a punch using the BG77 modem.
 #[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
 async fn bg77_send_punch_fn(
     msg: PunchMsg,
@@ -120,6 +128,7 @@ impl SendPunchFn for Bg77SendPunchFn {
     }
 }
 
+/// An MQTT client for the BG77 modem.
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
@@ -129,6 +138,7 @@ pub struct MqttClient<M: ModemHw> {
 }
 
 impl<M: ModemHw> MqttClient<M> {
+    /// Creates a new `MqttClient`.
     pub fn new(
         send_punch_mutex: &'static SendPunchMutexType,
         config: MqttConfig,
@@ -154,6 +164,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    /// Registers to the network.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
         if self.last_successful_send + self.config.packet_timeout * (4 + 2 * self.cgatt_cnt).into()
             < Instant::now()
@@ -189,6 +200,7 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
+    /// Handles URCs from the modem.
     pub fn urc_handler(response: &CommandResponse) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
@@ -209,6 +221,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    /// Handles the `+QMTPUB` URC.
     fn qmtpub_handler(response: &CommandResponse) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
@@ -234,6 +247,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    /// Opens a TCP connection to the MQTT broker.
     async fn mqtt_open(&self, bg77: &mut M, cid: u8) -> crate::Result<()> {
         let opened = bg77
             .simple_call_at("+QMTOPEN?", None)
@@ -260,7 +274,7 @@ impl<M: ModemHw> MqttClient<M> {
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
-        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\"", self.config.url)?;
         let (_, status) = bg77
             .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
@@ -273,6 +287,7 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
+    /// Connects to the MQTT broker.
     pub async fn mqtt_connect(&mut self, bg77: &mut M) -> crate::Result<()> {
         self.network_registration(bg77)
             .await
@@ -320,6 +335,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    /// Disconnects from the MQTT broker.
     #[allow(dead_code)]
     pub async fn mqtt_disconnect(&mut self, bg77: &mut M, cid: u8) -> Result<(), Error> {
         let cmd = format!(50; "+QMTDISC={cid}")?;
@@ -336,6 +352,7 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
+    /// Sends a message to the MQTT broker.
     pub async fn send_message(
         &mut self,
         bg77: &mut M,
@@ -345,7 +362,13 @@ impl<M: ModemHw> MqttClient<M> {
         msg_id: u16,
     ) -> Result<(), Error> {
         let cmd = format!(100;
-            "+QMTPUB={},{},{},0,\"yar/{}/{}\",{}", MQTT_CLIENT_ID, msg_id, qos as u8, &self.config.mac_address, topic, msg.len(),
+            "+QMTPUB={},{},{},0,\"yar/{}/{}\",{}",
+            MQTT_CLIENT_ID,
+            msg_id,
+            qos as u8,
+            &self.config.mac_address,
+            topic,
+            msg.len(),
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
@@ -365,7 +388,7 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    /// Schedules punch and returns its Punch ID
+    /// Schedules a punch to be sent and returns its Punch ID.
     pub async fn schedule_punch(&mut self, punch: RawPunch) -> u16 {
         // TODO: what if channel is full?
         let punch_id = self.punch_cnt;

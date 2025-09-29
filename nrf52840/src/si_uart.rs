@@ -3,6 +3,7 @@ use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
 use embassy_sync::channel::{Channel, Sender};
 use yaroc_common::{RawMutex, punch::RawPunch};
 
+/// A channel for sending punches from the SI UART to the event handler.
 pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
 
 // TODO: requires DWT which is now disabled
@@ -66,6 +67,7 @@ impl SiUart {
     }
 }
 
+/// A task that reads from the SI UART and sends the punches to the event handler.
 #[embassy_executor::task]
 pub async fn si_uart_reader(
     mut si_uart: SiUart,

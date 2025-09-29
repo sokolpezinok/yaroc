@@ -1,3 +1,4 @@
+#![doc = "This crate contains the firmware for the YAROC sport-tracking device, based on the nRF52840 chip."]
 #![no_std]
 #![no_main]
 

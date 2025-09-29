@@ -4,11 +4,22 @@ use heapless::String;
 use nrf_softdevice::{Flash, Softdevice, ble, raw, temperature_celsius};
 use yaroc_common::error::Error;
 
+/// Bluetooth Low Energy (BLE) stack.
+///
+/// This struct manages the nrf-softdevice configuration and initialization.
 pub struct Ble {
-    inner: &'static Softdevice,
+    softdevice: &'static Softdevice,
+}
+
+impl Default for Ble {
+    /// Creates a new `Ble` instance with default configuration.
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Ble {
+    /// Creates a new `Ble` instance and enables the Softdevice with a custom configuration.
     pub fn new() -> Self {
         let config = nrf_softdevice::Config {
             clock: Some(raw::nrf_clock_lf_cfg_t {
@@ -45,16 +56,20 @@ impl Ble {
         };
 
         Self {
-            inner: Softdevice::enable(&config),
+            softdevice: Softdevice::enable(&config),
         }
     }
 
+    /// Spawns the Softdevice task.
+    ///
+    /// This is required for the Softdevice to run.
     pub fn must_spawn(&self, spawner: Spawner) {
-        spawner.must_spawn(softdevice_task(self.inner));
+        spawner.must_spawn(softdevice_task(self.softdevice));
     }
 
+    /// Returns the MAC address of the device as a hex string.
     pub fn get_mac_address(&self) -> String<12> {
-        let bytes = ble::get_address(self.inner).bytes();
+        let bytes = ble::get_address(self.softdevice).bytes();
         let mut res = String::new();
         for b in bytes.iter().rev() {
             write!(&mut res, "{:02x}", b).expect("Unexpected length, this is a bug");
@@ -62,18 +77,23 @@ impl Ble {
         res
     }
 
+    /// Returns the temperature of the CPU.
     pub fn temperature(&self) -> crate::Result<f32> {
-        temperature_celsius(self.inner)
+        temperature_celsius(self.softdevice)
             .map(|val| val.to_num::<f32>())
             //TODO: consider propagating the error code
             .map_err(|_| Error::SoftdeviceError)
     }
 
+    /// Returns a handle to the Softdevice's flash memory.
     pub fn flash(&self) -> Flash {
-        Flash::take(self.inner)
+        Flash::take(self.softdevice)
     }
 }
 
+/// The main task for the Softdevice.
+///
+/// This task runs the Softdevice and must be spawned for BLE to work.
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) -> ! {
     sd.run().await
