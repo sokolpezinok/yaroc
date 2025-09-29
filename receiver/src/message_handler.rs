@@ -25,8 +25,8 @@ impl MessageHandler {
     /// This function initializes the `FleetState` and an optional `MqttReceiver`.
     pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
         let macs = dns.iter().map(|(_, mac)| mac);
+        //TODO: allow multiple MQTT receivers
         let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
-        // let (dev_tx, dev_rx) = unbounded_channel();
         let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         Self {
             fleet_state: FleetState::new(dns, Duration::from_secs(60)),
@@ -36,6 +36,9 @@ impl MessageHandler {
         }
     }
 
+    /// Returns the next event.
+    ///
+    /// This function is a long-running task that should be polled.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
             tokio::select! {
@@ -68,6 +71,7 @@ impl MessageHandler {
         }
     }
 
+    /// Returns a new `MshDevHandler` that can be used to handle Meshtastic devices.
     pub fn meshtastic_device_handler(&self) -> MshDevHandler {
         MshDevHandler::new(self.mesh_proto_tx.clone())
     }
