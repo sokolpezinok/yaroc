@@ -25,7 +25,7 @@ class YarocDaemon:
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        self.msh_serial = MeshtasticSerial(self.handler.msh_dev_notifier())
+        self.msh_serial = MeshtasticSerial(self.handler.msh_dev_handler())
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
