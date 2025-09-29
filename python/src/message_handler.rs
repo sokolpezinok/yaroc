@@ -5,9 +5,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
-use yaroc_receiver::message_handler::{
-    MessageHandler as MessageHandlerRs, MshDevHandler as MshDevNotifierRs,
-};
+use yaroc_receiver::meshtastic_serial::MshDevHandler as MshDevNotifierRs;
+use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
 use yaroc_receiver::system_info::MacAddress;
