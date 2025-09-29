@@ -6,15 +6,15 @@ from typing import Any
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME
 
-from ..rs import MshDevNotifier
+from ..rs import MshDevHandler
 from ..utils.sys_info import tty_device_from_usb
 
 
 class MeshtasticSerial:
-    def __init__(self, msh_dev_notifier: MshDevNotifier):
+    def __init__(self, msh_dev_handler: MshDevHandler):
         self._loop = asyncio.get_event_loop()
         self._device_queue: Queue[tuple[bool, str, str]] = Queue()
-        self._notifier = msh_dev_notifier
+        self._handler = msh_dev_handler
 
     @staticmethod
     def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:
@@ -31,9 +31,9 @@ class MeshtasticSerial:
             added, tty_acm, device_node = await self._device_queue.get()
             if added:
                 await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                self._notifier.add_device(tty_acm, device_node)
+                await self._handler.add_device(tty_acm, device_node)
             else:
-                self._notifier.remove_device(device_node)
+                self._handler.remove_device(device_node)
 
         await asyncio.sleep(10000000)
 

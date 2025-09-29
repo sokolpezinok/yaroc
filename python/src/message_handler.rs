@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::message_handler::{
-    MessageHandler as MessageHandlerRs, MshDevNotifier as MshDevNotifierRs,
+    MessageHandler as MessageHandlerRs, MshDevHandler as MshDevNotifierRs,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -85,22 +85,31 @@ impl From<MqttConfig> for MqttConfigRs {
 }
 
 #[pyclass]
-pub struct MshDevNotifier {
-    inner: MshDevNotifierRs,
+pub struct MshDevHandler {
+    inner: Arc<Mutex<MshDevNotifierRs>>,
 }
 
 #[pymethods]
-impl MshDevNotifier {
-    pub fn add_device(&self, port: String, device_node: String) -> PyResult<()> {
-        self.inner
-            .add_device(port, device_node)
-            .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
+impl MshDevHandler {
+    pub fn add_device<'a>(
+        &mut self,
+        py: Python<'a>,
+        port: String,
+        device_node: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let notifier = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            notifier.lock().await.add_device(port, device_node).await;
+            Ok(())
+        })
     }
 
-    pub fn remove_device(&self, device_node: String) -> PyResult<()> {
+    pub fn remove_device(&mut self, device_node: String) -> PyResult<()> {
         self.inner
-            .remove_device(device_node)
-            .map_err(|_| PyRuntimeError::new_err("Failed to add a device".to_string()))
+            .try_lock()
+            .map_err(|_| PyRuntimeError::new_err("Failed to device notifier".to_owned()))?
+            .remove_device(device_node);
+        Ok(())
     }
 }
 
@@ -132,9 +141,11 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
-    pub fn msh_dev_notifier(&self) -> PyResult<MshDevNotifier> {
-        let notifier = self.get_inner()?.meshtastic_device_notifier();
-        Ok(MshDevNotifier { inner: notifier })
+    pub fn msh_dev_handler(&self) -> PyResult<MshDevHandler> {
+        let handler = self.get_inner()?.meshtastic_device_handler();
+        Ok(MshDevHandler {
+            inner: Arc::new(Mutex::new(handler)),
+        })
     }
 
     pub fn next_event<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
