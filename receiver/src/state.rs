@@ -212,7 +212,7 @@ impl FleetState {
     pub fn process_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
-        recv_mac_address: Option<MacAddress>,
+        recv_mac_address: MacAddress,
     ) -> crate::Result<Option<Event>> {
         let now = Local::now();
         let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet);
@@ -322,9 +322,9 @@ impl FleetState {
         &mut self,
         mesh_packet: MeshPacket,
         now: DateTime<Local>,
-        recv_mac_address: Option<MacAddress>,
+        recv_mac_address: MacAddress,
     ) -> crate::Result<Option<MeshtasticLog>> {
-        let recv_position = recv_mac_address.and_then(|mac_addr| self.get_position_name(mac_addr));
+        let recv_position = self.get_position_name(recv_mac_address);
         let meshtastic_log =
             MeshtasticLog::from_mesh_packet(mesh_packet, now.into(), &self.dns, recv_position)?;
         self.msh_status_update(&meshtastic_log);
@@ -650,7 +650,7 @@ mod test_meshtastic {
             ..Default::default()
         };
         state
-            .msh_status_mesh_packet(mesh_packet, Local::now(), Some(MacAddress::default()))
+            .msh_status_mesh_packet(mesh_packet, Local::now(), MacAddress::default())
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);

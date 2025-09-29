@@ -18,7 +18,7 @@ pub struct MeshtasticSerial {
 
 pub enum MeshProto {
     MeshPacket(MeshPacket),
-    Disconnected,
+    Disconnected(String),
 }
 
 impl MeshtasticSerial {
@@ -75,7 +75,7 @@ impl MeshtasticSerial {
                     return MeshProto::MeshPacket(packet);
                 }
                 None => {
-                    return MeshProto::Disconnected;
+                    return MeshProto::Disconnected(self.device_node.clone());
                 }
                 _ => {}
             }
