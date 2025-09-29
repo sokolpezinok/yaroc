@@ -3,30 +3,27 @@ use embassy_futures::select::{Either3, select3};
 use embassy_time::{Duration, Ticker};
 use yaroc_common::status::{TEMPERATURE, Temp};
 
-use crate::send_punch::{Command, EVENT_CHANNEL};
+use crate::{
+    ble::Ble,
+    send_punch::{Command, EVENT_CHANNEL},
+};
 
-#[cfg(feature = "bluetooth-le")]
 pub struct SoftdeviceTemp {
-    ble: crate::ble::Ble,
+    ble: Ble,
 }
 
-#[cfg(feature = "bluetooth-le")]
 impl SoftdeviceTemp {
-    pub fn new(ble: crate::ble::Ble) -> Self {
+    pub fn new(ble: Ble) -> Self {
         Self { ble }
     }
 }
 
-#[cfg(feature = "bluetooth-le")]
 impl Temp for SoftdeviceTemp {
     async fn cpu_temperature(&mut self) -> crate::Result<f32> {
         self.ble.temperature()
     }
 }
 
-#[cfg(not(feature = "bluetooth-le"))]
-pub type OwnTemp = yaroc_common::status::NrfTemp;
-#[cfg(feature = "bluetooth-le")]
 pub type OwnTemp = SoftdeviceTemp;
 
 #[embassy_executor::task]

@@ -28,9 +28,6 @@ async fn main(spawner: Spawner) {
         mac_address,
         bg77,
         si_uart,
-        #[cfg(not(feature = "bluetooth-le"))]
-        temp,
-        #[cfg(feature = "bluetooth-le")]
         ble,
         ..
     } = device;
@@ -54,9 +51,6 @@ async fn main(spawner: Spawner) {
     ));
     spawner.must_spawn(si_uart_reader(si_uart, SI_UART_CHANNEL.sender()));
 
-    #[cfg(not(feature = "bluetooth-le"))]
-    let temp = yaroc_common::status::NrfTemp::new(temp);
-    #[cfg(feature = "bluetooth-le")]
     let temp = yaroc_nrf52840::system_info::SoftdeviceTemp::new(ble);
     spawner.must_spawn(sysinfo_update(temp));
 }

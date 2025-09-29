@@ -74,7 +74,6 @@ impl Ble {
     }
 }
 
-#[cfg(feature = "bluetooth-le")]
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) -> ! {
     sd.run().await

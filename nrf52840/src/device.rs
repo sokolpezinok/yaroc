@@ -1,6 +1,5 @@
-#[cfg(not(feature = "bluetooth-le"))]
-use core::str::FromStr;
-
+use crate::ble::Ble;
+use crate::flash::Flash;
 use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -30,21 +29,16 @@ pub struct Device {
         Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
     pub saadc: Saadc<'static, 1>,
     pub si_uart: SiUart,
-    #[cfg(not(feature = "bluetooth-le"))]
-    pub temp: embassy_nrf::temp::Temp<'static>,
-    #[cfg(feature = "bluetooth-le")]
-    pub ble: crate::ble::Ble,
-    #[cfg(feature = "bluetooth-le")]
-    pub flash: crate::flash::Flash,
+    pub ble: Ble,
+    pub flash: Flash,
 }
 
 impl Device {
     pub fn new(modem_config: ModemConfig) -> Self {
         let mut config: NrfConfig = Default::default();
-        if cfg!(feature = "bluetooth-le") {
-            config.time_interrupt_priority = Priority::P2;
-        }
+        config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
+
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::BAUD38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
@@ -67,15 +61,9 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
-        #[cfg(feature = "bluetooth-le")]
-        let ble = crate::ble::Ble::new();
-        #[cfg(feature = "bluetooth-le")]
+        let ble = Ble::new();
         let mac_address = ble.get_mac_address();
-        #[cfg(feature = "bluetooth-le")]
         let flash = crate::flash::Flash::new(ble.flash());
-
-        #[cfg(not(feature = "bluetooth-le"))]
-        let mac_address = String::from_str("cee423506cac").unwrap();
 
         Self {
             _blue_led: blue_led,
@@ -84,11 +72,7 @@ impl Device {
             bg77,
             si_uart: SiUart::new(rx0),
             saadc,
-            #[cfg(not(feature = "bluetooth-le"))]
-            temp: embassy_nrf::temp::Temp::new(p.TEMP, Irqs),
-            #[cfg(feature = "bluetooth-le")]
             ble,
-            #[cfg(feature = "bluetooth-le")]
             flash,
         }
     }

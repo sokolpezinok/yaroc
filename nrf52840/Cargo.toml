@@ -7,8 +7,7 @@ rust-version = "1.85"
 edition = "2024"
 
 [features]
-default = ["cortex-m/critical-section-single-core"]
-bluetooth-le = ["dep:nrf-softdevice"] # Disable default features for BLE support
+default = []
 
 [dependencies]
 yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
@@ -31,7 +30,7 @@ embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embedded-storage-async = "0.4.1"
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "6ff81139388c4256c5344ad9167859450abaa97d", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"], optional = true }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "6ff81139388c4256c5344ad9167859450abaa97d", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
 
 chrono = { workspace = true }
 femtopb = { workspace = true }

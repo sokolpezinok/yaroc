@@ -1,10 +1,8 @@
 #![no_std]
 #![no_main]
 
-#[cfg(feature = "bluetooth-le")]
 pub mod ble;
 pub mod device;
-#[cfg(feature = "bluetooth-le")]
 pub mod flash;
 pub mod mqtt;
 pub mod send_punch;
