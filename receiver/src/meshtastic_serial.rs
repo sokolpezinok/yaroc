@@ -163,20 +163,19 @@ impl MshDevHandler {
         let mesh_proto_tx = self.mesh_proto_tx.clone();
         tokio::spawn(async move {
             loop {
-                tokio::select! {
-                    msg = meshtastic_serial.next_message() => {
-                        match msg {
-                            MeshtasticEvent::MeshPacket(mesh_packet) => {
-                                mesh_proto_tx.send((mesh_packet, mac_address))
-                                    .expect("Channel unexpectedly closed");
-                            }
-                            MeshtasticEvent::Disconnected(_device_node) => {
-                                warn!("Removed meshtastic device: {mac_address}");
-                                cancellation_token.cancel();
-                            }
-                        }
+                let event =
+                    cancellation_token.run_until_cancelled(meshtastic_serial.next_message()).await;
+                match event {
+                    Some(MeshtasticEvent::MeshPacket(mesh_packet)) => {
+                        mesh_proto_tx
+                            .send((mesh_packet, mac_address))
+                            .expect("Channel unexpectedly closed");
                     }
-                    _ = cancellation_token.cancelled() => {
+                    Some(MeshtasticEvent::Disconnected(_device_node)) => {
+                        warn!("Removed meshtastic device: {mac_address}");
+                        cancellation_token.cancel();
+                    }
+                    None => {
                         break;
                     }
                 }
