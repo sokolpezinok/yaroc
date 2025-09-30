@@ -26,3 +26,6 @@ env_logger = "0.11.6"
 
 [[example]]
 name = "mqtt"
+
+[[example]]
+name = "meshtastic_serial"

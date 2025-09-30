@@ -98,7 +98,7 @@ impl MshDevHandler {
     ) -> PyResult<Bound<'a, PyAny>> {
         let notifier = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            notifier.lock().await.add_device(port, device_node).await;
+            notifier.lock().await.add_device(&port, &device_node).await;
             Ok(())
         })
     }

@@ -122,9 +122,9 @@ impl MshDevHandler {
     /// Connects to a Meshtastic device at a given serial port and device node.
     ///
     /// This function spawns a task to handle messages from the device.
-    pub async fn add_device(&mut self, port: String, device_node: String) {
+    pub async fn add_device(&mut self, port: &str, device_node: &str) {
         //TODO: make timeout configurable
-        match MeshtasticSerial::new(&port, &device_node, Duration::from_secs(12)).await {
+        match MeshtasticSerial::new(port, device_node, Duration::from_secs(12)).await {
             Ok(msh_serial) => {
                 let mac_address = msh_serial.mac_address();
                 info!("Connected to meshtastic device: {mac_address} at {port}");
