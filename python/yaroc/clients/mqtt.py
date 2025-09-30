@@ -224,11 +224,11 @@ class SIM7020MqttClient(Client):
                     mch.signal_snr_cb = snr * 10
                     mch.cellid = cellid
                     if ecl == 0:
-                        mch.network_type = CellNetworkType.NbIotEcl0
+                        mch.network_type = CellNetworkType.NbIotEcl0  # type: ignore
                     elif ecl == 1:
-                        mch.network_type = CellNetworkType.NbIotEcl1
+                        mch.network_type = CellNetworkType.NbIotEcl1  # type: ignore
                     elif ecl == 2:
-                        mch.network_type = CellNetworkType.NbIotEcl2
+                        mch.network_type = CellNetworkType.NbIotEcl2  # type: ignore
 
         return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 

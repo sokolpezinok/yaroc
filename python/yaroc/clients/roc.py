@@ -78,9 +78,9 @@ class RocClient(Client):
         oneof = status.WhichOneof("msg")
         if oneof == "mini_call_home":
             mch = status.mini_call_home
-            if mch.network_type == CellNetworkType.Lte:
+            if mch.network_type == CellNetworkType.Lte:  # type: ignore
                 network_type = "101"
-            elif mch.network_type == CellNetworkType.Umts:
+            elif mch.network_type == CellNetworkType.Umts:  # type: ignore
                 network_type = "41"
             else:
                 network_type = "0"
@@ -103,7 +103,7 @@ class RocClient(Client):
             }
         elif oneof == "dev_event":
             dev_event = status.dev_event
-            if dev_event.type == EventType.Added:
+            if dev_event.type == EventType.Added:  # type: ignore
                 codes = f"siadded-{dev_event.port}"
             else:
                 codes = f"siremoved-{dev_event.port}"
