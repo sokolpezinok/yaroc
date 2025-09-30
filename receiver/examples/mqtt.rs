@@ -32,7 +32,12 @@ async fn main() {
     let mut dns = Vec::new();
     for entry in &args.dns {
         if let Some((name, mac)) = entry.split_once(',') {
-            dns.push((name.to_owned(), MacAddress::try_from(mac).unwrap()));
+            dns.push((
+                name.to_owned(),
+                MacAddress::try_from(mac).expect("MAC address in the wrong format"),
+            ));
+        } else {
+            error!("DNS record in the wrong format, it should be <name>,<MAC_address>");
         }
     }
 
