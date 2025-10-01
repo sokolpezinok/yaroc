@@ -29,6 +29,7 @@ pub struct MqttReceiver {
     client: AsyncClient,
     topics: Vec<String>,
     event_loop: EventLoop,
+    url: String,
 }
 
 #[derive(Debug)]
@@ -42,7 +43,7 @@ pub enum Message {
 impl MqttReceiver {
     pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(config: MqttConfig, macs: I) -> Self {
         let client_id = format!("yaroc-{}", Uuid::new_v4());
-        let mut mqttoptions = MqttOptions::new(client_id.as_str(), config.url, config.port);
+        let mut mqttoptions = MqttOptions::new(client_id, &config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 128);
@@ -60,6 +61,7 @@ impl MqttReceiver {
         }
 
         Self {
+            url: config.url,
             client,
             event_loop,
             topics,
@@ -127,7 +129,7 @@ impl MqttReceiver {
                     warn!("MQTT Disconnected");
                 }
                 Event::Incoming(Packet::ConnAck(_)) => {
-                    info!("Connected to MQTT");
+                    info!("Connected to MQTT server {}", self.url);
                     for topic in &self.topics {
                         self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
                     }

@@ -2920,6 +2920,7 @@ dependencies = [
  "clap",
  "env_logger",
  "femtopb",
+ "futures",
  "log",
  "meshtastic",
  "prost 0.14.1",

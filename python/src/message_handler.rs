@@ -135,7 +135,7 @@ impl MessageHandler {
             .collect();
         let inner = Arc::new(Mutex::new(MessageHandlerRs::new(
             dns?,
-            mqtt_config.map(|config| config.into()),
+            mqtt_config.map(|config| config.into()).into_iter().collect(),
         )));
         Ok(Self { inner })
     }

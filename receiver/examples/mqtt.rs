@@ -42,10 +42,15 @@ async fn main() {
     }
 
     let mqtt_config = MqttConfig {
-        meshtastic_channel: args.msh_channel,
+        meshtastic_channel: args.msh_channel.clone(),
         ..Default::default()
     };
-    let mut handler = MessageHandler::new(dns, Some(mqtt_config));
+    let mqtt_config2 = MqttConfig {
+        meshtastic_channel: args.msh_channel,
+        url: "broker.hivemq.com".to_owned(),
+        ..Default::default()
+    };
+    let mut handler = MessageHandler::new(dns, vec![mqtt_config, mqtt_config2]);
 
     info!("Everything initialized, starting the loop");
     loop {

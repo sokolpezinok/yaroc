@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -14,7 +15,7 @@ use crate::system_info::MacAddress;
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    mqtt_receiver: Option<MqttReceiver>,
+    mqtt_receivers: Vec<MqttReceiver>,
     mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
     mesh_proto_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
 }
@@ -23,14 +24,16 @@ impl MessageHandler {
     /// Creates a new `MessageHandler`.
     ///
     /// This function initializes the `FleetState` and an optional `MqttReceiver`.
-    pub fn new(dns: Vec<(String, MacAddress)>, mqtt_config: Option<MqttConfig>) -> Self {
+    pub fn new(dns: Vec<(String, MacAddress)>, mqtt_configs: Vec<MqttConfig>) -> Self {
         let macs = dns.iter().map(|(_, mac)| mac);
-        //TODO: allow multiple MQTT receivers
-        let mqtt_receiver = mqtt_config.map(|config| MqttReceiver::new(config, macs));
+        let mqtt_receivers = mqtt_configs
+            .into_iter()
+            .map(|config| MqttReceiver::new(config, macs.clone()))
+            .collect();
         let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         Self {
             fleet_state: FleetState::new(dns, Duration::from_secs(60)),
-            mqtt_receiver,
+            mqtt_receivers,
             mesh_proto_tx,
             mesh_proto_rx,
         }
@@ -41,13 +44,13 @@ impl MessageHandler {
     /// This function is a long-running task that should be polled.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
+            let mqtt_futures: Vec<_> = self
+                .mqtt_receivers
+                .iter_mut()
+                .map(|receiver: &mut MqttReceiver| Box::pin(receiver.next_message()))
+                .collect();
             tokio::select! {
-                mqtt_message = async {
-                    match self.mqtt_receiver.as_mut() {
-                        Some(receiver) => receiver.next_message().await,
-                        None => std::future::pending().await
-                    }
-                } => {
+                (mqtt_message, _idx, _) = select_all(mqtt_futures.into_iter()) => {
                     if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
                         return Ok(message);
                     }

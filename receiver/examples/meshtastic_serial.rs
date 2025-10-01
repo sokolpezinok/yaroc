@@ -40,7 +40,7 @@ async fn main() {
         }
     }
 
-    let mut msg_handler = MessageHandler::new(dns, None);
+    let mut msg_handler = MessageHandler::new(dns, Vec::new());
     let mut msh_dev_handler = msg_handler.meshtastic_device_handler();
     msh_dev_handler.add_device(&args.port, "/some/node").await;
 
