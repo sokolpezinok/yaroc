@@ -1,5 +1,5 @@
 use crate::error::Error;
-use embassy_nrf::{peripherals::UARTE0, uarte::UarteRx};
+use embassy_nrf::uarte::UarteRx;
 use embassy_sync::channel::{Channel, Sender};
 use yaroc_common::{RawMutex, punch::RawPunch};
 
@@ -48,12 +48,12 @@ pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
 
 /// SportIdent UART. Reads chunks of 20 bytes.
 pub struct SiUart {
-    rx: UarteRx<'static, UARTE0>,
+    rx: UarteRx<'static>,
 }
 
 impl SiUart {
     /// Creates new SiUart from an UART RX.
-    pub fn new(rx: UarteRx<'static, UARTE0>) -> Self {
+    pub fn new(rx: UarteRx<'static>) -> Self {
         Self { rx }
     }
 

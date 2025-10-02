@@ -7,7 +7,6 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{Either3, select3};
 use embassy_nrf::{
     gpio::Output,
-    peripherals::{TIMER1, UARTE1},
     uarte::{UarteRxWithIdle, UarteTx},
 };
 use embassy_sync::channel::{Channel, Receiver};
@@ -26,9 +25,8 @@ use yaroc_common::{
 };
 
 /// The type of the `SendPunch` struct.
-pub type SendPunchType = SendPunch<
-    Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
->;
+pub type SendPunchType =
+    SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>>;
 /// The type of the mutex for the `SendPunch` struct.
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 

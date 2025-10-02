@@ -4,7 +4,7 @@ use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
-use embassy_nrf::peripherals::{TIMER1, UARTE0, UARTE1};
+use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
 use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
@@ -28,8 +28,7 @@ pub struct Device {
     /// The MAC address of the device
     pub mac_address: String<12>,
     /// The BG77 modem driver
-    pub bg77:
-        Bg77<UarteTx<'static, UARTE1>, UarteRxWithIdle<'static, UARTE1, TIMER1>, Output<'static>>,
+    pub bg77: Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>,
     /// The SAADC driver
     pub saadc: Saadc<'static, 1>,
     /// The SportIdent UART driver
