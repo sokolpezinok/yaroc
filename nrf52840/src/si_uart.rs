@@ -1,7 +1,10 @@
 use crate::error::Error;
-use embassy_nrf::uarte::UarteRx;
+use embassy_nrf::uarte::UarteRxWithIdle;
 use embassy_sync::channel::{Channel, Sender};
-use yaroc_common::{RawMutex, punch::RawPunch};
+use yaroc_common::{
+    RawMutex,
+    punch::{LEN, RawPunch, SiPunch},
+};
 
 /// A channel for sending punches from the SI UART to the event handler.
 pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
@@ -48,22 +51,45 @@ pub type SiUartChannelType = Channel<RawMutex, Result<RawPunch, Error>, 40>;
 
 /// SportIdent UART. Reads chunks of 20 bytes.
 pub struct SiUart {
-    rx: UarteRx<'static>,
+    rx: UarteRxWithIdle<'static>,
+    buf: [u8; LEN * 5],
+    end: usize,
 }
 
 impl SiUart {
     /// Creates new SiUart from an UART RX.
-    pub fn new(rx: UarteRx<'static>) -> Self {
-        Self { rx }
+    pub fn new(rx: UarteRxWithIdle<'static>) -> Self {
+        Self {
+            rx,
+            buf: [0; LEN * 5],
+            end: 0,
+        }
     }
 
     /// Read 20 bytes of SI punch data
     ///
     /// Return error if reading from RX or conversion is unsuccessful.
     async fn read(&mut self) -> crate::Result<RawPunch> {
-        let mut buf = RawPunch::default();
-        self.rx.read(&mut buf).await.map_err(|_| Error::UartReadError)?;
-        Ok(buf)
+        let bytes_read = self
+            .rx
+            .read_until_idle(&mut self.buf[self.end..])
+            .await
+            .map_err(|_| Error::UartReadError)?;
+        self.end += bytes_read;
+
+        let Some((raw, rest)) = SiPunch::find_punch_data(&self.buf[..self.end]) else {
+            // Clean the buffer if we can't find punches
+            if self.end >= LEN * 2 {
+                self.buf.copy_within(LEN * 2..self.end, 0);
+                self.end -= LEN * 2;
+            }
+            return Err(Error::UartReadError);
+        };
+        let range = self.end - rest.len()..self.end;
+        self.end = range.len();
+        self.buf.copy_within(range, 0);
+
+        Ok(raw)
     }
 }
 
