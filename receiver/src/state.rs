@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
@@ -290,9 +290,12 @@ impl FleetState {
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
             let si_punch_log = SiPunchLog::from_bytes(punch.raw, host_info.clone(), now);
-            if let Some(si_punch_log) = si_punch_log {
+            if let Some((si_punch_log, rest)) = si_punch_log {
                 status.punch(&si_punch_log.punch);
                 result.push(si_punch_log);
+                if !rest.is_empty() {
+                    warn!("Residual bytes after parsing punch: {rest:?}");
+                }
             } else {
                 error!("Wrong punch format: {:?}", punch.raw);
             }

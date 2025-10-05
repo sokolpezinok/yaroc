@@ -42,9 +42,9 @@ impl SiPunch {
     }
 
     #[staticmethod]
-    //TODO: drop this method and use something like SiPunchLog::from_bytes instead.
-    pub fn from_raw(bytes: [u8; 20], now: DateTime<FixedOffset>) -> Self {
-        SiPunchRs::from_raw(bytes, now.date_naive(), now.offset()).into()
+    pub fn from_raw(raw: &[u8], now: DateTime<FixedOffset>) -> Option<Self> {
+        let (punch, _rest) = SiPunchRs::from_bytes(raw, now.date_naive(), now.offset())?;
+        Some(punch.into())
     }
 }
 
@@ -113,14 +113,14 @@ mod test_punch {
     fn test_display() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let host_info = HostInfo::new("ROC1", MacAddress::Full(0x123456789012));
-        let punch = SiPunchLog::new(
+        let log = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),
             &host_info.into(),
             time + Duration::milliseconds(2831),
         );
 
         assert_eq!(
-            format!("{punch}"),
+            format!("{log}"),
             "ROC1 46283 punched 47 at 10:00:03.793, latency 2.83s"
         );
     }

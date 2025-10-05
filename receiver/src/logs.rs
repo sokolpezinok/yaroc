@@ -7,7 +7,7 @@ use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
-use yaroc_common::punch::{RawPunch, SiPunch};
+use yaroc_common::punch::SiPunch;
 use yaroc_common::status::{CellNetworkType, MiniCallHome};
 
 #[derive(Debug)]
@@ -22,18 +22,16 @@ impl SiPunchLog {
         bytes: &[u8],
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
-    ) -> Option<Self> {
-        let (raw, _) = SiPunch::find_punch_data(bytes)?;
-        Some(Self::from_raw(raw, host_info, now))
-    }
-
-    fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
-        let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());
-        Self {
-            latency: now - punch.time,
-            punch,
-            host_info,
-        }
+    ) -> Option<(Self, &[u8])> {
+        let (punch, rest) = SiPunch::from_bytes(bytes, now.date_naive(), now.offset())?;
+        Some((
+            Self {
+                latency: now - punch.time,
+                punch,
+                host_info,
+            },
+            rest,
+        ))
     }
 }
 
@@ -224,13 +222,15 @@ mod test_logs {
         let correct_punch =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
         let log = SiPunchLog::from_bytes(correct_punch, HostInfo::default(), Local::now().into())
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(log.punch.card, 1715004);
 
         let rotated_punch =
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
         let log = SiPunchLog::from_bytes(rotated_punch, HostInfo::default(), Local::now().into())
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(log.punch.card, 1715004);
 
         let short_punch =

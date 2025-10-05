@@ -31,6 +31,7 @@ pub type RawPunch = [u8; LEN];
 ///     let punch = SiPunch::from_raw(raw_punch, today, &tz);
 ///     assert_eq!(punch.card, 1715004);
 ///     assert_eq!(punch.code, 47);
+///     // ...
 ///     // Continue parsing `rest`
 /// }
 /// ```
@@ -76,6 +77,15 @@ impl SiPunch {
             mode,
             raw: Self::punch_to_bytes(card, code, time.naive_local(), mode),
         }
+    }
+
+    pub fn from_bytes<'a>(
+        bytes: &'a [u8],
+        today: NaiveDate,
+        offset: &'_ FixedOffset,
+    ) -> Option<(Self, &'a [u8])> {
+        let (raw, rest) = Self::find_punch_data(bytes)?;
+        Some((Self::from_raw(raw, today, offset), rest))
     }
 
     /// Creates a new `SiPunch` by parsing a raw 20-byte punch record.
@@ -134,28 +144,22 @@ impl SiPunch {
     /// A `Vec` containing `Result<SiPunch, Error>`. `Ok` contains a successfully parsed punch,
     /// while `Err` indicates a parsing failure.
     pub fn punches_from_payload<const N: usize>(
-        payload: &[u8],
+        mut payload: &[u8],
         today: NaiveDate,
         offset: &FixedOffset,
     ) -> Vec<Result<Self, Error>, N> {
-        match Self::find_punch_data(payload) {
-            None => {
-                let mut res = Vec::new();
-                res.push(Err(Error::ValueError)).unwrap();
-                res
+        let mut res = Vec::new();
+        while let Some((punch, rest)) = Self::from_bytes(payload, today, offset) {
+            if res.push(Ok(punch)).is_err() {
+                // TODO: indicate that the capacity has been used
+                return res;
             }
-            Some((punch, rest)) => {
-                let mut res = Vec::new();
-                res.push(Ok(Self::from_raw(punch, today, offset))).unwrap();
-
-                res.extend(rest.chunks(LEN).map(|chunk| {
-                    let partial_payload: RawPunch =
-                        chunk.try_into().map_err(|_| Error::BufferTooSmallError)?;
-                    Ok(Self::from_raw(partial_payload, today, offset))
-                }));
-                res
-            }
+            payload = rest;
         }
+        if !payload.is_empty() && res.push(Err(Error::BufferTooSmallError)).is_err() {
+            return res;
+        }
+        res
     }
 
     /// Calculates the date of the most recent given day of the week.
@@ -411,16 +415,17 @@ mod test_punch {
     #[test]
     fn test_punches_from_payload() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
-
-        let punch = SiPunch::new(1715004, 47, time, 2);
+        let expected_punch1 = SiPunch::new(1715004, 47, time, 2);
+        let expected_punch2 = SiPunch::new(46283, 52, time, 1);
         let payload =
-            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02\xd3\x0d\x00\x34\x00\x00\xb4\xcb\x08\x8c\xa3\xcb\x01\x00\x01\x49\xe2\x03\xff\x02";
 
-        let punches = SiPunch::punches_from_payload::<2>(payload, time.date_naive(), time.offset());
-        assert_eq!(punches.len(), 2);
-        assert_eq!(*punches[0].as_ref().unwrap(), punch);
+        let punches = SiPunch::punches_from_payload::<3>(payload, time.date_naive(), time.offset());
+        assert_eq!(punches.len(), 3);
+        assert_eq!(*punches[0].as_ref().unwrap(), expected_punch1);
+        assert_eq!(*punches[1].as_ref().unwrap(), expected_punch2);
         assert_eq!(
-            *punches[1].as_ref().unwrap_err(),
+            *punches[2].as_ref().unwrap_err(),
             Error::BufferTooSmallError
         );
     }
