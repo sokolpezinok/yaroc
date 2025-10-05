@@ -27,6 +27,8 @@ const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
 /// Precision of SportIdent timing is 1/256 of a second.
 const BILLION_BY_256: u32 = 1_000_000_000 / 256; // An integer
 const HALF_DAY_SECS: u32 = 12 * 60 * 60;
+const HEADER: [u8; 4] = [0xff, 0x02, 0xd3, 0x0d];
+const FOOTER: u8 = 0x03;
 
 impl SiPunch {
     /// Creates a new `SiPunch` and serializes it to raw bytes.
@@ -168,7 +170,7 @@ impl SiPunch {
     /// Serializes a punch to raw bytes.
     fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> RawPunch {
         let mut res = [0; LEN];
-        res[..4].copy_from_slice(&[0xff, 0x02, 0xd3, 0x0d]);
+        res[..4].copy_from_slice(&HEADER);
         res[4..6].copy_from_slice(&code.to_be_bytes());
         res[6..10].copy_from_slice(&Self::card_to_bytes(card));
         res[10..14].copy_from_slice(&Self::time_to_bytes(time));
@@ -177,8 +179,42 @@ impl SiPunch {
         res[16] = 1;
         let chksum = Self::sportident_checksum(&res[2..17]).to_be_bytes();
         res[17..19].copy_from_slice(&chksum);
-        res[19] = 0x03;
+        res[19] = FOOTER;
         res
+    }
+
+    /// Finds SI punch data in a raw byte stream.
+    ///
+    /// First it searches for HEADER. If HEADER is not present, it searches for HEADER[1..].
+    /// If footer is not present, it assumes it's present.
+    pub fn find_punch_data(raw: &[u8]) -> Option<RawPunch> {
+        let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
+        match position {
+            Some(position) => {
+                if position + LEN <= raw.len() {
+                    Some(raw[position..position + LEN].try_into().unwrap())
+                    // TODO: Also check for footer
+                } else if position + LEN == raw.len() + 1 {
+                    // Add footer
+                    let mut res: RawPunch = [0; _];
+                    res[..LEN - 1].copy_from_slice(&raw[position..]);
+                    res[LEN - 1] = FOOTER;
+                    Some(res)
+                } else {
+                    None
+                }
+            }
+            None => {
+                if raw.len() == LEN - 1 && HEADER[1..] == raw[..HEADER.len() - 1] {
+                    let mut new_raw: RawPunch = [0; _];
+                    new_raw[0] = HEADER[0];
+                    new_raw[1..].copy_from_slice(&raw[..LEN - 1]);
+                    Self::find_punch_data(&new_raw)
+                } else {
+                    None
+                }
+            }
+        }
     }
 }
 
@@ -260,5 +296,39 @@ mod test_punch {
             *punches[1].as_ref().unwrap_err(),
             Error::BufferTooSmallError
         );
+    }
+
+    #[test]
+    fn test_find_punch_data() {
+        let payload =
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+        assert_eq!(
+            SiPunch::find_punch_data(payload),
+            Some(
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
+            )
+        );
+
+        let short_payload =
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
+        assert_eq!(
+            SiPunch::find_punch_data(short_payload),
+            Some(
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
+            )
+        );
+
+        let short_payload =
+            b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+        assert_eq!(
+            SiPunch::find_punch_data(short_payload),
+            Some(
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
+            )
+        );
+
+        let short_payload =
+            b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
+        assert_eq!(SiPunch::find_punch_data(short_payload), None);
     }
 }
