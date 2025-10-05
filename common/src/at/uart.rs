@@ -157,22 +157,11 @@ impl RxWithIdle for FakeRxWithIdle {
     }
 }
 
-/// Fake `Tx` struct, to be used in tests
-pub struct FakeTx {
-    channel: &'static TxChannelType,
-}
-
-impl FakeTx {
-    pub fn new(channel: &'static TxChannelType) -> FakeTx {
-        Self { channel }
-    }
-}
-
-impl Tx for FakeTx {
+impl Tx for &'static TxChannelType {
     async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {
         let s = core::str::from_utf8(buffer).map_err(|_| Error::StringEncodingError)?;
         let s = String::from_str(s).map_err(|_| Error::BufferTooSmallError)?;
-        self.channel.send(s).await;
+        self.send(s).await;
         Ok(())
     }
 }
