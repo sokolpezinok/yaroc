@@ -75,3 +75,64 @@ impl<R: RxWithIdle> SiUart<R> {
         Ok(raw)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use chrono::DateTime;
+    use embassy_futures::block_on;
+
+    use super::*;
+
+    const FAKE_CAPACITY: usize = LEN * 10;
+
+    #[derive(Default)]
+    struct FakeRxWithIdle {
+        data: heapless::Vec<u8, FAKE_CAPACITY>,
+    }
+
+    impl FakeRxWithIdle {
+        pub fn fill(&mut self, data: &[u8]) {
+            self.data.extend_from_slice(data).unwrap();
+        }
+    }
+
+    impl RxWithIdle for FakeRxWithIdle {
+        async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
+            let m = buf.len().min(self.data.len());
+            buf[..m].copy_from_slice(&self.data[..m]);
+            let len = self.data.len();
+            self.data.copy_within(m..len, 0);
+            self.data.truncate(self.data.len() - m);
+            Ok(m)
+        }
+    }
+
+    #[test]
+    fn test_correct_punches() {
+        let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch1 = SiPunch::new(46283, 47, time1, 1);
+
+        let mut rx = FakeRxWithIdle::default();
+        rx.fill(b"\x03");
+        rx.fill(&punch1.raw);
+
+        let time2 = DateTime::parse_from_rfc3339("2023-11-23T10:02:43.792968750+01:00").unwrap();
+        let punch2 = SiPunch::new(46289, 94, time2, 1);
+        rx.fill(&punch2.raw[1..]);
+        rx.fill(b"\xff\x02");
+
+        let mut si_uart = SiUart::new(rx);
+
+        assert_eq!(block_on(si_uart.read()).unwrap(), punch1.raw);
+        assert_eq!(block_on(si_uart.read()).unwrap(), punch2.raw);
+        assert!(block_on(si_uart.read()).is_err());
+    }
+
+    #[test]
+    fn test_no_punches() {
+        let mut rx = FakeRxWithIdle::default();
+        rx.fill(&[0; 100]);
+        let mut si_uart = SiUart::new(rx);
+        assert!(block_on(si_uart.read()).is_err());
+    }
+}
