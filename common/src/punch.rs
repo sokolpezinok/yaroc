@@ -352,6 +352,14 @@ mod test_checksum {
         let s = b"\x01\x80\x05";
         assert_eq!(SiPunch::sportident_checksum(s), 0);
     }
+
+    #[test]
+    fn test_checksum_from_logged() {
+        // Logged raw data on October 5, 2025
+        let expected =
+            b"\xff\x02\xd3\x0d\x00\x01\x00\x7b\xc0\xc1\x00\x9f\xa9\x20\x00\x03\x88\xf8\x93\x03";
+        assert_eq!(SiPunch::sportident_checksum(&expected[2..17]), 0xf893);
+    }
 }
 
 #[cfg(test)]
