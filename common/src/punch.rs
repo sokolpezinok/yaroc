@@ -13,6 +13,27 @@ pub type RawPunch = [u8; LEN];
 /// This struct holds the decoded information from a raw SportIdent punch,
 /// including the card number, control code, and time. It also keeps the original
 /// raw data.
+///
+/// # Example
+///
+/// ```
+/// use chrono::{NaiveDate, FixedOffset};
+/// use yaroc_common::punch::SiPunch;
+///
+/// let raw_data = &[
+///     0x03, 0xff, 0x02, 0xd3, 0x0d, 0x00, 0x2f, 0x00, 0x1a, 0x2b, 0x3c, 0x08, 0x8c, 0xa3, 0xcb,
+///     0x02, 0x00, 0x01, 0x50, 0xe3, 0x03, 0xff, 0x02,
+/// ];
+/// let today = NaiveDate::from_ymd_opt(2023, 11, 23).unwrap();
+/// let tz = FixedOffset::east_opt(3600).unwrap();
+///
+/// if let Some((raw_punch, rest)) = SiPunch::find_punch_data(raw_data) {
+///     let punch = SiPunch::from_raw(raw_punch, today, &tz);
+///     assert_eq!(punch.card, 1715004);
+///     assert_eq!(punch.code, 47);
+///     // Continue parsing `rest`
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
     /// The card number of the SportIdent card that made the punch.
