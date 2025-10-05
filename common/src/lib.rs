@@ -5,6 +5,7 @@ pub mod backoff;
 pub mod bg77;
 pub mod error;
 pub mod punch;
+pub mod si_uart;
 pub mod status;
 
 pub mod proto {

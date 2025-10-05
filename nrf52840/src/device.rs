@@ -1,6 +1,5 @@
 use crate::ble::Ble;
 use crate::flash::Flash;
-use crate::si_uart::SiUart;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -11,6 +10,7 @@ use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
 use heapless::String;
 use yaroc_common::bg77::hw::{Bg77, ModemConfig};
+use yaroc_common::si_uart::SiUart;
 
 use {defmt_rtt as _, panic_probe as _};
 
