@@ -8,18 +8,22 @@ pub const LEN: usize = 20;
 /// A raw punch record as received from the SportIdent station.
 pub type RawPunch = [u8; LEN];
 
-/// A SportIdent punch.
+/// A SportIdent punch, representing a single timestamped record from a control station.
+///
+/// This struct holds the decoded information from a raw SportIdent punch,
+/// including the card number, control code, and time. It also keeps the original
+/// raw data.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiPunch {
-    /// The card number.
+    /// The card number of the SportIdent card that made the punch.
     pub card: u32,
-    /// The control code.
+    /// The control code of the station where the punch was made.
     pub code: u16,
-    /// The time of the punch.
+    /// The timestamp of the punch, with a fixed timezone offset.
     pub time: DateTime<FixedOffset>,
-    /// The punch mode.
+    /// The punch mode, indicating the type of station (e.g., start, finish, control).
     pub mode: u8,
-    /// The raw punch data that this struct was parsed from.
+    /// The original 20-byte raw data from which this punch was parsed.
     pub raw: RawPunch,
 }
 
@@ -31,7 +35,18 @@ const HEADER: [u8; 4] = [0xff, 0x02, 0xd3, 0x0d];
 const FOOTER: u8 = 0x03;
 
 impl SiPunch {
-    /// Creates a new `SiPunch` and serializes it to raw bytes.
+    /// Creates a new `SiPunch` from its components and serializes it into the raw byte format.
+    ///
+    /// # Arguments
+    ///
+    /// * `card` - The card number.
+    /// * `code` - The control code.
+    /// * `time` - The timestamp of the punch.
+    /// * `mode` - The punch mode.
+    ///
+    /// # Returns
+    ///
+    /// A new `SiPunch` instance.
     pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
         Self {
             card,
@@ -42,7 +57,17 @@ impl SiPunch {
         }
     }
 
-    /// Creates a new `SiPunch` from raw data.
+    /// Creates a new `SiPunch` by parsing a raw 20-byte punch record.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw 20-byte punch data.
+    /// * `today` - The current date, used to resolve the day of the week from the punch data.
+    /// * `offset` - The timezone offset to apply to the punch time.
+    ///
+    /// # Returns
+    ///
+    /// A new `SiPunch` instance.
     pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
         let data = &bytes[4..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
@@ -63,7 +88,7 @@ impl SiPunch {
         }
     }
 
-    /// Converts a `SiPunch` to a protobuf `Punch` message.
+    /// Converts this `SiPunch` to its protobuf representation.
     pub fn to_proto(&self) -> Punch<'_> {
         Punch {
             raw: &self.raw,
@@ -71,7 +96,22 @@ impl SiPunch {
         }
     }
 
-    /// Parses a byte slice into a vector of `SiPunch`es.
+    /// Parses a byte slice containing one or more punch records.
+    ///
+    /// This function searches for punch data in the payload, decodes it, and returns a vector
+    /// of `SiPunch` instances. It can handle cases where the payload contains partial or
+    /// multiple punch records.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The byte slice to parse.
+    /// * `today` - The current date, used for timestamp decoding.
+    /// * `offset` - The timezone offset to apply.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec` containing `Result<SiPunch, Error>`. `Ok` contains a successfully parsed punch,
+    /// while `Err` indicates a parsing failure.
     pub fn punches_from_payload<const N: usize>(
         payload: &[u8],
         today: NaiveDate,
@@ -97,14 +137,39 @@ impl SiPunch {
         }
     }
 
-    /// Returns the date of the last day of the week, given the day of the week and today's date.
+    /// Calculates the date of the most recent given day of the week.
+    ///
+    /// SportIdent punches encode the day of the week, not the full date. This function
+    /// determines the full date by finding the most recent occurrence of that day of the week
+    /// relative to `today`.
+    ///
+    /// # Arguments
+    ///
+    /// * `dow` - The day of the week (0=Sunday, 1=Monday, ..., 6=Saturday).
+    /// * `today` - The current date.
+    ///
+    /// # Returns
+    ///
+    /// The `NaiveDate` of the last occurrence of the given day of the week.
     pub fn last_dow(dow: u8, today: NaiveDate) -> NaiveDate {
         assert!(dow <= 7);
         let days = (today.weekday().num_days_from_sunday() + 7 - u32::from(dow)) % 7;
         today - Days::new(u64::from(days))
     }
 
-    /// Converts the 4-byte SportIdent time representation to a `NaiveDateTime`.
+    /// Converts a 4-byte SportIdent time representation into a `NaiveDateTime`.
+    ///
+    /// The SportIdent time format consists of a day of the week, a 12-hour AM/PM indicator,
+    /// seconds within that 12-hour period, and fractional seconds.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A 4-byte slice containing the time data.
+    /// * `today` - The current date, used to resolve the full date.
+    ///
+    /// # Returns
+    ///
+    /// The corresponding `NaiveDateTime`.
     fn bytes_to_datetime(data: &[u8], today: NaiveDate) -> NaiveDateTime {
         let dow = (data[0] & 0b1110) >> 1;
         let date = Self::last_dow(dow, today);
@@ -118,10 +183,10 @@ impl SiPunch {
         NaiveDateTime::new(date, time)
     }
 
-    /// Reimplementation of the Sportident checksum algorithm.
+    /// Implements the SportIdent checksum algorithm.
     ///
-    /// Note that they call it CRC, but it is buggy. See the last test that leads to a checksum of 0
-    /// for a polynomial that's not divisible by 0x8005.
+    /// Note: SportIdent calls this a CRC, but it has some unusual properties.
+    /// The implementation is based on reverse-engineering the algorithm.
     fn sportident_checksum(message: &[u8]) -> u16 {
         let mut msg: Vec<u8, LEN> = Vec::from_slice(message).unwrap();
         msg.push(0).unwrap();
@@ -151,7 +216,10 @@ impl SiPunch {
         chksum
     }
 
-    /// Converts a SportIdent card number to bytes.
+    /// Converts a SportIdent card number to its 4-byte representation.
+    ///
+    /// This handles the encoding scheme for early card series (1-4) which have a
+    /// different mapping.
     fn card_to_bytes(mut card: u32) -> [u8; 4] {
         let series = card / 100_000;
         if series <= 4 {
@@ -160,7 +228,7 @@ impl SiPunch {
         card.to_be_bytes()
     }
 
-    /// Converts a timestamp to SportIdent 4-byte time representation.
+    /// Converts a `NaiveDateTime` to the 4-byte SportIdent time representation.
     fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
         let mut res = [0; 4];
         res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
@@ -177,7 +245,7 @@ impl SiPunch {
         res
     }
 
-    /// Serializes a punch to raw bytes.
+    /// Serializes a punch's components into a raw 20-byte SportIdent record.
     fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> RawPunch {
         let mut res = [0; LEN];
         res[..4].copy_from_slice(&HEADER);
@@ -193,27 +261,33 @@ impl SiPunch {
         res
     }
 
-    /// Finds SI punch data in a raw byte stream.
+    /// Finds a SportIdent punch record within a raw byte stream.
     ///
-    /// First it searches for HEADER. If HEADER is not present, it searches for HEADER[1..].
-    /// If footer is not present, it fills it in.
+    /// This function searches for the `HEADER` sequence. It can also handle cases where the
+    /// first byte of the header is missing or the `FOOTER` is missing.
     ///
-    /// If a punch is found, it returns the punch as RawPunch and the earliest next position of a
-    /// punch in `raw`.
+    /// # Arguments
+    ///
+    /// * `raw` - The byte slice to search within.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple with the `RawPunch` and the position in the stream
+    /// immediately after the found punch. Returns `None` if no punch is found.
     // TODO: maybe just "eat" `raw` and return that: raw[position + LEN..].
     pub fn find_punch_data(raw: &[u8]) -> Option<(RawPunch, usize)> {
         let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
         match position {
             Some(position) => {
                 if position + LEN <= raw.len() {
+                    // TODO: Also check for footer
                     Some((
                         raw[position..position + LEN].try_into().unwrap(),
                         position + LEN,
                     ))
-                    // TODO: Also check for footer
                 } else if position + LEN == raw.len() + 1 {
                     // Add footer
-                    let mut res: RawPunch = [0; _];
+                    let mut res: RawPunch = Default::default();
                     res[..LEN - 1].copy_from_slice(&raw[position..]);
                     res[LEN - 1] = FOOTER;
                     Some((res, position + LEN - 1))
@@ -224,7 +298,7 @@ impl SiPunch {
             None => {
                 // Check for missing first header character
                 if raw.len() >= LEN - 1 && HEADER[1..] == raw[..HEADER.len() - 1] {
-                    let mut new_raw: RawPunch = [0; _];
+                    let mut new_raw: RawPunch = Default::default();
                     new_raw[0] = HEADER[0];
                     new_raw[1..].copy_from_slice(&raw[..LEN - 1]);
                     // Solve recursively
@@ -333,8 +407,7 @@ mod test_punch {
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
         assert_eq!(
             SiPunch::find_punch_data(payload),
-            Some((
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
+            Some((*b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
                 20
             ))
         );
