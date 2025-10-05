@@ -123,11 +123,11 @@ impl SiPunch {
                 res.push(Err(Error::ValueError)).unwrap();
                 res
             }
-            Some((punch, position)) => {
+            Some((punch, rest)) => {
                 let mut res = Vec::new();
                 res.push(Ok(Self::from_raw(punch, today, offset))).unwrap();
 
-                res.extend(payload[position..].chunks(LEN).map(|chunk| {
+                res.extend(rest.chunks(LEN).map(|chunk| {
                     let partial_payload: RawPunch =
                         chunk.try_into().map_err(|_| Error::BufferTooSmallError)?;
                     Ok(Self::from_raw(partial_payload, today, offset))
@@ -263,8 +263,11 @@ impl SiPunch {
 
     /// Finds a SportIdent punch record within a raw byte stream.
     ///
-    /// This function searches for the `HEADER` sequence. It can also handle cases where the
-    /// first byte of the header is missing or the `FOOTER` is missing.
+    /// This function searches for the `HEADER` sequence and returns the first punch found in the
+    /// stream. It also returns the rest of the stream after the punch.
+    ///
+    /// The function is robust to some corruption, as it can handle cases where the first byte of
+    /// the header is missing or the `FOOTER` is missing.
     ///
     /// # Arguments
     ///
@@ -272,10 +275,12 @@ impl SiPunch {
     ///
     /// # Returns
     ///
-    /// An `Option` containing a tuple with the `RawPunch` and the position in the stream
-    /// immediately after the found punch. Returns `None` if no punch is found.
-    // TODO: maybe just "eat" `raw` and return that: raw[position + LEN..].
-    pub fn find_punch_data(raw: &[u8]) -> Option<(RawPunch, usize)> {
+    /// An `Option` containing a tuple with:
+    ///   - The `RawPunch` found.
+    ///   - A slice representing the rest of the stream after the punch.
+    ///
+    /// Returns `None` if no punch is found.
+    pub fn find_punch_data(raw: &[u8]) -> Option<(RawPunch, &[u8])> {
         let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
         match position {
             Some(position) => {
@@ -283,14 +288,14 @@ impl SiPunch {
                     // TODO: Also check for footer
                     Some((
                         raw[position..position + LEN].try_into().unwrap(),
-                        position + LEN,
+                        &raw[position + LEN..],
                     ))
                 } else if position + LEN == raw.len() + 1 {
                     // Add footer
                     let mut res: RawPunch = Default::default();
                     res[..LEN - 1].copy_from_slice(&raw[position..]);
                     res[LEN - 1] = FOOTER;
-                    Some((res, position + LEN - 1))
+                    Some((res, &raw[position + LEN - 1..]))
                 } else {
                     None
                 }
@@ -302,7 +307,7 @@ impl SiPunch {
                     new_raw[0] = HEADER[0];
                     new_raw[1..].copy_from_slice(&raw[..LEN - 1]);
                     // Solve recursively
-                    Self::find_punch_data(&new_raw).map(|(punch, position)| (punch, position - 1))
+                    Self::find_punch_data(&new_raw).map(|(punch, _)| (punch, &raw[LEN - 1..]))
                 } else {
                     None
                 }
@@ -394,36 +399,35 @@ mod test_punch {
     #[test]
     fn test_find_punch_data() {
         let long_payload =
-            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff";
+        let (bytes, rest) = SiPunch::find_punch_data(long_payload).unwrap();
         assert_eq!(
-            SiPunch::find_punch_data(long_payload),
-            Some((
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
-                21
-            ))
+            &bytes,
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
         );
+        assert_eq!(rest, b"\xff");
 
         let payload =
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
+        let (bytes, rest) = SiPunch::find_punch_data(payload).unwrap();
         assert_eq!(
-            SiPunch::find_punch_data(payload),
-            Some((*b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
-                20
-            ))
+            &bytes,
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
         );
+        assert!(rest.is_empty());
 
         let short_payload =
             b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+        let (bytes, rest) = SiPunch::find_punch_data(short_payload).unwrap();
         assert_eq!(
-            SiPunch::find_punch_data(short_payload),
-            Some((
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
-                19
-            ))
+            &bytes,
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
         );
+        assert!(rest.is_empty());
 
-        let short_payload =
+        let too_short_payload =
             b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
-        assert_eq!(SiPunch::find_punch_data(short_payload), None);
+        let res = SiPunch::find_punch_data(too_short_payload);
+        assert!(res.is_none());
     }
 }
