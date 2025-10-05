@@ -32,7 +32,7 @@ pub struct Device {
     /// The SAADC driver
     pub saadc: Saadc<'static, 1>,
     /// The SportIdent UART driver
-    pub si_uart: SiUart,
+    pub si_uart: SiUart<UarteRxWithIdle<'static>>,
     /// The Bluetooth Low Energy driver
     pub ble: Ble,
     /// The flash memory driver
