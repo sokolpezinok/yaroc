@@ -80,30 +80,17 @@ impl<R: RxWithIdle> SiUart<R> {
 mod test {
     use chrono::DateTime;
     use embassy_futures::block_on;
+    use embassy_sync::pipe::{Pipe, Reader};
+
+    use crate::RawMutex;
 
     use super::*;
 
     const FAKE_CAPACITY: usize = LEN * 10;
 
-    #[derive(Default)]
-    struct FakeRxWithIdle {
-        data: heapless::Vec<u8, FAKE_CAPACITY>,
-    }
-
-    impl FakeRxWithIdle {
-        pub fn fill(&mut self, data: &[u8]) {
-            self.data.extend_from_slice(data).unwrap();
-        }
-    }
-
-    impl RxWithIdle for FakeRxWithIdle {
+    impl RxWithIdle for Reader<'_, RawMutex, FAKE_CAPACITY> {
         async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
-            let m = buf.len().min(self.data.len());
-            buf[..m].copy_from_slice(&self.data[..m]);
-            let len = self.data.len();
-            self.data.copy_within(m..len, 0);
-            self.data.truncate(self.data.len() - m);
-            Ok(m)
+            Ok(self.read(buf).await)
         }
     }
 
@@ -112,27 +99,39 @@ mod test {
         let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
         let punch1 = SiPunch::new(46283, 47, time1, 1);
 
-        let mut rx = FakeRxWithIdle::default();
-        rx.fill(b"\x03");
-        rx.fill(&punch1.raw);
+        let mut pipe: Pipe<RawMutex, FAKE_CAPACITY> = Pipe::new();
+        let (pipe_rx, pipe_tx) = pipe.split();
+        block_on(pipe_tx.write(b"\x03"));
+        block_on(pipe_tx.write(&punch1.raw));
 
         let time2 = DateTime::parse_from_rfc3339("2023-11-23T10:02:43.792968750+01:00").unwrap();
         let punch2 = SiPunch::new(46289, 94, time2, 1);
-        rx.fill(&punch2.raw[1..]);
-        rx.fill(b"\xff\x02");
+        block_on(pipe_tx.write(&punch2.raw[1..]));
 
-        let mut si_uart = SiUart::new(rx);
-
+        let mut si_uart = SiUart::new(pipe_rx);
         assert_eq!(block_on(si_uart.read()).unwrap(), punch1.raw);
+
+        // Now inject punch1 again but in two parts
+        block_on(pipe_tx.write(b"\xff\x02"));
         assert_eq!(block_on(si_uart.read()).unwrap(), punch2.raw);
-        assert!(block_on(si_uart.read()).is_err());
+        block_on(pipe_tx.write(&punch1.raw[2..]));
+        assert_eq!(block_on(si_uart.read()).unwrap(), punch1.raw);
     }
 
     #[test]
-    fn test_no_punches() {
-        let mut rx = FakeRxWithIdle::default();
-        rx.fill(&[0; 100]);
-        let mut si_uart = SiUart::new(rx);
+    fn test_zeroed_bytes_first() {
+        let mut pipe: Pipe<RawMutex, FAKE_CAPACITY> = Pipe::new();
+        let (pipe_rx, pipe_tx) = pipe.split();
+        let mut si_uart = SiUart::new(pipe_rx);
+
+        // We send 100 bytes which are empty: no punches, no headers.
+        block_on(pipe_tx.write(&[0; 100]));
         assert!(block_on(si_uart.read()).is_err());
+
+        // Then finally we send a punch.
+        let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch1 = SiPunch::new(46283, 47, time1, 1);
+        block_on(pipe_tx.write(&punch1.raw));
+        assert_eq!(block_on(si_uart.read()).unwrap(), punch1.raw);
     }
 }

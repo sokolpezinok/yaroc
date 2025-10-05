@@ -1,5 +1,4 @@
 use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
-use core::option::Option::Some;
 use core::str::FromStr;
 #[cfg(feature = "defmt")]
 use defmt::{self, debug};
