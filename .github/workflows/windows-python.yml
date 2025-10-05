@@ -20,15 +20,11 @@ jobs:
   windows:
     name: Build
     runs-on: windows-latest
-    strategy:
-      matrix:
-        target: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          architecture: ${{ matrix.target }}
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -36,28 +32,24 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
           working-directory: "python"
           args: -r --strip --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels
           path: python/dist
 
   release:
     name: Release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [x64, x86]
     if: "startsWith(github.ref, 'refs/tags/')"
     needs: windows
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
