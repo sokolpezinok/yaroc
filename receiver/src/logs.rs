@@ -18,7 +18,16 @@ pub struct SiPunchLog {
 }
 
 impl SiPunchLog {
-    pub fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn from_bytes(
+        bytes: &[u8],
+        host_info: HostInfo,
+        now: DateTime<FixedOffset>,
+    ) -> Option<Self> {
+        let (raw, _) = SiPunch::find_punch_data(bytes)?;
+        Some(Self::from_raw(raw, host_info, now))
+    }
+
+    fn from_raw(bytes: RawPunch, host_info: HostInfo, now: DateTime<FixedOffset>) -> Self {
         let punch = SiPunch::from_raw(bytes, now.date_naive(), now.offset());
         Self {
             latency: now - punch.time,
@@ -209,6 +218,26 @@ mod test_logs {
         proto::{MiniCallHome, Timestamp},
         status::CellSignalInfo,
     };
+
+    #[test]
+    fn test_cellular_punch() {
+        let correct_punch =
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+        let log = SiPunchLog::from_bytes(correct_punch, HostInfo::default(), Local::now().into())
+            .unwrap();
+        assert_eq!(log.punch.card, 1715004);
+
+        let rotated_punch =
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
+        let log = SiPunchLog::from_bytes(rotated_punch, HostInfo::default(), Local::now().into())
+            .unwrap();
+        assert_eq!(log.punch.card, 1715004);
+
+        let short_punch =
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50";
+        let log = SiPunchLog::from_bytes(short_punch, HostInfo::default(), Local::now().into());
+        assert!(log.is_none());
+    }
 
     #[test]
     fn test_cellular_dbm() {

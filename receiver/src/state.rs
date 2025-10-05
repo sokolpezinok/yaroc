@@ -289,15 +289,12 @@ impl FleetState {
         let status = self.cellular_node_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
-            match punch.raw.try_into() {
-                Ok(bytes) => {
-                    let si_punch = SiPunchLog::from_raw(bytes, host_info.clone(), now);
-                    status.punch(&si_punch.punch);
-                    result.push(si_punch);
-                }
-                Err(_) => {
-                    error!("Wrong length of chunk={}", punch.raw.len());
-                }
+            let si_punch_log = SiPunchLog::from_bytes(punch.raw, host_info.clone(), now);
+            if let Some(si_punch_log) = si_punch_log {
+                status.punch(&si_punch_log.punch);
+                result.push(si_punch_log);
+            } else {
+                error!("Wrong punch format: {:?}", punch.raw);
             }
         }
 

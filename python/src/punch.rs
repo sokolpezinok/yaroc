@@ -42,6 +42,7 @@ impl SiPunch {
     }
 
     #[staticmethod]
+    //TODO: drop this method and use something like SiPunchLog::from_bytes instead.
     pub fn from_raw(bytes: [u8; 20], now: DateTime<FixedOffset>) -> Self {
         SiPunchRs::from_raw(bytes, now.date_naive(), now.offset()).into()
     }

@@ -197,6 +197,10 @@ impl SiPunch {
     ///
     /// First it searches for HEADER. If HEADER is not present, it searches for HEADER[1..].
     /// If footer is not present, it fills it in.
+    ///
+    /// If a punch is found, it returns the punch as RawPunch and the earliest next position of a
+    /// punch in `raw`.
+    // TODO: maybe just "eat" `raw` and return that: raw[position + LEN..].
     pub fn find_punch_data(raw: &[u8]) -> Option<(RawPunch, usize)> {
         let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
         match position {
