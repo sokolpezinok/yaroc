@@ -77,14 +77,24 @@ impl SiPunch {
         today: NaiveDate,
         offset: &FixedOffset,
     ) -> Vec<Result<Self, Error>, N> {
-        payload
-            .chunks(LEN)
-            .map(|chunk| {
-                let partial_payload: RawPunch =
-                    chunk.try_into().map_err(|_| Error::BufferTooSmallError)?;
-                Ok(Self::from_raw(partial_payload, today, offset))
-            })
-            .collect()
+        match Self::find_punch_data(payload) {
+            None => {
+                let mut res = Vec::new();
+                res.push(Err(Error::ValueError)).unwrap();
+                res
+            }
+            Some((punch, position)) => {
+                let mut res = Vec::new();
+                res.push(Ok(Self::from_raw(punch, today, offset))).unwrap();
+
+                res.extend(payload[position..].chunks(LEN).map(|chunk| {
+                    let partial_payload: RawPunch =
+                        chunk.try_into().map_err(|_| Error::BufferTooSmallError)?;
+                    Ok(Self::from_raw(partial_payload, today, offset))
+                }));
+                res
+            }
+        }
     }
 
     /// Returns the date of the last day of the week, given the day of the week and today's date.
@@ -186,30 +196,35 @@ impl SiPunch {
     /// Finds SI punch data in a raw byte stream.
     ///
     /// First it searches for HEADER. If HEADER is not present, it searches for HEADER[1..].
-    /// If footer is not present, it assumes it's present.
-    pub fn find_punch_data(raw: &[u8]) -> Option<RawPunch> {
+    /// If footer is not present, it fills it in.
+    pub fn find_punch_data(raw: &[u8]) -> Option<(RawPunch, usize)> {
         let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
         match position {
             Some(position) => {
                 if position + LEN <= raw.len() {
-                    Some(raw[position..position + LEN].try_into().unwrap())
+                    Some((
+                        raw[position..position + LEN].try_into().unwrap(),
+                        position + LEN,
+                    ))
                     // TODO: Also check for footer
                 } else if position + LEN == raw.len() + 1 {
                     // Add footer
                     let mut res: RawPunch = [0; _];
                     res[..LEN - 1].copy_from_slice(&raw[position..]);
                     res[LEN - 1] = FOOTER;
-                    Some(res)
+                    Some((res, position + LEN - 1))
                 } else {
                     None
                 }
             }
             None => {
-                if raw.len() == LEN - 1 && HEADER[1..] == raw[..HEADER.len() - 1] {
+                // Check for missing first header character
+                if raw.len() >= LEN - 1 && HEADER[1..] == raw[..HEADER.len() - 1] {
                     let mut new_raw: RawPunch = [0; _];
                     new_raw[0] = HEADER[0];
                     new_raw[1..].copy_from_slice(&raw[..LEN - 1]);
-                    Self::find_punch_data(&new_raw)
+                    // Solve recursively
+                    Self::find_punch_data(&new_raw).map(|(punch, position)| (punch, position - 1))
                 } else {
                     None
                 }
@@ -287,7 +302,7 @@ mod test_punch {
 
         let punch = SiPunch::new(1715004, 47, time, 2);
         let payload =
-            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02";
 
         let punches = SiPunch::punches_from_payload::<2>(payload, time.date_naive(), time.offset());
         assert_eq!(punches.len(), 2);
@@ -300,31 +315,34 @@ mod test_punch {
 
     #[test]
     fn test_find_punch_data() {
-        let payload =
+        let long_payload =
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
         assert_eq!(
-            SiPunch::find_punch_data(payload),
-            Some(
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
-            )
+            SiPunch::find_punch_data(long_payload),
+            Some((
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
+                21
+            ))
         );
 
-        let short_payload =
+        let payload =
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
         assert_eq!(
-            SiPunch::find_punch_data(short_payload),
-            Some(
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
-            )
+            SiPunch::find_punch_data(payload),
+            Some((
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
+                20
+            ))
         );
 
         let short_payload =
             b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
         assert_eq!(
             SiPunch::find_punch_data(short_payload),
-            Some(
-                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
-            )
+            Some((
+                *b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03",
+                19
+            ))
         );
 
         let short_payload =
