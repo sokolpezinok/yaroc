@@ -83,6 +83,7 @@ class BtSerialSiWorker(SiWorker):
 
 class UdevSiFactory(SiWorker):
     def __init__(self):
+        super().__init__()
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
@@ -93,6 +94,7 @@ class UdevSiFactory(SiWorker):
             on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
         )
         self.handler = SiUartHandler()
+        _handler_task = asyncio.create_task(self.get_punches(queue))
 
         for device_id, parent_device_info in self.monitor.get_available_devices().items():
             self._add_usb_device(device_id, parent_device_info)
@@ -126,6 +128,16 @@ class UdevSiFactory(SiWorker):
     def _is_sandberg(device_info: dict[str, Any]):
         return device_info[ID_VENDOR_ID] == "1a86" and device_info[ID_MODEL_ID] == "55d4"
 
+    async def get_punches(self, queue: Queue[SiPunch]):
+        while True:
+            try:
+                raw_punch = await self.handler.next_punch()
+                punch = SiPunch.from_raw(raw_punch, datetime.now().astimezone())
+                if punch is not None:
+                    await self.process_punch(punch, queue)
+            except Exception as e:
+                logging.error(f"Error while getting punches: {e}")
+
     def stop(self):
         self._observer.stop()
         self.monitor.stop_monitoring()
@@ -144,11 +156,6 @@ class UdevSiFactory(SiWorker):
         asyncio.run_coroutine_threadsafe(
             self._device_queue.put(("remove", device_info)), self._loop
         )
-
-    @property
-    def codes(self) -> set[int]:
-        # TODO
-        return set()
 
 
 class FakeSiWorker(SiWorker):
