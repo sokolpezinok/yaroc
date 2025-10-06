@@ -63,8 +63,8 @@ impl<R: RxWithIdle> SiUart<R> {
         let Some((raw, rest)) = SiPunch::find_punch_data(&self.buf[..self.end]) else {
             // Clean the buffer if we can't find punches
             if self.end >= LEN * 2 {
-                self.buf.copy_within(LEN * 2..self.end, 0);
-                self.end -= LEN * 2;
+                self.buf.copy_within(LEN..self.end, 0);
+                self.end -= LEN;
             }
             return Err(Error::UartReadError);
         };
@@ -125,13 +125,15 @@ mod test {
         let mut si_uart = SiUart::new(pipe_rx);
 
         // We send 100 bytes which are empty: no punches, no headers.
-        block_on(pipe_tx.write(&[0; 100]));
+        block_on(pipe_tx.write(&[0; 38]));
         assert!(block_on(si_uart.read()).is_err());
 
         // Then finally we send a punch.
         let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
         let punch1 = SiPunch::new(46283, 47, time1, 1);
-        block_on(pipe_tx.write(&punch1.raw));
+        block_on(pipe_tx.write(&punch1.raw[0..2]));
+        assert!(block_on(si_uart.read()).is_err());
+        block_on(pipe_tx.write(&punch1.raw[2..]));
         assert_eq!(block_on(si_uart.read()).unwrap(), punch1.raw);
     }
 }
