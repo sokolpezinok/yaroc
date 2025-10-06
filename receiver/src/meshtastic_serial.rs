@@ -1,11 +1,11 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::time::Duration;
 
 use log::warn;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
-use std::collections::hash_map::Entry;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::{Instant, timeout_at};
 use tokio_util::sync::CancellationToken;
@@ -169,6 +169,7 @@ impl MshDevHandler {
             loop {
                 tokio::select! {
                     _ = cancellation_token.cancelled() => {
+                        warn!("Stopping meshtastic device: {mac_address}");
                         break;
                     }
                     event = meshtastic_serial.next_message() => {
@@ -188,5 +189,64 @@ impl MshDevHandler {
             }
         });
         cancellation_token_clone
+    }
+
+    #[cfg(test)]
+    fn is_running(&self, device_node: &str) -> bool {
+        self.cancellation_tokens.contains_key(device_node)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc::{self, Receiver};
+
+    pub struct FakeMeshtasticSerial {
+        mac_address: MacAddress,
+        rx: Receiver<MeshPacket>,
+    }
+
+    impl FakeMeshtasticSerial {
+        pub fn new(mac_address: MacAddress, rx: Receiver<MeshPacket>) -> Self {
+            Self { mac_address, rx }
+        }
+    }
+
+    impl MeshtasticSerialTrait for FakeMeshtasticSerial {
+        fn mac_address(&self) -> MacAddress {
+            self.mac_address
+        }
+
+        async fn next_message(&mut self) -> MeshtasticEvent {
+            let packet = self.rx.recv().await;
+            match packet {
+                Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
+                None => MeshtasticEvent::Disconnected("Fake".to_owned()),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_serial() {
+        let (tx, rx) = mpsc::channel(1);
+        let fake_serial = FakeMeshtasticSerial::new(MacAddress::default(), rx);
+
+        let packet = MeshPacket {
+            from: 0x1234,
+            to: 0xabcd,
+            ..Default::default()
+        };
+        tx.send(packet.clone()).await.unwrap();
+        let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
+        let mut handler = MshDevHandler::new(proto_tx);
+        handler.add_device(fake_serial, "/some");
+
+        let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
+        assert_eq!(recv_mac, Default::default());
+        assert_eq!(recv_packet, packet);
+
+        handler.remove_device("/some".to_owned());
+        assert!(!handler.is_running("/some"));
     }
 }
