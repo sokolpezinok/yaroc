@@ -1,12 +1,26 @@
+//! A module for UART communication with SportIdent devices.
+//!
+//! This module provides a `SiUart` struct that can read SportIdent punches from a UART
+//! interface. It is generic over the UART reader, so it can be used with different UART
+//! implementations.
+
 #[cfg(feature = "nrf")]
 use embassy_nrf::uarte::UarteRxWithIdle;
 
 use crate::error::Error;
 use crate::punch::{LEN, RawPunch, SiPunch};
 
-/// A trait for reading from a UART until it's idle.
+/// A trait for reading from a UART that can detect when the line is idle.
 pub trait RxWithIdle {
-    /// Read from UART until it's idle. Return the number of read bytes.
+    /// Read from UART until it's idle.
+    ///
+    /// # Arguments
+    ///
+    /// * `buf` - The buffer to read the data into.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes read.
     fn read_until_idle(
         &mut self,
         buf: &mut [u8],
@@ -25,7 +39,7 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
     }
 }
 
-/// SportIdent UART reader.
+/// A SportIdent UART reader.
 ///
 /// This struct reads data from a UART, finds SI punches in the data stream, and returns them.
 /// It is generic over the UART reader, so it can be used with different UART implementations.
@@ -37,6 +51,10 @@ pub struct SiUart<R: RxWithIdle> {
 
 impl<R: RxWithIdle> SiUart<R> {
     /// Creates a new `SiUart` from a UART reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `rx` - A UART reader that implements the `RxWithIdle` trait.
     pub fn new(rx: R) -> Self {
         Self {
             rx,
@@ -50,7 +68,9 @@ impl<R: RxWithIdle> SiUart<R> {
     /// This function reads from the UART until a punch is found. It handles cases where the
     /// punch is split across multiple reads.
     ///
-    /// Returns a `RawPunch` if a punch is successfully read, or an error if reading from the
+    /// # Returns
+    ///
+    /// A `RawPunch` if a punch is successfully read, or an error if reading from the
     /// UART fails or if the data cannot be parsed.
     pub async fn read(&mut self) -> crate::Result<RawPunch> {
         let bytes_read = self

@@ -90,7 +90,7 @@ impl AtRxBroker {
     /// ('\n' or '\r\n' are both accepted).
     ///
     /// This function is intended to be run as a background task.
-    /// 
+    ///
     /// Note that if 300 characters are read at once, the last line will be cut in the middle. This
     /// might be fixed in the future.
     ///
@@ -254,8 +254,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
                 .receive()
                 .with_deadline(deadline)
                 .await
-                .map_err(|_| Error::TimeoutError)?
-                ?;
+                .map_err(|_| Error::TimeoutError)??;
             res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
             if from_modem.terminal() {
                 break;
@@ -397,13 +396,11 @@ mod test_at {
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handler);
 
         block_on(broker.parse_lines("OK\n+URC: 1,\"string\"\nERROR"));
-        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?,
-                   FromModem::Ok);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
         let urc = URC_CHANNEL.try_receive().unwrap();
         assert_eq!(urc.command(), "URC");
         assert_eq!(urc.values().as_slice(), ["1", "string"]);
-        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?,
-                   FromModem::Error);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Error);
 
         let long = "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890X";
         block_on(broker.parse_lines(long));
@@ -417,8 +414,7 @@ mod test_at {
             MAIN_RX_CHANNEL.try_receive().unwrap()?,
             FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
         );
-        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?,
-                   FromModem::Eof);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Eof);
         assert_eq!(MAIN_RX_CHANNEL.len(), 0);
         Ok(())
     }
