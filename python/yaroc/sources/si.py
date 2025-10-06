@@ -26,7 +26,7 @@ class DeviceEvent:
 
 
 class SiWorker:
-    def __init__(self):
+    def __init__(self) -> None:
         self._codes: set[int] = set()
 
     async def process_punch(self, punch: SiPunch, queue: Queue[SiPunch]):
@@ -82,7 +82,7 @@ class BtSerialSiWorker(SiWorker):
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
 
@@ -112,7 +112,7 @@ class UdevSiFactory(SiWorker):
                         continue
                     logging.info(f"Inserted SportIdent device {tty_usb}")
 
-                    self.handler.add_device(tty_usb, parent_device_node)
+                    await self.handler.add_device(tty_usb, parent_device_node)
                     await status_queue.put(DeviceEvent(True, tty_usb))
                 elif action == "remove":
                     self.handler.remove_device(parent_device_node)
