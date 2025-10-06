@@ -31,11 +31,7 @@ class MeshtasticSerial:
             added, tty_acm, device_node = await self._device_queue.get()
             if added:
                 await asyncio.sleep(3.0)  # Give the TTY subystem more time
-                try:
-                    await self._handler.add_device(tty_acm, device_node)
-                    logging.info("Connected to meshtastic device: {mac_address} at {tty_acm}")
-                except Exception as e:
-                    logging.error(f"Error connecting to {tty_acm}: {e}")
+                await self._handler.add_device(tty_acm, device_node)
             else:
                 self._handler.remove_device(device_node)
 

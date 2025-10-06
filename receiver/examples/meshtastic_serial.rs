@@ -48,7 +48,7 @@ async fn main() {
     let msh_serial = MeshtasticSerial::new(&args.port, "/some/node", Duration::from_secs(12))
         .await
         .expect("Can't connect to a meshtastic device at {args.port}");
-    msh_dev_handler.add_device(msh_serial, "/some/node").await;
+    msh_dev_handler.add_device(msh_serial, "/some/node");
 
     info!("Everything initialized, starting the loop");
     loop {
