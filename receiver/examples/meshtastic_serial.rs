@@ -1,7 +1,10 @@
 extern crate yaroc_common;
 
+use std::time::Duration;
+
 use clap::Parser;
 use log::{error, info};
+use yaroc_receiver::meshtastic_serial::MeshtasticSerial;
 use yaroc_receiver::message_handler::MessageHandler;
 use yaroc_receiver::state::Event;
 use yaroc_receiver::system_info::MacAddress;
@@ -42,7 +45,10 @@ async fn main() {
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new());
     let mut msh_dev_handler = msg_handler.meshtastic_device_handler();
-    msh_dev_handler.add_device(&args.port, "/some/node").await;
+    let msh_serial = MeshtasticSerial::new(&args.port, "/some/node", Duration::from_secs(12))
+        .await
+        .expect("Can't connect to a meshtastic device at {args.port}");
+    msh_dev_handler.add_device(msh_serial, "/some/node").await;
 
     info!("Everything initialized, starting the loop");
     loop {

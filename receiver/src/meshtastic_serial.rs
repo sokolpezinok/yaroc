@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use log::{error, info, warn};
+use log::warn;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
@@ -13,20 +13,28 @@ use tokio_util::sync::CancellationToken;
 use crate::error::Error;
 use crate::system_info::MacAddress;
 
-/// A connection to a Meshtastic device.
-pub struct MeshtasticSerial {
-    device_node: String,
-    stream_api: ConnectedStreamApi,
-    listener: UnboundedReceiver<FromRadio>,
-    mac_address: MacAddress,
-}
-
 /// An enum representing a message from a Meshtastic device.
 pub enum MeshtasticEvent {
     /// A mesh packet.
     MeshPacket(MeshPacket),
     /// The device was disconnected.
     Disconnected(String),
+}
+
+pub trait MeshtasticSerialTrait {
+    /// Returns the MAC address of the device.
+    fn mac_address(&self) -> MacAddress;
+
+    /// Returns the next message from the device.
+    fn next_message(&mut self) -> impl Future<Output = MeshtasticEvent>;
+}
+
+/// A connection to a Meshtastic device.
+pub struct MeshtasticSerial {
+    device_node: String,
+    stream_api: ConnectedStreamApi,
+    listener: UnboundedReceiver<FromRadio>,
+    mac_address: MacAddress,
 }
 
 impl MeshtasticSerial {
@@ -71,14 +79,14 @@ impl MeshtasticSerial {
         self.stream_api.disconnect().await?;
         Ok(())
     }
+}
 
-    /// Returns the MAC address of the device.
-    pub fn mac_address(&self) -> MacAddress {
+impl MeshtasticSerialTrait for MeshtasticSerial {
+    fn mac_address(&self) -> MacAddress {
         self.mac_address
     }
 
-    /// Returns the next message from the device.
-    pub async fn next_message(&mut self) -> MeshtasticEvent {
+    async fn next_message(&mut self) -> MeshtasticEvent {
         loop {
             match self.listener.recv().await {
                 Some(FromRadio {
@@ -122,20 +130,9 @@ impl MshDevHandler {
     /// Connects to a Meshtastic device at a given serial port and device node.
     ///
     /// This function spawns a task to handle messages from the device.
-    pub async fn add_device(&mut self, port: &str, device_node: &str) {
-        //TODO: make timeout configurable
-        match MeshtasticSerial::new(port, device_node, Duration::from_secs(12)).await {
-            Ok(msh_serial) => {
-                let mac_address = msh_serial.mac_address();
-                info!("Connected to meshtastic device: {mac_address} at {port}");
-                let token = self.spawn_serial(msh_serial);
-                self.cancellation_tokens.insert(device_node.to_owned(), token);
-            }
-            Err(err) => {
-                //TODO: return the error
-                error!("Error connecting to {port}: {err}");
-            }
-        }
+    pub fn add_device(&mut self, msh_serial: MeshtasticSerial, device_node: &str) {
+        let token = self.spawn_serial(msh_serial);
+        self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
     /// Disconnects a Meshtastic device.

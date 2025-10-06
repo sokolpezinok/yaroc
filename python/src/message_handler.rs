@@ -1,3 +1,4 @@
+use log::{error, info};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::sync::Arc;
@@ -5,7 +6,9 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
-use yaroc_receiver::meshtastic_serial::MshDevHandler as MshDevNotifierRs;
+use yaroc_receiver::meshtastic_serial::{
+    MeshtasticSerial, MeshtasticSerialTrait, MshDevHandler as MshDevNotifierRs,
+};
 use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -98,8 +101,20 @@ impl MshDevHandler {
     ) -> PyResult<Bound<'a, PyAny>> {
         let notifier = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            notifier.lock().await.add_device(&port, &device_node).await;
-            Ok(())
+            let mut notifier = notifier.lock().await;
+            match MeshtasticSerial::new(port.as_str(), &device_node, Duration::from_secs(12)).await
+            {
+                Ok(msh_serial) => {
+                    let mac_address = msh_serial.mac_address();
+                    notifier.add_device(msh_serial, &device_node);
+                    info!("Connected to meshtastic device: {mac_address} at {port}",);
+                    Ok(())
+                }
+                Err(err) => {
+                    error!("Error connecting to {port}: {err}");
+                    Ok(())
+                }
+            }
         })
     }
 
