@@ -99,14 +99,14 @@ impl MshDevHandler {
         port: String,
         device_node: String,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let notifier = self.inner.clone();
+        let mutex = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut notifier = notifier.lock().await;
+            let mut handler = mutex.lock().await;
             match MeshtasticSerial::new(port.as_str(), &device_node, Duration::from_secs(12)).await
             {
                 Ok(msh_serial) => {
                     let mac_address = msh_serial.mac_address();
-                    notifier.add_device(msh_serial, &device_node);
+                    handler.add_device(msh_serial, &device_node);
                     info!("Connected to meshtastic device: {mac_address} at {port}",);
                     Ok(())
                 }
@@ -121,7 +121,9 @@ impl MshDevHandler {
     pub fn remove_device(&mut self, device_node: String) -> PyResult<()> {
         self.inner
             .try_lock()
-            .map_err(|_| PyRuntimeError::new_err("Failed to device notifier".to_owned()))?
+            .map_err(|_| {
+                PyRuntimeError::new_err("Failed to lock meshtastic device handler".to_owned())
+            })?
             .remove_device(device_node);
         Ok(())
     }

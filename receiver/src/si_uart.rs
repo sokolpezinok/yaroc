@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 
 use log::{error, warn};
 use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 use tokio_util::sync::CancellationToken;
 
@@ -54,15 +54,15 @@ pub struct SiUartHandler {
 //TODO: consider merging logic with MshDevHandler
 impl SiUartHandler {
     /// Creates a new `SiUartHandler`.
-    ///
-    /// # Arguments
-    ///
-    /// * `punch_tx` - A sender for forwarding punches.
-    pub fn new(punch_tx: UnboundedSender<RawPunch>) -> Self {
-        Self {
-            cancellation_tokens: HashMap::new(),
-            punch_tx,
-        }
+    pub fn new() -> (Self, UnboundedReceiver<RawPunch>) {
+        let (punch_tx, punch_rx) = unbounded_channel();
+        (
+            Self {
+                cancellation_tokens: HashMap::new(),
+                punch_tx,
+            },
+            punch_rx,
+        )
     }
     /// Connects to a SportIdent UART device.
     ///
