@@ -25,7 +25,7 @@ pub trait MeshtasticSerialTrait {
     /// Returns the MAC address of the device.
     fn mac_address(&self) -> MacAddress;
 
-    /// Returns the next message from the device.
+    /// Waits for the next message from the device.
     fn next_message(&mut self) -> impl Future<Output = MeshtasticEvent> + Send;
 }
 
@@ -104,30 +104,27 @@ impl MeshtasticSerialTrait for MeshtasticSerial {
     }
 }
 
-/// Handles connecting and disconnecting of Meshtastic devices.
+/// Meshtastic device handler
 ///
-/// Currently, only serial port connections are supported.
-/// Handles connecting and disconnecting of Meshtastic devices.
-///
-/// Currently, only serial port connections are supported.
+/// Handles connecting and disconnecting of meshtastic devices. Supports only serial port
+/// connections right now.
 pub struct MshDevHandler {
     cancellation_tokens: HashMap<String, CancellationToken>,
     mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
 }
 
-/// Meshtastic device handler
-///
-/// Handles connecting and disconnecting of meshtastic devices. Supports only serial port
-/// connections right now.
 impl MshDevHandler {
     /// Creates a new `MshDevHandler`.
+    ///
+    /// The handler is responsible for forwarding messages from the Meshtastic devices to the
+    /// message handler.
     pub fn new(mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) -> Self {
         Self {
             cancellation_tokens: HashMap::new(),
             mesh_proto_tx,
         }
     }
-    /// Connects to a Meshtastic device at a given serial port and device node.
+    /// Connects to a Meshtastic device.
     ///
     /// This function spawns a task to handle messages from the device.
     pub fn add_device<M: MeshtasticSerialTrait + Send + 'static>(
@@ -141,7 +138,8 @@ impl MshDevHandler {
 
     /// Disconnects a Meshtastic device.
     ///
-    /// This function cancels the task that handles messages from the device.
+    /// This function cancels the task that handles messages from the device and returns true if
+    /// the device was connected.
     pub fn remove_device(&mut self, device_node: String) -> bool {
         if let Entry::Occupied(occupied_entry) = self.cancellation_tokens.entry(device_node) {
             // Note: the message in spawn_serial is logged first, but with a MAC address. We do not
@@ -156,7 +154,8 @@ impl MshDevHandler {
 
     /// Spawns a task to read messages from a Meshtastic serial connection.
     ///
-    /// The task forwards the messages to the message handler.
+    /// The task forwards the messages to the message handler and can be cancelled by the returned
+    /// `CancellationToken`.
     fn spawn_serial<M: MeshtasticSerialTrait + Send + 'static>(
         &mut self,
         mut meshtastic_serial: M,
