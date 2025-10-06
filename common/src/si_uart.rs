@@ -144,11 +144,11 @@ mod test {
         let (pipe_rx, pipe_tx) = pipe.split();
         let mut si_uart = SiUart::new(pipe_rx);
 
-        // We send 100 bytes which are empty: no punches, no headers.
+        // We send 38 bytes which are empty: no punches, no headers.
         block_on(pipe_tx.write(&[0; 38]));
         assert!(block_on(si_uart.read()).is_err());
 
-        // Then finally we send a punch.
+        // Then finally we send a punch, but it's split into two parts.
         let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
         let punch1 = SiPunch::new(46283, 47, time1, 1);
         block_on(pipe_tx.write(&punch1.raw[0..2]));

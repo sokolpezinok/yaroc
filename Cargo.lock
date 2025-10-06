@@ -2927,6 +2927,7 @@ dependencies = [
  "rumqttc",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-serial",
  "tokio-util",
  "uuid",
  "yaroc-common",

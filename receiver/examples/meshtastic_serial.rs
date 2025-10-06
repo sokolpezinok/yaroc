@@ -1,5 +1,3 @@
-extern crate yaroc_common;
-
 use std::time::Duration;
 
 use clap::Parser;
