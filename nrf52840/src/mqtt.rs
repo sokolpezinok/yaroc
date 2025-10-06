@@ -274,7 +274,7 @@ impl<M: ModemHw> MqttClient<M> {
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
-        let cmd = format!(100; "+QMTOPEN={cid},\"{}\"", self.config.url)?;
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = bg77
             .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
