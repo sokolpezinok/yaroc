@@ -43,13 +43,13 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
 ///
 /// This struct reads data from a UART, finds SI punches in the data stream, and returns them.
 /// It is generic over the UART reader, so it can be used with different UART implementations.
-pub struct SiUart<R: RxWithIdle> {
+pub struct SiUart<R: RxWithIdle + Send> {
     rx: R,
     buf: [u8; LEN * 5],
     end: usize,
 }
 
-impl<R: RxWithIdle> SiUart<R> {
+impl<R: RxWithIdle + Send> SiUart<R> {
     /// Creates a new `SiUart` from a UART reader.
     ///
     /// # Arguments

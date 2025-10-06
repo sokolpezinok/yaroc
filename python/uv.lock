@@ -1183,7 +1183,7 @@ wheels = [
 
 [[package]]
 name = "yaroc"
-version = "0.1.17b1"
+version = "0.1.17b2"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
