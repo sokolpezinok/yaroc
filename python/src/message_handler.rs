@@ -108,13 +108,12 @@ impl MshDevHandler {
                     let mac_address = msh_serial.mac_address();
                     handler.add_device(msh_serial, &device_node);
                     info!("Connected to meshtastic device: {mac_address} at {port}",);
-                    Ok(())
                 }
                 Err(err) => {
                     error!("Error connecting to {port}: {err}");
-                    Ok(())
                 }
             }
+            Ok(())
         })
     }
 
