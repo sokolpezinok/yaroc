@@ -14,6 +14,12 @@ pub struct SiUartHandler {
     punch_rx: Arc<Mutex<UnboundedReceiver<RawPunch>>>,
 }
 
+impl Default for SiUartHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[pymethods]
 impl SiUartHandler {
     #[new]
@@ -25,7 +31,7 @@ impl SiUartHandler {
         }
     }
 
-    pub fn add_device<'a>(&mut self, py: Python<'a>, port: String, device_node: String) {
+    pub fn add_device(&mut self, port: String, device_node: String) {
         match TokioSerial::new(port.as_str()) {
             Ok(serial) => {
                 self.inner.add_device(serial, &device_node);
@@ -37,21 +43,19 @@ impl SiUartHandler {
         }
     }
 
-    pub fn remove_device(&mut self, device_node: String) {
-        self.inner.remove_device(device_node);
+    pub fn remove_device(&mut self, device_node: String) -> bool {
+        self.inner.remove_device(device_node)
     }
 
     pub fn next_punch<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let rx = self.punch_rx.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, RawPunch>(py, async move {
-            let message = rx
-                .lock()
+            rx.lock()
                 .await
                 .recv()
                 .await
                 .ok_or(PyConnectionError::new_err("Channel closed".to_owned()))
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()));
-            message
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))
         })
     }
 }

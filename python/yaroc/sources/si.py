@@ -3,18 +3,14 @@ import logging
 import socket
 import time
 from asyncio import Queue
-from asyncio.tasks import Task
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Event
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator
 
-import serial
-from serial_asyncio import open_serial_connection
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
 
-from ..rs import SiPunch
+from ..rs import SiPunch, SiUartHandler
 from ..utils.sys_info import tty_device_from_usb
 
 DEFAULT_TIMEOUT_MS = 3.0
@@ -45,54 +41,6 @@ class SiWorker:
     @property
     def codes(self) -> set[int]:
         return self._codes
-
-
-class SerialSiWorker(SiWorker):
-    """Serial port worker"""
-
-    def __init__(self, port: str):
-        super().__init__()
-        self.port = port
-        self.name = "srr"
-        self._finished = Event()
-
-    async def loop(self, queue: Queue[SiPunch]):
-        successful = False
-        for i in range(3):
-            try:
-                async with asyncio.timeout(10):
-                    reader, writer = await open_serial_connection(
-                        url=self.port, baudrate=38400, rtscts=False
-                    )
-                logging.info(f"Connected to SRR source at {self.port}")
-                successful = True
-                break
-            except Exception as err:
-                logging.error(f"Error connecting to {self.port}: {err}")
-                await asyncio.sleep(5.0)
-        if not successful:
-            return
-
-        while not self._finished.is_set():
-            try:
-                data = await reader.read(20)
-                if len(data) == 0:
-                    await asyncio.sleep(1.0)
-                    continue
-                now = datetime.now().astimezone()
-                punch = SiPunch.from_raw(data, now)
-                if punch is not None:
-                    await self.process_punch(punch, queue)
-
-            except serial.serialutil.SerialException as err:
-                logging.error(f"Fatal serial exception: {err}")
-                return
-            except Exception as err:
-                logging.error(f"Serial worker loop error: {err}")
-                await asyncio.sleep(5.0)
-
-    def close(self):
-        self._finished.set()
 
 
 class BtSerialSiWorker(SiWorker):
@@ -135,7 +83,6 @@ class BtSerialSiWorker(SiWorker):
 
 class UdevSiFactory(SiWorker):
     def __init__(self):
-        self._udev_workers: Dict[str, tuple[SerialSiWorker, Task, str]] = {}
         self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
@@ -145,6 +92,7 @@ class UdevSiFactory(SiWorker):
         self.monitor.start_monitoring(
             on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
         )
+        self.handler = SiUartHandler()
 
         for device_id, parent_device_info in self.monitor.get_available_devices().items():
             self._add_usb_device(device_id, parent_device_info)
@@ -157,22 +105,16 @@ class UdevSiFactory(SiWorker):
                 if action == "add":
                     await asyncio.sleep(3.0)  # Give the TTY subystem more time
 
-                    device_node = tty_device_from_usb(parent_device_node)
-                    if device_node is None or device_node in self._udev_workers:
+                    tty_usb = tty_device_from_usb(parent_device_node)
+                    if tty_usb is None:
                         continue
-                    logging.info(f"Inserted SportIdent device {device_node}")
+                    logging.info(f"Inserted SportIdent device {tty_usb}")
 
-                    worker = SerialSiWorker(device_node)
-                    task = asyncio.create_task(worker.loop(queue))
-                    self._udev_workers[parent_device_node] = (worker, task, device_node)
-                    await status_queue.put(DeviceEvent(True, device_node))
+                    self.handler.add_device(tty_usb, parent_device_node)
+                    await status_queue.put(DeviceEvent(True, tty_usb))
                 elif action == "remove":
-                    if parent_device_node in self._udev_workers:
-                        si_worker, _, device_node = self._udev_workers[parent_device_node]
-                        logging.info(f"Removed device {device_node}")
-                        si_worker.close()
-                        del self._udev_workers[parent_device_node]
-                        await status_queue.put(DeviceEvent(False, device_node))
+                    self.handler.remove_device(parent_device_node)
+                    await status_queue.put(DeviceEvent(False, parent_device_node))
             except Exception as e:
                 logging.error(e)
 
@@ -205,8 +147,8 @@ class UdevSiFactory(SiWorker):
 
     @property
     def codes(self) -> set[int]:
-        worker_codes = [worker.codes for worker, _, _ in self._udev_workers.values()]
-        return set().union(*worker_codes)
+        # TODO
+        return set()
 
 
 class FakeSiWorker(SiWorker):

@@ -69,6 +69,7 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::message_handler::MessageHandler>()?;
     m.add_class::<crate::message_handler::MqttConfig>()?;
     m.add_class::<crate::message_handler::MshDevHandler>()?;
+    m.add_class::<crate::si_uart::SiUartHandler>()?;
     m.add_class::<crate::status::CellularLog>()?;
     m.add_class::<crate::status::MeshtasticLog>()?;
     m.add_class::<crate::status::NodeInfo>()?;
