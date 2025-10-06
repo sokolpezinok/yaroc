@@ -21,6 +21,8 @@ pub enum Error {
     UartReadError,
     #[error("UART write error")]
     UartWriteError,
+    #[error("UART unexpectedly closed")]
+    UartClosedError,
     #[error("AT 'ERROR' response")]
     AtErrorResponse,
     #[error("Timeout error")]

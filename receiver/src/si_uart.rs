@@ -13,6 +13,7 @@ use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
 pub struct TokioSerial {
     serial: SerialStream,
+    port: String,
 }
 
 impl TokioSerial {
@@ -30,7 +31,15 @@ impl TokioSerial {
         let builder = tokio_serial::new(port, 38400);
         let serial =
             builder.open_native_async().map_err(|_| crate::error::Error::ConnectionError)?;
-        Ok(Self { serial })
+        Ok(Self {
+            serial,
+            port: port.to_owned(),
+        })
+    }
+
+    /// Returns the port path of the serial connection.
+    pub fn port(&self) -> &str {
+        &self.port
     }
 }
 
@@ -54,6 +63,10 @@ pub struct SiUartHandler {
 //TODO: consider merging logic with MshDevHandler
 impl SiUartHandler {
     /// Creates a new `SiUartHandler`.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing the new `SiUartHandler` instance and a receiver for punches.
     pub fn new() -> (Self, UnboundedReceiver<RawPunch>) {
         let (punch_tx, punch_rx) = unbounded_channel();
         (
@@ -73,7 +86,8 @@ impl SiUartHandler {
     /// * `serial` - The serial port to use.
     /// * `device_node` - A string identifying the device, usually its path.
     pub fn add_device(&mut self, serial: TokioSerial, device_node: &str) {
-        let token = self.spawn_serial(serial, device_node.to_owned());
+        let port = serial.port().to_owned();
+        let token = self.spawn_serial(serial, port);
         self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
@@ -108,7 +122,7 @@ impl SiUartHandler {
             loop {
                 tokio::select! {
                     _ = cancellation_token.cancelled() => {
-                        warn!("Stopping SI UART device: {}", port);
+                        warn!("Stopping SI UART device: {port}");
                         break;
                     }
                     punch = si_uart.read() => {
@@ -119,8 +133,16 @@ impl SiUartHandler {
                                     .expect("Channel unexpectedly closed");
                             }
                             Err(err) => {
-                                error!("Failed to read punch: {err}");
-                                cancellation_token.cancel();
+                                match err {
+                                    Error::UartClosedError => {
+                                        error!("Device removed: {port}");
+                                        cancellation_token.cancel();
+                                        break;
+                                    }
+                                    e => {
+                                        error!("Failed to read punch: {e}");
+                                    }
+                                }
                             }
                         }
                     }

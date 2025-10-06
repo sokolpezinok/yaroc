@@ -105,7 +105,7 @@ class UdevSiFactory(SiWorker):
 
             try:
                 if action == "add":
-                    await asyncio.sleep(3.0)  # Give the TTY subystem more time
+                    await asyncio.sleep(2.0)  # Give the TTY subystem more time
 
                     tty_usb = tty_device_from_usb(parent_device_node)
                     if tty_usb is None:

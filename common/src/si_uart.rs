@@ -73,12 +73,12 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     /// A `RawPunch` if a punch is successfully read, or an error if reading from the
     /// UART fails or if the data cannot be parsed.
     pub async fn read(&mut self) -> crate::Result<RawPunch> {
-        let bytes_read = self
-            .rx
-            .read_until_idle(&mut self.buf[self.end..])
-            .await
-            .map_err(|_| Error::UartReadError)?;
+        let bytes_read = self.rx.read_until_idle(&mut self.buf[self.end..]).await?;
         self.end += bytes_read;
+
+        if bytes_read == 0 {
+            return Err(Error::UartClosedError);
+        }
 
         let Some((raw, rest)) = SiPunch::find_punch_data(&self.buf[..self.end]) else {
             // Clean the buffer if we can't find punches

@@ -1,3 +1,5 @@
+//! An example of reading punches from a SportIdent UART device.
+
 use chrono::Local;
 use clap::Parser;
 use log::{error, info};
@@ -6,6 +8,7 @@ use yaroc_common::{punch::SiPunch, si_uart::SiUart};
 use yaroc_receiver::si_uart::TokioSerial;
 
 #[derive(Parser, Debug)]
+/// Arguments for the `si_uart` example.
 struct Args {
     #[arg(short, long)]
     port: String,
@@ -18,8 +21,10 @@ async fn main() {
         .format_timestamp_millis()
         .init();
 
-    let rx = TokioSerial::new("/dev/ttyUSB1").unwrap();
+    let args = Args::parse();
+    let rx = TokioSerial::new(&args.port).unwrap();
     let mut si_uart = SiUart::new(rx);
+    info!("Listening for punches on {}", args.port);
     while let Ok(punch) = si_uart.read().await {
         let now = Local::now();
         let punch = SiPunch::from_raw(punch, now.date_naive(), now.offset());
