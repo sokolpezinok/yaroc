@@ -18,7 +18,7 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
 
-pub const PUNCH_QUEUE_SIZE: usize = 32;
+pub const PUNCH_QUEUE_SIZE: usize = 100;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
@@ -100,9 +100,16 @@ pub trait SendPunchFn {
     fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
-// TODO: find a better way of instantiating this
-static STATUS_UPDATES: LazyLock<[Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE]> =
-    LazyLock::new(Default::default);
+fn init_status_updates() -> Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE> {
+    let mut res = Vec::new();
+    for _ in 0..PUNCH_QUEUE_SIZE {
+        let _ = res.push(Signal::new());
+    }
+    res
+}
+
+static STATUS_UPDATES: LazyLock<Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE>> =
+    LazyLock::new(init_status_updates);
 
 #[derive(Copy, Clone)]
 enum MqttEvent {
