@@ -32,8 +32,7 @@ pub enum BackoffCommand {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-/// Struct holding all necessary information about a punch that will be send and retried if send
-/// fails.
+/// A message containing a punch that is to be sent, with retry logic.
 pub struct PunchMsg {
     pub punch: RawPunch,
     backoff: Duration,
@@ -77,26 +76,27 @@ impl PunchMsg {
     }
 }
 
-/// Trait for a send punch function used by `BackoffRetries` to send punches.
+/// A trait for sending punches, used by [`BackoffRetries`].
 pub trait SendPunchFn {
     type SemaphoreReleaser;
 
-    /// Acquire concurrent access to the send punch function.
+    /// Acquires concurrent access for sending a punch.
     ///
-    /// The releaser should be dropped once you received a publish, timeout or error response via
-    /// `STATUS_UPDATES`.
+    /// The returned releaser should be dropped after receiving a response (publish, timeout,
+    /// or error) via `STATUS_UPDATES`.
     fn acquire(
         &mut self,
     ) -> impl core::future::Future<Output = crate::Result<Self::SemaphoreReleaser>>;
 
-    /// Send punch. The result of the operation is received via `STATUS_UPDATES`.
+    /// Sends a punch. The result of the operation is received via `STATUS_UPDATES`.
     fn send_punch(
         &mut self,
         punch: &PunchMsg,
     ) -> impl core::future::Future<Output = crate::Result<()>>;
 
-    /// Spawn this send punch function on a `spawner`, trying to send punch message `msg`. The
-    /// total timeout is given as `send_punch_timeout`, after this the message is dropped.
+    /// Spawns a task to send a punch message with a total timeout.
+    ///
+    /// The message is dropped if the timeout is exceeded.
     fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
@@ -119,7 +119,7 @@ enum MqttEvent {
 static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1> =
     PubSubChannel::new();
 
-/// Exponential backoff retries for sending punches.
+/// Manages exponential backoff retries for sending punches.
 pub struct BackoffRetries<S: SendPunchFn> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
@@ -150,16 +150,15 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
-    /// Find vacant index in `unpublished_msgs`.
+    /// Finds a vacant index in `unpublished_msgs`.
     ///
-    /// It's a position set to false;
+    /// A vacant index is one that is set to `false`.
     fn vacant_idx(&self) -> Option<usize> {
         self.unpublished_msgs.iter().rposition(|val| !val)
     }
 
-    /// Delete message from unpublished messages.
-    ///
-    /// Typically done after it's been succesfully published.
+    /// Deletes a message from unpublished messages, typically after it has been successfully
+    /// published.
     fn delete_msg(&mut self, idx: u16) {
         // The `vacant_idx` function will consider this spot empty.
         self.unpublished_msgs[idx as usize] = false;
@@ -192,9 +191,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         self.mqtt_events.publish_immediate(MqttEvent::Connect)
     }
 
-    /// Main loop handling the retries.
+    /// The main loop for handling punch sending and retries.
     ///
-    /// Needs to run on a separate thread.
+    /// This should run in a separate task.
     pub async fn r#loop(&mut self) {
         loop {
             match CMD_FOR_BACKOFF.receive().await {
@@ -213,7 +212,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
-    /// Figure out if message has been sent.
+    /// Determines if a message has been successfully sent by waiting for a status update.
     async fn is_message_sent(
         punch_msg: &PunchMsg,
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
@@ -254,9 +253,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
-    /// Wait for the period of punch_msg.backoff.
+    /// Waits for the backoff period of a punch message.
     ///
-    /// The backoff can be interrupted by an MQTT connect event.
+    /// The wait can be interrupted by an MQTT connect event.
     async fn backoff(
         punch_msg: &mut PunchMsg,
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
@@ -278,10 +277,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
-    /// Try sending a punch using `send_punch_fn`, retrying if necessary.
+    /// Tries to send a punch with retries.
     ///
-    /// This function is to be used by SendPunchFn::spawn(). We can't spawn it directly, as
-    /// embassy_executor::task doesn't allow generic functions and S is a generic parameter.
+    /// This function is intended to be used by [`SendPunchFn::spawn`].
     pub async fn try_sending_with_retries(
         mut punch_msg: PunchMsg,
         mut send_punch_fn: S,
