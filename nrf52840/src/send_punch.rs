@@ -9,7 +9,7 @@ use embassy_nrf::{
     gpio::Output,
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::channel::{Channel, Receiver};
+use embassy_sync::channel::Channel;
 use embassy_sync::{mutex::Mutex, signal::Signal};
 use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{Message, repeated};
@@ -22,6 +22,7 @@ use yaroc_common::{
     },
     proto::{Punch, Punches},
     punch::{RawPunch, SiPunch},
+    si_uart::SiUart,
 };
 
 /// The type of the `SendPunch` struct.
@@ -201,7 +202,7 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, 40>,
+    mut si_uart: SiUart<UarteRxWithIdle<'static>>,
 ) {
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
@@ -214,12 +215,7 @@ pub async fn send_punch_event_handler(
     }
 
     loop {
-        let signal = select3(
-            MCH_SIGNAL.wait(),
-            EVENT_CHANNEL.receive(),
-            punch_receiver.receive(),
-        )
-        .await;
+        let signal = select3(MCH_SIGNAL.wait(), EVENT_CHANNEL.receive(), si_uart.read()).await;
         {
             let mut send_punch_unlocked = send_punch_mutex.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
