@@ -4,7 +4,7 @@ use crate::{
     punch::RawPunch,
 };
 #[cfg(feature = "defmt")]
-use defmt::{error, warn};
+use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_sync::{
@@ -16,7 +16,7 @@ use embassy_sync::{
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
-use log::{error, warn};
+use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 100;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
@@ -205,7 +205,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 BackoffCommand::Status(status) => self.handle_status(status),
                 BackoffCommand::MqttDisconnected => self.mqtt_disconnected(),
                 BackoffCommand::MqttConnected => self.mqtt_connected(),
-                BackoffCommand::PunchPublished(_punch_id, msg_id) => {
+                BackoffCommand::PunchPublished(punch_id, msg_id) => {
+                    info!("Punch ID={} published", punch_id);
                     self.delete_msg(msg_id);
                 }
             }
@@ -242,7 +243,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 Either::Second(MqttEvent::Connect) => {}
                 Either::First(StatusCode::Retrying(retries)) => {
                     warn!(
-                        "Sending punch ID={} will be retried, has been tried {} times",
+                        "Sending punch ID={} will be retried by the modem, has been tried {} times",
                         punch_id, retries
                     );
                 }
