@@ -18,7 +18,7 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
 
-pub const PUNCH_QUEUE_SIZE: usize = 24;
+pub const PUNCH_QUEUE_SIZE: usize = 32;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
     Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
