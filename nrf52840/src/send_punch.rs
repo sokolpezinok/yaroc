@@ -1,3 +1,6 @@
+//! This module handles sending punches and other data to the server.
+//! It uses a BG77 modem and MQTT to communicate with the server.
+
 use crate::{
     error::Error,
     mqtt::{MqttClient, MqttConfig, MqttQos},
@@ -25,28 +28,32 @@ use yaroc_common::{
     si_uart::SiUart,
 };
 
-/// The type of the `SendPunch` struct.
+/// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type SendPunchType =
     SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>>;
-/// The type of the mutex for the `SendPunch` struct.
+/// A type alias for a mutex-guarded `Option<SendPunchType>`.
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
-/// A signal for the MiniCallHome.
+/// A signal used to trigger a MiniCallHome event.
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
-/// A command to be sent to the `send_punch_event_handler`.
+/// Commands to be sent to the `send_punch_event_handler`.
 pub enum Command {
-    /// Synchronize the time with the network.
+    /// Instructs the modem to synchronize its time with the network.
     SynchronizeTime,
-    /// Connect to the MQTT broker.
+    /// Instructs the modem to connect to the MQTT broker.
+    ///
+    /// The `bool` parameter indicates whether to force a reconnection.
     MqttConnect(bool, Instant),
-    /// Update the battery status.
+    /// Instructs the modem to update the battery status.
     BatteryUpdate,
 }
-/// The channel for sending commands to the `send_punch_event_handler`.
+/// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
-/// A struct for sending punches and other data to the server.
+/// A handler for sending punches and other data to the server.
+///
+/// This struct manages the modem, the MQTT client, and system information.
 pub struct SendPunch<M: ModemHw> {
     bg77: M,
     client: MqttClient<M>,
@@ -55,7 +62,14 @@ pub struct SendPunch<M: ModemHw> {
 }
 
 impl<M: ModemHw> SendPunch<M> {
-    /// Creates a new `SendPunch` struct.
+    /// Creates a new `SendPunch` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `bg77`: An initialized modem instance.
+    /// * `send_punch_mutex`: A mutex to access the `SendPunch` instance.
+    /// * `spawner`: The embassy spawner.
+    /// * `mqtt_config`: The MQTT configuration.
     pub fn new(
         mut bg77: M,
         send_punch_mutex: &'static SendPunchMutexType,
@@ -71,7 +85,18 @@ impl<M: ModemHw> SendPunch<M> {
         }
     }
 
-    /// Sends a message to the given topic.
+    /// Encodes and sends a message to the given MQTT topic.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `N`: The size of the buffer for the encoded message.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic`: The MQTT topic to which the message is sent.
+    /// * `msg`: The message to be sent, which must implement `femtopb::Message`.
+    /// * `qos`: The MQTT Quality of Service level.
+    /// * `msg_id`: The message identifier.
     async fn send_message<const N: usize>(
         &mut self,
         topic: &str,
@@ -85,7 +110,7 @@ impl<M: ModemHw> SendPunch<M> {
         self.client.send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id).await
     }
 
-    /// Sends a MiniCallHome message.
+    /// Sends a `MiniCallHome` message, containing system information.
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
         let mini_call_home =
             self.system_info.mini_call_home(&mut self.bg77).await.ok_or(Error::ModemError)?;
@@ -93,7 +118,9 @@ impl<M: ModemHw> SendPunch<M> {
             .await
     }
 
-    /// Schedules the SI punch to be handled by `BackoffRetries`.
+    /// Schedules a punch to be sent.
+    ///
+    /// This function processes a raw punch, logs it, and schedules it for sending.
     pub async fn schedule_punch(&mut self, punch: crate::Result<RawPunch>) {
         match punch {
             Ok(punch) => {
@@ -117,6 +144,11 @@ impl<M: ModemHw> SendPunch<M> {
     }
 
     /// Sends a punch to the server.
+    ///
+    /// # Arguments
+    ///
+    /// * `punch`: The raw punch to be sent.
+    /// * `msg_id`: The message identifier.
     pub async fn send_punch_impl(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
         let punch = [Punch {
             raw: &punch,
@@ -129,7 +161,9 @@ impl<M: ModemHw> SendPunch<M> {
         self.send_message::<40>("p", punches, MqttQos::Q1, msg_id).await
     }
 
-    /// Basic setup of the modem.
+    /// Performs the basic setup of the modem.
+    ///
+    /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.bg77.turn_on().await;
         self.bg77.configure().await?;
@@ -138,17 +172,21 @@ impl<M: ModemHw> SendPunch<M> {
         Ok(())
     }
 
-    /// Connects to the configured MQTT server.
+    /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.client.mqtt_connect(&mut self.bg77).await
     }
 
-    /// Synchronizes time with the network time of the modem.
+    /// Synchronizes the system time with the network time from the modem.
     async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
         self.system_info.current_time(&mut self.bg77, false).await
     }
 
-    /// Executes a command.
+    /// Executes a `Command`.
+    ///
+    /// # Arguments
+    ///
+    /// * `command`: The command to be executed.
     pub async fn execute_command(&mut self, command: Command) {
         match command {
             Command::MqttConnect(force, _) => {
@@ -184,7 +222,11 @@ impl<M: ModemHw> SendPunch<M> {
     }
 }
 
-/// A task that sends a MiniCallHome every `minicallhome_interval`.
+/// A task that periodically triggers a `MiniCallHome` event.
+///
+/// # Arguments
+///
+/// * `minicallhome_interval`: The interval at which to trigger the `MiniCallHome` event.
 #[embassy_executor::task]
 pub async fn minicallhome_loop(minicallhome_interval: Duration) {
     let mut mch_ticker = Ticker::every(minicallhome_interval);
@@ -198,7 +240,15 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
     }
 }
 
-/// An event handler for `SendPunch`.
+/// The main event handler for the `SendPunch` struct.
+///
+/// This task listens for events from the `MCH_SIGNAL`, `EVENT_CHANNEL`, and `si_uart` and
+/// dispatches them to the `SendPunch` instance.
+///
+/// # Arguments
+///
+/// * `send_punch_mutex`: A mutex to access the `SendPunch` instance.
+/// * `si_uart`: The SI-UART reader.
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
