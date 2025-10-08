@@ -12,13 +12,14 @@ use embassy_nrf::{
     gpio::Output,
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::channel::Channel;
+use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_sync::{mutex::Mutex, signal::Signal};
 use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{Message, repeated};
 use heapless::format;
 use yaroc_common::{
     RawMutex,
+    backoff::PUNCH_QUEUE_SIZE,
     bg77::{
         hw::{Bg77, ModemHw},
         system_info::SystemInfo,
@@ -240,6 +241,22 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
     }
 }
 
+/// A task that reads punches from the SI-UART and sends them to a channel.
+///
+/// This task is designed to run continuously, reading punches from the `si_uart`
+/// and sending them to the `punch_sender` channel. This decouples the reading of
+/// punches from their processing, which is important because the processing might
+/// involve waiting for the modem, which can be a long operation.
+#[embassy_executor::task]
+pub async fn read_si_uart(
+    mut si_uart: SiUart<UarteRxWithIdle<'static>>,
+    punch_sender: Sender<'static, RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE>,
+) {
+    loop {
+        punch_sender.send(si_uart.read().await).await;
+    }
+}
+
 /// The main event handler for the `SendPunch` struct.
 ///
 /// This task listens for events from the `MCH_SIGNAL`, `EVENT_CHANNEL`, and `si_uart` and
@@ -252,7 +269,7 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    mut si_uart: SiUart<UarteRxWithIdle<'static>>,
+    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE>,
 ) {
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
@@ -265,7 +282,12 @@ pub async fn send_punch_event_handler(
     }
 
     loop {
-        let signal = select3(MCH_SIGNAL.wait(), EVENT_CHANNEL.receive(), si_uart.read()).await;
+        let signal = select3(
+            MCH_SIGNAL.wait(),
+            EVENT_CHANNEL.receive(),
+            punch_receiver.receive(),
+        )
+        .await;
         {
             let mut send_punch_unlocked = send_punch_mutex.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();

@@ -5,19 +5,26 @@ use core::str::FromStr;
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_sync::mutex::Mutex;
+use embassy_sync::{channel::Channel, mutex::Mutex};
 use heapless::String;
-use yaroc_common::bg77::hw::ModemConfig;
+use yaroc_common::{
+    RawMutex, backoff::PUNCH_QUEUE_SIZE, bg77::hw::ModemConfig, error::Error, punch::RawPunch,
+};
 use yaroc_nrf52840::{
     self as _,
     device::Device,
     mqtt::MqttConfig,
-    send_punch::{SendPunch, SendPunchMutexType, minicallhome_loop, send_punch_event_handler},
+    send_punch::{
+        SendPunch, SendPunchMutexType, minicallhome_loop, read_si_uart, send_punch_event_handler,
+    },
     system_info::{SoftdeviceTemp, sysinfo_update},
 };
 
 /// A mutex for the `SendPunch` struct.
 static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
+/// A channel for the SI UART.
+static SI_UART_CHANNEL: Channel<RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE> =
+    Channel::new();
 
 /// The main entry point of the application.
 #[embassy_executor::main]
@@ -40,12 +47,16 @@ async fn main(spawner: Spawner) {
     };
 
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
+    spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
 
     let send_punch = SendPunch::new(bg77, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
-    spawner.must_spawn(send_punch_event_handler(&SEND_PUNCH_MUTEX, si_uart));
+    spawner.must_spawn(send_punch_event_handler(
+        &SEND_PUNCH_MUTEX,
+        SI_UART_CHANNEL.receiver(),
+    ));
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.must_spawn(sysinfo_update(temp));
