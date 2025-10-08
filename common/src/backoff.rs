@@ -19,8 +19,7 @@ use heapless::Vec;
 use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 100;
-pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, { PUNCH_QUEUE_SIZE * 2 }> =
-    Channel::new();
+pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, PUNCH_QUEUE_SIZE> = Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
 
 pub enum BackoffCommand {
@@ -196,6 +195,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     /// This should run in a separate task.
     pub async fn r#loop(&mut self) {
         loop {
+            // Important: none of these match arms should be blocking, we need to consume
+            // `CMD_FOR_BACKOFF` as fast as possible.
             match CMD_FOR_BACKOFF.receive().await {
                 BackoffCommand::PublishPunch(punch, punch_id) => {
                     self.handle_publish_request(punch, punch_id)

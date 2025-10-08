@@ -390,7 +390,6 @@ impl<M: ModemHw> MqttClient<M> {
 
     /// Schedules a punch to be sent and returns its Punch ID.
     pub async fn schedule_punch(&mut self, punch: RawPunch) -> u16 {
-        // TODO: what if channel is full?
         let punch_id = self.punch_cnt;
         CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch, punch_id)).await;
         self.punch_cnt += 1;

@@ -45,7 +45,7 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
 /// It is generic over the UART reader, so it can be used with different UART implementations.
 pub struct SiUart<R: RxWithIdle + Send> {
     rx: R,
-    buf: [u8; LEN * 5],
+    buf: [u8; LEN * 12],
     end: usize,
 }
 
@@ -58,7 +58,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     pub fn new(rx: R) -> Self {
         Self {
             rx,
-            buf: [0; LEN * 5],
+            buf: [0; LEN * 12],
             end: 0,
         }
     }
