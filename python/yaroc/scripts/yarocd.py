@@ -22,10 +22,14 @@ class YarocDaemon:
         client_group: ClientGroup,
         display_model: str | None = None,
         mqtt_config: MqttConfig | None = None,
+        meshtastic_serial: bool = False,
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        self.msh_serial = MeshtasticSerial(self.handler.msh_dev_handler())
+        if meshtastic_serial:
+            self.msh_serial = MeshtasticSerial(self.handler.msh_dev_handler())
+        else:
+            self.msh_serial = None
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
@@ -86,7 +90,8 @@ class YarocDaemon:
 
         asyncio.create_task(self.client_group.loop())
         asyncio.create_task(self.handle_messages())
-        asyncio.create_task(self.msh_serial.loop())
+        if self.msh_serial is not None:
+            asyncio.create_task(self.msh_serial.loop())
 
         try:
             await shutdown_event.wait()
@@ -119,7 +124,14 @@ async def main_loop():
     mqtt_config.url = config.get("broker_url", BROKER_URL)
     mqtt_config.port = config.get("broker_port", BROKER_PORT)
     mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
-    yaroc_daemon = YarocDaemon(dns, client_group, config.get("display", None), mqtt_config)
+    meshtastic_serial = meshtastic_conf.get("watch_serial", False)
+    yaroc_daemon = YarocDaemon(
+        dns,
+        client_group,
+        config.get("display", None),
+        mqtt_config,
+        meshtastic_serial=meshtastic_serial,
+    )
     await yaroc_daemon.loop()
 
 
