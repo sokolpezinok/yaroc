@@ -205,10 +205,11 @@ impl<M: ModemHw> MqttClient<M> {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
                 let message = Command::MqttConnect(true, Instant::now());
-                if response.command() == "QMTSTAT"
-                    && CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err()
-                {
-                    error!("Error while sending MQTT disconnect notification, channel full");
+                if response.command() == "QMTSTAT" {
+                    warn!("MQTT disconnected");
+                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
+                        error!("Error while sending MQTT disconnect notification, channel full");
+                    }
                 }
                 if EVENT_CHANNEL.try_send(message).is_err() {
                     error!("Error while sending MQTT connect command, channel full");
@@ -234,7 +235,7 @@ impl<M: ModemHw> MqttClient<M> {
         if values[0] == 0 {
             let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
             if status.msg_id > 0 {
-                // This should cause an update of self.last_successful_send (if published)
+                // TODO: This should cause an update of self.last_successful_send (if published)
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status(status)).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }

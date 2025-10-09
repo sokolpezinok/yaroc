@@ -269,7 +269,9 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     return;
                 }
                 Either::Second(MqttEvent::Connect) => {
-                    // After MQTT connect we
+                    // After MQTT connect we halve the backoff. Note also that this interrupts a
+                    // a backoff timer, meaning that the message will be immediately sent with
+                    // halved backoff.
                     punch_msg.halve_backoff();
                     return;
                 }
@@ -309,10 +311,10 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                         .await;
                     break;
                 }
+                Ok(false) => Self::backoff(&mut punch_msg, &mut mqtt_events).await,
                 Err(_) => {
                     error!("Response from modem timed out for punch ID={}", punch_id);
                 }
-                _ => Self::backoff(&mut punch_msg, &mut mqtt_events).await,
             }
         }
     }
