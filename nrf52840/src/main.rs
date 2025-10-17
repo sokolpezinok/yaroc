@@ -7,9 +7,7 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use heapless::String;
-use yaroc_common::{
-    RawMutex, backoff::PUNCH_QUEUE_SIZE, bg77::hw::ModemConfig, error::Error, punch::RawPunch,
-};
+use yaroc_common::{RawMutex, backoff::BatchedPunches, bg77::hw::ModemConfig, error::Error};
 use yaroc_nrf52840::{
     self as _,
     device::Device,
@@ -23,8 +21,7 @@ use yaroc_nrf52840::{
 /// A mutex for the `SendPunch` struct.
 static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
 /// A channel for the SI UART.
-static SI_UART_CHANNEL: Channel<RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE> =
-    Channel::new();
+static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = Channel::new();
 
 /// The main entry point of the application.
 #[embassy_executor::main]

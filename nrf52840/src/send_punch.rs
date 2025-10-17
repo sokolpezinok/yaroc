@@ -19,13 +19,13 @@ use femtopb::{Message, repeated};
 use heapless::{Vec, format};
 use yaroc_common::{
     RawMutex,
-    backoff::{BatchedPunches, PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE},
+    backoff::{BatchedPunches, PUNCH_BATCH_SIZE},
     bg77::{
         hw::{Bg77, ModemHw},
         system_info::SystemInfo,
     },
     proto::{Punch, Punches},
-    punch::{RawPunch, SiPunch},
+    punch::SiPunch,
     si_uart::SiUart,
 };
 
@@ -119,23 +119,25 @@ impl<M: ModemHw> SendPunch<M> {
             .await
     }
 
-    /// Schedules a punch to be sent.
+    /// Schedules a batch of punches to be sent.
     ///
-    /// This function processes a raw punch, logs it, and schedules it for sending.
-    pub async fn schedule_punch(&mut self, punch: crate::Result<RawPunch>) {
+    /// This function processes a batch of punches, logs them, and schedules them for sending.
+    pub async fn schedule_punch(&mut self, punch: crate::Result<BatchedPunches>) {
         match punch {
-            Ok(punch) => {
-                let id = self.client.schedule_punch([punch].into()).await;
+            Ok(punches) => {
+                let id = self.client.schedule_punch(punches.clone()).await;
                 if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
                     let today = time.date_naive();
-                    let punch = SiPunch::from_raw(punch, today, time.offset());
-                    info!(
-                        "{} punched {} at {}, ID={}",
-                        punch.card,
-                        punch.code,
-                        format!(40; "{}", punch.time).unwrap(),
-                        id,
-                    );
+                    for punch in punches {
+                        let punch = SiPunch::from_raw(punch, today, time.offset());
+                        info!(
+                            "{} punched {} at {}, ID={}",
+                            punch.card,
+                            punch.code,
+                            format!(40; "{}", punch.time).unwrap(),
+                            id,
+                        );
+                    }
                 }
             }
             Err(err) => {
@@ -259,10 +261,11 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
 #[embassy_executor::task]
 pub async fn read_si_uart(
     mut si_uart: SiUart<UarteRxWithIdle<'static>>,
-    punch_sender: Sender<'static, RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE>,
+    punch_sender: Sender<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     loop {
-        punch_sender.send(si_uart.read().await).await;
+        // TODO: batch data from si_uart
+        punch_sender.send(si_uart.read().await.map(|p| [p].into())).await;
     }
 }
 
@@ -274,11 +277,11 @@ pub async fn read_si_uart(
 /// # Arguments
 ///
 /// * `send_punch_mutex`: A mutex to access the `SendPunch` instance.
-/// * `si_uart`: The SI-UART reader.
+/// * `punch_receiver`: The receiver for batched punches.
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
     send_punch_mutex: &'static SendPunchMutexType,
-    punch_receiver: Receiver<'static, RawMutex, Result<RawPunch, Error>, PUNCH_QUEUE_SIZE>,
+    punch_receiver: Receiver<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     {
         let mut send_punch_unlocked = send_punch_mutex.lock().await;
