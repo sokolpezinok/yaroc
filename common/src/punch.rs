@@ -47,6 +47,11 @@ pub struct SiPunch {
     pub mode: u8,
     /// The original 20-byte raw data from which this punch was parsed.
     pub raw: RawPunch,
+    /// The index of this punch in the series of punches. Note that this number is 0 for "Send last
+    /// record" and higher for the other two settings.
+    pub idx: u8,
+    /// The total count of punches on the card.
+    pub cnt: u8,
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
@@ -68,7 +73,7 @@ impl SiPunch {
     ///
     /// # Returns
     ///
-    /// A new `SiPunch` instance.
+    /// A new `SiPunch` instance. It emulates the "Send last record" setting.
     pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
         Self {
             card,
@@ -76,6 +81,8 @@ impl SiPunch {
             time,
             mode,
             raw: Self::punch_to_bytes(card, code, time.naive_local(), mode),
+            idx: 0,
+            cnt: 1,
         }
     }
 
@@ -107,15 +114,22 @@ impl SiPunch {
         if series <= 4 {
             card += series * EARLY_SERIES_COMPLEMENT;
         }
-        let data = &data[6..];
-        let datetime = offset.from_local_datetime(&Self::bytes_to_datetime(data, today)).unwrap();
+        let datetime = offset
+            .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
+            .unwrap();
+
+        let mode = data[10] & 0b1111;
+        let idx = data[11];
+        let cnt = data[12];
 
         Self {
             card,
             code,
             time: datetime,
-            mode: data[4] & 0b1111,
+            mode,
             raw: bytes,
+            idx,
+            cnt,
         }
     }
 
@@ -176,7 +190,7 @@ impl SiPunch {
     /// # Returns
     ///
     /// The `NaiveDate` of the last occurrence of the given day of the week.
-    pub fn last_dow(dow: u8, today: NaiveDate) -> NaiveDate {
+    fn last_dow(dow: u8, today: NaiveDate) -> NaiveDate {
         assert!(dow <= 7);
         let days = (today.weekday().num_days_from_sunday() + 7 - u32::from(dow)) % 7;
         today - Days::new(u64::from(days))
