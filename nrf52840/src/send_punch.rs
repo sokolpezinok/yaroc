@@ -19,7 +19,7 @@ use femtopb::{Message, repeated};
 use heapless::{Vec, format};
 use yaroc_common::{
     RawMutex,
-    backoff::{PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE},
+    backoff::{BatchedPunches, PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE},
     bg77::{
         hw::{Bg77, ModemHw},
         system_info::SystemInfo,
@@ -152,7 +152,7 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `msg_id`: The message identifier.
     pub async fn send_punch_impl(
         &mut self,
-        punches: &Vec<RawPunch, PUNCH_BATCH_SIZE>,
+        punches: &BatchedPunches,
         msg_id: u16,
     ) -> crate::Result<()> {
         let mut punch_protos = Vec::<Punch, PUNCH_BATCH_SIZE>::new();

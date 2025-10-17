@@ -26,6 +26,7 @@ use log::{error, info, warn};
 pub const PUNCH_QUEUE_SIZE: usize = 80;
 /// The number of punches that are sent in a single batch.
 pub const PUNCH_BATCH_SIZE: usize = 8;
+pub type BatchedPunches = Vec<RawPunch, PUNCH_BATCH_SIZE>;
 /// The channel for sending commands to the backoff task.
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, PUNCH_QUEUE_SIZE> = Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
@@ -33,7 +34,7 @@ const BACKOFF_MULTIPLIER: u32 = 2;
 /// A command to be sent to the backoff task.
 pub enum BackoffCommand {
     /// Encapsulates a punch to be sent.
-    PublishPunches(Vec<RawPunch, PUNCH_BATCH_SIZE>, u16),
+    PublishPunches(BatchedPunches, u16),
     /// A confirmation that a punch has been published.
     PunchPublished(u16, u16),
     /// A notification that the MQTT client has disconnected.
@@ -48,7 +49,7 @@ pub enum BackoffCommand {
 /// A message containing a batch of punches that is to be sent, with retry logic.
 pub struct PunchMsg {
     /// The punches to be sent.
-    pub punches: Vec<RawPunch, PUNCH_BATCH_SIZE>,
+    pub punches: BatchedPunches,
     backoff: Duration,
     /// The ID of the punch.
     pub id: u16,
@@ -80,12 +81,7 @@ impl Default for PunchMsg {
 
 impl PunchMsg {
     /// Creates a new `PunchMsg`.
-    pub fn new(
-        punches: Vec<RawPunch, PUNCH_BATCH_SIZE>,
-        id: u16,
-        msg_id: u16,
-        initial_backoff: Duration,
-    ) -> Self {
+    pub fn new(punches: BatchedPunches, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
             punches,
             id,
@@ -191,7 +187,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     }
 
     /// Handles a request to publish a punch.
-    fn handle_publish_request(&mut self, punches: Vec<RawPunch, PUNCH_BATCH_SIZE>, punch_id: u16) {
+    fn handle_publish_request(&mut self, punches: BatchedPunches, punch_id: u16) {
         match self.vacant_idx() {
             // We skip the first element corresponding to ID=0
             Some(msg_id) if msg_id > 0 => {

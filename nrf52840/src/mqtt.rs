@@ -7,7 +7,7 @@ use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::semaphore::{FairSemaphore, Semaphore};
 use embassy_time::{Duration, Instant, Timer, WithTimeout};
-use heapless::{String, Vec, format};
+use heapless::{String, format};
 use yaroc_common::{
     RawMutex,
     at::{
@@ -15,11 +15,10 @@ use yaroc_common::{
         response::CommandResponse,
     },
     backoff::{
-        BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE,
+        BackoffCommand, BackoffRetries, BatchedPunches, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
         PunchMsg, SendPunchFn,
     },
     bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
-    punch::RawPunch,
 };
 
 const MQTT_CLIENT_ID: u8 = 0;
@@ -391,7 +390,7 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Schedules a punch to be sent and returns its Punch ID.
-    pub async fn schedule_punch(&mut self, punches: Vec<RawPunch, PUNCH_BATCH_SIZE>) -> u16 {
+    pub async fn schedule_punch(&mut self, punches: BatchedPunches) -> u16 {
         let punch_id = self.punch_cnt;
         CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches(punches, punch_id)).await;
         self.punch_cnt += 1;
