@@ -16,10 +16,10 @@ use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_sync::{mutex::Mutex, signal::Signal};
 use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{Message, repeated};
-use heapless::format;
+use heapless::{Vec, format};
 use yaroc_common::{
     RawMutex,
-    backoff::PUNCH_QUEUE_SIZE,
+    backoff::{PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE},
     bg77::{
         hw::{Bg77, ModemHw},
         system_info::SystemInfo,
@@ -148,18 +148,27 @@ impl<M: ModemHw> SendPunch<M> {
     ///
     /// # Arguments
     ///
-    /// * `punch`: The raw punch to be sent.
+    /// * `punches`: A vector of raw punches to be sent.
     /// * `msg_id`: The message identifier.
-    pub async fn send_punch_impl(&mut self, punch: RawPunch, msg_id: u16) -> crate::Result<()> {
-        let punch = [Punch {
-            raw: &punch,
-            ..Default::default()
-        }];
-        let punches = Punches {
-            punches: repeated::Repeated::from_slice(&punch),
+    pub async fn send_punch_impl(
+        &mut self,
+        punches: &Vec<RawPunch, PUNCH_BATCH_SIZE>,
+        msg_id: u16,
+    ) -> crate::Result<()> {
+        let mut punch_protos = Vec::<Punch, PUNCH_BATCH_SIZE>::new();
+        for punch in punches {
+            let _ = punch_protos.push(Punch {
+                raw: punch,
+                ..Default::default()
+            });
+        }
+
+        let punches_proto = Punches {
+            punches: repeated::Repeated::from_slice(&punch_protos),
             ..Default::default()
         };
-        self.send_message::<40>("p", punches, MqttQos::Q1, msg_id).await
+        const PROTO_LEN: usize = (20 + 4) * PUNCH_BATCH_SIZE + 2;
+        self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id).await
     }
 
     /// Performs the basic setup of the modem.

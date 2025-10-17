@@ -19,7 +19,7 @@ use heapless::Vec;
 use log::{error, info, warn};
 
 pub const PUNCH_QUEUE_SIZE: usize = 80;
-pub const PUNCH_BATCH_SIZE: usize = 1;
+pub const PUNCH_BATCH_SIZE: usize = 8;
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, PUNCH_QUEUE_SIZE> = Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
 
@@ -32,9 +32,9 @@ pub enum BackoffCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-/// A message containing a punch that is to be sent, with retry logic.
+/// A message containing a batch of punches that is to be sent, with retry logic.
 pub struct PunchMsg {
-    pub punch: Vec<RawPunch, PUNCH_BATCH_SIZE>,
+    pub punches: Vec<RawPunch, PUNCH_BATCH_SIZE>,
     backoff: Duration,
     pub id: u16,
     pub msg_id: u16,
@@ -53,7 +53,7 @@ impl PunchMsg {
 impl Default for PunchMsg {
     fn default() -> Self {
         Self {
-            punch: Vec::from_array([RawPunch::default()]),
+            punches: Vec::from_array([RawPunch::default()]),
             backoff: Duration::from_secs(1),
             id: 0,
             msg_id: 0,
@@ -64,7 +64,7 @@ impl Default for PunchMsg {
 impl PunchMsg {
     pub fn new(punch: RawPunch, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
-            punch: Vec::from_array([punch]),
+            punches: Vec::from_array([punch]),
             id,
             msg_id, // TODO: can't be 0
             backoff: initial_backoff,

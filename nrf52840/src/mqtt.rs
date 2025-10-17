@@ -115,7 +115,7 @@ impl SendPunchFn for Bg77SendPunchFn {
             .with_timeout(self.packet_timeout)
             .await
             .map_err(|_| Error::TimeoutError)?;
-        send_punch.as_mut().unwrap().send_punch_impl(punch.punch[0], punch.msg_id).await
+        send_punch.as_mut().unwrap().send_punch_impl(&punch.punches, punch.msg_id).await
     }
 
     async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
