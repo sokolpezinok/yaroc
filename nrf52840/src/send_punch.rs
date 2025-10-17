@@ -125,7 +125,7 @@ impl<M: ModemHw> SendPunch<M> {
     pub async fn schedule_punch(&mut self, punch: crate::Result<RawPunch>) {
         match punch {
             Ok(punch) => {
-                let id = self.client.schedule_punch(punch).await;
+                let id = self.client.schedule_punch([punch].into()).await;
                 if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
                     let today = time.date_naive();
                     let punch = SiPunch::from_raw(punch, today, time.offset());

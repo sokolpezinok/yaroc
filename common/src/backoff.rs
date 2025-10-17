@@ -33,7 +33,7 @@ const BACKOFF_MULTIPLIER: u32 = 2;
 /// A command to be sent to the backoff task.
 pub enum BackoffCommand {
     /// Encapsulates a punch to be sent.
-    PublishPunch(RawPunch, u16),
+    PublishPunches(Vec<RawPunch, PUNCH_BATCH_SIZE>, u16),
     /// A confirmation that a punch has been published.
     PunchPublished(u16, u16),
     /// A notification that the MQTT client has disconnected.
@@ -80,9 +80,14 @@ impl Default for PunchMsg {
 
 impl PunchMsg {
     /// Creates a new `PunchMsg`.
-    pub fn new(punch: RawPunch, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
+    pub fn new(
+        punches: Vec<RawPunch, PUNCH_BATCH_SIZE>,
+        id: u16,
+        msg_id: u16,
+        initial_backoff: Duration,
+    ) -> Self {
         Self {
-            punches: Vec::from_array([punch]),
+            punches,
             id,
             msg_id, // TODO: can't be 0
             backoff: initial_backoff,
@@ -186,11 +191,11 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     }
 
     /// Handles a request to publish a punch.
-    fn handle_publish_request(&mut self, punch: RawPunch, punch_id: u16) {
+    fn handle_publish_request(&mut self, punches: Vec<RawPunch, PUNCH_BATCH_SIZE>, punch_id: u16) {
         match self.vacant_idx() {
             // We skip the first element corresponding to ID=0
             Some(msg_id) if msg_id > 0 => {
-                let msg = PunchMsg::new(punch, punch_id, msg_id as u16, self.initial_backoff);
+                let msg = PunchMsg::new(punches, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
                 self.send_punch_fn.spawn(msg, self.spawner, self.send_punch_timeout);
@@ -224,8 +229,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
             // Important: none of these match arms should be blocking, we need to consume
             // `CMD_FOR_BACKOFF` as fast as possible.
             match CMD_FOR_BACKOFF.receive().await {
-                BackoffCommand::PublishPunch(punch, punch_id) => {
-                    self.handle_publish_request(punch, punch_id)
+                BackoffCommand::PublishPunches(punches, punch_id) => {
+                    self.handle_publish_request(punches, punch_id)
                 }
 
                 BackoffCommand::Status(status) => self.handle_status(status),

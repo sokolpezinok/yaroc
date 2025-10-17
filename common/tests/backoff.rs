@@ -176,15 +176,15 @@ async fn main(spawner: Spawner) {
     let mut punch0 = RawPunch::default();
     punch0[0] = 3;
     spawner.must_spawn(respond_to_fake(0, MQTT_DISCONNECT.subscriber().unwrap()));
-    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch0, 0)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch0].into(), 0)).await;
     let mut punch1 = RawPunch::default();
     punch1[0] = 2;
     spawner.must_spawn(respond_to_fake(1, MQTT_DISCONNECT.subscriber().unwrap()));
-    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch1, 1)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch1].into(), 1)).await;
     let mut punch2 = RawPunch::default();
     punch2[0] = 1;
     spawner.must_spawn(respond_to_fake(2, MQTT_DISCONNECT.subscriber().unwrap()));
-    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch2, 2)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch2].into(), 2)).await;
 
     let disconnect_publisher = MQTT_DISCONNECT.publisher().unwrap();
     // MQTT disconnect at 100 milliseconds cuts the first try (timeout) to just 100 ms
@@ -219,7 +219,7 @@ async fn main(spawner: Spawner) {
     let mut punch3 = RawPunch::default();
     punch3[0] = 3;
     spawner.must_spawn(respond_to_fake(3, MQTT_DISCONNECT.subscriber().unwrap()));
-    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunch(punch3, 3)).await;
+    CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch3].into(), 3)).await;
 
     Timer::after_millis(300).await;
     // MQTT connect during sending has no effect
