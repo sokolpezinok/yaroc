@@ -70,7 +70,7 @@ impl SendPunchFn for FakeSendPunchFn {
     type SemaphoreReleaser = ();
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
-        let cnt = punch.punch[0];
+        let cnt = punch.punch[0][0];
         let msg_id = punch.msg_id;
         let (time, status) = if self.counter == 0 {
             // First attempt fails
