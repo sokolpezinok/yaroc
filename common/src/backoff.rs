@@ -1,6 +1,6 @@
-//! A module for sending punches with exponential backoff retries.
+//! A module for sending batches of punches with exponential backoff retries.
 //!
-//! This module is designed to be used in a separate task that will handle sending punches
+//! This module is designed to be used in a separate task that will handle sending batches of punches
 //! and retrying them with an exponential backoff strategy.
 use crate::{
     RawMutex,
@@ -33,7 +33,7 @@ const BACKOFF_MULTIPLIER: u32 = 2;
 
 /// A command to be sent to the backoff task.
 pub enum BackoffCommand {
-    /// Encapsulates a punch to be sent.
+    /// Encapsulates a batch of punches to be sent.
     PublishPunches(BatchedPunches, u16),
     /// A confirmation that a punch has been published.
     PunchPublished(u16, u16),

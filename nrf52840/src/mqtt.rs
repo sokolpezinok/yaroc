@@ -389,7 +389,7 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    /// Schedules a punch to be sent and returns its Punch ID.
+    /// Schedules a batch of punches to be sent and returns its Punch ID.
     pub async fn schedule_punch(&mut self, punches: BatchedPunches) -> u16 {
         let punch_id = self.punch_cnt;
         CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches(punches, punch_id)).await;

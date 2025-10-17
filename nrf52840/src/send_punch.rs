@@ -144,7 +144,7 @@ impl<M: ModemHw> SendPunch<M> {
         }
     }
 
-    /// Sends a punch to the server.
+    /// Sends a batch of punches to the server.
     ///
     /// # Arguments
     ///
