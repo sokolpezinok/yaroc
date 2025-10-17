@@ -117,7 +117,7 @@ mod test {
     #[test]
     fn test_correct_punches() {
         let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
-        let punch1 = SiPunch::new(46283, 47, time1, 1);
+        let punch1 = SiPunch::new_send_last_record(46283, 47, time1, 1);
 
         let mut pipe: Pipe<RawMutex, FAKE_CAPACITY> = Pipe::new();
         let (pipe_rx, pipe_tx) = pipe.split();
@@ -125,7 +125,7 @@ mod test {
         block_on(pipe_tx.write(&punch1.raw));
 
         let time2 = DateTime::parse_from_rfc3339("2023-11-23T10:02:43.792968750+01:00").unwrap();
-        let punch2 = SiPunch::new(46289, 94, time2, 1);
+        let punch2 = SiPunch::new_send_last_record(46289, 94, time2, 1);
         block_on(pipe_tx.write(&punch2.raw[1..]));
 
         let mut si_uart = SiUart::new(pipe_rx);
@@ -150,7 +150,7 @@ mod test {
 
         // Then finally we send a punch, but it's split into two parts.
         let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
-        let punch1 = SiPunch::new(46283, 47, time1, 1);
+        let punch1 = SiPunch::new_send_last_record(46283, 47, time1, 1);
         block_on(pipe_tx.write(&punch1.raw[0..2]));
         assert!(block_on(si_uart.read()).is_err());
         block_on(pipe_tx.write(&punch1.raw[2..]));

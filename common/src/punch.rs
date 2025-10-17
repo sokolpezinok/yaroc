@@ -48,9 +48,9 @@ pub struct SiPunch {
     /// The original 20-byte raw data from which this punch was parsed.
     pub raw: RawPunch,
     /// The index of this punch in the series of punches. Note that this number is 0 for "Send last
-    /// record" and higher for the other two settings.
+    /// record" and can be higher for the other two settings.
     pub idx: u8,
-    /// The total count of punches on the card.
+    /// The total count of punches on the card. Always 0 for "Send last record".
     pub cnt: u8,
 }
 
@@ -62,7 +62,10 @@ const HEADER: [u8; 4] = [0xff, 0x02, 0xd3, 0x0d];
 const FOOTER: u8 = 0x03;
 
 impl SiPunch {
-    /// Creates a new `SiPunch` from its components and serializes it into the raw byte format.
+    /// Creates a new `SiPunch` that emulates the "Send last record" setting of a SportIdent
+    /// station.
+    ///
+    /// This is a convenience wrapper around [`SiPunch::new`] with `idx=0` and `cnt=1`.
     ///
     /// # Arguments
     ///
@@ -73,19 +76,67 @@ impl SiPunch {
     ///
     /// # Returns
     ///
-    /// A new `SiPunch` instance. It emulates the "Send last record" setting.
-    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
+    /// A new `SiPunch` instance.
+    pub fn new_send_last_record(
+        card: u32,
+        code: u16,
+        time: DateTime<FixedOffset>,
+        mode: u8,
+    ) -> Self {
+        Self::new(card, code, time, mode, 0, 1)
+    }
+
+    /// Creates a new `SiPunch` from its components and serializes it into the raw byte format.
+    ///
+    /// # Arguments
+    ///
+    /// * `card` - The card number.
+    /// * `code` - The control code.
+    /// * `time` - The timestamp of the punch.
+    /// * `mode` - The punch mode.
+    /// * `idx`  - The punch index.
+    /// * `cnt`  - The total punch count.
+    ///
+    /// # Returns
+    ///
+    /// A new `SiPunch` instance.
+    pub fn new(
+        card: u32,
+        code: u16,
+        time: DateTime<FixedOffset>,
+        mode: u8,
+        idx: u8,
+        cnt: u8,
+    ) -> Self {
         Self {
             card,
             code,
             time,
             mode,
-            raw: Self::punch_to_bytes(card, code, time.naive_local(), mode),
-            idx: 0,
-            cnt: 1,
+            idx,
+            cnt,
+            raw: Self::punch_to_bytes(card, code, time.naive_local(), mode, idx, cnt),
         }
     }
 
+    /// Finds and parses a `SiPunch` from a byte slice.
+    ///
+    /// This is a convenience function that combines [`SiPunch::find_punch_data`] and
+    /// [`SiPunch::from_raw`].
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The byte slice to parse.
+    /// * `today` - The current date, used for timestamp decoding.
+    /// * `offset` - The timezone offset to apply.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple with:
+    ///  - The parsed `SiPunch`.
+    ///  - A slice representing the rest of the stream after the punch.
+    ///
+    /// Returns `None` if no punch is found.
     pub fn from_bytes<'a>(
         bytes: &'a [u8],
         today: NaiveDate,
@@ -95,45 +146,9 @@ impl SiPunch {
         Some((Self::from_raw(raw, today, offset), rest))
     }
 
-    /// Creates a new `SiPunch` by parsing a raw 20-byte punch record.
-    ///
-    /// # Arguments
-    ///
-    /// * `bytes` - The raw 20-byte punch data.
-    /// * `today` - The current date, used to resolve the day of the week from the punch data.
-    /// * `offset` - The timezone offset to apply to the punch time.
-    ///
-    /// # Returns
-    ///
-    /// A new `SiPunch` instance.
-    pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
-        let data = &bytes[4..19];
-        let code = u16::from_be_bytes([data[0] & 1, data[1]]);
-        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
-        let series = card / (1 << 16);
-        if series <= 4 {
-            card += series * EARLY_SERIES_COMPLEMENT;
-        }
-        let datetime = offset
-            .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
-            .unwrap();
-
-        let mode = data[10] & 0b1111;
-        let idx = data[11];
-        let cnt = data[12];
-
-        Self {
-            card,
-            code,
-            time: datetime,
-            mode,
-            raw: bytes,
-            idx,
-            cnt,
-        }
-    }
-
     /// Converts this `SiPunch` to its protobuf representation.
+    ///
+    /// The protobuf representation only contains the raw data of the punch.
     pub fn to_proto(&self) -> Punch<'_> {
         Punch {
             raw: &self.raw,
@@ -155,8 +170,10 @@ impl SiPunch {
     ///
     /// # Returns
     ///
-    /// A `Vec` containing `Result<SiPunch, Error>`. `Ok` contains a successfully parsed punch,
-    /// while `Err` indicates a parsing failure.
+    /// A `Vec` of `Result<SiPunch, Error>`. Successfully parsed punches are wrapped in `Ok`.
+    /// If the payload contains trailing data that cannot be parsed as a full punch, the last
+    /// element of the vector will be `Err(Error::BufferTooSmallError)`. The capacity of the
+    /// vector is limited by the const generic `N`.
     pub fn punches_from_payload<const N: usize>(
         mut payload: &[u8],
         today: NaiveDate,
@@ -174,6 +191,43 @@ impl SiPunch {
             return res;
         }
         res
+    }
+
+    /// Creates a new `SiPunch` by parsing a raw 20-byte punch record.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw 20-byte punch data.
+    /// * `today` - The current date, used to resolve the day of the week from the punch data.
+    /// * `offset` - The timezone offset to apply to the punch time.
+    ///
+    /// # Returns
+    ///
+    /// A new `SiPunch` instance.
+    pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
+        let data = &bytes[HEADER.len()..19];
+        let code = u16::from_be_bytes([data[0] & 1, data[1]]);
+        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
+        let series = card / (1 << 16);
+        if series <= 4 {
+            card += series * EARLY_SERIES_COMPLEMENT;
+        }
+        let datetime = offset
+            .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
+            .unwrap();
+
+        let mode = data[10] & 0b1111;
+        let (idx, cnt) = Self::bytes_to_idx_and_cnt(&bytes);
+
+        Self {
+            card,
+            code,
+            time: datetime,
+            mode,
+            raw: bytes,
+            idx,
+            cnt,
+        }
     }
 
     /// Calculates the date of the most recent given day of the week.
@@ -220,6 +274,12 @@ impl SiPunch {
         let nanos = u32::from(data[3]) * BILLION_BY_256;
         let time = NaiveTime::from_num_seconds_from_midnight_opt(seconds, nanos).unwrap();
         NaiveDateTime::new(date, time)
+    }
+
+    /// Extracts the punch index and total count from the raw punch data.
+    fn bytes_to_idx_and_cnt(bytes: &RawPunch) -> (u8, u8) {
+        let data = &bytes[HEADER.len()..];
+        (data[11], data[12])
     }
 
     /// Implements the SportIdent checksum algorithm.
@@ -285,15 +345,25 @@ impl SiPunch {
     }
 
     /// Serializes a punch's components into a raw 20-byte SportIdent record.
-    fn punch_to_bytes(card: u32, code: u16, time: NaiveDateTime, mode: u8) -> RawPunch {
+    ///
+    /// This internal function constructs the byte representation of a punch, including the
+    /// header, footer, and checksum.
+    fn punch_to_bytes(
+        card: u32,
+        code: u16,
+        time: NaiveDateTime,
+        mode: u8,
+        idx: u8,
+        cnt: u8,
+    ) -> RawPunch {
         let mut res = [0; LEN];
         res[..4].copy_from_slice(&HEADER);
         res[4..6].copy_from_slice(&code.to_be_bytes());
         res[6..10].copy_from_slice(&Self::card_to_bytes(card));
         res[10..14].copy_from_slice(&Self::time_to_bytes(time));
         res[14] = mode;
-        // res[15..17] is set to 0 out of 1, corresponding to the setting "send last punch"
-        res[16] = 1;
+        res[15] = idx;
+        res[16] = cnt;
         let chksum = Self::sportident_checksum(&res[2..17]).to_be_bytes();
         res[17..19].copy_from_slice(&chksum);
         res[19] = FOOTER;
@@ -419,7 +489,7 @@ mod test_punch {
     #[test]
     fn test_punch() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
         assert_eq!(
             &punch,
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
@@ -429,10 +499,10 @@ mod test_punch {
     #[test]
     fn test_punches_from_payload() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
-        let expected_punch1 = SiPunch::new(1715004, 47, time, 2);
-        let expected_punch2 = SiPunch::new(46283, 52, time, 1);
+        let expected_punch1 = SiPunch::new(1715004, 47, time, 2, 1, 3);
+        let expected_punch2 = SiPunch::new_send_last_record(46283, 52, time, 1);
         let payload =
-            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03\xff\x02\xd3\x0d\x00\x34\x00\x00\xb4\xcb\x08\x8c\xa3\xcb\x01\x00\x01\x49\xe2\x03\xff\x02";
+            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x01\x03\xd2\xe6\x03\xff\x02\xd3\x0d\x00\x34\x00\x00\xb4\xcb\x08\x8c\xa3\xcb\x01\x00\x01\x49\xe2\x03\xff\x02";
 
         let punches = SiPunch::punches_from_payload::<3>(payload, time.date_naive(), time.offset());
         assert_eq!(punches.len(), 3);

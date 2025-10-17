@@ -38,7 +38,7 @@ impl From<SiPunchRs> for SiPunch {
 impl SiPunch {
     #[staticmethod]
     pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
-        SiPunchRs::new(card, code, time, mode).into()
+        SiPunchRs::new_send_last_record(card, code, time, mode).into()
     }
 
     #[staticmethod]

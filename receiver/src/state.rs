@@ -505,7 +505,7 @@ mod test_punch {
     #[test]
     fn test_punch() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
-        let punch = SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
         let punches_slice = &[Punch {
             raw: &punch,
             ..Default::default()
@@ -581,7 +581,7 @@ mod test_meshtastic {
     #[test]
     fn test_meshtastic_serial() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = yaroc_common::punch::SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = yaroc_common::punch::SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
         let message = envelope(
             0xdeadbeef,
@@ -660,7 +660,7 @@ mod test_meshtastic {
     #[test]
     fn test_meshtastic_serial_and_status() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = yaroc_common::punch::SiPunch::new(1715004, 47, time, 2).raw;
+        let punch = yaroc_common::punch::SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
         let message = envelope(
             0xdeadbeef,
