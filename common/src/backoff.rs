@@ -1,3 +1,7 @@
+//! A module for sending punches with exponential backoff retries.
+//!
+//! This module is designed to be used in a separate task that will handle sending punches
+//! and retrying them with an exponential backoff strategy.
 use crate::{
     RawMutex,
     at::mqtt::{MqttStatus, StatusCode},
@@ -18,29 +22,42 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 
+/// The size of the queue for punches that are waiting to be sent.
 pub const PUNCH_QUEUE_SIZE: usize = 80;
+/// The number of punches that are sent in a single batch.
 pub const PUNCH_BATCH_SIZE: usize = 8;
+/// The channel for sending commands to the backoff task.
 pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, PUNCH_QUEUE_SIZE> = Channel::new();
 const BACKOFF_MULTIPLIER: u32 = 2;
 
+/// A command to be sent to the backoff task.
 pub enum BackoffCommand {
+    /// Encapsulates a punch to be sent.
     PublishPunch(RawPunch, u16),
+    /// A confirmation that a punch has been published.
     PunchPublished(u16, u16),
+    /// A notification that the MQTT client has disconnected.
     MqttDisconnected,
+    /// A notification that the MQTT client has connected.
     MqttConnected,
+    /// A status update from the MQTT client.
     Status(MqttStatus),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 /// A message containing a batch of punches that is to be sent, with retry logic.
 pub struct PunchMsg {
+    /// The punches to be sent.
     pub punches: Vec<RawPunch, PUNCH_BATCH_SIZE>,
     backoff: Duration,
+    /// The ID of the punch.
     pub id: u16,
+    /// The ID of the message.
     pub msg_id: u16,
 }
 
 impl PunchMsg {
+    /// Returns the time when the next send attempt should be made.
     pub fn next_send(&self) -> Instant {
         Instant::now() + self.backoff
     }
@@ -62,6 +79,7 @@ impl Default for PunchMsg {
 }
 
 impl PunchMsg {
+    /// Creates a new `PunchMsg`.
     pub fn new(punch: RawPunch, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
         Self {
             punches: Vec::from_array([punch]),
@@ -71,6 +89,7 @@ impl PunchMsg {
         }
     }
 
+    /// Updates the backoff duration for the next retry.
     pub fn update_backoff(&mut self) {
         self.backoff *= BACKOFF_MULTIPLIER;
     }
@@ -78,6 +97,7 @@ impl PunchMsg {
 
 /// A trait for sending punches, used by [`BackoffRetries`].
 pub trait SendPunchFn {
+    /// The type of the semaphore releaser.
     type SemaphoreReleaser;
 
     /// Acquires concurrent access for sending a punch.
@@ -130,6 +150,7 @@ pub struct BackoffRetries<S: SendPunchFn> {
 }
 
 impl<S: SendPunchFn + Copy> BackoffRetries<S> {
+    /// Creates a new `BackoffRetries`.
     pub fn new(
         send_punch_fn: S,
         initial_backoff: Duration,
@@ -164,6 +185,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         self.unpublished_msgs[idx as usize] = false;
     }
 
+    /// Handles a request to publish a punch.
     fn handle_publish_request(&mut self, punch: RawPunch, punch_id: u16) {
         match self.vacant_idx() {
             // We skip the first element corresponding to ID=0
@@ -179,14 +201,17 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
+    /// Handles a status update from the MQTT client.
     fn handle_status(&mut self, status: MqttStatus) {
         STATUS_UPDATES.get()[status.msg_id as usize].signal(status.code);
     }
 
+    /// Publishes an MQTT disconnect event.
     fn mqtt_disconnected(&mut self) {
         self.mqtt_events.publish_immediate(MqttEvent::Disconnect)
     }
 
+    /// Publishes an MQTT connect event.
     fn mqtt_connected(&mut self) {
         self.mqtt_events.publish_immediate(MqttEvent::Connect)
     }
