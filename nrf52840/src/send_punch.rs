@@ -264,8 +264,7 @@ pub async fn read_si_uart(
     punch_sender: Sender<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     loop {
-        // TODO: batch data from si_uart
-        punch_sender.send(si_uart.read().await.map(|p| [p].into())).await;
+        punch_sender.send(si_uart.read().await).await;
     }
 }
 

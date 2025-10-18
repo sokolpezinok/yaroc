@@ -7,30 +7,6 @@
 //! The `SiUart` struct reads data from the UART, finds SI punches in the data stream, and
 //! returns them as `BatchedPunches`. It can handle cases where punches are split across
 //! multiple reads and can filter out garbage data.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use embassy_nrf::uarte::{UarteRxWithIdle, Config};
-//! use yaroc_common::si_uart::{SiUart, RxWithIdle};
-//!
-//! // Initialize your UART peripheral here
-//! let mut uarte = ...;
-//! let mut si_uart = SiUart::new(uarte);
-//!
-//! loop {
-//!     match si_uart.read().await {
-//!         Ok(punches) => {
-//!             for punch in punches.iter() {
-//!                 // Process the punch
-//!             }
-//!         }
-//!         Err(e) => {
-//!             // Handle the error
-//!         }
-//!     }
-//! }
-//! ```
 
 #[cfg(feature = "nrf")]
 use embassy_nrf::uarte::UarteRxWithIdle;

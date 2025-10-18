@@ -12,41 +12,7 @@
 //! To use this module, you need to create a `BackoffRetries` instance and run its `r#loop`
 //! method in a separate task. You can then send punches to the backoff task by sending
 //! `BackoffCommand::PublishPunches` commands to the `CMD_FOR_BACKOFF` channel.
-//!
-//! ```no_run
-//! use embassy_executor::Spawner;
-//! use embassy_time::Duration;
-//! use yaroc_common::backoff::{
-//!     BackoffRetries, BackoffCommand, BatchedPunches, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF,
-//! };
-//!
-//! // Define your own `SendPunchFn` implementation
-//! struct MySendPunchFn;
-//! impl SendPunchFn for MySendPunchFn {
-//!     ...
-//! }
-//!
-//! async {
-//!     let spawner = Spawner::for_current_executor().await;
-//!     let mut backoff = BackoffRetries::new(
-//!         MySendPunchFn,
-//!         Duration::from_secs(1),
-//!         Duration::from_secs(10),
-//!         10,
-//!         spawner,
-//!     );
-//!
-//!     spawner.spawn(async move {
-//!         backoff.r#loop().await;
-//!     });
-//!
-//!     // Send a punch
-//!     let punches: BatchedPunches = BatchedPunches::new();
-//!     CMD_FOR_BACKOFF
-//!         .send(BackoffCommand::PublishPunches(punches, 0))
-//!         .await;
-//! };
-//! ```
+
 use crate::{
     RawMutex,
     at::mqtt::{MqttStatus, StatusCode},
