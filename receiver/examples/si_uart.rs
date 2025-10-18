@@ -25,10 +25,12 @@ async fn main() {
     let rx = TokioSerial::new(&args.port).unwrap();
     let mut si_uart = SiUart::new(rx);
     info!("Listening for punches on {}", args.port);
-    while let Ok(punch) = si_uart.read().await {
+    while let Ok(punches) = si_uart.read().await {
         let now = Local::now();
-        let punch = SiPunch::from_raw(punch, now.date_naive(), now.offset());
-        info!("Recieved punch: {punch:?}");
+        for punch in punches {
+            let punch = SiPunch::from_raw(punch, now.date_naive(), now.offset());
+            info!("Recieved punch: {punch:?}");
+        }
     }
     error!("Error while receiving punch, exiting");
 }

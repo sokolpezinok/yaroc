@@ -1,7 +1,52 @@
 //! A module for sending batches of punches with exponential backoff retries.
 //!
-//! This module is designed to be used in a separate task that will handle sending batches of punches
+//! This module provides a `BackoffRetries` struct that manages a queue of punches to be sent.
+//! It is designed to be used in a separate task that will handle sending batches of punches
 //! and retrying them with an exponential backoff strategy.
+//!
+//! The `BackoffRetries` struct uses a `SendPunchFn` trait to abstract the actual sending of the
+//! punch. This allows it to be used with different communication methods, such as MQTT.
+//!
+//! # Usage
+//!
+//! To use this module, you need to create a `BackoffRetries` instance and run its `r#loop`
+//! method in a separate task. You can then send punches to the backoff task by sending
+//! `BackoffCommand::PublishPunches` commands to the `CMD_FOR_BACKOFF` channel.
+//!
+//! ```no_run
+//! use embassy_executor::Spawner;
+//! use embassy_time::Duration;
+//! use yaroc_common::backoff::{
+//!     BackoffRetries, BackoffCommand, BatchedPunches, PunchMsg, SendPunchFn, CMD_FOR_BACKOFF,
+//! };
+//!
+//! // Define your own `SendPunchFn` implementation
+//! struct MySendPunchFn;
+//! impl SendPunchFn for MySendPunchFn {
+//!     ...
+//! }
+//!
+//! async {
+//!     let spawner = Spawner::for_current_executor().await;
+//!     let mut backoff = BackoffRetries::new(
+//!         MySendPunchFn,
+//!         Duration::from_secs(1),
+//!         Duration::from_secs(10),
+//!         10,
+//!         spawner,
+//!     );
+//!
+//!     spawner.spawn(async move {
+//!         backoff.r#loop().await;
+//!     });
+//!
+//!     // Send a punch
+//!     let punches: BatchedPunches = BatchedPunches::new();
+//!     CMD_FOR_BACKOFF
+//!         .send(BackoffCommand::PublishPunches(punches, 0))
+//!         .await;
+//! };
+//! ```
 use crate::{
     RawMutex,
     at::mqtt::{MqttStatus, StatusCode},
@@ -81,11 +126,16 @@ impl Default for PunchMsg {
 
 impl PunchMsg {
     /// Creates a new `PunchMsg`.
+    ///
+    /// # Panics
+    ///
+    /// This function panics in debug builds if `msg_id` is 0.
     pub fn new(punches: BatchedPunches, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
+        debug_assert!(msg_id > 0, "msg_id must be greater than 0");
         Self {
             punches,
             id,
-            msg_id, // TODO: can't be 0
+            msg_id,
             backoff: initial_backoff,
         }
     }
@@ -121,6 +171,7 @@ pub trait SendPunchFn {
     fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
+/// Initializes the `STATUS_UPDATES` vector.
 fn init_status_updates() -> Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE> {
     let mut res = Vec::new();
     for _ in 0..PUNCH_QUEUE_SIZE {
@@ -129,14 +180,26 @@ fn init_status_updates() -> Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE> 
     res
 }
 
+/// A vector of signals for status updates.
+///
+/// Each message in the `unpublished_msgs` vector has a corresponding signal in this vector.
+/// The signal is used to notify the `try_sending_with_retries` function about the status of
+/// the message.
 static STATUS_UPDATES: LazyLock<Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE>> =
     LazyLock::new(init_status_updates);
 
+/// An event related to the MQTT client.
 #[derive(Copy, Clone)]
 enum MqttEvent {
+    /// The MQTT client has connected.
     Connect,
+    /// The MQTT client has disconnected.
     Disconnect,
 }
+
+/// A channel for MQTT events.
+///
+/// This channel is used to broadcast MQTT events to all `try_sending_with_retries` tasks.
 static MQTT_EVENTS: PubSubChannel<RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1> =
     PubSubChannel::new();
 
@@ -174,13 +237,16 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
 
     /// Finds a vacant index in `unpublished_msgs`.
     ///
-    /// A vacant index is one that is set to `false`.
+    /// A vacant index is one that is set to `false`. The indices are searched from the end of the
+    /// vector, so the highest index is returned first.
     fn vacant_idx(&self) -> Option<usize> {
         self.unpublished_msgs.iter().rposition(|val| !val)
     }
 
-    /// Deletes a message from unpublished messages, typically after it has been successfully
-    /// published.
+    /// Marks a message as published.
+    ///
+    /// This function marks the message at the given index as published, so the index can be
+    /// reused for a new message.
     fn delete_msg(&mut self, idx: u16) {
         // The `vacant_idx` function will consider this spot empty.
         self.unpublished_msgs[idx as usize] = false;

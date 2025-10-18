@@ -127,10 +127,12 @@ impl SiUartHandler {
                     }
                     punch = si_uart.read() => {
                         match punch {
-                            Ok(punch) => {
-                                punch_tx
-                                    .send(punch)
-                                    .expect("Channel unexpectedly closed");
+                            Ok(punches) => {
+                                for punch in punches {
+                                    punch_tx
+                                        .send(punch)
+                                        .expect("Channel unexpectedly closed");
+                                }
                             }
                             Err(err) => {
                                 match err {
