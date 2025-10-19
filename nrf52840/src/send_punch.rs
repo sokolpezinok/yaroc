@@ -264,7 +264,14 @@ pub async fn read_si_uart(
     punch_sender: Sender<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     loop {
-        punch_sender.send(si_uart.read().await).await;
+        match si_uart.read_grouped_punches().await {
+            Err(err) => punch_sender.send(Err(err)).await,
+            Ok(grouped_punches) => {
+                for punches in grouped_punches {
+                    punch_sender.send(Ok(punches)).await;
+                }
+            }
+        }
     }
 }
 

@@ -295,7 +295,19 @@ impl SiPunch {
     }
 
     /// Extracts the punch index and total count from the raw punch data.
-    fn bytes_to_idx_and_cnt(bytes: &RawPunch) -> (u8, u8) {
+    ///
+    /// The punch index and total count are used for sequences of punches. For "Send all records"
+    /// and "Send unsent records", the station sends a sequence of punches, each with an index
+    /// and the total count.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw punch data.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing the punch index and the total count.
+    pub(crate) fn bytes_to_idx_and_cnt(bytes: &RawPunch) -> (u8, u8) {
         let data = &bytes[HEADER.len()..];
         (data[11], data[12])
     }

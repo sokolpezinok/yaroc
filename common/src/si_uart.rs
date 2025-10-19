@@ -8,12 +8,19 @@
 //! returns them as `BatchedPunches`. It can handle cases where punches are split across
 //! multiple reads and can filter out garbage data.
 
+#[cfg(feature = "defmt")]
+use defmt::error;
 #[cfg(feature = "nrf")]
 use embassy_nrf::uarte::UarteRxWithIdle;
+use embassy_time::{Duration, Instant};
+use heapless::Vec;
+use heapless::index_map::{Entry, FnvIndexMap};
+#[cfg(not(feature = "defmt"))]
+use log::error;
 
 use crate::backoff::BatchedPunches;
 use crate::error::Error;
-use crate::punch::{LEN, SiPunch};
+use crate::punch::{LEN, RawPunch, SiPunch};
 
 /// A trait for reading from a UART that can detect when the line is idle.
 pub trait RxWithIdle {
@@ -47,8 +54,13 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
     }
 }
 
-const PUNCH_CAPACITY: usize = 12;
+const PUNCH_CAPACITY: usize = 5;
 const BUF_SIZE: usize = LEN * PUNCH_CAPACITY;
+
+struct UnfinishedSequence {
+    punches: BatchedPunches,
+    deadline: Instant,
+}
 
 /// A SportIdent UART reader.
 ///
@@ -62,6 +74,7 @@ pub struct SiUart<R: RxWithIdle + Send> {
     rx: R,
     buf: [u8; BUF_SIZE],
     end: usize,
+    unfinished_sequences: FnvIndexMap<u32, UnfinishedSequence, 8>,
 }
 
 impl<R: RxWithIdle + Send> SiUart<R> {
@@ -75,8 +88,9 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     pub fn new(rx: R) -> Self {
         Self {
             rx,
-            buf: [0; LEN * 12],
+            buf: [0; BUF_SIZE],
             end: 0,
+            unfinished_sequences: Default::default(),
         }
     }
 
@@ -98,7 +112,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     ///
     /// * `Error::UartReadError` - If there is an error reading from the UART.
     /// * `Error::UartClosedError` - If the UART is closed.
-    pub async fn read(&mut self) -> crate::Result<BatchedPunches> {
+    pub async fn read(&mut self) -> crate::Result<Vec<RawPunch, PUNCH_CAPACITY>> {
         let bytes_read = self.rx.read_until_idle(&mut self.buf[self.end..]).await?;
         self.end += bytes_read;
 
@@ -106,7 +120,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
             return Err(Error::UartClosedError);
         }
 
-        let mut punches = BatchedPunches::new();
+        let mut punches = Vec::new();
         let mut payload = &self.buf[..self.end];
         while let Some((punch, rest)) = SiPunch::find_punch_data(payload) {
             if punches.len() < punches.capacity() {
@@ -130,6 +144,91 @@ impl<R: RxWithIdle + Send> SiUart<R> {
         self.buf.copy_within(range, 0);
 
         Ok(punches)
+    }
+
+    /// Reads SI punches from the UART and groups them by card number.
+    ///
+    /// This function reads data from the UART, searches for SI punches, and groups them into
+    /// `BatchedPunches` based on the card number. It is useful when punches from multiple cards
+    /// are interleaved.
+    ///
+    /// The function waits for the UART line to be idle before processing the received data. It can
+    /// handle cases where punches are split across multiple reads and can filter out garbage data.
+    ///
+    /// If a sequence of punches for a card is not complete within a certain timeout, it will be
+    /// returned as is.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `BatchedPunches`, where each `BatchedPunches` contains
+    /// punches from a single card.
+    ///
+    /// # Errors
+    ///
+    /// This function can return the following errors:
+    ///
+    /// * `Error::UartReadError` - If there is an error reading from the UART.
+    /// * `Error::UartClosedError` - If the UART is closed.
+    pub async fn read_grouped_punches(
+        &mut self,
+    ) -> crate::Result<Vec<BatchedPunches, PUNCH_CAPACITY>> {
+        loop {
+            let punches = self.read().await?;
+
+            let grouped_punches: Vec<BatchedPunches, PUNCH_CAPACITY> =
+                punches.into_iter().filter_map(|p| self.group_punches(p)).collect();
+            if !grouped_punches.is_empty() {
+                return Ok(grouped_punches);
+            }
+        }
+    }
+
+    /// Groups a single punch into a sequence of punches for the same card.
+    ///
+    /// This function takes a single `RawPunch` and adds it to a sequence of punches for the
+    /// corresponding card. If the punch is a single punch (not part of a sequence), it is
+    /// returned immediately. Otherwise, it is added to an internal buffer of unfinished
+    /// sequences.
+    ///
+    /// When a sequence is complete (i.e., the last punch of a sequence is received), the complete
+    /// sequence is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `punch` - The raw punch data.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing `BatchedPunches` if a sequence is complete, otherwise `None`.
+    fn group_punches(&mut self, punch: RawPunch) -> Option<BatchedPunches> {
+        let card = SiPunch::bytes_to_card(&punch);
+        let (idx, cnt) = SiPunch::bytes_to_idx_and_cnt(&punch);
+        if idx == 0 && cnt == 1 {
+            return Some([punch].into());
+        }
+
+        match self.unfinished_sequences.entry(card) {
+            Entry::Occupied(mut entry) => {
+                let seq = entry.get_mut();
+                seq.punches.push(punch).unwrap();
+                seq.deadline = Instant::now() + Duration::from_millis(300);
+                if idx + 1 == cnt || seq.punches.is_full() {
+                    Some(entry.remove().punches)
+                } else {
+                    None
+                }
+            }
+            Entry::Vacant(punches) => {
+                let seq = UnfinishedSequence {
+                    punches: [punch].into(),
+                    deadline: Instant::now() + Duration::from_secs(1),
+                };
+                if punches.insert(seq).is_err() {
+                    error!("Error inserting punch from {}, seq {}/{}", card, idx, cnt);
+                }
+                None
+            }
+        }
     }
 }
 
@@ -209,5 +308,57 @@ mod test {
         assert!(block_on(si_uart.read()).is_err());
         // The buffer should be cleaned by `LEN`
         assert_eq!(si_uart.end, super::BUF_SIZE - LEN);
+    }
+
+    #[test]
+    fn test_read_grouped_punches_single() {
+        let mut pipe: Pipe<RawMutex, FAKE_CAPACITY> = Pipe::new();
+        let (pipe_rx, pipe_tx) = pipe.split();
+        let mut si_uart = SiUart::new(pipe_rx);
+
+        let time1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch1 = SiPunch::new_send_last_record(46283, 47, time1, 1);
+        block_on(pipe_tx.write(&punch1.raw));
+
+        let punches1 = block_on(si_uart.read_grouped_punches()).unwrap();
+        assert_eq!(punches1.len(), 1);
+        assert_eq!(punches1[0].as_slice(), &[punch1.raw]);
+
+        let time2 = DateTime::parse_from_rfc3339("2023-11-23T10:02:43.792968750+01:00").unwrap();
+        let punch2 = SiPunch::new_send_last_record(46289, 94, time2, 1);
+        block_on(pipe_tx.write(&punch2.raw));
+
+        let punches2 = block_on(si_uart.read_grouped_punches()).unwrap();
+        assert_eq!(punches2.len(), 1);
+        assert_eq!(punches2[0].as_slice(), &[punch2.raw]);
+    }
+
+    #[test]
+    fn test_read_grouped_punches_interleaved() {
+        let mut pipe: Pipe<RawMutex, FAKE_CAPACITY> = Pipe::new();
+        let (pipe_rx, pipe_tx) = pipe.split();
+        let mut si_uart = SiUart::new(pipe_rx);
+
+        let card_a = 12345;
+        let time_a1 = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch_a1 = SiPunch::new(card_a, 31, time_a1, 0, 0, 2);
+        let time_a2 = DateTime::parse_from_rfc3339("2023-11-23T10:00:04.792968750+01:00").unwrap();
+        let punch_a2 = SiPunch::new(card_a, 32, time_a2, 0, 1, 2);
+
+        let card_b = 54321;
+        let time_b1 = DateTime::parse_from_rfc3339("2023-11-23T10:01:00.792968750+01:00").unwrap();
+        let punch_b1 = SiPunch::new_send_last_record(card_b, 47, time_b1, 1);
+
+        block_on(pipe_tx.write(&punch_a1.raw));
+        block_on(pipe_tx.write(&punch_b1.raw));
+
+        let punches1 = block_on(si_uart.read_grouped_punches()).unwrap();
+        assert_eq!(punches1.len(), 1);
+        assert_eq!(punches1[0].as_slice(), &[punch_b1.raw]);
+
+        block_on(pipe_tx.write(&punch_a2.raw));
+        let punches2 = block_on(si_uart.read_grouped_punches()).unwrap();
+        assert_eq!(punches2.len(), 1);
+        assert_eq!(punches2[0].as_slice(), &[punch_a1.raw, punch_a2.raw]);
     }
 }
