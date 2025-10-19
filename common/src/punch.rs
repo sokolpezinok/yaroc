@@ -338,6 +338,7 @@ impl SiPunch {
     /// This handles the encoding scheme for early card series (1-4) which have a
     /// different mapping.
     fn card_to_bytes(mut card: u32) -> [u8; 4] {
+        //TODO: cards with more then 3 bytes are not used and supported.
         let series = card / 100_000;
         if series <= 4 {
             card -= series * EARLY_SERIES_COMPLEMENT;
@@ -491,8 +492,8 @@ mod test_punch {
         let bytes = SiPunch::card_to_bytes(416534);
         assert_eq!(bytes, [0, 0x04, 0x40, 0x96]);
 
-        let bytes = SiPunch::card_to_bytes(81110151);
-        assert_eq!(bytes, [4, 0xd5, 0xa4, 0x87]);
+        let bytes = SiPunch::card_to_bytes(8110151);
+        assert_eq!(bytes, [0, 0x7b, 0xc0, 0x47]);
     }
 
     #[test]
