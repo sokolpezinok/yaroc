@@ -207,11 +207,7 @@ impl SiPunch {
     pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
         let data = &bytes[HEADER.len()..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
-        let mut card = u32::from_be_bytes(data[2..6].try_into().unwrap()) & 0xffffff;
-        let series = card / (1 << 16);
-        if series <= 4 {
-            card += series * EARLY_SERIES_COMPLEMENT;
-        }
+        let card = Self::bytes_to_card(data);
         let datetime = offset
             .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
             .unwrap();
@@ -228,6 +224,28 @@ impl SiPunch {
             idx,
             cnt,
         }
+    }
+
+    /// Parses a 15-byte SportIdent data slice to extract the card number.
+    ///
+    /// The data slice should not include the header or footer of the punch. This function
+    /// handles the card number encoding, including the special encoding for early series
+    /// cards (1-4).
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A 15-byte slice of the punch data.
+    ///
+    /// # Returns
+    ///
+    /// The decoded card number.
+    pub(crate) fn bytes_to_card(data: &[u8]) -> u32 {
+        let mut card = u32::from_be_bytes([data[2], data[3], data[4], data[5]]) & 0xffffff;
+        let series = card / (1 << 16);
+        if series <= 4 {
+            card += series * EARLY_SERIES_COMPLEMENT;
+        }
+        card
     }
 
     /// Calculates the date of the most recent given day of the week.
@@ -455,6 +473,15 @@ mod test_punch {
     use chrono::prelude::*;
 
     use crate::{error::Error, punch::SiPunch};
+
+    #[test]
+    fn test_bytes_to_card() {
+        let raw_punch =
+            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
+        let data = &raw_punch[4..19];
+        let card = SiPunch::bytes_to_card(data);
+        assert_eq!(card, 1715004);
+    }
 
     #[test]
     fn test_card_series() {
