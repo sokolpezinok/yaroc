@@ -34,7 +34,7 @@ use heapless::Vec;
 use log::{error, info, warn};
 
 /// The size of the queue for punches that are waiting to be sent.
-pub const PUNCH_QUEUE_SIZE: usize = 80;
+pub const PUNCH_QUEUE_SIZE: usize = 70;
 /// The number of punches that are sent in a single batch.
 pub const PUNCH_BATCH_SIZE: usize = 8;
 pub type BatchedPunches = Vec<RawPunch, PUNCH_BATCH_SIZE>;
