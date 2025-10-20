@@ -158,9 +158,9 @@ impl SiPunch {
 
     /// Parses a byte slice containing one or more punch records.
     ///
-    /// This function searches for punch data in the payload, decodes it, and returns a vector
-    /// of `SiPunch` instances. It can handle cases where the payload contains partial or
-    /// multiple punch records.
+    /// This function searches for punch data in the payload, decodes it, and returns a vector of
+    /// `SiPunch` instances. It can handle cases where the payload contains partial or multiple
+    /// punch records.
     ///
     /// # Arguments
     ///
@@ -170,10 +170,10 @@ impl SiPunch {
     ///
     /// # Returns
     ///
-    /// A `Vec` of `Result<SiPunch, Error>`. Successfully parsed punches are wrapped in `Ok`.
-    /// If the payload contains trailing data that cannot be parsed as a full punch, the last
-    /// element of the vector will be `Err(Error::BufferTooSmallError)`. The capacity of the
-    /// vector is limited by the const generic `N`.
+    /// A `Vec` of `Result<SiPunch, Error>`. Successfully parsed punches are wrapped in `Ok`. If
+    /// the payload contains trailing data that cannot be parsed as a full punch, the last element
+    /// of the vector will be `Err(Error::BufferTooSmallError)`. The capacity of the vector is
+    /// limited by the const generic `N`.
     pub fn punches_from_payload<const N: usize>(
         mut payload: &[u8],
         today: NaiveDate,
@@ -197,49 +197,49 @@ impl SiPunch {
     ///
     /// # Arguments
     ///
-    /// * `bytes` - The raw 20-byte punch data.
+    /// * `punch` - The raw 20-byte punch data.
     /// * `today` - The current date, used to resolve the day of the week from the punch data.
     /// * `offset` - The timezone offset to apply to the punch time.
     ///
     /// # Returns
     ///
     /// A new `SiPunch` instance.
-    pub fn from_raw(bytes: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
-        let data = &bytes[HEADER.len()..19];
+    pub fn from_raw(punch: RawPunch, today: NaiveDate, offset: &FixedOffset) -> Self {
+        let data = &punch[HEADER.len()..19];
         let code = u16::from_be_bytes([data[0] & 1, data[1]]);
-        let card = Self::bytes_to_card(data);
+        let card = Self::bytes_to_card(&punch);
         let datetime = offset
             .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
             .unwrap();
 
         let mode = data[10] & 0b1111;
-        let (idx, cnt) = Self::bytes_to_idx_and_cnt(&bytes);
+        let (idx, cnt) = Self::bytes_to_idx_and_cnt(&punch);
 
         Self {
             card,
             code,
             time: datetime,
             mode,
-            raw: bytes,
+            raw: punch,
             idx,
             cnt,
         }
     }
 
-    /// Parses a 15-byte SportIdent data slice to extract the card number.
+    /// Parses a raw 20-byte SportIdent punch to extract the card number.
     ///
-    /// The data slice should not include the header or footer of the punch. This function
-    /// handles the card number encoding, including the special encoding for early series
-    /// cards (1-4).
+    /// This function handles the card number encoding, including the special encoding for early
+    /// series cards (1-4).
     ///
     /// # Arguments
     ///
-    /// * `data` - A 15-byte slice of the punch data.
+    /// * `punch` - A raw 20-byte punch.
     ///
     /// # Returns
     ///
     /// The decoded card number.
-    pub(crate) fn bytes_to_card(data: &[u8]) -> u32 {
+    pub(crate) fn bytes_to_card(punch: &RawPunch) -> u32 {
+        let data = &punch[HEADER.len()..];
         let mut card = u32::from_be_bytes([data[2], data[3], data[4], data[5]]) & 0xffffff;
         let series = card / (1 << 16);
         if series <= 4 {
@@ -250,9 +250,9 @@ impl SiPunch {
 
     /// Calculates the date of the most recent given day of the week.
     ///
-    /// SportIdent punches encode the day of the week, not the full date. This function
-    /// determines the full date by finding the most recent occurrence of that day of the week
-    /// relative to `today`.
+    /// SportIdent punches encode the day of the week, not the full date. This function determines
+    /// the full date by finding the most recent occurrence of that day of the week relative to
+    /// `today`.
     ///
     /// # Arguments
     ///
@@ -479,8 +479,7 @@ mod test_punch {
     fn test_bytes_to_card() {
         let raw_punch =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
-        let data = &raw_punch[4..19];
-        let card = SiPunch::bytes_to_card(data);
+        let card = SiPunch::bytes_to_card(&raw_punch);
         assert_eq!(card, 1715004);
     }
 
