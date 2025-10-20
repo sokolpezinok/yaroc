@@ -12,7 +12,7 @@
 use defmt::error;
 #[cfg(feature = "nrf")]
 use embassy_nrf::uarte::UarteRxWithIdle;
-use embassy_time::{Duration, Instant};
+use embassy_time::{Duration, Instant, WithTimeout};
 use heapless::Vec;
 use heapless::index_map::{Entry, FnvIndexMap};
 #[cfg(not(feature = "defmt"))]
@@ -173,7 +173,17 @@ impl<R: RxWithIdle + Send> SiUart<R> {
         &mut self,
     ) -> crate::Result<Vec<BatchedPunches, PUNCH_CAPACITY>> {
         loop {
-            let punches = self.read().await?;
+            let punches = match self.next_deadline() {
+                Some((deadline, card)) => match self.read().with_deadline(deadline).await {
+                    Ok(punches) => punches?,
+                    Err(_) => match self.unfinished_sequences.entry(card) {
+                        // Card `card` timed out waiting for the last record, return what we have.
+                        Entry::Occupied(seq) => return Ok([seq.remove().punches].into()),
+                        Entry::Vacant(_) => continue,
+                    },
+                },
+                None => self.read().await?,
+            };
 
             let grouped_punches: Vec<BatchedPunches, PUNCH_CAPACITY> =
                 punches.into_iter().filter_map(|p| self.group_punches(p)).collect();
@@ -221,7 +231,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
             Entry::Vacant(punches) => {
                 let seq = UnfinishedSequence {
                     punches: [punch].into(),
-                    deadline: Instant::now() + Duration::from_secs(1),
+                    deadline: Instant::now() + Duration::from_millis(300),
                 };
                 if punches.insert(seq).is_err() {
                     error!("Error inserting punch from {}, seq {}/{}", card, idx, cnt);
@@ -229,6 +239,20 @@ impl<R: RxWithIdle + Send> SiUart<R> {
                 None
             }
         }
+    }
+
+    /// Returns the deadline of the next unfinished sequence to expire.
+    ///
+    /// This function is used to determine the timeout for the `read_grouped_punches` function.
+    /// It returns the deadline of the sequence that will expire first, along with the corresponding
+    /// card number.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple of the deadline and the card number, or `None` if there are
+    /// no unfinished sequences.
+    pub fn next_deadline(&self) -> Option<(Instant, u32)> {
+        self.unfinished_sequences.iter().map(|(card, seq)| (seq.deadline, *card)).min()
     }
 }
 
