@@ -34,10 +34,10 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: -r --out dist --find-interpreter --strip
-          sccache: 'false'  # TODO: sccache is broken on 2_28
+          sccache: true
           working-directory: "python"
           before-script-linux: yum install -y dbus-devel pkgconfig && yum -y clean all
-          manylinux: 2_28
+          manylinux: 2_34
       - name: Test the wheel
         if: matrix.target == 'x86_64'
         run: |
