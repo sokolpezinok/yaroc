@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import Any, Sequence
 
 import serial
 from serial_asyncio import open_serial_connection
@@ -44,8 +44,9 @@ FINAL_RESPONSE = (
 class SerialClient(Client):
     """Serial client emulating an SRR dongle."""
 
-    def __init__(self, out_port: str):
+    def __init__(self, out_port: str, mini_reader_port: str | None = None):
         self.out_port = out_port
+        self.mini_reader_port = mini_reader_port
         self.writer_out = None
 
     async def loop(self):
@@ -63,24 +64,31 @@ class SerialClient(Client):
 
         while True:
             data = await reader_out.readuntil(b"\x03")
-            if data == b"\xff\x02\x02\xf0\x01Mm\n\x03":
-                logging.info("Responding to orienteering software - MeOS")
-                self.writer_out.write(FIRST_RESPONSE)
-                data = await reader_out.readuntil(b"\x03")
-                if data == b"\x02\x83\x02\x00\x80\xbf\x17\x03":
-                    self.writer_out.write(FINAL_RESPONSE)
-                else:
-                    logging.error("Communication with MeOS failed")
-            elif data == b"\xff\x02\xf0\x01Mm\n\x03":
-                logging.info("Responding to orienteering software - SportIdent Reader")
-                self.writer_out.write(FIRST_RESPONSE)
-                data = await reader_out.readuntil(b"\x03")
-                if data == b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03":
-                    self.writer_out.write(FINAL_RESPONSE)
-                else:
-                    logging.error("Communication with SportIdent Reader failed")
+            self.respond_as_blue_srr(data, reader_out)
+
+    async def respond_as_blue_srr(self, first_query: bytes, reader_out: Any):
+        if self.writer_out is None:
+            logging.warn("Serial port {self.out_port} not connected")
+            return
+
+        if first_query == b"\xff\x02\x02\xf0\x01Mm\n\x03":
+            logging.info("Responding to orienteering software - MeOS")
+            self.writer_out.write(FIRST_RESPONSE)
+            data = await reader_out.readuntil(b"\x03")
+            if data == b"\x02\x83\x02\x00\x80\xbf\x17\x03":
+                self.writer_out.write(FINAL_RESPONSE)
             else:
-                logging.error("Contacted by unknown orienteering software")
+                logging.error("Communication with MeOS failed")
+        elif first_query == b"\xff\x02\xf0\x01Mm\n\x03":
+            logging.info("Responding to orienteering software - SportIdent Reader")
+            self.writer_out.write(FIRST_RESPONSE)
+            data = await reader_out.readuntil(b"\x03")
+            if data == b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03":
+                self.writer_out.write(FINAL_RESPONSE)
+            else:
+                logging.error("Communication with SportIdent Reader failed")
+        else:
+            logging.error("Contacted by unknown orienteering software")
 
     async def send_punch(self, punch_log: SiPunchLog) -> bool:
         if self.writer_out is None:
