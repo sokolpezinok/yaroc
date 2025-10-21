@@ -47,12 +47,12 @@ class SerialClient(Client):
     def __init__(self, out_port: str, mini_reader_port: str | None = None):
         self.out_port = out_port
         self.mini_reader_port = mini_reader_port
-        self.writer_out = None
+        self.computer_tx = None
 
     async def loop(self):
         try:
             async with asyncio.timeout(10):
-                reader_out, self.writer_out = await open_serial_connection(
+                computer_rx, self.computer_tx = await open_serial_connection(
                     url=self.out_port,
                     baudrate=38400,
                     timeout=5,
@@ -63,39 +63,68 @@ class SerialClient(Client):
             return
 
         while True:
-            data = await reader_out.readuntil(b"\x03")
-            self.respond_as_blue_srr(data, reader_out)
+            if self.mini_reader_port is None:
+                first_query = await computer_rx.readuntil(b"\x03")
+                await self.respond_as_blue_srr(first_query, computer_rx)
+            else:
+                for i in range(60):
+                    try:
+                        async with asyncio.timeout(60):
+                            usb_reader_rx, usb_reader_tx = await open_serial_connection(
+                                url=self.mini_reader_port, baudrate=38400, timeout=5
+                            )
+                        logging.info(f"Connected to mini reader at {self.mini_reader_port}")
+                        break
+                    except Exception as err:
+                        logging.error(f"Timed out connecting to {self.mini_reader_port}: {err}")
+
+                _t1 = asyncio.create_task(self.respond_as_reader(usb_reader_rx))
+
+                while True:
+                    query = await computer_rx.readuntil(b"\x03")
+                    usb_reader_tx.write(query)
+
+                _t1.cancel()
+
+    async def respond_as_reader(self, usb_reader_rx: Any):
+        if self.computer_tx is None:
+            logging.warn("Serial port {self.out_port} not connected")
+            return
+
+        while True:
+            response = await usb_reader_rx.readuntil(b"\x03")
+            self.computer_tx.write(response)
 
     async def respond_as_blue_srr(self, first_query: bytes, reader_out: Any):
-        if self.writer_out is None:
+        if self.computer_tx is None:
             logging.warn("Serial port {self.out_port} not connected")
             return
 
         if first_query == b"\xff\x02\x02\xf0\x01Mm\n\x03":
             logging.info("Responding to orienteering software - MeOS")
-            self.writer_out.write(FIRST_RESPONSE)
+            self.computer_tx.write(FIRST_RESPONSE)
             data = await reader_out.readuntil(b"\x03")
             if data == b"\x02\x83\x02\x00\x80\xbf\x17\x03":
-                self.writer_out.write(FINAL_RESPONSE)
+                self.computer_tx.write(FINAL_RESPONSE)
             else:
                 logging.error("Communication with MeOS failed")
         elif first_query == b"\xff\x02\xf0\x01Mm\n\x03":
             logging.info("Responding to orienteering software - SportIdent Reader")
-            self.writer_out.write(FIRST_RESPONSE)
+            self.computer_tx.write(FIRST_RESPONSE)
             data = await reader_out.readuntil(b"\x03")
             if data == b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03":
-                self.writer_out.write(FINAL_RESPONSE)
+                self.computer_tx.write(FINAL_RESPONSE)
             else:
                 logging.error("Communication with SportIdent Reader failed")
         else:
             logging.error("Contacted by unknown orienteering software")
 
     async def send_punch(self, punch_log: SiPunchLog) -> bool:
-        if self.writer_out is None:
+        if self.computer_tx is None:
             logging.error("Serial client not connected")
             return False
         try:
-            self.writer_out.write(bytes(punch_log.punch.raw))
+            self.computer_tx.write(bytes(punch_log.punch.raw))
             logging.info("Punch sent via serial port")
             return True
         except serial.serialutil.SerialException as err:
