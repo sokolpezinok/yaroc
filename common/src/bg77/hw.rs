@@ -45,19 +45,64 @@ pub enum RAT {
     LtemNbIot, // Both
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct LteBands {
+    /// LTE-M bands bitmask. Bit `n` corresponds to band `n+1`.
+    pub ltem: u128,
+    /// NB-IoT bands bitmask. Bit `n` corresponds to band `n+1`.
+    pub nbiot: u128,
+}
+
+impl LteBands {
+    /// Sets the LTE-M bands from a slice of band numbers.
+    ///
+    /// This will overwrite any previously set LTE-M bands.
+    /// Bands should be given as numbers, e.g., 20 for B20.
+    /// Invalid band numbers (0 or > 128) are ignored.
+    pub fn set_ltem_bands(&mut self, bands: &[u32]) {
+        self.ltem = 0;
+        for &band in bands {
+            if band > 0 && band <= 128 {
+                self.ltem |= 1_u128 << (band - 1);
+            }
+        }
+    }
+
+    /// Sets the NB-IoT bands from a slice of band numbers.
+    ///
+    /// This will overwrite any previously set NB-IoT bands.
+    /// Bands should be given as numbers, e.g., 20 for B20.
+    /// Invalid band numbers (0 or > 128) are ignored.
+    pub fn set_nbiot_bands(&mut self, bands: &[u32]) {
+        self.nbiot = 0;
+        for &band in bands {
+            if band > 0 && band <= 128 {
+                self.nbiot |= 1_u128 << (band - 1);
+            }
+        }
+    }
+}
+
 pub struct ModemConfig {
     /// Access point name (APN)
     pub apn: String<30>,
     /// Radio access technology (RAT)
     pub rat: RAT,
+    /// LTE bands
+    pub bands: LteBands,
 }
 
 impl Default for ModemConfig {
     /// Creates a default modem configuration.
     fn default() -> Self {
+        let mut bands = LteBands::default();
+        // Default bands are B20 for both LTE-M and NB-IoT
+        bands.set_ltem_bands(&[20]);
+        bands.set_nbiot_bands(&[20]);
         Self {
             apn: String::from_str("internet.iot").unwrap(),
             rat: RAT::LtemNbIot,
+            bands,
         }
     }
 }
@@ -195,8 +240,8 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         self.simple_call_at(&cmd, None).await?;
         let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
         self.simple_call_at(&cmd, None).await?;
-        //TODO: allow band configuration
-        self.simple_call_at("+QCFG=\"band\",0,80000,80000", None).await?;
+        let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
+        self.simple_call_at(&cmd, None).await?;
         Ok(())
     }
 }
