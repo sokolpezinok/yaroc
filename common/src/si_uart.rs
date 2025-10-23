@@ -9,14 +9,14 @@
 //! multiple reads and can filter out garbage data.
 
 #[cfg(feature = "defmt")]
-use defmt::error;
+use defmt::{debug, error};
 #[cfg(feature = "nrf")]
 use embassy_nrf::uarte::UarteRxWithIdle;
 use embassy_time::{Duration, Instant, WithTimeout};
 use heapless::Vec;
 use heapless::index_map::{Entry, FnvIndexMap};
 #[cfg(not(feature = "defmt"))]
-use log::error;
+use log::{debug, error};
 
 use crate::backoff::BatchedPunches;
 use crate::error::Error;
@@ -115,6 +115,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     pub async fn read(&mut self) -> crate::Result<Vec<RawPunch, PUNCH_CAPACITY>> {
         let bytes_read = self.rx.read_until_idle(&mut self.buf[self.end..]).await?;
         self.end += bytes_read;
+        debug!("Read {} bytes from UART", bytes_read);
 
         if bytes_read == 0 {
             return Err(Error::UartClosedError);
