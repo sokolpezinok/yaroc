@@ -18,7 +18,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use femtopb::{Message, repeated};
 use heapless::{Vec, format};
 use yaroc_common::{
-    RawMutex,
+    PUNCH_EXTRA_LEN, RawMutex,
     backoff::{BatchedPunches, PUNCH_BATCH_SIZE},
     bg77::{
         hw::{Bg77, ModemHw},
@@ -169,7 +169,7 @@ impl<M: ModemHw> SendPunch<M> {
             punches: repeated::Repeated::from_slice(&punch_protos),
             ..Default::default()
         };
-        const PROTO_LEN: usize = (20 + 4) * PUNCH_BATCH_SIZE + 2;
+        const PROTO_LEN: usize = (20 + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;
         self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id).await
     }
 
