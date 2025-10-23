@@ -212,17 +212,30 @@ impl SiPunch {
             .from_local_datetime(&Self::bytes_to_datetime(&data[6..10], today))
             .unwrap();
 
+        let is_d3_modified = data[0] & 0b1000_0000 > 0;
         let mode = data[10] & 0b1111;
-        let (idx, cnt) = Self::bytes_to_idx_and_cnt(&punch);
+        if is_d3_modified {
+            let (idx, cnt) = Self::bytes_to_idx_and_cnt(&punch);
 
-        Self {
-            card,
-            code,
-            time: datetime,
-            mode,
-            raw: punch,
-            idx,
-            cnt,
+            Self {
+                card,
+                code,
+                time: datetime,
+                mode,
+                idx,
+                cnt,
+                raw: punch,
+            }
+        } else {
+            Self {
+                card,
+                code,
+                time: datetime,
+                mode, // TODO: this is probably just random data now
+                idx: 0,
+                cnt: 1,
+                raw: punch,
+            }
         }
     }
 
@@ -379,6 +392,8 @@ impl SiPunch {
     ///
     /// This internal function constructs the byte representation of a punch, including the
     /// header, footer, and checksum.
+    ///
+    /// Uses the "0xD3 modified" format, i.e. the new SIAC format.
     fn punch_to_bytes(
         card: u32,
         code: u16,
@@ -390,6 +405,7 @@ impl SiPunch {
         let mut res = [0; LEN];
         res[..4].copy_from_slice(&HEADER);
         res[4..6].copy_from_slice(&code.to_be_bytes());
+        res[4] ^= 0b1000_0000; // 0xD3 modified
         res[6..10].copy_from_slice(&Self::card_to_bytes(card));
         res[10..14].copy_from_slice(&Self::time_to_bytes(time));
         res[14] = mode;
@@ -474,10 +490,15 @@ mod test_checksum {
 
     #[test]
     fn test_checksum_from_logged() {
-        // Logged raw data on October 5, 2025
+        // Logged raw data from BSF8-SRR on October 5, 2025
         let expected =
             b"\xff\x02\xd3\x0d\x00\x01\x00\x7b\xc0\xc1\x00\x9f\xa9\x20\x00\x03\x88\xf8\x93\x03";
         assert_eq!(SiPunch::sportident_checksum(&expected[2..17]), 0xf893);
+
+        // Logged raw data from SIAC (send last record) on October 23, 2025
+        let expected =
+            b"\xff\x02\xd3\x0d\x80\x2e\x0f\x7b\xc0\xd4\x09\x90\x01\xd5\x72\x00\x01\xa8\x15\x03";
+        assert_eq!(SiPunch::sportident_checksum(&expected[2..17]), 0xa815);
     }
 }
 
@@ -526,12 +547,12 @@ mod test_punch {
     }
 
     #[test]
-    fn test_punch() {
+    fn test_new_send_last_record() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
         assert_eq!(
             &punch,
-            b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03"
+            b"\xff\x02\xd3\x0d\x80\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\xef\x20\x03"
         );
     }
 
@@ -541,7 +562,7 @@ mod test_punch {
         let expected_punch1 = SiPunch::new(1715004, 47, time, 2, 1, 3);
         let expected_punch2 = SiPunch::new_send_last_record(46283, 52, time, 1);
         let payload =
-            b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x01\x03\xd2\xe6\x03\xff\x02\xd3\x0d\x00\x34\x00\x00\xb4\xcb\x08\x8c\xa3\xcb\x01\x00\x01\x49\xe2\x03\xff\x02";
+            b"\x03\xff\x02\xd3\x0d\x80\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x01\x03\x6d\x25\x03\xff\x02\xd3\x0d\x80\x34\x00\x00\xb4\xcb\x08\x8c\xa3\xcb\x01\x00\x01\xf6\x21\x03\xff\x02";
 
         let punches = SiPunch::punches_from_payload::<3>(payload, time.date_naive(), time.offset());
         assert_eq!(punches.len(), 3);
