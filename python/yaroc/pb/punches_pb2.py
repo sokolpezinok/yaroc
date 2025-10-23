@@ -14,15 +14,13 @@ _sym_db = _symbol_database.Default()
 from . import timestamp_pb2 as timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rpunches.proto\x12\x05yaroc\x1a\x0ftimestamp.proto\"\x14\n\x05Punch\x12\x0b\n\x03raw\x18\x01 \x01(\x0c\"U\n\x07Punches\x12\x1d\n\x07punches\x18\x01 \x03(\x0b\x32\x0c.yaroc.Punch\x12+\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x10.yaroc.Timestampb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rpunches.proto\x12\x05yaroc\x1a\x0ftimestamp.proto\"G\n\x07Punches\x12\x0f\n\x07punches\x18\x01 \x03(\x0c\x12+\n\x11sending_timestamp\x18\x02 \x01(\x0b\x32\x10.yaroc.Timestampb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'punches_pb2', globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
-  _PUNCH._serialized_start=41
-  _PUNCH._serialized_end=61
-  _PUNCHES._serialized_start=63
-  _PUNCHES._serialized_end=148
+  _PUNCHES._serialized_start=41
+  _PUNCHES._serialized_end=112
 # @@protoc_insertion_point(module_scope)

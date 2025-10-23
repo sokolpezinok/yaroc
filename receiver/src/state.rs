@@ -289,7 +289,7 @@ impl FleetState {
         let status = self.cellular_node_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
-            let si_punch_log = SiPunchLog::from_bytes(punch.raw, host_info.clone(), now);
+            let si_punch_log = SiPunchLog::from_bytes(punch, host_info.clone(), now);
             if let Some((si_punch_log, rest)) = si_punch_log {
                 status.punch(&si_punch_log.punch);
                 result.push(si_punch_log);
@@ -297,7 +297,7 @@ impl FleetState {
                     warn!("Residual bytes after parsing punch: {rest:?}");
                 }
             } else {
-                error!("Wrong punch format: {:?}", punch.raw);
+                error!("Wrong punch format: {:?}", punch);
             }
         }
 
@@ -476,7 +476,7 @@ mod test_punch {
     use super::*;
 
     use yaroc_common::proto::status::Msg;
-    use yaroc_common::proto::{MiniCallHome, Punch, Timestamp};
+    use yaroc_common::proto::{MiniCallHome, Timestamp};
     use yaroc_common::punch::SiPunch;
 
     use chrono::Local;
@@ -484,10 +484,7 @@ mod test_punch {
 
     #[test]
     fn test_wrong_punch() {
-        let punches_slice = &[Punch {
-            raw: b"\x12\x43",
-            ..Default::default()
-        }];
+        let punches_slice: &[&[u8]] = &[b"\x12\x43\xa7"];
         let punches = Punches {
             punches: Repeated::from_slice(punches_slice),
             ..Default::default()
@@ -506,10 +503,7 @@ mod test_punch {
     fn test_punch() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
         let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
-        let punches_slice = &[Punch {
-            raw: &punch,
-            ..Default::default()
-        }];
+        let punches_slice: &[&[u8]] = &[&punch];
         let punches = Punches {
             punches: Repeated::from_slice(punches_slice),
             ..Default::default()

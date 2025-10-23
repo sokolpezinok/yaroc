@@ -28,7 +28,7 @@ use yaroc_common::{
         mqtt::{MqttClient, MqttConfig, MqttQos},
         system_info::SystemInfo,
     },
-    proto::{Punch, Punches},
+    proto::Punches,
     punch::SiPunch,
     send_punch::SendPunchCommand,
     si_uart::SiUart,
@@ -244,16 +244,13 @@ impl<M: ModemHw> SendPunch<M> {
         punches: &BatchedPunches,
         msg_id: u16,
     ) -> crate::Result<()> {
-        let mut punch_protos = Vec::<Punch, PUNCH_BATCH_SIZE>::new();
+        let mut punch_messages = Vec::<&[u8], PUNCH_BATCH_SIZE>::new();
         for punch in punches {
-            let _ = punch_protos.push(Punch {
-                raw: punch,
-                ..Default::default()
-            });
+            let _ = punch_messages.push(punch);
         }
 
         let punches_proto = Punches {
-            punches: repeated::Repeated::from_slice(&punch_protos),
+            punches: repeated::Repeated::from_slice(&punch_messages),
             ..Default::default()
         };
         const PROTO_LEN: usize = (20 + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;

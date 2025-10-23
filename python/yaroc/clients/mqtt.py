@@ -11,9 +11,8 @@ from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttCodeError, MqttError
 from aiomqtt.client import Will
 
-from ..pb.punches_pb2 import Punch, Punches
+from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import CellNetworkType, Disconnected, Status
-from ..pb.utils import create_punch_proto
 from ..rs import SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
@@ -89,7 +88,7 @@ class MqttClient(Client):
     ) -> bool:
         punches = Punches()
         try:
-            punches.punches.append(create_punch_proto(punch_log.punch))
+            punches.punches.append(punch_log.punch.raw)
         except Exception as err:
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.millis_epoch = current_timestamp_millis()
@@ -191,7 +190,7 @@ class SIM7020MqttClient(Client):
             await self._sim7020.setup()
         await sleep(10000000.0)
 
-    async def _send_punches(self, punches: list[Punch]) -> list[bool]:
+    async def _send_punches(self, punches: list[bytes]) -> list[bool]:
         punches_proto = Punches()
         for punch in punches:
             punches_proto.punches.append(punch)
@@ -210,7 +209,7 @@ class SIM7020MqttClient(Client):
         self,
         punch_log: SiPunchLog,
     ) -> bool:
-        res = await self._retries.send(create_punch_proto(punch_log.punch))
+        res = await self._retries.send(punch_log.punch.raw)
         return res if res is not None else False
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:

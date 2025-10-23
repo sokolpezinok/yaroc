@@ -1,7 +1,7 @@
 use chrono::{Days, prelude::*};
 use heapless::Vec;
 
-use crate::{error::Error, proto::Punch};
+use crate::error::Error;
 
 /// The length of a raw punch record in bytes.
 pub const LEN: usize = 20;
@@ -144,16 +144,6 @@ impl SiPunch {
     ) -> Option<(Self, &'a [u8])> {
         let (raw, rest) = Self::find_punch_data(bytes)?;
         Some((Self::from_raw(raw, today, offset), rest))
-    }
-
-    /// Converts this `SiPunch` to its protobuf representation.
-    ///
-    /// The protobuf representation only contains the raw data of the punch.
-    pub fn to_proto(&self) -> Punch<'_> {
-        Punch {
-            raw: &self.raw,
-            unknown_fields: femtopb::UnknownFields::empty(),
-        }
     }
 
     /// Parses a byte slice containing one or more punch records.

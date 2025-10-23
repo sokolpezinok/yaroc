@@ -20,13 +20,13 @@ pub type RawMutex = embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 #[cfg(not(all(target_abi = "eabihf", target_os = "none")))]
 pub type RawMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-pub const PUNCH_EXTRA_LEN: usize = 4;
+pub const PUNCH_EXTRA_LEN: usize = 2;
 
 #[cfg(test)]
 mod test_proto {
     use crate::{
         PUNCH_EXTRA_LEN,
-        proto::{MiniCallHome, Punch, Punches},
+        proto::{MiniCallHome, Punches},
     };
     use femtopb::{Message, Repeated};
 
@@ -43,15 +43,9 @@ mod test_proto {
 
     #[test]
     fn punch_encoding_length() {
-        let punch1 = Punch {
-            raw: b"\x01\x23\x45",
-            ..Default::default()
-        };
-        let punch2 = Punch {
-            raw: b"\xab\xcd\xef",
-            ..Default::default()
-        };
-        let punch_slice = &[punch1, punch2];
+        let punch1 = b"\x01\x23\x45";
+        let punch2 = b"\xab\xcd\xef";
+        let punch_slice: &[&[u8]] = &[punch1, punch2];
 
         let punches = Punches {
             punches: Repeated::from_slice(punch_slice),
