@@ -7,7 +7,7 @@ use crate::at::{
 use crate::error::Error;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use heapless::{String, format};
+use heapless::{String, Vec, format};
 
 /// Minimum timeout for BG77 AT-command responses.
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -107,19 +107,12 @@ impl Default for ModemConfig {
     }
 }
 
-/// Struct for accessing Quectel BG77 modem
-pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
-    uart1: AtUart<T, R>,
-    modem_pin: P,
-    config: ModemConfig,
-}
-
 pub trait ModemHw {
     /// Configures the modem according to a modem config.
     fn configure(&mut self) -> impl core::future::Future<Output = Result<(), Error>>;
 
-    /// Spawn a task for the modem and process incoming URCs using the provided handler.
-    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner);
+    /// Spawn a task for the modem and process incoming URCs using the provided handlers.
+    fn spawn(&mut self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>);
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
@@ -158,6 +151,13 @@ pub trait ModemHw {
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
 }
+///
+/// Struct for accessing Quectel BG77 modem
+pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
+    uart1: AtUart<T, R>,
+    modem_pin: P,
+    config: ModemConfig,
+}
 
 impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
     /// Creates a new `Bg77` modem instance.
@@ -172,8 +172,8 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
 }
 
 impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
-    fn spawn(&mut self, urc_handler: UrcHandlerType, spawner: Spawner) {
-        self.uart1.spawn_rx(urc_handler, spawner);
+    fn spawn(&mut self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
+        self.uart1.spawn_rx(urc_handlers, spawner);
     }
 
     async fn simple_call_at(

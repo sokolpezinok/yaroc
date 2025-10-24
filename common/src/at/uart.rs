@@ -21,7 +21,7 @@ use crate::{RawMutex, error::Error};
 /// A channel for receiving AT-command replies from the modem.
 pub type MainRxChannelType = Channel<RawMutex, Result<FromModem, Error>, 5>;
 /// A handler for Unsolicited Result Codes (URCs).
-pub type UrcHandlerType = fn(&CommandResponse) -> bool;
+pub type UrcHandlerType = fn(&'_ CommandResponse) -> bool;
 /// The main channel for receiving AT-command replies from the modem.
 pub static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
 
@@ -29,7 +29,7 @@ pub static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
 /// or channel dedicated to URCs.
 pub struct AtRxBroker {
     main_channel: &'static MainRxChannelType,
-    urc_handler: UrcHandlerType,
+    urc_handlers: Vec<UrcHandlerType, 3>,
 }
 
 impl AtRxBroker {
@@ -37,12 +37,24 @@ impl AtRxBroker {
     ///
     /// # Arguments
     /// * `main_channel` - The channel for routing non-URC replies.
-    /// * `urc_handler` - A function for handling URCs.
-    pub fn new(main_channel: &'static MainRxChannelType, urc_handler: UrcHandlerType) -> Self {
+    /// * `urc_handlers` - A list of functions for handling URCs.
+    pub fn new(
+        main_channel: &'static MainRxChannelType,
+        urc_handlers: Vec<UrcHandlerType, 3>,
+    ) -> Self {
         Self {
             main_channel,
-            urc_handler,
+            urc_handlers,
         }
+    }
+
+    fn urc_handler(&self, response: &CommandResponse) -> bool {
+        for handler in &self.urc_handlers {
+            if handler(response) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Parses lines out of a given text and forwards each line to the appropriate channel.
@@ -65,7 +77,7 @@ impl AtRxBroker {
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref()
-                && (self.urc_handler)(command_response)
+                && self.urc_handler(command_response)
             {
                 #[cfg(feature = "defmt")]
                 debug!("Got URC {}", line);
@@ -121,8 +133,8 @@ pub trait RxWithIdle {
     ///
     /// # Arguments
     /// * `spawner` - The task spawner.
-    /// * `urc_handler` - A function for handling URCs.
-    fn spawn(self, spawner: Spawner, urc_handler: UrcHandlerType);
+    /// * `urc_handlers` - A list of functions for handling URCs.
+    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>);
 
     /// Reads from the UART until the line is idle.
     ///
@@ -178,8 +190,8 @@ async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: Spawner, urc_handler: UrcHandlerType) {
-        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
+    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
+        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);
         spawner.must_spawn(reader(self, at_broker));
     }
 
@@ -233,12 +245,12 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     /// Spawns a task that reads from the UART and brokers the replies.
     ///
     /// # Arguments
-    /// * `urc_handler` - A function for handling URCs.
+    /// * `urc_handlers` - A list of functions for handling URCs.
     /// * `spawner` - The task spawner.
-    pub fn spawn_rx(&mut self, urc_handler: UrcHandlerType, spawner: Spawner) {
+    pub fn spawn_rx(&mut self, urc_handlers: Vec<UrcHandlerType, 3>, spawner: Spawner) {
         // Consume self.rx, then set self.rx = None
         let rx = self.rx.take();
-        rx.unwrap().spawn(spawner, urc_handler);
+        rx.unwrap().spawn(spawner, urc_handlers);
     }
 
     /// Reads a reply from the modem.
@@ -386,14 +398,15 @@ mod test_at {
     fn test_at_broker() -> crate::Result<()> {
         static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
-        let handler = |response: &CommandResponse| match response.command() {
+        let handler: UrcHandlerType = |response: &CommandResponse| match response.command() {
             "URC" => {
                 URC_CHANNEL.try_send(response.clone()).unwrap();
                 true
             }
             _ => false,
         };
-        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handler);
+        let handlers = [handler].into();
+        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handlers);
 
         block_on(broker.parse_lines("OK\n+URC: 1,\"string\"\nERROR"));
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);

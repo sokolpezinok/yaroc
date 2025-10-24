@@ -1,5 +1,4 @@
 use chrono::{DateTime, FixedOffset};
-use yaroc_common::at::response::CommandResponse;
 use yaroc_common::at::uart::{FakeRxWithIdle, TxChannelType};
 use yaroc_common::bg77::hw::{Bg77, FakePin, ModemHw};
 use yaroc_common::bg77::system_info::SystemInfo;
@@ -35,8 +34,7 @@ async fn main(spawner: Spawner) {
     );
 
     let mut bg77 = Bg77::new(&TX_CHANNEL, rx, FakePin {}, Default::default());
-    let handler = |_: &CommandResponse| false;
-    bg77.spawn(handler, spawner);
+    bg77.spawn(spawner, [].into());
     TEMPERATURE.sender().send(27.0);
     BATTERY.sender().send(BatteryInfo {
         mv: 3967,

@@ -201,7 +201,7 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Handles URCs from the modem.
-    pub fn urc_handler(response: &CommandResponse) -> bool {
+    pub fn urc_handler(response: &'_ CommandResponse) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
                 let message = Command::MqttConnect(true, Instant::now());

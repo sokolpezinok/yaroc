@@ -1,6 +1,7 @@
 use crate::error::Error;
 use embassy_executor::Spawner;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
+use heapless::Vec;
 
 use super::uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, Tx, UrcHandlerType};
 
@@ -17,8 +18,8 @@ async fn reader(rx: UarteRxWithIdle<'static>, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for UarteRxWithIdle<'static> {
-    fn spawn(self, spawner: Spawner, urc_handler: UrcHandlerType) {
-        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handler);
+    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
+        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);
         spawner.must_spawn(reader(self, at_broker));
     }
 
