@@ -21,7 +21,6 @@ use yaroc_common::{
     bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
 };
 
-const MQTT_CLIENT_ID: u8 = 0;
 // Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
 const PUNCHES_INFLIGHT: usize = 5;
 
@@ -131,6 +130,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 /// An MQTT client for the BG77 modem.
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
+    client_id: u8,
     last_successful_send: Instant,
     cgatt_cnt: u8,
     punch_cnt: u16,
@@ -142,6 +142,7 @@ impl<M: ModemHw> MqttClient<M> {
     pub fn new(
         send_punch_mutex: &'static SendPunchMutexType,
         config: MqttConfig,
+        client_id: u8,
         spawner: Spawner,
     ) -> Self {
         let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
@@ -157,6 +158,7 @@ impl<M: ModemHw> MqttClient<M> {
 
         Self {
             config,
+            client_id,
             last_successful_send: Instant::now(),
             cgatt_cnt: 0,
             punch_cnt: 0,
@@ -201,7 +203,7 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Handles URCs from the modem.
-    pub fn urc_handler(response: &'_ CommandResponse) -> bool {
+    pub fn urc_handler(response: &'_ CommandResponse, client_id: u8) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
                 let message = Command::MqttConnect(true, Instant::now());
@@ -217,13 +219,13 @@ impl<M: ModemHw> MqttClient<M> {
                 true
             }
             "CEREG" => response.values().len() == 4,
-            "QMTPUB" => Self::qmtpub_handler(response),
+            "QMTPUB" => Self::qmtpub_handler(response, client_id),
             _ => false,
         }
     }
 
     /// Handles the `+QMTPUB` URC.
-    fn qmtpub_handler(response: &CommandResponse) -> bool {
+    fn qmtpub_handler(response: &CommandResponse, client_id: u8) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {
@@ -231,8 +233,7 @@ impl<M: ModemHw> MqttClient<M> {
             }
         };
 
-        // TODO: get client ID
-        if values[0] == 0 {
+        if values[0] == client_id {
             let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
             if status.msg_id > 0 {
                 // TODO: This should cause an update of self.last_successful_send (if published)
@@ -254,7 +255,9 @@ impl<M: ModemHw> MqttClient<M> {
             .simple_call_at("+QMTOPEN?", None)
             .await?
             .parse2::<u8, String<40>>([0, 1], Some(cid));
-        if let Ok((MQTT_CLIENT_ID, url)) = opened {
+        if let Ok((client_id, url)) = opened
+            && client_id == cid
+        {
             if *url == self.config.url {
                 info!("TCP connection already opened to {}", url);
                 return Ok(());
@@ -293,7 +296,7 @@ impl<M: ModemHw> MqttClient<M> {
         self.network_registration(bg77)
             .await
             .inspect_err(|err| error!("Network registration failed: {}", err))?;
-        let cid = MQTT_CLIENT_ID;
+        let cid = self.client_id;
         self.mqtt_open(bg77, cid).await?;
 
         let (_, status) = bg77
@@ -364,7 +367,7 @@ impl<M: ModemHw> MqttClient<M> {
     ) -> Result<(), Error> {
         let cmd = format!(100;
             "+QMTPUB={},{},{},0,\"yar/{}/{}\",{}",
-            MQTT_CLIENT_ID,
+            self.client_id,
             msg_id,
             qos as u8,
             &self.config.mac_address,

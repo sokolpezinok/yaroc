@@ -78,9 +78,9 @@ impl<M: ModemHw> SendPunch<M> {
         spawner: Spawner,
         mqtt_config: MqttConfig,
     ) -> Self {
-        let client = MqttClient::new(send_punch_mutex, mqtt_config, spawner);
+        let client = MqttClient::new(send_punch_mutex, mqtt_config, 0, spawner);
         let mut handlers: Vec<UrcHandlerType, 3> = Vec::new();
-        let _ = handlers.push(MqttClient::<M>::urc_handler);
+        let _ = handlers.push(|response| MqttClient::<M>::urc_handler(response, 0));
         bg77.spawn(spawner, handlers);
         Self {
             bg77,
