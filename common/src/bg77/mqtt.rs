@@ -1,13 +1,14 @@
-use crate::{
-    error::Error,
-    send_punch::{Command, EVENT_CHANNEL},
-};
 use core::{marker::PhantomData, str::FromStr};
+#[cfg(feature = "defmt")]
 use defmt::{debug, error, info, warn};
+use embassy_sync::channel::Sender;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
-use yaroc_common::{
+#[cfg(not(feature = "defmt"))]
+use log::{error, info, warn};
+
+use crate::{
     RawMutex,
     at::{
         mqtt::{MqttStatus, StatusCode},
@@ -15,6 +16,8 @@ use yaroc_common::{
     },
     backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
     bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
+    error::Error,
+    send_punch::SendPunchCommand,
 };
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
@@ -107,11 +110,12 @@ impl<M: ModemHw> MqttClient<M> {
         bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         // CGATT=1 needs additional time and reading from modem
         Timer::after_secs(1).await;
-        let response = bg77.read().await;
-        if let Ok(response) = response {
-            if !response.lines().is_empty() {
-                debug!("Read {=[?]} after CGATT=1", response.lines());
-            }
+        let _response = bg77.read().await;
+        #[cfg(feature = "defmt")]
+        if let Ok(response) = _response
+            && !response.lines().is_empty()
+        {
+            debug!("Read {=[?]} after CGATT=1", response.lines());
         }
         // TODO: should we do something with the result?
         let (_, _) =
@@ -124,6 +128,7 @@ impl<M: ModemHw> MqttClient<M> {
     pub fn urc_handler(
         response: &'_ CommandResponse,
         client_id: u8,
+        command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
         mqtt_msg_published: &'static Signal<RawMutex, Instant>,
     ) -> bool {
         match response.command() {
@@ -134,8 +139,8 @@ impl<M: ModemHw> MqttClient<M> {
                         error!("Error while sending MQTT disconnect notification, channel full");
                     }
                 }
-                let message = Command::MqttConnect(true, Instant::now());
-                if EVENT_CHANNEL.try_send(message).is_err() {
+                let message = SendPunchCommand::MqttConnect(true, Instant::now());
+                if command_sender.try_send(message).is_err() {
                     error!("Error while sending MQTT connect command, channel full");
                 }
                 true

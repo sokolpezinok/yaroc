@@ -5,7 +5,6 @@
 pub mod ble;
 pub mod device;
 pub mod flash;
-pub mod mqtt;
 pub mod send_punch;
 pub mod system_info;
 

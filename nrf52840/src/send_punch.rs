@@ -1,10 +1,7 @@
 //! This module handles sending punches and other data to the server.
 //! It uses a BG77 modem and MQTT to communicate with the server.
 
-use crate::{
-    error::Error,
-    mqtt::{MqttClient, MqttConfig, MqttQos},
-};
+use crate::error::Error;
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either3, select3};
@@ -28,10 +25,12 @@ use yaroc_common::{
     },
     bg77::{
         hw::{ACTIVATION_TIMEOUT, Bg77, ModemHw},
+        mqtt::{MqttClient, MqttConfig, MqttQos},
         system_info::SystemInfo,
     },
     proto::{Punch, Punches},
     punch::SiPunch,
+    send_punch::SendPunchCommand,
     si_uart::SiUart,
 };
 
@@ -41,22 +40,11 @@ pub type SendPunchType =
 /// A type alias for a mutex-guarded `Option<SendPunchType>`.
 pub type SendPunchMutexType = Mutex<RawMutex, Option<SendPunchType>>;
 
+/// A channel for sending `Command`s to the `send_punch_event_handler`.
+pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
+
 /// A signal used to trigger a MiniCallHome event.
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
-
-/// Commands to be sent to the `send_punch_event_handler`.
-pub enum Command {
-    /// Instructs the modem to synchronize its time with the network.
-    SynchronizeTime,
-    /// Instructs the modem to connect to the MQTT broker.
-    ///
-    /// The `bool` parameter indicates whether to force a reconnection.
-    MqttConnect(bool, Instant),
-    /// Instructs the modem to update the battery status.
-    BatteryUpdate,
-}
-/// A channel for sending `Command`s to the `send_punch_event_handler`.
-pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
 // Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
 const PUNCHES_INFLIGHT: usize = 5;
@@ -173,8 +161,9 @@ impl<M: ModemHw> SendPunch<M> {
 
         let client = MqttClient::new(mqtt_config, 0, &MQTT_MSG_PUBLISHED);
         let mut handlers: Vec<UrcHandlerType, 3> = Vec::new();
-        let _ = handlers
-            .push(|response| MqttClient::<M>::urc_handler(response, 0, &MQTT_MSG_PUBLISHED));
+        let _ = handlers.push(|response| {
+            MqttClient::<M>::urc_handler(response, 0, COMMAND_CHANNEL.sender(), &MQTT_MSG_PUBLISHED)
+        });
         bg77.spawn(spawner, handlers);
         Self {
             bg77,
@@ -292,14 +281,14 @@ impl<M: ModemHw> SendPunch<M> {
         self.system_info.current_time(&mut self.bg77, false).await
     }
 
-    /// Executes a `Command`.
+    /// Executes a `SendPunchCommand`.
     ///
     /// # Arguments
     ///
     /// * `command`: The command to be executed.
-    pub async fn execute_command(&mut self, command: Command) {
+    pub async fn execute_command(&mut self, command: SendPunchCommand) {
         match command {
-            Command::MqttConnect(force, _) => {
+            SendPunchCommand::MqttConnect(force, _) => {
                 if !force
                     && self
                         .last_reconnect
@@ -312,7 +301,7 @@ impl<M: ModemHw> SendPunch<M> {
                 self.last_reconnect = Some(Instant::now());
                 let _ = res.inspect_err(|err| error!("Error connecting to MQTT: {}", err));
             }
-            Command::SynchronizeTime => {
+            SendPunchCommand::SynchronizeTime => {
                 let time = self.synchronize_time().await;
                 match time {
                     None => warn!("Cannot get modem time"),
@@ -321,7 +310,7 @@ impl<M: ModemHw> SendPunch<M> {
                     }
                 }
             }
-            Command::BatteryUpdate => {
+            SendPunchCommand::BatteryUpdate => {
                 let _ = self
                     .system_info
                     .update_battery_state(&mut self.bg77)
@@ -400,7 +389,7 @@ pub async fn send_punch_event_handler(
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),
-            EVENT_CHANNEL.receive(),
+            COMMAND_CHANNEL.receive(),
             punch_receiver.receive(),
         )
         .await;
@@ -411,7 +400,9 @@ pub async fn send_punch_event_handler(
                 Either3::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => {
-                        EVENT_CHANNEL.send(Command::MqttConnect(false, Instant::now())).await;
+                        COMMAND_CHANNEL
+                            .send(SendPunchCommand::MqttConnect(false, Instant::now()))
+                            .await;
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },

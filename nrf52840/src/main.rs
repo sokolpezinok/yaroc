@@ -7,11 +7,15 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_sync::{channel::Channel, mutex::Mutex};
 use heapless::String;
-use yaroc_common::{RawMutex, backoff::BatchedPunches, bg77::hw::ModemConfig, error::Error};
+use yaroc_common::{
+    RawMutex,
+    backoff::BatchedPunches,
+    bg77::{hw::ModemConfig, mqtt::MqttConfig},
+    error::Error,
+};
 use yaroc_nrf52840::{
     self as _,
     device::Device,
-    mqtt::MqttConfig,
     send_punch::{
         SendPunch, SendPunchMutexType, minicallhome_loop, read_si_uart, send_punch_event_handler,
     },
