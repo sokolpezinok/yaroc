@@ -4,9 +4,11 @@ use crate::{
 };
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{debug, error, info, warn};
+use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 use yaroc_common::{
+    RawMutex,
     at::{
         mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
@@ -56,24 +58,34 @@ pub struct MqttClient<M: ModemHw> {
     last_successful_send: Instant,
     cgatt_cnt: u8,
     punch_cnt: u16,
+    mqtt_msg_published: &'static Signal<RawMutex, Instant>,
     _phantom: PhantomData<M>,
 }
 
 impl<M: ModemHw> MqttClient<M> {
     /// Creates a new `MqttClient`.
-    pub fn new(config: MqttConfig, client_id: u8) -> Self {
+    pub fn new(
+        config: MqttConfig,
+        client_id: u8,
+        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
+    ) -> Self {
         Self {
             config,
             client_id,
             last_successful_send: Instant::now(),
             cgatt_cnt: 0,
             punch_cnt: 0,
+            mqtt_msg_published,
             _phantom: PhantomData,
         }
     }
 
     /// Registers to the network.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
+        if let Some(publish_time) = self.mqtt_msg_published.try_take() {
+            self.last_successful_send = self.last_successful_send.max(publish_time);
+        }
+
         if self.last_successful_send + self.config.packet_timeout * (4 + 2 * self.cgatt_cnt).into()
             < Instant::now()
         {
@@ -109,29 +121,37 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Handles URCs from the modem.
-    pub fn urc_handler(response: &'_ CommandResponse, client_id: u8) -> bool {
+    pub fn urc_handler(
+        response: &'_ CommandResponse,
+        client_id: u8,
+        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
+    ) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
-                let message = Command::MqttConnect(true, Instant::now());
                 if response.command() == "QMTSTAT" {
                     warn!("MQTT disconnected");
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                         error!("Error while sending MQTT disconnect notification, channel full");
                     }
                 }
+                let message = Command::MqttConnect(true, Instant::now());
                 if EVENT_CHANNEL.try_send(message).is_err() {
                     error!("Error while sending MQTT connect command, channel full");
                 }
                 true
             }
             "CEREG" => response.values().len() == 4,
-            "QMTPUB" => Self::qmtpub_handler(response, client_id),
+            "QMTPUB" => Self::qmtpub_handler(response, client_id, mqtt_msg_published),
             _ => false,
         }
     }
 
     /// Handles the `+QMTPUB` URC.
-    fn qmtpub_handler(response: &CommandResponse, client_id: u8) -> bool {
+    fn qmtpub_handler(
+        response: &CommandResponse,
+        client_id: u8,
+        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
+    ) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {
@@ -141,8 +161,10 @@ impl<M: ModemHw> MqttClient<M> {
 
         if values[0] == client_id {
             let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
+            if status.code == StatusCode::Published {
+                mqtt_msg_published.signal(Instant::now());
+            }
             if status.msg_id > 0 {
-                // TODO: This should cause an update of self.last_successful_send (if published)
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status(status)).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }
