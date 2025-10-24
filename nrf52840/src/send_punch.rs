@@ -12,17 +12,22 @@ use embassy_nrf::{
     gpio::Output,
     uarte::{UarteRxWithIdle, UarteTx},
 };
-use embassy_sync::channel::{Channel, Receiver, Sender};
+use embassy_sync::{
+    channel::{Channel, Receiver, Sender},
+    semaphore::{FairSemaphore, Semaphore},
+};
 use embassy_sync::{mutex::Mutex, signal::Signal};
-use embassy_time::{Duration, Instant, Ticker};
+use embassy_time::{Duration, Instant, Ticker, WithTimeout};
 use femtopb::{Message, repeated};
 use heapless::{Vec, format};
 use yaroc_common::{
     PUNCH_EXTRA_LEN, RawMutex,
     at::uart::UrcHandlerType,
-    backoff::{BatchedPunches, PUNCH_BATCH_SIZE},
+    backoff::{
+        BackoffRetries, BatchedPunches, PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn,
+    },
     bg77::{
-        hw::{Bg77, ModemHw},
+        hw::{ACTIVATION_TIMEOUT, Bg77, ModemHw},
         system_info::SystemInfo,
     },
     proto::{Punch, Punches},
@@ -53,6 +58,82 @@ pub enum Command {
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static EVENT_CHANNEL: Channel<RawMutex, Command, 10> = Channel::new();
 
+// Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
+const PUNCHES_INFLIGHT: usize = 5;
+static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
+    FairSemaphore::new(PUNCHES_INFLIGHT);
+
+/// A task that runs the backoff retries loop.
+#[embassy_executor::task]
+pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
+    backoff_retries.r#loop().await;
+}
+
+/// A function that sends a punch using the BG77 modem.
+#[derive(Clone, Copy)]
+pub struct Bg77SendPunchFn {
+    send_punch_mutex: &'static SendPunchMutexType,
+    bg77_punch_semaphore: &'static FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
+    packet_timeout: Duration,
+}
+
+impl Bg77SendPunchFn {
+    /// Creates a new `Bg77SendPunchFn`.
+    pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
+        Self {
+            send_punch_mutex,
+            bg77_punch_semaphore: &BG77_PUNCH_SEMAPHORE,
+            packet_timeout,
+        }
+    }
+
+    pub fn send_punch_timeout(&self) -> Duration {
+        ACTIVATION_TIMEOUT + self.packet_timeout * 2
+    }
+}
+
+/// A task that sends a punch using the BG77 modem.
+#[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
+async fn bg77_send_punch_fn(
+    msg: PunchMsg,
+    send_punch_fn: Bg77SendPunchFn,
+    send_punch_timeout: Duration,
+) {
+    BackoffRetries::<Bg77SendPunchFn>::try_sending_with_retries(
+        msg,
+        send_punch_fn,
+        send_punch_timeout,
+    )
+    .await
+}
+
+impl SendPunchFn for Bg77SendPunchFn {
+    type SemaphoreReleaser = embassy_sync::semaphore::SemaphoreReleaser<
+        'static,
+        FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
+    >;
+
+    async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
+        let mut send_punch = self
+            .send_punch_mutex
+            .lock()
+            // TODO: We avoid deadlock by adding a timeout, there might be better solutions
+            .with_timeout(self.packet_timeout)
+            .await
+            .map_err(|_| Error::TimeoutError)?;
+        send_punch.as_mut().unwrap().send_punch_impl(&punch.punches, punch.msg_id).await
+    }
+
+    async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
+        // The modem doesn't like too many messages being sent out at the same time.
+        self.bg77_punch_semaphore.acquire(1).await.map_err(|_| Error::SemaphoreError)
+    }
+
+    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
+        spawner.must_spawn(bg77_send_punch_fn(msg, self, send_punch_timeout));
+    }
+}
+
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
@@ -78,7 +159,17 @@ impl<M: ModemHw> SendPunch<M> {
         spawner: Spawner,
         mqtt_config: MqttConfig,
     ) -> Self {
-        let client = MqttClient::new(send_punch_mutex, mqtt_config, 0, spawner);
+        let send_punch_fn = Bg77SendPunchFn::new(send_punch_mutex, mqtt_config.packet_timeout);
+        let backoff_retries = BackoffRetries::new(
+            send_punch_fn,
+            Duration::from_secs(10),
+            send_punch_fn.send_punch_timeout(),
+            PUNCH_QUEUE_SIZE - 1,
+            spawner,
+        );
+        spawner.must_spawn(backoff_retries_loop(backoff_retries));
+
+        let client = MqttClient::new(mqtt_config, 0);
         let mut handlers: Vec<UrcHandlerType, 3> = Vec::new();
         let _ = handlers.push(|response| MqttClient::<M>::urc_handler(response, 0));
         bg77.spawn(spawner, handlers);

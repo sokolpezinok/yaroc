@@ -1,32 +1,21 @@
 use crate::{
     error::Error,
-    send_punch::{Command, EVENT_CHANNEL, SendPunchMutexType},
+    send_punch::{Command, EVENT_CHANNEL},
 };
 use core::{marker::PhantomData, str::FromStr};
 use defmt::{debug, error, info, warn};
-use embassy_executor::Spawner;
-use embassy_sync::semaphore::{FairSemaphore, Semaphore};
-use embassy_time::{Duration, Instant, Timer, WithTimeout};
+use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 use yaroc_common::{
-    RawMutex,
     at::{
         mqtt::{MqttStatus, StatusCode},
         response::CommandResponse,
     },
-    backoff::{
-        BackoffCommand, BackoffRetries, BatchedPunches, CMD_FOR_BACKOFF, PUNCH_QUEUE_SIZE,
-        PunchMsg, SendPunchFn,
-    },
+    backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
     bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
 };
 
-// Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
-const PUNCHES_INFLIGHT: usize = 5;
-
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
-static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
-    FairSemaphore::new(PUNCHES_INFLIGHT);
 
 /// Quality of Service for MQTT messages.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -60,73 +49,6 @@ impl Default for MqttConfig {
     }
 }
 
-/// A task that runs the backoff retries loop.
-#[embassy_executor::task]
-pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
-    backoff_retries.r#loop().await;
-}
-
-/// A function that sends a punch using the BG77 modem.
-#[derive(Clone, Copy)]
-pub struct Bg77SendPunchFn {
-    send_punch_mutex: &'static SendPunchMutexType,
-    bg77_punch_semaphore: &'static FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
-    packet_timeout: Duration,
-}
-
-impl Bg77SendPunchFn {
-    /// Creates a new `Bg77SendPunchFn`.
-    pub fn new(send_punch_mutex: &'static SendPunchMutexType, packet_timeout: Duration) -> Self {
-        Self {
-            send_punch_mutex,
-            bg77_punch_semaphore: &BG77_PUNCH_SEMAPHORE,
-            packet_timeout,
-        }
-    }
-}
-
-/// A task that sends a punch using the BG77 modem.
-#[embassy_executor::task(pool_size = PUNCH_QUEUE_SIZE)]
-async fn bg77_send_punch_fn(
-    msg: PunchMsg,
-    send_punch_fn: Bg77SendPunchFn,
-    send_punch_timeout: Duration,
-) {
-    BackoffRetries::<Bg77SendPunchFn>::try_sending_with_retries(
-        msg,
-        send_punch_fn,
-        send_punch_timeout,
-    )
-    .await
-}
-
-impl SendPunchFn for Bg77SendPunchFn {
-    type SemaphoreReleaser = embassy_sync::semaphore::SemaphoreReleaser<
-        'static,
-        FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
-    >;
-
-    async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
-        let mut send_punch = self
-            .send_punch_mutex
-            .lock()
-            // TODO: We avoid deadlock by adding a timeout, there might be better solutions
-            .with_timeout(self.packet_timeout)
-            .await
-            .map_err(|_| Error::TimeoutError)?;
-        send_punch.as_mut().unwrap().send_punch_impl(&punch.punches, punch.msg_id).await
-    }
-
-    async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
-        // The modem doesn't like too many messages being sent out at the same time.
-        self.bg77_punch_semaphore.acquire(1).await.map_err(|_| Error::SemaphoreError)
-    }
-
-    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
-        spawner.must_spawn(bg77_send_punch_fn(msg, self, send_punch_timeout));
-    }
-}
-
 /// An MQTT client for the BG77 modem.
 pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
@@ -139,23 +61,7 @@ pub struct MqttClient<M: ModemHw> {
 
 impl<M: ModemHw> MqttClient<M> {
     /// Creates a new `MqttClient`.
-    pub fn new(
-        send_punch_mutex: &'static SendPunchMutexType,
-        config: MqttConfig,
-        client_id: u8,
-        spawner: Spawner,
-    ) -> Self {
-        let send_punch_for_backoff = Bg77SendPunchFn::new(send_punch_mutex, config.packet_timeout);
-        let send_punch_timeout = ACTIVATION_TIMEOUT + config.packet_timeout * 2;
-        let backoff_retries = BackoffRetries::new(
-            send_punch_for_backoff,
-            Duration::from_secs(10),
-            send_punch_timeout,
-            PUNCH_QUEUE_SIZE - 1,
-            spawner,
-        );
-        spawner.must_spawn(backoff_retries_loop(backoff_retries));
-
+    pub fn new(config: MqttConfig, client_id: u8) -> Self {
         Self {
             config,
             client_id,
