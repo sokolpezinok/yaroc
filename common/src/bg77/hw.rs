@@ -1,13 +1,13 @@
 use core::str::FromStr;
 
 use crate::at::{
-    response::AtResponse,
+    response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
     uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
 };
 use crate::error::Error;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use heapless::{String, Vec, format};
+use heapless::{String, Vec, format, index_map::FnvIndexMap};
 
 /// Minimum timeout for BG77 AT-command responses.
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -151,7 +151,68 @@ pub trait ModemHw {
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
 }
-///
+
+pub struct FakeModem {
+    responses: FnvIndexMap<String<AT_COMMAND_SIZE>, String<60>, 8>,
+}
+
+impl FakeModem {
+    pub fn new(interactions: &[(&str, &str)]) -> Self {
+        let mut responses = FnvIndexMap::new();
+        for (command, response) in interactions {
+            responses
+                .insert(
+                    String::from_str(command).unwrap(),
+                    String::from_str(response).unwrap(),
+                )
+                .unwrap();
+        }
+        Self { responses }
+    }
+}
+
+//TODO: might be better to use a mocking library here
+impl ModemHw for FakeModem {
+    async fn configure(&mut self) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn spawn(&mut self, _spawner: Spawner, _urc_handlers: Vec<UrcHandlerType, 3>) {}
+
+    async fn simple_call_at(
+        &mut self,
+        cmd: &str,
+        _response_timeout: Option<Duration>,
+    ) -> crate::Result<AtResponse> {
+        let at_cmd = format!(AT_COMMAND_SIZE; "AT{cmd}").unwrap();
+        let command_response =
+            CommandResponse::new(self.responses.get(at_cmd.as_str()).unwrap()).unwrap();
+        let response = FromModem::CommandResponse(command_response);
+        Ok(AtResponse::new([response, FromModem::Ok].into(), cmd))
+    }
+
+    async fn call_at(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
+        todo!();
+    }
+
+    async fn call(
+        &mut self,
+        _msg: &[u8],
+        _command_prefix: &str,
+        _second_read_timeout: Option<Duration>,
+    ) -> crate::Result<AtResponse> {
+        todo!()
+    }
+
+    async fn read(&mut self) -> crate::Result<AtResponse> {
+        todo!()
+    }
+
+    async fn turn_on(&mut self) -> crate::Result<()> {
+        todo!()
+    }
+}
+
 /// Struct for accessing Quectel BG77 modem
 pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
     uart1: AtUart<T, R>,

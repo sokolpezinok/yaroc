@@ -142,3 +142,50 @@ impl<M: ModemHw> SystemInfo<M> {
         Some(mini_call_home)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::bg77::hw::FakeModem;
+
+    use super::*;
+
+    use embassy_futures::block_on;
+
+    #[test]
+    fn test_basic_system_info() {
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
+            ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+        ]);
+
+        TEMPERATURE.sender().send(27.0);
+        BATTERY.sender().send(BatteryInfo {
+            mv: 3967,
+            percents: 76,
+        });
+        let mut system_info = SystemInfo::default();
+
+        let mch = block_on(system_info.mini_call_home(&mut bg77)).unwrap();
+        let signal_info = mch.signal_info.unwrap();
+        assert_eq!(signal_info.network_type, CellNetworkType::NbIotEcl1);
+        assert_eq!(signal_info.rssi_dbm, -107);
+        assert_eq!(signal_info.snr_cb, -130);
+        assert_eq!(
+            signal_info.cellid,
+            Some(u32::from_str_radix("2B2078", 16).unwrap())
+        );
+        assert_eq!(mch.batt_mv, Some(3967));
+        assert_eq!(mch.batt_percents, Some(76));
+        assert_eq!(mch.cpu_temperature, Some(27.0));
+        assert_eq!(
+            mch.timestamp,
+            DateTime::<FixedOffset>::parse_from_str(
+                "2024-12-24 10:48:23+01:00",
+                "%Y-%m-%d %H:%M:%S%:z"
+            )
+            .unwrap()
+        );
+    }
+}

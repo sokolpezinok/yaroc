@@ -37,9 +37,5 @@ name = "backoff"
 required-features = ["std"]
 
 [[test]]
-name = "bg77_sysinfo"
-required-features = ["std"]
-
-[[test]]
 name = "uart"
 required-features = ["std"]
