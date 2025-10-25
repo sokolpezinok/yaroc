@@ -253,7 +253,7 @@ impl<M: ModemHw> SendPunch<M> {
             punches: repeated::Repeated::from_slice(&punch_messages),
             ..Default::default()
         };
-        const PROTO_LEN: usize = (20 + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;
+        const PROTO_LEN: usize = (yaroc_common::punch::LEN + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;
         self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id).await
     }
 
