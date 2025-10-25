@@ -11,7 +11,6 @@ from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..sources.si import (
-    BtSerialSiWorker,
     FakeSiWorker,
     SiPunchManager,
     SiWorker,
@@ -85,7 +84,6 @@ class Container(containers.DeclarativeContainer):
     source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
         udev=providers.Factory(UdevSiFactory),
         fake=providers.Factory(FakeSiWorker, config.punch_source.fake.interval),
-        bt=providers.Factory(BtSerialSiWorker),
     )
     workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
     si_manager = providers.Factory(SiPunchManager, workers)

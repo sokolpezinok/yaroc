@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import socket
 import time
 from asyncio import Queue
 from dataclasses import dataclass
@@ -41,44 +40,6 @@ class SiWorker:
     @property
     def codes(self) -> set[int]:
         return self._codes
-
-
-class BtSerialSiWorker(SiWorker):
-    """Bluetooth serial worker"""
-
-    def __init__(self, mac_addr: str):
-        super().__init__()
-        self.name = "lora"
-        self.mac_address = mac_addr
-        logging.info(f"Starting a bluetooth serial worker, connecting to {mac_addr}")
-
-    def __hash__(self):
-        return self.mac_address.__hash__()
-
-    async def loop(self, queue: Queue, _status_queue):
-        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-        sock.setblocking(False)
-        loop = asyncio.get_event_loop()
-        try:
-            await loop.sock_connect(sock, (self.mac_address, 1))
-        except Exception as err:
-            logging.error(f"Error connecting to {self.mac_address}: {err}")
-        logging.info(f"Connected to {self.mac_address}")
-
-        while True:
-            try:
-                data = await loop.sock_recv(sock, 20)
-                now = datetime.now().astimezone()
-                if len(data) == 0:
-                    await asyncio.sleep(1.0)
-                    continue
-                punch = SiPunch.from_raw(data, now)
-                if punch is not None:
-                    await self.process_punch(punch, queue)
-
-            except Exception as err:
-                logging.error(f"Loop crashing: {err}")
-                return
 
 
 class UdevSiFactory(SiWorker):
@@ -124,10 +85,6 @@ class UdevSiFactory(SiWorker):
     def _is_silabs(device_info: dict[str, Any]):
         return device_info[ID_VENDOR_ID] == "10c4"
 
-    @staticmethod
-    def _is_sandberg(device_info: dict[str, Any]):
-        return device_info[ID_VENDOR_ID] == "1a86" and device_info[ID_MODEL_ID] == "55d4"
-
     async def get_punches(self, queue: Queue[SiPunch]):
         while True:
             try:
@@ -144,7 +101,7 @@ class UdevSiFactory(SiWorker):
 
     def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         try:
-            if not self._is_silabs(device_info) and not self._is_sandberg(device_info):
+            if not self._is_silabs(device_info):
                 return
             asyncio.run_coroutine_threadsafe(
                 self._device_queue.put(("add", device_info)), self._loop
