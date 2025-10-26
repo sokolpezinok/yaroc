@@ -2073,6 +2073,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
+name = "sequential-storage"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0779e7aa11fe1e0a6a0bfb6abcdcc8852c6b74e3946d2ce93d24963dafc4a271"
+dependencies = [
+ "embedded-storage-async",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2885,11 +2894,11 @@ dependencies = [
  "embedded-hal-async",
  "embedded-io",
  "embedded-io-async",
- "embedded-storage-async",
  "femtopb",
  "heapless 0.9.1",
  "nrf-softdevice",
  "panic-probe",
+ "sequential-storage",
  "thiserror 2.0.17",
  "yaroc-common",
 ]

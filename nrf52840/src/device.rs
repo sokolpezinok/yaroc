@@ -39,6 +39,14 @@ pub struct Device {
     pub flash: Flash,
 }
 
+#[derive(Clone, femtopb::Message)]
+pub struct DeviceConfig<'a> {
+    #[femtopb(string, tag = 1)]
+    name: &'a str,
+    #[femtopb(unknown_fields)]
+    pub unknown_fields: femtopb::UnknownFields<'a>,
+}
+
 impl Device {
     /// Initializes all the drivers and peripherals of the device
     pub fn new(modem_config: ModemConfig) -> Self {
