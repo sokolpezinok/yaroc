@@ -1,7 +1,12 @@
-MEMORY
-{
+MEMORY {
   /* NOTE 1 K = 1 KiBi = 1024 bytes */
   /* NRF52840 with Softdevice S140 7.3.0 */
-  FLASH : ORIGIN = 0x00000000 + 156K, LENGTH = 1024K - 156K
+  FLASH : ORIGIN = 0x0 + 156K, LENGTH = 1024K - 156K - 64K
   RAM : ORIGIN = 0x20000000 + 31K, LENGTH = 256K - 31K
+  DATA_FLASH : ORIGIN = 0x0 + 1024K - 64K, LENGTH = 64K
+}
+
+SECTIONS {
+  PROVIDE(_data_flash_start = ORIGIN(DATA_FLASH));
+  PROVIDE(_data_flash_size = LENGTH(DATA_FLASH));
 }
