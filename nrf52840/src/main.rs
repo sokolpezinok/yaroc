@@ -15,7 +15,8 @@ use yaroc_common::{
 };
 use yaroc_nrf52840::{
     self as _,
-    device::Device,
+    device::{Device, DeviceConfig},
+    flash::ValueIndex,
     send_punch::{
         SendPunch, SendPunchMutexType, minicallhome_loop, read_si_uart, send_punch_event_handler,
     },
@@ -37,15 +38,24 @@ async fn main(spawner: Spawner) {
         bg77,
         si_uart,
         ble,
+        mut flash,
         ..
     } = device;
 
-    info!("Device initialized, MAC address: {}", mac_address.as_str());
+    let mut buffer = [0; 4096];
+    let device_config: Option<DeviceConfig> =
+        flash.read(ValueIndex::DeviceConfig, &mut buffer).await.unwrap();
+
     let mqtt_config = MqttConfig {
-        name: String::from_str("spe06").unwrap(),
+        name: String::from_str(device_config.map(|x| x.name).unwrap_or("spe06")).unwrap(),
         mac_address,
         ..Default::default()
     };
+    info!(
+        "Device initialized: {}/{}",
+        mqtt_config.name.as_str(),
+        mqtt_config.mac_address.as_str()
+    );
 
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
     spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
