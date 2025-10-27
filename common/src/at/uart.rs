@@ -389,6 +389,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod test_at {
     use super::*;

@@ -143,6 +143,7 @@ impl<M: ModemHw> SystemInfo<M> {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod test {
     use crate::bg77::hw::FakeModem;

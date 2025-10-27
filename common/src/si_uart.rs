@@ -257,6 +257,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod test {
     use chrono::DateTime;
