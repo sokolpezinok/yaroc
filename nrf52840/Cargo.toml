@@ -29,7 +29,7 @@ embassy-futures = { workspace = true }
 embassy-nrf = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "6ff81139388c4256c5344ad9167859450abaa97d", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
 sequential-storage = "5.0.1"
 
 chrono = { workspace = true }

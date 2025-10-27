@@ -7,10 +7,6 @@ name = "Inflector"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
-dependencies = [
- "lazy_static",
- "regex",
-]
 
 [[package]]
 name = "addr2line"
@@ -1369,7 +1365,7 @@ dependencies = [
 [[package]]
 name = "nrf-softdevice"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=6ff81139388c4256c5344ad9167859450abaa97d#6ff81139388c4256c5344ad9167859450abaa97d"
+source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=5949a5b1445cc907745c6449a35577e4544cd255#5949a5b1445cc907745c6449a35577e4544cd255"
 dependencies = [
  "cortex-m",
  "critical-section",
@@ -1389,7 +1385,7 @@ dependencies = [
 [[package]]
 name = "nrf-softdevice-macro"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=6ff81139388c4256c5344ad9167859450abaa97d#6ff81139388c4256c5344ad9167859450abaa97d"
+source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=5949a5b1445cc907745c6449a35577e4544cd255#5949a5b1445cc907745c6449a35577e4544cd255"
 dependencies = [
  "Inflector",
  "darling 0.13.4",
@@ -1402,7 +1398,7 @@ dependencies = [
 [[package]]
 name = "nrf-softdevice-s140"
 version = "0.1.2"
-source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=6ff81139388c4256c5344ad9167859450abaa97d#6ff81139388c4256c5344ad9167859450abaa97d"
+source = "git+https://github.com/embassy-rs/nrf-softdevice.git?rev=5949a5b1445cc907745c6449a35577e4544cd255#5949a5b1445cc907745c6449a35577e4544cd255"
 
 [[package]]
 name = "num-traits"

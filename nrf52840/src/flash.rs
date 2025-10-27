@@ -2,7 +2,8 @@ use femtopb::Message;
 use nrf_softdevice::Flash as NrfFlash;
 use sequential_storage::{
     cache::NoCache,
-    map::{SerializationError, Value, fetch_item},
+    erase_all,
+    map::{SerializationError, Value, fetch_item, store_item},
 };
 use yaroc_common::error::Error;
 
@@ -42,7 +43,7 @@ impl Flash {
     /// Creates a new Flash instance
     pub fn new(flash: NrfFlash) -> Self {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
-        let data_end = data_start + 64 * 1024; // TODO: use _data_flash_size
+        let data_end = data_start + 0x10000; // TODO: use _data_flash_size
         Self {
             inner: flash,
             data_start,
@@ -50,7 +51,36 @@ impl Flash {
         }
     }
 
-    /// Reads data from the flash memory.
+    /// Erases the data flash memory.
+    pub async fn erase(&mut self) -> crate::Result<()> {
+        erase_all(&mut self.inner, self.data_start..self.data_end)
+            .await
+            .map_err(|_| Error::FlashError)
+    }
+
+    /// Stores a value in the flash memory.
+    pub async fn write<'a, V: Value<'a>>(
+        &mut self,
+        key: ValueIndex,
+        value: V,
+        buffer: &'a mut [u8],
+    ) -> crate::Result<()> {
+        let range = self.data_start..self.data_end;
+        let key = key as u8;
+
+        store_item::<u8, V, _>(
+            &mut self.inner,
+            range,
+            &mut NoCache::new(),
+            buffer,
+            &key,
+            &value,
+        )
+        .await
+        .map_err(|_| Error::FlashError)
+    }
+
+    /// Fetches a value from the flash memory.
     pub async fn read<'a, V: Value<'a>>(
         &mut self,
         key: ValueIndex,

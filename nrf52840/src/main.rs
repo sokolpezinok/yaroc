@@ -31,7 +31,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let modem_config = ModemConfig::default();
-    let device = Device::new(modem_config);
+    let device = Device::new(modem_config, spawner);
     let Device {
         mac_address,
         bg77,

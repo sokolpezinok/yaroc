@@ -1,5 +1,6 @@
 use crate::ble::Ble;
 use crate::flash::Flash;
+use embassy_executor::Spawner;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -42,14 +43,14 @@ pub struct Device {
 #[derive(Clone, femtopb::Message)]
 pub struct DeviceConfig<'a> {
     #[femtopb(string, tag = 1)]
-    name: &'a str,
+    pub name: &'a str,
     #[femtopb(unknown_fields)]
     pub unknown_fields: femtopb::UnknownFields<'a>,
 }
 
 impl Device {
     /// Initializes all the drivers and peripherals of the device
-    pub fn new(modem_config: ModemConfig) -> Self {
+    pub fn new(modem_config: ModemConfig, spawner: Spawner) -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -77,6 +78,7 @@ impl Device {
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
         let ble = Ble::new();
+        ble.must_spawn(spawner);
         let mac_address = ble.get_mac_address();
         let flash = Flash::new(ble.flash());
 
