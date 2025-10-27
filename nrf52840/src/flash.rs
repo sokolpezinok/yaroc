@@ -1,3 +1,5 @@
+use core::ops::Range;
+
 use femtopb::Message;
 use nrf_softdevice::Flash as NrfFlash;
 use sequential_storage::{
@@ -18,8 +20,7 @@ unsafe extern "C" {
 /// A wrapper around the nrf_softdevice::Flash
 pub struct Flash {
     inner: NrfFlash,
-    data_start: u32,
-    data_end: u32,
+    range: Range<u32>,
 }
 
 impl<'a> Value<'a> for DeviceConfig<'a> {
@@ -43,17 +44,16 @@ impl Flash {
     /// Creates a new Flash instance
     pub fn new(flash: NrfFlash) -> Self {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
-        let data_end = data_start + 0x10000; // TODO: use _data_flash_size
+        let data_end = data_start + unsafe { &_data_flash_size as *const u32 as u32 };
         Self {
             inner: flash,
-            data_start,
-            data_end,
+            range: data_start..data_end,
         }
     }
 
     /// Erases the data flash memory.
     pub async fn erase(&mut self) -> crate::Result<()> {
-        erase_all(&mut self.inner, self.data_start..self.data_end)
+        erase_all(&mut self.inner, self.range.clone())
             .await
             .map_err(|_| Error::FlashError)
     }
@@ -65,12 +65,11 @@ impl Flash {
         value: V,
         buffer: &'a mut [u8],
     ) -> crate::Result<()> {
-        let range = self.data_start..self.data_end;
         let key = key as u8;
 
         store_item::<u8, V, _>(
             &mut self.inner,
-            range,
+            self.range.clone(),
             &mut NoCache::new(),
             buffer,
             &key,
@@ -86,11 +85,16 @@ impl Flash {
         key: ValueIndex,
         buffer: &'a mut [u8],
     ) -> crate::Result<Option<V>> {
-        let range = self.data_start..self.data_end;
         let key = key as u8;
 
-        fetch_item::<u8, V, _>(&mut self.inner, range, &mut NoCache::new(), buffer, &key)
-            .await
-            .map_err(|_| Error::FlashError)
+        fetch_item::<u8, V, _>(
+            &mut self.inner,
+            self.range.clone(),
+            &mut NoCache::new(),
+            buffer,
+            &key,
+        )
+        .await
+        .map_err(|_| Error::FlashError)
     }
 }
