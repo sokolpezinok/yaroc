@@ -24,9 +24,12 @@ jobs:
         target: [x86_64, aarch64, armv7]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv with all available options
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.13'
+          version: '0.9.6'
+          python-version: '3.11'
+          enable-cache: false
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Build wheels
@@ -41,13 +44,15 @@ jobs:
       - name: Test the wheel
         if: matrix.target == 'x86_64'
         run: |
-          pip install yaroc --find-links dist --force-reinstall
-          pip install pytest
+          uv venv
+          uv pip install -r pyproject.toml --extra dev
+          uv pip install yaroc --pre --find-links dist
+          source .venv/bin/activate
           pytest
       - name: Lint with ruff
         if: matrix.target == 'x86_64'
         run: |
-          pip install ruff
+          uv tool install ruff
           ruff check . --select=E9,F63,F7,F82 --statistics
           ruff check . --exit-zero --statistics
       - name: Upload wheels
