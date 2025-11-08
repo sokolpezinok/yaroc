@@ -363,7 +363,7 @@ impl SiPunch {
 
     /// Converts a `NaiveDateTime` to the 4-byte SportIdent time representation.
     fn time_to_bytes(time: NaiveDateTime) -> [u8; 4] {
-        let mut res = [0; 4];
+        let mut res = [0; _];
         res[0] = u8::try_from(time.weekday().num_days_from_sunday()).unwrap() << 1;
         let secs = if time.hour() >= 12 {
             res[0] |= 1;
@@ -392,7 +392,7 @@ impl SiPunch {
         idx: u8,
         cnt: u8,
     ) -> RawPunch {
-        let mut res = [0; LEN];
+        let mut res = [0; _];
         res[..4].copy_from_slice(&HEADER);
         res[4..6].copy_from_slice(&code.to_be_bytes());
         res[4] ^= 0b1000_0000; // 0xD3 modified

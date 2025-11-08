@@ -88,7 +88,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     pub fn new(rx: R) -> Self {
         Self {
             rx,
-            buf: [0; BUF_SIZE],
+            buf: [0; _],
             end: 0,
             unfinished_sequences: Default::default(),
         }
