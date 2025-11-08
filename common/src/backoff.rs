@@ -137,22 +137,13 @@ pub trait SendPunchFn {
     fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
 }
 
-/// Initializes the `STATUS_UPDATES` vector.
-fn init_status_updates() -> Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE> {
-    let mut res = Vec::new();
-    for _ in 0..PUNCH_QUEUE_SIZE {
-        let _ = res.push(Signal::new());
-    }
-    res
-}
-
-/// A vector of signals for status updates.
+/// An array of signals for status updates.
 ///
-/// Each message in the `unpublished_msgs` vector has a corresponding signal in this vector.
+/// Each message in the `unpublished_msgs` vector has a corresponding signal in this array.
 /// The signal is used to notify the `try_sending_with_retries` function about the status of
 /// the message.
-static STATUS_UPDATES: LazyLock<Vec<Signal<RawMutex, StatusCode>, PUNCH_QUEUE_SIZE>> =
-    LazyLock::new(init_status_updates);
+static STATUS_UPDATES: LazyLock<[Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE]> =
+    LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
 
 /// An event related to the MQTT client.
 #[derive(Copy, Clone)]
