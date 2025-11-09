@@ -31,13 +31,6 @@ impl ModemPin for embassy_nrf::gpio::Output<'static> {
     }
 }
 
-/// A fake modem pin for testing purposes, it does nothing.
-pub struct FakePin {}
-impl ModemPin for FakePin {
-    fn set_low(&mut self) {}
-    fn set_high(&mut self) {}
-}
-
 /// Radio Access Technology
 pub enum RAT {
     Ltem,      // LTE-M

@@ -217,7 +217,8 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Opens a TCP connection to the MQTT broker.
-    async fn mqtt_open(&self, bg77: &mut M, cid: u8) -> crate::Result<()> {
+    async fn mqtt_open(&self, bg77: &mut M) -> crate::Result<()> {
+        let cid = self.client_id;
         let opened = bg77
             .simple_call_at("+QMTOPEN?", None)
             .await?
@@ -263,9 +264,9 @@ impl<M: ModemHw> MqttClient<M> {
         self.network_registration(bg77)
             .await
             .inspect_err(|err| error!("Network registration failed: {}", err))?;
-        let cid = self.client_id;
-        self.mqtt_open(bg77, cid).await?;
+        self.mqtt_open(bg77).await?;
 
+        let cid = self.client_id;
         let (_, status) = bg77
             .simple_call_at("+QMTCONN?", None)
             .await?
@@ -308,7 +309,8 @@ impl<M: ModemHw> MqttClient<M> {
 
     /// Disconnects from the MQTT broker.
     #[allow(dead_code)]
-    pub async fn mqtt_disconnect(&mut self, bg77: &mut M, cid: u8) -> Result<(), Error> {
+    pub async fn mqtt_disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
+        let cid = self.client_id;
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = bg77
             .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
@@ -397,6 +399,6 @@ mod test {
         ]);
 
         let mut client = MqttClient::new(MqttConfig::default(), 2, &MQTT_MSG_PUBLISHED);
-        assert_eq!(block_on(client.mqtt_disconnect(&mut bg77, 2)), Ok(()));
+        assert_eq!(block_on(client.mqtt_disconnect(&mut bg77)), Ok(()));
     }
 }
