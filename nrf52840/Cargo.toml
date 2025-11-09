@@ -25,9 +25,9 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5.0"
 embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
-embassy-futures = { workspace = true }
-embassy-nrf = { workspace = true }
-embassy-sync = { workspace = true }
+embassy-futures = { workspace = true, features = ["defmt"] }
+embassy-nrf = { workspace = true, features = ["defmt"] }
+embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
 sequential-storage = "5.0.1"
