@@ -367,3 +367,36 @@ impl<M: ModemHw> MqttClient<M> {
         punch_id
     }
 }
+
+#[cfg(feature = "std")]
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::bg77::hw::FakeModem;
+    use embassy_futures::block_on;
+
+    static MQTT_MSG_PUBLISHED: Signal<RawMutex, Instant> = Signal::new();
+
+    #[test]
+    fn test_mqtt_connect_ok() {
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
+            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
+        ]);
+
+        let mut client = MqttClient::new(MqttConfig::default(), 1, &MQTT_MSG_PUBLISHED);
+        assert_eq!(block_on(client.mqtt_connect(&mut bg77)), Ok(()));
+    }
+
+    #[test]
+    fn test_mqtt_disconnect_ok() {
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QMTDISC=2", "+QMTDISC: 2,0"),
+            ("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0"),
+        ]);
+
+        let mut client = MqttClient::new(MqttConfig::default(), 2, &MQTT_MSG_PUBLISHED);
+        assert_eq!(block_on(client.mqtt_disconnect(&mut bg77, 2)), Ok(()));
+    }
+}
