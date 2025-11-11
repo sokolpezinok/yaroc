@@ -27,6 +27,12 @@ pub trait MeshtasticSerialTrait {
 
     /// Waits for the next message from the device.
     fn next_message(&mut self) -> impl Future<Output = MeshtasticEvent> + Send;
+
+    fn inner_loop(
+        &mut self,
+        cancellation_token: CancellationToken,
+        mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+    ) -> impl Future<Output = ()> + Send;
 }
 
 /// A connection to a Meshtastic device.
@@ -102,6 +108,37 @@ impl MeshtasticSerialTrait for MeshtasticSerial {
             }
         }
     }
+
+    fn inner_loop(
+        &mut self,
+        cancellation_token: CancellationToken,
+        mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+    ) -> impl Future<Output = ()> + Send {
+        let mac_address = self.mac_address();
+        async move {
+            loop {
+                tokio::select! {
+                    _ = cancellation_token.cancelled() => {
+                        warn!("Stopping meshtastic device: {mac_address}");
+                        break;
+                    }
+                    event = self.next_message() => {
+                        match event {
+                            MeshtasticEvent::MeshPacket(mesh_packet) => {
+                                mesh_proto_tx
+                                    .send((mesh_packet, mac_address))
+                                    .expect("Channel unexpectedly closed");
+                            }
+                            MeshtasticEvent::Disconnected(_device_node) => {
+                                warn!("Removed meshtastic device: {mac_address}");
+                                cancellation_token.cancel();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Meshtastic device handler
@@ -160,33 +197,13 @@ impl MshDevHandler {
         &mut self,
         mut meshtastic_serial: M,
     ) -> CancellationToken {
-        let mac_address = meshtastic_serial.mac_address();
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let mesh_proto_tx = self.mesh_proto_tx.clone();
         tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = cancellation_token.cancelled() => {
-                        warn!("Stopping meshtastic device: {mac_address}");
-                        break;
-                    }
-                    event = meshtastic_serial.next_message() => {
-                        match event {
-                            MeshtasticEvent::MeshPacket(mesh_packet) => {
-                                mesh_proto_tx
-                                    .send((mesh_packet, mac_address))
-                                    .expect("Channel unexpectedly closed");
-                            }
-                            MeshtasticEvent::Disconnected(_device_node) => {
-                                warn!("Removed meshtastic device: {mac_address}");
-                                cancellation_token.cancel();
-                            }
-                        }
-                    }
-                }
-            }
+            meshtastic_serial.inner_loop(cancellation_token, mesh_proto_tx).await
         });
+
         cancellation_token_clone
     }
 
@@ -222,6 +239,33 @@ mod tests {
             match packet {
                 Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
                 None => MeshtasticEvent::Disconnected("Fake".to_owned()),
+            }
+        }
+
+        async fn inner_loop(
+            &mut self,
+            cancellation_token: CancellationToken,
+            mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+        ) {
+            let mac_address = self.mac_address();
+            loop {
+                tokio::select! {
+                    _ = cancellation_token.cancelled() => {
+                        break;
+                    }
+                    event = self.next_message() => {
+                        match event {
+                            MeshtasticEvent::MeshPacket(mesh_packet) => {
+                                mesh_proto_tx
+                                    .send((mesh_packet, mac_address))
+                                    .expect("Channel unexpectedly closed");
+                            }
+                            MeshtasticEvent::Disconnected(_device_node) => {
+                                cancellation_token.cancel();
+                            }
+                        }
+                    }
+                }
             }
         }
     }
