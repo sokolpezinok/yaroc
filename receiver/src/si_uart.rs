@@ -87,7 +87,8 @@ impl SiUartHandler {
     /// * `device_node` - A string identifying the device, usually its path.
     pub fn add_device(&mut self, serial: TokioSerial, device_node: &str) {
         let port = serial.port().to_owned();
-        let token = self.spawn_serial(serial, port);
+        let si_uart = SiUart::new(serial);
+        let token = self.spawn_serial(si_uart, port);
         self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
@@ -113,11 +114,14 @@ impl SiUartHandler {
     ///
     /// The task forwards the messages to the punch transmitter and can be cancelled by the returned
     /// `CancellationToken`.
-    fn spawn_serial(&mut self, serial: TokioSerial, port: String) -> CancellationToken {
+    fn spawn_serial(
+        &mut self,
+        mut si_uart: SiUart<TokioSerial>,
+        port: String,
+    ) -> CancellationToken {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let punch_tx = self.punch_tx.clone();
-        let mut si_uart = SiUart::new(serial);
         tokio::spawn(async move {
             loop {
                 tokio::select! {
