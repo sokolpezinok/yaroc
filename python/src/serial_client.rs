@@ -22,20 +22,22 @@ const LAST_BYTE: u8 = 0x03;
 
 #[pymethods]
 impl SerialClient {
-    #[new]
-    pub fn new(computer_port: &str) -> PyResult<Self> {
-        let builder = tokio_serial::new(computer_port, 38400);
-        let computer_serial = builder.open_native_async().map_err(|e| {
-            PyConnectionError::new_err(format!("Error connecting to {}: {e}", computer_port))
-        })?;
-        info!("Connected to SRR sink at {computer_port}");
-        let (rx, tx) = split(computer_serial);
-        let rx = BufReader::new(rx);
-        let tx = BufWriter::new(tx);
+    #[staticmethod]
+    pub fn create<'a>(computer_port: String, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        future_into_py::<_, SerialClient>(py, async move {
+            let builder = tokio_serial::new(&computer_port, 38400);
+            let computer_serial = builder.open_native_async().map_err(|e| {
+                PyConnectionError::new_err(format!("Error connecting to {}: {e}", computer_port))
+            })?;
+            info!("Connected to SRR sink at {computer_port}");
+            let (rx, tx) = split(computer_serial);
+            let rx = BufReader::new(rx);
+            let tx = BufWriter::new(tx);
 
-        Ok(Self {
-            computer_rx: Arc::new(Mutex::new(rx)),
-            computer_tx: Arc::new(Mutex::new(tx)),
+            Ok(Self {
+                computer_rx: Arc::new(Mutex::new(rx)),
+                computer_tx: Arc::new(Mutex::new(tx)),
+            })
         })
     }
 
