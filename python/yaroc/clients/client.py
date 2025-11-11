@@ -1,10 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
-
-import serial
-from serial_asyncio import open_serial_connection
+from typing import Sequence
 
 from ..pb.status_pb2 import Status
 from ..rs import SiPunchLog
@@ -26,111 +23,6 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
-        return True
-
-
-FIRST_RESPONSE = b"\xff\x02\xf0\x03\x12\x8cMb?\x03"
-FINAL_RESPONSE = (
-    b"\xff\x02\x83\x83\x12\x8c\x00\r\x00\x12\x8c\x04450\x16\x0b\x0fo!\xff\xff\xff\x02\x06\x00\x1b"
-    b"\x17?\x18\x18\x06)\x08\x05>\xfe\n\xeb\n\xeb\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
-    b"\xff\xff\x92\xba\x1aB\x01\xff\xff\xe1\xff\xff\xff\xff\xff\x01\x01\x01\x0b\x07\x0c\x00\r]\x0eD"
-    b'\x0f\xec\x10-\x11;\x12s\x13#\x14;\x15\x01\x19\x1d\x1a\x1c\x1b\xc7\x1c\x00\x1d\xb0!\xb6"\x10#'
-    b"\xea$\n%\x00&\x11,\x88-1.\x0b\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xf9"
-    b"\xc3\x03"
-)
-
-
-class SerialClient(Client):
-    """Serial client emulating an SRR dongle."""
-
-    def __init__(self, out_port: str, mini_reader_port: str | None = None):
-        self.out_port = out_port
-        self.mini_reader_port = mini_reader_port
-        self.computer_tx = None
-
-    async def loop(self):
-        try:
-            async with asyncio.timeout(10):
-                computer_rx, self.computer_tx = await open_serial_connection(
-                    url=self.out_port,
-                    baudrate=38400,
-                    timeout=5,
-                )
-            logging.info(f"Connected to SRR sink at {self.out_port}")
-        except Exception as err:
-            logging.error(f"Error connecting to {self.out_port}: {err}")
-            return
-
-        while True:
-            if self.mini_reader_port is None:
-                first_query = await computer_rx.readuntil(b"\x03")
-                await self.respond_as_blue_srr(first_query, computer_rx)
-            else:
-                for i in range(60):
-                    try:
-                        async with asyncio.timeout(60):
-                            usb_reader_rx, usb_reader_tx = await open_serial_connection(
-                                url=self.mini_reader_port, baudrate=38400, timeout=5
-                            )
-                        logging.info(f"Connected to mini reader at {self.mini_reader_port}")
-                        break
-                    except Exception as err:
-                        logging.error(f"Timed out connecting to {self.mini_reader_port}: {err}")
-
-                _t1 = asyncio.create_task(self.respond_as_reader(usb_reader_rx))
-
-                while True:
-                    query = await computer_rx.readuntil(b"\x03")
-                    usb_reader_tx.write(query)
-
-                _t1.cancel()
-
-    async def respond_as_reader(self, usb_reader_rx: Any):
-        if self.computer_tx is None:
-            logging.warn("Serial port {self.out_port} not connected")
-            return
-
-        while True:
-            response = await usb_reader_rx.readuntil(b"\x03")
-            self.computer_tx.write(response)
-
-    async def respond_as_blue_srr(self, first_query: bytes, reader_out: Any):
-        if self.computer_tx is None:
-            logging.warn("Serial port {self.out_port} not connected")
-            return
-
-        if first_query == b"\xff\x02\x02\xf0\x01Mm\n\x03":
-            logging.info("Responding to orienteering software - MeOS")
-            self.computer_tx.write(FIRST_RESPONSE)
-            data = await reader_out.readuntil(b"\x03")
-            if data == b"\x02\x83\x02\x00\x80\xbf\x17\x03":
-                self.computer_tx.write(FINAL_RESPONSE)
-            else:
-                logging.error("Communication with MeOS failed")
-        elif first_query == b"\xff\x02\xf0\x01Mm\n\x03":
-            logging.info("Responding to orienteering software - SportIdent Reader")
-            self.computer_tx.write(FIRST_RESPONSE)
-            data = await reader_out.readuntil(b"\x03")
-            if data == b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03":
-                self.computer_tx.write(FINAL_RESPONSE)
-            else:
-                logging.error("Communication with SportIdent Reader failed")
-        else:
-            logging.error("Contacted by unknown orienteering software")
-
-    async def send_punch(self, punch_log: SiPunchLog) -> bool:
-        if self.computer_tx is None:
-            logging.error("Serial client not connected")
-            return False
-        try:
-            self.computer_tx.write(bytes(punch_log.punch.raw))
-            logging.info("Punch sent via serial port")
-            return True
-        except serial.serialutil.SerialException as err:
-            logging.error(f"Fatal serial exception: {err}")
-            return False
-
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
 

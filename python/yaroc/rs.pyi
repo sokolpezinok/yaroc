@@ -3,6 +3,9 @@ from enum import IntEnum
 from typing import ClassVar as _ClassVar
 from typing import List, Tuple
 
+from yaroc.clients.client import Client
+from yaroc.pb.status_pb2 import Status
+
 class HostInfo(object):
     mac_address: str
     @staticmethod
@@ -102,3 +105,10 @@ class MessageHandler(object):
     async def next_event(self) -> Event: ...
 
 def current_timestamp_millis() -> int: ...
+
+class SerialClient(Client):
+    @staticmethod
+    async def create(port: str): ...
+    async def loop(self): ...
+    async def send_punch(self, punch_log: SiPunchLog) -> bool: ...
+    async def send_status(self, status: Status, mac_addr: str) -> bool: ...
