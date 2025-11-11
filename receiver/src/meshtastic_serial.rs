@@ -25,9 +25,6 @@ pub trait MeshtasticSerialTrait {
     /// Returns the MAC address of the device.
     fn mac_address(&self) -> MacAddress;
 
-    /// Waits for the next message from the device.
-    fn next_message(&mut self) -> impl Future<Output = MeshtasticEvent> + Send;
-
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
         &mut self,
@@ -76,23 +73,7 @@ impl MeshtasticSerial {
         })
     }
 
-    /// Returns the device node.
-    pub fn device_node(&self) -> &str {
-        &self.device_node
-    }
-
-    /// Disconnects the Meshtastic device.
-    pub async fn disconnect(self) -> Result<(), Box<dyn std::error::Error>> {
-        self.stream_api.disconnect().await?;
-        Ok(())
-    }
-}
-
-impl MeshtasticSerialTrait for MeshtasticSerial {
-    fn mac_address(&self) -> MacAddress {
-        self.mac_address
-    }
-
+    /// Waits for the next message from the device.
     async fn next_message(&mut self) -> MeshtasticEvent {
         loop {
             match self.listener.recv().await {
@@ -108,6 +89,23 @@ impl MeshtasticSerialTrait for MeshtasticSerial {
                 _ => {}
             }
         }
+    }
+
+    /// Returns the device node.
+    pub fn device_node(&self) -> &str {
+        &self.device_node
+    }
+
+    /// Disconnects the Meshtastic device.
+    pub async fn disconnect(self) -> Result<(), Box<dyn std::error::Error>> {
+        self.stream_api.disconnect().await?;
+        Ok(())
+    }
+}
+
+impl MeshtasticSerialTrait for MeshtasticSerial {
+    fn mac_address(&self) -> MacAddress {
+        self.mac_address
     }
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
@@ -163,6 +161,7 @@ impl MshDevHandler {
             mesh_proto_tx,
         }
     }
+
     /// Connects to a Meshtastic device.
     ///
     /// This function spawns a task to handle messages from the device.
@@ -229,12 +228,6 @@ mod tests {
         pub fn new(mac_address: MacAddress, rx: Receiver<MeshPacket>) -> Self {
             Self { mac_address, rx }
         }
-    }
-
-    impl MeshtasticSerialTrait for FakeMeshtasticSerial {
-        fn mac_address(&self) -> MacAddress {
-            self.mac_address
-        }
 
         async fn next_message(&mut self) -> MeshtasticEvent {
             let packet = self.rx.recv().await;
@@ -242,6 +235,12 @@ mod tests {
                 Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
                 None => MeshtasticEvent::Disconnected("Fake".to_owned()),
             }
+        }
+    }
+
+    impl MeshtasticSerialTrait for FakeMeshtasticSerial {
+        fn mac_address(&self) -> MacAddress {
+            self.mac_address
         }
 
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
