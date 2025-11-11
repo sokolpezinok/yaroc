@@ -4,11 +4,10 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use yaroc_receiver::serial_device_manager::SerialDeviceManager;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
-use yaroc_receiver::meshtastic_serial::{
-    MeshtasticSerial, MeshtasticSerialTrait, MshDevHandler as MshDevNotifierRs,
-};
+use yaroc_receiver::meshtastic_serial::MeshtasticSerial;
 use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -88,7 +87,7 @@ impl From<MqttConfig> for MqttConfigRs {
 
 #[pyclass]
 pub struct MshDevHandler {
-    inner: Arc<Mutex<MshDevNotifierRs>>,
+    inner: Arc<Mutex<SerialDeviceManager>>,
 }
 
 #[pymethods]

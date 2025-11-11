@@ -91,6 +91,11 @@ impl MeshtasticSerial {
         &self.device_node
     }
 
+    /// Returns the MAC address of the device.
+    pub fn mac_address(&self) -> MacAddress {
+        self.mac_address
+    }
+
     /// Disconnects the Meshtastic device.
     pub async fn disconnect(self) -> Result<(), Box<dyn std::error::Error>> {
         self.stream_api.disconnect().await?;
