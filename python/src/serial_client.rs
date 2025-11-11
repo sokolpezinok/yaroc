@@ -87,14 +87,14 @@ impl SerialClient {
     }
 
     pub fn send_punch<'a>(
-        &mut self,
+        &self,
         py: Python<'a>,
         punch_log: &SiPunchLog,
     ) -> PyResult<Bound<'a, PyAny>> {
         let computer_tx = self.computer_tx.clone();
         let raw_punch = punch_log.punch.raw;
 
-        future_into_py::<_, ()>(py, async move {
+        future_into_py(py, async move {
             let mut tx = computer_tx.lock().await;
             tx.write_all(&raw_punch).await.map_err(|e| {
                 PyRuntimeError::new_err(format!("Error sending punch via serial port: {e}"))
@@ -105,7 +105,7 @@ impl SerialClient {
     }
 
     pub fn send_status<'a>(
-        &'a self,
+        &self,
         py: Python<'a>,
         _status: &Bound<'_, PyAny>,
         _mac_addr: &str,
