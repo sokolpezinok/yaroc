@@ -22,12 +22,9 @@ pub enum MeshtasticEvent {
 }
 
 pub trait MeshtasticSerialTrait {
-    /// Returns the MAC address of the device.
-    fn mac_address(&self) -> MacAddress;
-
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
-        &mut self,
+        self,
         cancellation_token: CancellationToken,
         mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
     ) -> impl Future<Output = ()> + Send;
@@ -104,17 +101,13 @@ impl MeshtasticSerial {
 }
 
 impl MeshtasticSerialTrait for MeshtasticSerial {
-    fn mac_address(&self) -> MacAddress {
-        self.mac_address
-    }
-
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
-        &mut self,
+        mut self,
         cancellation_token: CancellationToken,
         mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
     ) -> impl Future<Output = ()> + Send {
-        let mac_address = self.mac_address();
+        let mac_address = self.mac_address;
         async move {
             loop {
                 tokio::select! {
@@ -196,7 +189,7 @@ impl MshDevHandler {
     /// `CancellationToken`.
     fn spawn_serial<M: MeshtasticSerialTrait + Send + 'static>(
         &mut self,
-        mut meshtastic_serial: M,
+        meshtastic_serial: M,
     ) -> CancellationToken {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -239,17 +232,13 @@ mod tests {
     }
 
     impl MeshtasticSerialTrait for FakeMeshtasticSerial {
-        fn mac_address(&self) -> MacAddress {
-            self.mac_address
-        }
-
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
         async fn inner_loop(
-            &mut self,
+            mut self,
             cancellation_token: CancellationToken,
             mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
         ) {
-            let mac_address = self.mac_address();
+            let mac_address = self.mac_address;
             loop {
                 tokio::select! {
                     _ = cancellation_token.cancelled() => {
