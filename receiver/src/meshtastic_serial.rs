@@ -28,6 +28,7 @@ pub trait MeshtasticSerialTrait {
     /// Waits for the next message from the device.
     fn next_message(&mut self) -> impl Future<Output = MeshtasticEvent> + Send;
 
+    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
         &mut self,
         cancellation_token: CancellationToken,
@@ -109,6 +110,7 @@ impl MeshtasticSerialTrait for MeshtasticSerial {
         }
     }
 
+    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
         &mut self,
         cancellation_token: CancellationToken,
@@ -242,6 +244,7 @@ mod tests {
             }
         }
 
+        /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
         async fn inner_loop(
             &mut self,
             cancellation_token: CancellationToken,
