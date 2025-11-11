@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::info;
 use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use std::sync::Arc;
@@ -48,12 +48,12 @@ impl SiUartHandler {
                     let si_uart = SiUart::new(serial);
                     mutex.lock().await.add_device(si_uart, &device_node);
                     info!("Connected to SI UART device at {port}",);
+                    Ok(())
                 }
-                Err(err) => {
-                    error!("Error connecting to {port}: {err}");
-                }
-            };
-            Ok(())
+                Err(err) => Err(PyConnectionError::new_err(format!(
+                    "Error connecting to {port}: {err}"
+                ))),
+            }
         })
     }
 

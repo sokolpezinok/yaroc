@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator
 
 from usbmonitor import USBMonitor
-from usbmonitor.attributes import DEVNAME, ID_MODEL_ID, ID_VENDOR_ID
+from usbmonitor.attributes import DEVNAME, ID_VENDOR_ID
 
 from ..rs import SiPunch, SiUartHandler
 from ..utils.sys_info import tty_device_from_usb
