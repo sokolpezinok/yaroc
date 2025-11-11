@@ -71,7 +71,7 @@ struct UnfinishedSequence {
 ///
 /// * `R` - A UART reader that implements the `RxWithIdle` trait.
 pub struct SiUart<R: RxWithIdle + Send> {
-    rx: R,
+    pub rx: R,
     buf: [u8; BUF_SIZE],
     end: usize,
     unfinished_sequences: FnvIndexMap<u32, UnfinishedSequence, 8>,

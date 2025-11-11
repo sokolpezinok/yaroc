@@ -3,14 +3,17 @@ use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use yaroc_common::punch::RawPunch;
+use yaroc_common::si_uart::SiUart;
+use yaroc_receiver::serial_device_manager::SerialDeviceManager;
+use yaroc_receiver::si_uart::TokioSerial;
 
-use yaroc_receiver::si_uart::{SiUartHandler as SiUartHandlerRs, TokioSerial};
+type SiUartTokio = SiUart<TokioSerial>;
 
 #[pyclass]
 pub struct SiUartHandler {
-    inner: Arc<Mutex<SiUartHandlerRs>>,
+    inner: Arc<Mutex<SerialDeviceManager<SiUartTokio>>>,
     punch_rx: Arc<Mutex<UnboundedReceiver<RawPunch>>>,
 }
 
@@ -24,7 +27,8 @@ impl Default for SiUartHandler {
 impl SiUartHandler {
     #[new]
     pub fn new() -> Self {
-        let (inner, punch_rx) = SiUartHandlerRs::new();
+        let (punch_tx, punch_rx) = unbounded_channel::<RawPunch>();
+        let inner = SerialDeviceManager::new(punch_tx);
         Self {
             inner: Arc::new(Mutex::new(inner)),
             punch_rx: Arc::new(Mutex::new(punch_rx)),
@@ -41,7 +45,8 @@ impl SiUartHandler {
         pyo3_async_runtimes::tokio::future_into_py::<_, ()>(py, async move {
             match TokioSerial::new(port.as_str()) {
                 Ok(serial) => {
-                    mutex.lock().await.add_device(serial, &device_node);
+                    let si_uart = SiUart::new(serial);
+                    mutex.lock().await.add_device(si_uart, &device_node);
                     info!("Connected to SI UART device at {port}",);
                 }
                 Err(err) => {

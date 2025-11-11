@@ -9,7 +9,7 @@ pub trait UsbSerialTrait {
     fn inner_loop(
         self,
         cancellation_token: CancellationToken,
-        mesh_proto_tx: UnboundedSender<Self::Output>,
+        tx: UnboundedSender<Self::Output>,
     ) -> impl Future<Output = ()> + Send;
 }
 
