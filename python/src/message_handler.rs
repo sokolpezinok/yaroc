@@ -87,7 +87,7 @@ impl From<MqttConfig> for MqttConfigRs {
 
 #[pyclass]
 pub struct MshDevHandler {
-    inner: Arc<Mutex<SerialDeviceManager>>,
+    inner: Arc<Mutex<SerialDeviceManager<MeshtasticSerial>>>,
 }
 
 #[pymethods]

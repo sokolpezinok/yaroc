@@ -9,6 +9,7 @@ use tokio::time::{Instant, timeout_at};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
+use crate::serial_device_manager::UsbSerialTrait;
 use crate::system_info::MacAddress;
 
 /// An enum representing a message from a Meshtastic device.
@@ -17,15 +18,6 @@ pub enum MeshtasticEvent {
     MeshPacket(MeshPacket),
     /// The device was disconnected.
     Disconnected(String),
-}
-
-pub trait MeshtasticSerialTrait {
-    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    fn inner_loop(
-        self,
-        cancellation_token: CancellationToken,
-        mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-    ) -> impl Future<Output = ()> + Send;
 }
 
 /// A connection to a Meshtastic device.
@@ -103,7 +95,9 @@ impl MeshtasticSerial {
     }
 }
 
-impl MeshtasticSerialTrait for MeshtasticSerial {
+impl UsbSerialTrait for MeshtasticSerial {
+    type Output = (MeshPacket, MacAddress);
+
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     fn inner_loop(
         mut self,

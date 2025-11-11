@@ -1,43 +1,51 @@
-use crate::{meshtastic_serial::MeshtasticSerialTrait, system_info::MacAddress};
-use meshtastic::protobufs::MeshPacket;
 use std::collections::{HashMap, hash_map::Entry};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
-/// Meshtastic device handler
-///
-/// Handles connecting and disconnecting of meshtastic devices. Supports only serial port
-/// connections right now.
-pub struct SerialDeviceManager {
-    cancellation_tokens: HashMap<String, CancellationToken>,
-    mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+pub trait UsbSerialTrait {
+    type Output;
+
+    /// An inner loop that reads messages from the serial device and sends them to a channel.
+    fn inner_loop(
+        self,
+        cancellation_token: CancellationToken,
+        mesh_proto_tx: UnboundedSender<Self::Output>,
+    ) -> impl Future<Output = ()> + Send;
 }
 
-impl SerialDeviceManager {
+/// Serial device manager
+///
+/// Handles connecting and disconnecting of serial devices. Supports only serial port
+/// connections right now.
+pub struct SerialDeviceManager<M: UsbSerialTrait + Send + 'static> {
+    cancellation_tokens: HashMap<String, CancellationToken>,
+    tx: UnboundedSender<M::Output>,
+}
+
+impl<M: UsbSerialTrait + Send + 'static> SerialDeviceManager<M>
+where
+    <M as UsbSerialTrait>::Output: Send,
+{
     /// Creates a new `SerialDeviceManager`.
     ///
-    /// The handler is responsible for forwarding messages from the Meshtastic devices to the
+    /// The handler is responsible for forwarding messages from the serial devices to the
     /// message handler.
-    pub fn new(mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) -> Self {
+    pub fn new(tx: UnboundedSender<M::Output>) -> Self {
         Self {
             cancellation_tokens: HashMap::new(),
-            mesh_proto_tx,
+            tx,
         }
     }
 
-    /// Connects to a Meshtastic device.
+    /// Connects to a serial device.
     ///
     /// This function spawns a task to handle messages from the device.
-    pub fn add_device<M: MeshtasticSerialTrait + Send + 'static>(
-        &mut self,
-        msh_serial: M,
-        device_node: &str,
-    ) {
+    pub fn add_device(&mut self, msh_serial: M, device_node: &str) {
         let token = self.spawn_serial(msh_serial);
         self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
-    /// Disconnects a Meshtastic device.
+    /// Disconnects a serial device.
     ///
     /// This function cancels the task that handles messages from the device and returns true if
     /// the device was connected.
@@ -53,20 +61,15 @@ impl SerialDeviceManager {
         }
     }
 
-    /// Spawns a task to read messages from a Meshtastic serial connection.
+    /// Spawns a task to read messages from a serial connection.
     ///
     /// The task forwards the messages to the message handler and can be cancelled by the returned
     /// `CancellationToken`.
-    fn spawn_serial<M: MeshtasticSerialTrait + Send + 'static>(
-        &mut self,
-        meshtastic_serial: M,
-    ) -> CancellationToken {
+    fn spawn_serial(&mut self, meshtastic_serial: M) -> CancellationToken {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
-        let mesh_proto_tx = self.mesh_proto_tx.clone();
-        tokio::spawn(async move {
-            meshtastic_serial.inner_loop(cancellation_token, mesh_proto_tx).await
-        });
+        let tx = self.tx.clone();
+        tokio::spawn(async move { meshtastic_serial.inner_loop(cancellation_token, tx).await });
 
         cancellation_token_clone
     }
@@ -80,10 +83,7 @@ impl SerialDeviceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        meshtastic_serial::{MeshtasticEvent, MeshtasticSerialTrait},
-        system_info::MacAddress,
-    };
+    use crate::{meshtastic_serial::MeshtasticEvent, system_info::MacAddress};
     use futures::Future;
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc::{self, Receiver, UnboundedSender};
@@ -108,7 +108,9 @@ mod tests {
         }
     }
 
-    impl MeshtasticSerialTrait for FakeMeshtasticSerial {
+    impl UsbSerialTrait for FakeMeshtasticSerial {
+        type Output = (MeshPacket, MacAddress);
+
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
         fn inner_loop(
             mut self,
