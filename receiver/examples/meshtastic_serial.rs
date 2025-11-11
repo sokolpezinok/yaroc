@@ -1,11 +1,10 @@
-use std::time::Duration;
-
 use clap::Parser;
 use log::{error, info};
-use yaroc_receiver::meshtastic_serial::MeshtasticSerial;
-use yaroc_receiver::message_handler::MessageHandler;
-use yaroc_receiver::state::Event;
-use yaroc_receiver::system_info::MacAddress;
+use std::time::Duration;
+use yaroc_receiver::{
+    meshtastic_serial::MeshtasticSerial, message_handler::MessageHandler, state::Event,
+    system_info::MacAddress,
+};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -42,11 +41,11 @@ async fn main() {
     }
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new());
-    let mut msh_dev_handler = msg_handler.meshtastic_device_handler();
+    let mut serial_device_manager = msg_handler.meshtastic_device_handler();
     let msh_serial = MeshtasticSerial::new(&args.port, "/some/node", Duration::from_secs(12))
         .await
         .expect("Can't connect to a meshtastic device at {args.port}");
-    msh_dev_handler.add_device(msh_serial, "/some/node");
+    serial_device_manager.add_device(msh_serial, "/some/node");
 
     info!("Everything initialized, starting the loop");
     loop {

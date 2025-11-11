@@ -1,13 +1,13 @@
-use std::time::Duration;
-
+use crate::{
+    mqtt::{MqttConfig, MqttReceiver},
+    serial_device_manager::SerialDeviceManager,
+    state::{Event, FleetState},
+    system_info::MacAddress,
+};
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
+use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-
-use crate::meshtastic_serial::MshDevHandler;
-use crate::mqtt::{MqttConfig, MqttReceiver};
-use crate::state::{Event, FleetState};
-use crate::system_info::MacAddress;
 
 /// Orchestrates the overall message flow.
 ///
@@ -74,8 +74,8 @@ impl MessageHandler {
         }
     }
 
-    /// Returns a new `MshDevHandler` that can be used to handle Meshtastic devices.
-    pub fn meshtastic_device_handler(&self) -> MshDevHandler {
-        MshDevHandler::new(self.mesh_proto_tx.clone())
+    /// Returns a new `SerialDeviceManager` that can be used to handle Meshtastic devices.
+    pub fn meshtastic_device_handler(&self) -> SerialDeviceManager {
+        SerialDeviceManager::new(self.mesh_proto_tx.clone())
     }
 }

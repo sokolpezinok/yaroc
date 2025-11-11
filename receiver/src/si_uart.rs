@@ -60,7 +60,7 @@ pub struct SiUartHandler {
     punch_tx: UnboundedSender<RawPunch>,
 }
 
-//TODO: consider merging logic with MshDevHandler
+//TODO: consider merging logic with SerialDeviceManager
 impl SiUartHandler {
     /// Creates a new `SiUartHandler`.
     ///
