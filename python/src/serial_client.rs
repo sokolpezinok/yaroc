@@ -4,7 +4,7 @@ use log::{error, info};
 use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
-use tokio::io::{AsyncBufReadExt, BufReader, BufWriter, ReadHalf, WriteHalf, split};
+use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf, WriteHalf, split};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
@@ -13,7 +13,7 @@ use crate::punch::SiPunchLog;
 #[pyclass]
 pub struct SerialClient {
     computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
-    computer_tx: Arc<Mutex<BufWriter<WriteHalf<SerialStream>>>>,
+    computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
 }
 
 const FIRST_RESPONSE: &[u8] = b"\xff\x02\xf0\x03\x12\x8cMb?\x03";
@@ -32,7 +32,6 @@ impl SerialClient {
             info!("Connected to SRR sink at {computer_port}");
             let (rx, tx) = split(computer_serial);
             let rx = BufReader::new(rx);
-            let tx = BufWriter::new(tx);
 
             Ok(Self {
                 computer_rx: Arc::new(Mutex::new(rx)),
