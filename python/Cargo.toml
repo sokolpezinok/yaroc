@@ -23,6 +23,7 @@ pyo3-log = "0.13.0"
 regex = "1.11"
 thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
+tokio-serial.workspace = true
 
 [lib]
 name = "yaroc_rs"

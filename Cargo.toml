@@ -23,6 +23,7 @@ log = "0.4"
 meshtastic = { git = "https://github.com/meshtastic/rust", rev = "70c0f7cf9aeaac00059546a68a04d04762ee78f5" }
 thiserror = { version = "2.0.0", default-features = false }
 tokio = { version = "1.44" }
+tokio-serial = "5.4.5"
 
 [profile.release]
 debug = 2

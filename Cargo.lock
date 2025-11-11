@@ -2915,6 +2915,7 @@ dependencies = [
  "regex",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-serial",
  "walkdir",
  "yaroc-common",
  "yaroc-receiver",

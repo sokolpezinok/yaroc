@@ -19,7 +19,7 @@ pub struct SiPunch {
     #[pyo3(get)]
     mode: u8,
     #[pyo3(get)]
-    raw: RawPunch,
+    pub raw: RawPunch,
 }
 
 impl From<SiPunchRs> for SiPunch {
