@@ -10,7 +10,7 @@ from ..rs import MshDevHandler
 from ..utils.sys_info import tty_device_from_usb
 
 
-class MeshtasticSerial:
+class UsbSerialManager:
     def __init__(self, msh_dev_handler: MshDevHandler):
         self._loop = asyncio.get_event_loop()
         self._device_queue: Queue[tuple[bool, str, str]] = Queue()

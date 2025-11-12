@@ -9,7 +9,7 @@ from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
 from ..rs import CellularLog, Event, MeshtasticLog, MessageHandler, MqttConfig, NodeInfo, SiPunchLog
-from ..sources.meshtastic import MeshtasticSerial
+from ..sources.usb_serial_manager import UsbSerialManager
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import is_windows
@@ -27,9 +27,11 @@ class YarocDaemon:
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
         if meshtastic_serial:
-            self.msh_serial = MeshtasticSerial(self.handler.msh_dev_handler())
+            self.serial_manager: UsbSerialManager | None = UsbSerialManager(
+                self.handler.msh_dev_handler()
+            )
         else:
-            self.msh_serial = None
+            self.serial_manager = None
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
@@ -90,8 +92,8 @@ class YarocDaemon:
 
         asyncio.create_task(self.client_group.loop())
         asyncio.create_task(self.handle_messages())
-        if self.msh_serial is not None:
-            asyncio.create_task(self.msh_serial.loop())
+        if self.serial_manager is not None:
+            asyncio.create_task(self.serial_manager.loop())
 
         try:
             await shutdown_event.wait()
