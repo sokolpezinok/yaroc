@@ -21,7 +21,6 @@ pub struct SerialClient {
     computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
     mini_reader: Arc<Mutex<Option<SerialStream>>>,
     mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
-    #[allow(dead_code)]
     mini_reader_connect_tx: UnboundedSender<String>,
 }
 
@@ -98,9 +97,19 @@ impl SerialClient {
             let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
             tokio::select! {
                 len = mini_reader.read_buf(&mut reader_buffer) => {
-                    let _ = len.inspect_err(|e| error!("Error while reading from mini reader: {e}"));
-                    let mut tx = computer_tx.lock().await;
-                    let _ = tx.write_all(reader_buffer.as_slice()).await.inspect_err(|_| error!("Error writing into serial port"));
+                    match len {
+                        Ok(0) => {
+                            // Disconnected
+                            return None;
+                        }
+                        Err(e) => {
+                            error!("Error while reading from mini reader: {e}");
+                        }
+                        _ => {
+                            let mut tx = computer_tx.lock().await;
+                            let _ = tx.write_all(reader_buffer.as_slice()).await.inspect_err(|_| error!("Error writing into serial port"));
+                        }
+                    };
                     // TODO: continue the full transaction and only then release computer_tx.
                 }
                 len = rx.read_buf(&mut buffer) => {
@@ -180,8 +189,7 @@ impl SerialClient {
                         mini_reader_connect_rx.clone(),
                     )
                     .await;
-                    *mini_reader =
-                        device.map(|port| Self::connect_to_mini_reader(port)).transpose()?;
+                    *mini_reader = device.map(Self::connect_to_mini_reader).transpose()?;
                 } else {
                     Self::respond_as_blue_srr(computer_rx.clone(), computer_tx.clone()).await;
                     if let Ok(port) = mini_reader_connect_rx.lock().await.try_recv() {
@@ -190,6 +198,28 @@ impl SerialClient {
                     }
                 }
             }
+        })
+    }
+
+    /// Adds a mini-reader to the client.
+    ///
+    /// This method sends the port of the mini-reader to the main loop, which will then
+    /// connect to it.
+    ///
+    /// # Arguments
+    /// * `py` - Python interpreter instance.
+    /// * `port` - The path to the serial port of the mini-reader (e.g., "/dev/ttyUSB1").
+    ///
+    /// # Returns
+    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves when the port is sent.
+    pub fn add_mini_reader<'a>(&self, py: Python<'a>, port: String) -> PyResult<Bound<'a, PyAny>> {
+        let tx = self.mini_reader_connect_tx.clone();
+        future_into_py(py, async move {
+            info!("Connected mini-reader to {port}");
+            tx.send(port).map_err(|e| {
+                PyRuntimeError::new_err(format!("Error sending mini reader port: {e}"))
+            })?;
+            Ok(())
         })
     }
 
