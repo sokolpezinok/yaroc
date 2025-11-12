@@ -5,6 +5,7 @@ use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader, ReadHalf, WriteHalf, split};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
@@ -19,6 +20,9 @@ pub struct SerialClient {
     computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
     computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
     mini_reader: Arc<Mutex<Option<SerialStream>>>,
+    mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+    #[allow(dead_code)]
+    mini_reader_connect_tx: UnboundedSender<String>,
 }
 
 const FIRST_RESPONSE: &[u8] = b"\xff\x02\xf0\x03\x12\x8cMb?\x03";
@@ -85,11 +89,13 @@ impl SerialClient {
         computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
         computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
         mini_reader: &mut SerialStream,
-    ) {
+        mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+    ) -> Option<String> {
         loop {
             let mut reader_buffer = Vec::with_capacity(280);
             let mut buffer = Vec::with_capacity(280);
             let mut rx = computer_rx.lock().await;
+            let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
             tokio::select! {
                 len = mini_reader.read_buf(&mut reader_buffer) => {
                     let _ = len.inspect_err(|e| error!("Error while reading from mini reader: {e}"));
@@ -101,8 +107,18 @@ impl SerialClient {
                     let _ = len.inspect_err(|e| error!("Error while reading the computer: {e}"));
                     let _ = mini_reader.write_all(buffer.as_slice()).await.inspect_err(|e| error!("Error writing back to mini-Reader: {e}"));
                 }
+                device = mini_reader_connect_rx.recv() => {
+                    return device;
+                }
             }
         }
+    }
+
+    fn connect_to_mini_reader(port: String) -> PyResult<SerialStream> {
+        let builder = tokio_serial::new(&port, 38400);
+        builder
+            .open_native_async()
+            .map_err(|e| PyConnectionError::new_err(format!("Error connecting to {}: {e}", port)))
     }
 }
 
@@ -126,11 +142,14 @@ impl SerialClient {
             info!("Connected to SRR sink at {computer_port}");
             let (rx, tx) = split(computer_serial);
             let rx = BufReader::new(rx);
+            let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
 
             Ok(Self {
                 computer_rx: Arc::new(Mutex::new(rx)),
                 computer_tx: Arc::new(Mutex::new(tx)),
                 mini_reader: Arc::default(),
+                mini_reader_connect_rx: Arc::new(Mutex::new(mini_reader_connect_rx)),
+                mini_reader_connect_tx,
             })
         })
     }
@@ -149,18 +168,30 @@ impl SerialClient {
         let computer_rx = self.computer_rx.clone();
         let computer_tx = self.computer_tx.clone();
         let mini_reader = self.mini_reader.clone();
+        let mini_reader_connect_rx = self.mini_reader_connect_rx.clone();
         future_into_py::<_, ()>(py, async move {
             loop {
                 let mut mini_reader = mini_reader.lock().await;
                 if let Some(mini_reader_stream) = mini_reader.as_mut() {
-                    Self::respond_as_mini_reader(
+                    let device = Self::respond_as_mini_reader(
                         computer_rx.clone(),
                         computer_tx.clone(),
                         mini_reader_stream,
+                        mini_reader_connect_rx.clone(),
                     )
                     .await;
+                    if let Some(port) = device {
+                        let mini_reader_serial = Self::connect_to_mini_reader(port)?;
+                        *mini_reader = Some(mini_reader_serial);
+                    } else {
+                        *mini_reader = None;
+                    }
                 } else {
                     Self::respond_as_blue_srr(computer_rx.clone(), computer_tx.clone()).await;
+                    if let Ok(port) = mini_reader_connect_rx.lock().await.try_recv() {
+                        let mini_reader_serial = Self::connect_to_mini_reader(port)?;
+                        *mini_reader = Some(mini_reader_serial);
+                    }
                 }
             }
         })
