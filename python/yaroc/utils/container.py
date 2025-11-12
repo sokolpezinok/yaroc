@@ -109,8 +109,9 @@ async def create_clients(
             if si_device_notifier is not None:
                 # TODO: this is not the right place for this function
                 async def handle_queue(callable, si_device_notifier):
-                    new_device = await si_device_notifier.get()
-                    await callable(new_device)
+                    while True:
+                        new_device = await si_device_notifier.get()
+                        await callable(new_device)
 
                 t = asyncio.create_task(handle_queue(serial.add_mini_reader, si_device_notifier))
                 tasks.append(t)
