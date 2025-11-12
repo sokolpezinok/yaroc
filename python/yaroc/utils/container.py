@@ -19,6 +19,7 @@ from ..sources.si import (
     SiWorker,
     UdevSiFactory,
 )
+from ..sources.usb_serial_manager import forward_queue
 from ..utils.async_serial import AsyncATCom
 
 
@@ -104,16 +105,10 @@ async def create_clients(
     if config is not None:
         if config.get("serial", {}).get("enable", False):
             logging.info(f"Enabled serial client at {config['serial']['port']}")
-            serial = await client_factories.serial()
+            serial: SerialClient = await client_factories.serial()
 
             if si_device_notifier is not None:
-                # TODO: this is not the right place for this function
-                async def handle_queue(callable, si_device_notifier):
-                    while True:
-                        new_device = await si_device_notifier.get()
-                        await callable(new_device)
-
-                t = asyncio.create_task(handle_queue(serial.add_mini_reader, si_device_notifier))
+                t = asyncio.create_task(forward_queue(serial.add_mini_reader, si_device_notifier))
                 tasks.append(t)
 
             clients.append(serial)

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from asyncio import Queue
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_VENDOR_ID
@@ -65,3 +65,10 @@ class UsbSerialManager:
         asyncio.run_coroutine_threadsafe(
             self._device_queue.put((False, "Unknown", device_node)), self._loop
         )
+
+
+async def forward_queue(coroutine: Callable[[str], Coroutine], si_device_notifier: Queue[str]):
+    while True:
+        new_device = await si_device_notifier.get()
+        await asyncio.sleep(2.0)  # Give the TTY system more time
+        await coroutine(new_device)
