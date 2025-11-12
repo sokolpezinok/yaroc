@@ -11,10 +11,11 @@ from ..utils.sys_info import tty_device_from_usb
 
 
 class UsbSerialManager:
-    def __init__(self, msh_dev_handler: MshDevHandler):
+    def __init__(self, msh_dev_handler: MshDevHandler, si_device_notifier: Queue[str] | None = None):
         self._loop = asyncio.get_event_loop()
         self._device_queue: Queue[tuple[bool, str, str]] = Queue()
         self._handler = msh_dev_handler
+        self._si_device_notifier = si_device_notifier
 
     @staticmethod
     def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:

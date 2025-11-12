@@ -2,6 +2,7 @@ import asyncio
 import logging
 import signal
 import tomllib
+from asyncio import Queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
@@ -23,6 +24,7 @@ class YarocDaemon:
         display_model: str | None = None,
         mqtt_config: MqttConfig | None = None,
         meshtastic_serial: bool = False,
+        si_device_notifier: Queue[str] | None = None,
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
@@ -104,7 +106,7 @@ class YarocDaemon:
         logging.info("Main loop shutting down")
 
 
-async def main_loop():
+async def main_loop() -> None:
     with open("yarocd.toml", "rb") as f:
         config = tomllib.load(f)
     config.pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
@@ -116,7 +118,10 @@ async def main_loop():
     container.wire(modules=["yaroc.utils.container"])
 
     mac_addresses = config["mac-addresses"]
-    client_group = await create_clients(container.client_factories, mac_addresses)
+    si_device_notifier: Queue[str] = Queue()
+    client_group = await create_clients(
+        container.client_factories, mac_addresses, si_device_notifier=si_device_notifier
+    )
     if client_group.len() == 0:
         logging.info("Listening without forwarding")
 
