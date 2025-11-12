@@ -180,12 +180,8 @@ impl SerialClient {
                         mini_reader_connect_rx.clone(),
                     )
                     .await;
-                    if let Some(port) = device {
-                        let mini_reader_serial = Self::connect_to_mini_reader(port)?;
-                        *mini_reader = Some(mini_reader_serial);
-                    } else {
-                        *mini_reader = None;
-                    }
+                    *mini_reader =
+                        device.map(|port| Self::connect_to_mini_reader(port)).transpose()?;
                 } else {
                     Self::respond_as_blue_srr(computer_rx.clone(), computer_tx.clone()).await;
                     if let Ok(port) = mini_reader_connect_rx.lock().await.try_recv() {
