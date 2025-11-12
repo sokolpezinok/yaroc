@@ -1,6 +1,6 @@
 use std::{future, sync::Arc};
 
-use log::{error, info};
+use log::{error, info, warn};
 use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -104,11 +104,13 @@ impl SerialClient {
             let mut buffer = Vec::with_capacity(280);
             let mut rx = computer_rx.lock().await;
             let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
+
             tokio::select! {
                 len = mini_reader.read_buf(&mut reader_buffer) => {
                     match len {
                         Ok(0) => {
-                            // Disconnected
+                            warn!("Mini-reader disconnected");
+                            let _ = mini_reader.shutdown().await;
                             return None;
                         }
                         Err(e) => {
@@ -134,9 +136,9 @@ impl SerialClient {
 
     fn connect_to_mini_reader(port: String) -> PyResult<SerialStream> {
         let builder = tokio_serial::new(&port, 38400);
-        info!("Connected to mini-reader at {port}");
         builder
             .open_native_async()
+            .inspect(|_| info!("Connected to mini-reader at {port}"))
             .map_err(|e| PyConnectionError::new_err(format!("Error connecting to {}: {e}", port)))
     }
 }
@@ -189,8 +191,8 @@ impl SerialClient {
         let mini_reader = self.mini_reader.clone();
         let mini_reader_connect_rx = self.mini_reader_connect_rx.clone();
         future_into_py::<_, ()>(py, async move {
+            let mut mini_reader = mini_reader.lock().await;
             loop {
-                let mut mini_reader = mini_reader.lock().await;
                 let device = if let Some(mini_reader_stream) = mini_reader.as_mut() {
                     Self::respond_as_mini_reader(
                         computer_rx.clone(),
@@ -207,7 +209,11 @@ impl SerialClient {
                     )
                     .await
                 };
-                *mini_reader = device.map(Self::connect_to_mini_reader).transpose()?;
+                let res = device.map(Self::connect_to_mini_reader).transpose();
+                match res {
+                    Ok(mini_reader_stream) => *mini_reader = mini_reader_stream,
+                    Err(e) => error!("{e}"),
+                }
             }
         })
     }
