@@ -4,7 +4,7 @@ use log::{error, info};
 use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
-use tokio::io::{AsyncBufReadExt, BufReader, ReadHalf, WriteHalf, split};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader, ReadHalf, WriteHalf, split};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
@@ -18,6 +18,7 @@ use crate::punch::SiPunchLog;
 pub struct SerialClient {
     computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
     computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
+    mini_reader: Arc<Mutex<Option<SerialStream>>>,
 }
 
 const FIRST_RESPONSE: &[u8] = b"\xff\x02\xf0\x03\x12\x8cMb?\x03";
@@ -25,7 +26,7 @@ const FINAL_RESPONSE: &[u8] = b"\xff\x02\x83\x83\x12\x8c\x00\r\x00\x12\x8c\x0445
 const LAST_BYTE: u8 = 0x03;
 
 impl SerialClient {
-    /// Responds to orienteering software as a blue SportIdent Reader (SRR).
+    /// Responds to orienteering software as a blue SportIdent SRR dongle.
     ///
     /// This function handles the communication protocol with orienteering software,
     /// specifically MeOS and SportIdent Reader, by sending predefined responses.
@@ -70,6 +71,39 @@ impl SerialClient {
             .await
             .inspect_err(|e| error!("Communication with software failed: {e}"));
     }
+
+    /// Handles communication when a mini-reader is connected.
+    ///
+    /// This function continuously reads from both the computer's serial port and the mini-reader,
+    /// forwarding data between them. It acts as a bridge for communication.
+    ///
+    /// # Arguments
+    /// * `computer_rx` - An `Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>` for reading from the computer.
+    /// * `computer_tx` - An `Arc<Mutex<WriteHalf<SerialStream>>>` for writing to the computer.
+    /// * `mini_reader` - A mutable reference to the `SerialStream` connected to the mini-reader.
+    async fn respond_as_mini_reader(
+        computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
+        computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
+        mini_reader: &mut SerialStream,
+    ) {
+        loop {
+            let mut reader_buffer = Vec::with_capacity(280);
+            let mut buffer = Vec::with_capacity(280);
+            let mut rx = computer_rx.lock().await;
+            tokio::select! {
+                len = mini_reader.read_buf(&mut reader_buffer) => {
+                    let _ = len.inspect_err(|e| error!("Error while reading from mini reader: {e}"));
+                    let mut tx = computer_tx.lock().await;
+                    let _ = tx.write_all(reader_buffer.as_slice()).await.inspect_err(|_| error!("Error writing into serial port"));
+                    // TODO: continue the full transaction and only then release computer_tx.
+                }
+                len = rx.read_buf(&mut buffer) => {
+                    let _ = len.inspect_err(|e| error!("Error while reading the computer: {e}"));
+                    let _ = mini_reader.write_all(buffer.as_slice()).await.inspect_err(|e| error!("Error writing back to mini-Reader: {e}"));
+                }
+            }
+        }
+    }
 }
 
 #[pymethods]
@@ -96,11 +130,12 @@ impl SerialClient {
             Ok(Self {
                 computer_rx: Arc::new(Mutex::new(rx)),
                 computer_tx: Arc::new(Mutex::new(tx)),
+                mini_reader: Arc::default(),
             })
         })
     }
 
-    /// Starts an asynchronous loop to continuously respond as a blue SRR.
+    /// Starts an asynchronous loop to continuously respond as a blue SRR dongle.
     ///
     /// This method runs an infinite loop that calls `respond_as_blue_srr` to handle
     /// incoming communication from orienteering software.
@@ -113,9 +148,20 @@ impl SerialClient {
     pub fn r#loop<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let computer_rx = self.computer_rx.clone();
         let computer_tx = self.computer_tx.clone();
+        let mini_reader = self.mini_reader.clone();
         future_into_py::<_, ()>(py, async move {
             loop {
-                Self::respond_as_blue_srr(computer_rx.clone(), computer_tx.clone()).await;
+                let mut mini_reader = mini_reader.lock().await;
+                if let Some(mini_reader_stream) = mini_reader.as_mut() {
+                    Self::respond_as_mini_reader(
+                        computer_rx.clone(),
+                        computer_tx.clone(),
+                        mini_reader_stream,
+                    )
+                    .await;
+                } else {
+                    Self::respond_as_blue_srr(computer_rx.clone(), computer_tx.clone()).await;
+                }
             }
         })
     }
