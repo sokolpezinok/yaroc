@@ -28,12 +28,9 @@ class YarocDaemon:
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        if meshtastic_serial:
-            self.serial_manager: UsbSerialManager | None = UsbSerialManager(
-                self.handler.msh_dev_handler()
-            )
-        else:
-            self.serial_manager = None
+        self.serial_manager = UsbSerialManager(
+            self.handler.msh_dev_handler() if meshtastic_serial else None, si_device_notifier
+        )
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
@@ -138,6 +135,7 @@ async def main_loop() -> None:
         config.get("display", None),
         mqtt_config,
         meshtastic_serial=meshtastic_serial,
+        si_device_notifier=si_device_notifier,
     )
     await yaroc_daemon.loop()
 

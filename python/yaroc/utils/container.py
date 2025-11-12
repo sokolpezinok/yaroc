@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sys
-from asyncio import Queue
+from asyncio import Queue, Task
 from typing import Any, Dict
 
 from dependency_injector import containers, providers
@@ -68,7 +68,7 @@ class Container(containers.DeclarativeContainer):
     async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.port)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
-        serial=providers.Coroutine(SerialClient.create, config.client.serial.port),
+        serial=providers.Callable(SerialClient.create, config.client.serial.port),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(
@@ -100,19 +100,21 @@ async def create_clients(
     si_device_notifier: Queue[str] | None = None,
 ) -> ClientGroup:
     clients: list[Client] = []
+    tasks: list[Task] = []
     if config is not None:
         if config.get("serial", {}).get("enable", False):
             logging.info(f"Enabled serial client at {config['serial']['port']}")
             serial = await client_factories.serial()
 
             if si_device_notifier is not None:
-
+                # TODO: this is not the right place for this function
                 async def handle_queue(callable, si_device_notifier):
                     new_device = await si_device_notifier.get()
                     await callable(new_device)
 
-                # TODO: usually a task gets garbage collected, we should store it somewhere
-                asyncio.create_task(handle_queue(serial.add_mini_reader, si_device_notifier))
+                t = asyncio.create_task(handle_queue(serial.add_mini_reader, si_device_notifier))
+                tasks.append(t)
+
             clients.append(serial)
         if config.get("sim7020", {}).get("enable", False):
             clients.append(await client_factories.sim7020())
@@ -131,4 +133,4 @@ async def create_clients(
         if config.get("mop", {}).get("enable", False):
             clients.append(client_factories.mop())
             logging.info("Enabled MOP client")
-    return ClientGroup(clients)
+    return ClientGroup(clients, tasks)

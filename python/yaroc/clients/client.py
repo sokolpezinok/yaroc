@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from asyncio import Task
 from typing import Sequence
 
 from ..pb.status_pb2 import Status
@@ -28,8 +29,9 @@ class Client(ABC):
 
 
 class ClientGroup:
-    def __init__(self, clients: list[Client]):
+    def __init__(self, clients: list[Client], tasks: list[Task]):
         self.clients = clients
+        self.tasks = tasks
 
     def len(self) -> int:
         return len(self.clients)
