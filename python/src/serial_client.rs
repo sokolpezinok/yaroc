@@ -119,14 +119,26 @@ impl SerialClient {
                         }
                         _ => {
                             let mut tx = computer_tx.lock().await;
-                            let _ = tx.write_all(reader_buffer.as_slice()).await.inspect_err(|_| error!("Error writing into serial port"));
+                            let _ = tx
+                                .write_all(reader_buffer.as_slice())
+                                .await
+                                .inspect_err(|e| error!("Error writing into serial port: {e}"));
                         }
                     };
                     // TODO: continue the full transaction and only then release computer_tx.
                 }
                 len = rx.read_buf(&mut buffer) => {
-                    let _ = len.inspect_err(|e| error!("Error while reading the computer: {e}"));
-                    let _ = mini_reader.write_all(buffer.as_slice()).await.inspect_err(|e| error!("Error writing back to mini-Reader: {e}"));
+                    match len {
+                        Ok(_) => {
+                            let _ = mini_reader
+                                .write_all(buffer.as_slice())
+                                .await
+                                .inspect_err(|e| error!("Error writing back to mini-Reader: {e}"));
+                        }
+                        Err(e) => {
+                            error!("Error while reading from computer: {e}");
+                        }
+                    }
                 }
                 device = mini_reader_connect_rx.recv() => {
                     return device;
