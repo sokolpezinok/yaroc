@@ -5,7 +5,7 @@ use tokio_serial::{SerialPortBuilderExt, SerialStream};
 use tokio_util::sync::CancellationToken;
 
 use yaroc_common::punch::RawPunch;
-use yaroc_common::si_uart::SiUart;
+use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
 use crate::serial_device_manager::UsbSerialTrait;
@@ -27,7 +27,7 @@ impl TokioSerial {
     /// A `Result` containing the new `TokioSerial` instance or an error if the port cannot be
     /// opened.
     pub fn new(port: &str) -> crate::Result<Self> {
-        let builder = tokio_serial::new(port, 38400);
+        let builder = tokio_serial::new(port, BAUD_RATE);
         let serial =
             builder.open_native_async().map_err(|_| crate::error::Error::ConnectionError)?;
         Ok(Self {

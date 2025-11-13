@@ -8,6 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader, ReadHalf, WriteHalf, s
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
+use yaroc_common::si_uart::BAUD_RATE;
 
 use crate::punch::SiPunchLog;
 
@@ -135,7 +136,7 @@ impl SerialClient {
     }
 
     fn connect_to_mini_reader(port: String) -> PyResult<SerialStream> {
-        let builder = tokio_serial::new(&port, 38400);
+        let builder = tokio_serial::new(&port, BAUD_RATE);
         builder
             .open_native_async()
             .inspect(|_| info!("Connected to mini-reader at {port}"))
@@ -156,7 +157,7 @@ impl SerialClient {
     #[staticmethod]
     pub fn create<'a>(computer_port: String, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         future_into_py::<_, SerialClient>(py, async move {
-            let builder = tokio_serial::new(&computer_port, 38400);
+            let builder = tokio_serial::new(&computer_port, BAUD_RATE);
             let computer_serial = builder.open_native_async().map_err(|e| {
                 PyConnectionError::new_err(format!("Error connecting to {}: {e}", computer_port))
             })?;

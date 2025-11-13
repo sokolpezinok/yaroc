@@ -22,6 +22,8 @@ use crate::backoff::BatchedPunches;
 use crate::error::Error;
 use crate::punch::{LEN, RawPunch, SiPunch};
 
+pub const BAUD_RATE: u32 = 38400;
+
 /// A trait for reading from a UART that can detect when the line is idle.
 pub trait RxWithIdle {
     /// Read from the UART until the line is idle.
