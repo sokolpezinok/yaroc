@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::{future, sync::Arc};
 
 use log::{error, info, warn};
@@ -100,11 +101,13 @@ impl SerialClient {
         mini_reader: &mut SerialStream,
         mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
     ) -> Option<String> {
+        let mut tx_guard = None;
+        let mut rx = computer_rx.lock().await;
+        let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
         loop {
+            //TODO: Consider using the `bytes` crate.
             let mut reader_buffer = Vec::with_capacity(280);
             let mut buffer = Vec::with_capacity(280);
-            let mut rx = computer_rx.lock().await;
-            let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
 
             tokio::select! {
                 len = mini_reader.read_buf(&mut reader_buffer) => {
@@ -117,15 +120,22 @@ impl SerialClient {
                         Err(e) => {
                             error!("Error while reading from mini reader: {e}");
                         }
-                        _ => {
-                            let mut tx = computer_tx.lock().await;
+                        Ok(_) => {
+                            let mut tx = match tx_guard.take() {
+                                Some(t) => t,
+                                None => {
+                                    computer_tx.lock().await
+                                }
+                            };
                             let _ = tx
                                 .write_all(reader_buffer.as_slice())
                                 .await
                                 .inspect_err(|e| error!("Error writing into serial port: {e}"));
+                            // We store the guard on computer_tx for some time, so that the longer
+                            // "transaction" can complete and not be interrupted.
+                            tx_guard = Some(tx);
                         }
                     };
-                    // TODO: continue the full transaction and only then release computer_tx.
                 }
                 len = rx.read_buf(&mut buffer) => {
                     match len {
@@ -142,6 +152,10 @@ impl SerialClient {
                 }
                 device = mini_reader_connect_rx.recv() => {
                     return device;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(800)), if tx_guard.is_some() => {
+                    // Release lock on computer_tx if enough time has passed.
+                    tx_guard = None;
                 }
             }
         }
