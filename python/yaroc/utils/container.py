@@ -49,9 +49,6 @@ def create_si_workers(
         if config.get("fake", {}).get("enable", False):
             logging.info("Enabled fake punch source")
             workers.append(source_factories.fake())
-        if config.get("bt", {}).get("enable", False):
-            logging.info("Enabled Bluetooth punch source")
-            workers.append(source_factories.bt(config["bt"]["mac_addr"]))
     return workers
 
 
