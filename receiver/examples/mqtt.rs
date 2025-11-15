@@ -1,5 +1,7 @@
 extern crate yaroc_common;
 
+use std::time::Duration;
+
 use clap::Parser;
 use log::{error, info};
 use yaroc_receiver::message_handler::MessageHandler;
@@ -50,7 +52,11 @@ async fn main() {
         url: "broker.hivemq.com".to_owned(),
         ..Default::default()
     };
-    let mut handler = MessageHandler::new(dns, vec![mqtt_config, mqtt_config2]);
+    let mut handler = MessageHandler::new(
+        dns,
+        vec![mqtt_config, mqtt_config2],
+        Duration::from_secs(60),
+    );
 
     info!("Everything initialized, starting the loop");
     loop {

@@ -135,8 +135,12 @@ pub struct MessageHandler {
 #[pymethods]
 impl MessageHandler {
     #[new]
-    #[pyo3(signature = (dns, mqtt_config=None))]
-    pub fn new(dns: Vec<(String, String)>, mqtt_config: Option<MqttConfig>) -> PyResult<Self> {
+    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60)))]
+    pub fn new(
+        dns: Vec<(String, String)>,
+        mqtt_config: Option<MqttConfig>,
+        node_info_interval: Duration,
+    ) -> PyResult<Self> {
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
             .map(|(mac, name)| {
@@ -151,6 +155,7 @@ impl MessageHandler {
         let inner = Arc::new(Mutex::new(MessageHandlerRs::new(
             dns?,
             mqtt_config.map(|config| config.into()).into_iter().collect(),
+            node_info_interval,
         )));
         Ok(Self { inner })
     }

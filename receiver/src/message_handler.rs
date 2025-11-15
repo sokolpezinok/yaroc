@@ -25,7 +25,11 @@ impl MessageHandler {
     /// Creates a new `MessageHandler`.
     ///
     /// This function initializes the `FleetState` and an optional `MqttReceiver`.
-    pub fn new(dns: Vec<(String, MacAddress)>, mqtt_configs: Vec<MqttConfig>) -> Self {
+    pub fn new(
+        dns: Vec<(String, MacAddress)>,
+        mqtt_configs: Vec<MqttConfig>,
+        node_infos_interval: Duration,
+    ) -> Self {
         let macs = dns.iter().map(|(_, mac)| mac);
         let mqtt_receivers = mqtt_configs
             .into_iter()
@@ -33,7 +37,7 @@ impl MessageHandler {
             .collect();
         let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         Self {
-            fleet_state: FleetState::new(dns, Duration::from_secs(60)),
+            fleet_state: FleetState::new(dns, node_infos_interval),
             mqtt_receivers,
             mesh_proto_tx,
             mesh_proto_rx,

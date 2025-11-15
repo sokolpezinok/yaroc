@@ -40,7 +40,7 @@ async fn main() {
         }
     }
 
-    let mut msg_handler = MessageHandler::new(dns, Vec::new());
+    let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
     let mut serial_device_manager = msg_handler.meshtastic_device_handler();
     let msh_serial = MeshtasticSerial::new(&args.port, "/some/node", Duration::from_secs(12))
         .await
