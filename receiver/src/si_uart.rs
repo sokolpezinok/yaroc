@@ -60,36 +60,31 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
         tx: UnboundedSender<Self::Output>,
     ) {
         let port = self.rx.port().to_owned();
-        loop {
-            tokio::select! {
-                _ = cancellation_token.cancelled() => {
-                    warn!("Stopping SI UART device: {port}");
-                    break;
-                }
-                punch = self.read() => {
+        let output = cancellation_token
+            .run_until_cancelled_owned(async {
+                loop {
+                    let punch = self.read().await;
                     match punch {
                         Ok(punches) => {
                             for punch in punches {
-                                tx
-                                    .send(punch)
-                                    .expect("Channel unexpectedly closed");
+                                tx.send(punch).expect("Channel unexpectedly closed");
                             }
                         }
-                        Err(err) => {
-                            match err {
-                                Error::UartClosedError => {
-                                    error!("Device removed: {port}");
-                                    cancellation_token.cancel();
-                                    break;
-                                }
-                                e => {
-                                    error!("Failed to read punch: {e}");
-                                }
+                        Err(err) => match err {
+                            Error::UartClosedError => {
+                                error!("Removed SI UART device: {port}");
+                                break;
                             }
-                        }
+                            e => {
+                                error!("Failed to read punch: {e}");
+                            }
+                        },
                     }
                 }
-            }
+            })
+            .await;
+        if output.is_none() {
+            warn!("Stopping SI UART device: {port}");
         }
     }
 }

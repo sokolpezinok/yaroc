@@ -84,7 +84,6 @@ where
 mod tests {
     use super::*;
     use crate::{meshtastic_serial::MeshtasticEvent, system_info::MacAddress};
-    use futures::Future;
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc::{self, Receiver, UnboundedSender};
     use tokio_util::sync::CancellationToken;
@@ -112,33 +111,29 @@ mod tests {
         type Output = (MeshPacket, MacAddress);
 
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-        fn inner_loop(
+        async fn inner_loop(
             mut self,
             cancellation_token: CancellationToken,
             mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-        ) -> impl Future<Output = ()> + Send {
+        ) {
             let mac_address = self.mac_address;
-            async move {
-                loop {
-                    tokio::select! {
-                        _ = cancellation_token.cancelled() => {
-                            break;
-                        }
-                        event = self.next_message() => {
-                            match event {
-                                MeshtasticEvent::MeshPacket(mesh_packet) => {
-                                    mesh_proto_tx
-                                        .send((mesh_packet, mac_address))
-                                        .expect("Channel unexpectedly closed");
-                                }
-                                MeshtasticEvent::Disconnected(_device_node) => {
-                                    cancellation_token.cancel();
-                                }
+            cancellation_token
+                .run_until_cancelled_owned(async {
+                    loop {
+                        let event = self.next_message().await;
+                        match event {
+                            MeshtasticEvent::MeshPacket(mesh_packet) => {
+                                mesh_proto_tx
+                                    .send((mesh_packet, mac_address))
+                                    .expect("Channel unexpectedly closed");
+                            }
+                            MeshtasticEvent::Disconnected(_device_node) => {
+                                break;
                             }
                         }
                     }
-                }
-            }
+                })
+                .await;
         }
     }
 
