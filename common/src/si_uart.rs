@@ -8,6 +8,8 @@
 //! returns them as `BatchedPunches`. It can handle cases where punches are split across
 //! multiple reads and can filter out garbage data.
 
+use core::fmt::Display;
+
 #[cfg(feature = "defmt")]
 use defmt::{debug, error};
 #[cfg(feature = "nrf")]
@@ -256,6 +258,13 @@ impl<R: RxWithIdle + Send> SiUart<R> {
     /// no unfinished sequences.
     pub fn next_deadline(&self) -> Option<(Instant, u32)> {
         self.unfinished_sequences.iter().map(|(card, seq)| (seq.deadline, *card)).min()
+    }
+}
+
+impl<R: RxWithIdle + Send> Display for SiUart<R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        //TODO: write also the port
+        write!(f, "SportIdent UART")
     }
 }
 

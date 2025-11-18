@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::time::Duration;
 
 use log::warn;
@@ -6,7 +7,6 @@ use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::{Instant, timeout_at};
-use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
 use crate::serial_device_manager::UsbSerialTrait;
@@ -99,32 +99,26 @@ impl UsbSerialTrait for MeshtasticSerial {
     type Output = (MeshPacket, MacAddress);
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(
-        mut self,
-        cancellation_token: CancellationToken,
-        mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-    ) {
-        let mac_address = self.mac_address;
-        let output = cancellation_token
-            .run_until_cancelled_owned(async {
-                loop {
-                    let event = self.next_message().await;
-                    match event {
-                        MeshtasticEvent::MeshPacket(mesh_packet) => {
-                            mesh_proto_tx
-                                .send((mesh_packet, mac_address))
-                                .expect("Channel unexpectedly closed");
-                        }
-                        MeshtasticEvent::Disconnected(_device_node) => {
-                            warn!("Removed meshtastic device: {mac_address}");
-                            break;
-                        }
-                    }
+    async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+        loop {
+            let event = self.next_message().await;
+            match event {
+                MeshtasticEvent::MeshPacket(mesh_packet) => {
+                    mesh_proto_tx
+                        .send((mesh_packet, self.mac_address))
+                        .expect("Channel unexpectedly closed");
                 }
-            })
-            .await;
-        if output.is_none() {
-            warn!("Stopping meshtastic device: {mac_address}");
+                MeshtasticEvent::Disconnected(_device_node) => {
+                    warn!("Removed meshtastic device: {}", self.mac_address);
+                    break;
+                }
+            }
         }
+    }
+}
+
+impl Display for MeshtasticSerial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Meshtastic device {}", self.mac_address)
     }
 }

@@ -1,16 +1,15 @@
+use log::warn;
 use std::collections::{HashMap, hash_map::Entry};
+use std::fmt::Display;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
 
 pub trait UsbSerialTrait {
     type Output;
 
     /// An inner loop that reads messages from the serial device and sends them to a channel.
-    fn inner_loop(
-        self,
-        cancellation_token: CancellationToken,
-        tx: UnboundedSender<Self::Output>,
-    ) -> impl Future<Output = ()> + Send;
+    fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
 }
 
 /// Serial device manager
@@ -25,6 +24,7 @@ pub struct SerialDeviceManager<M: UsbSerialTrait + Send + 'static> {
 impl<M: UsbSerialTrait + Send + 'static> SerialDeviceManager<M>
 where
     <M as UsbSerialTrait>::Output: Send,
+    M: Display,
 {
     /// Creates a new `SerialDeviceManager`.
     ///
@@ -65,11 +65,21 @@ where
     ///
     /// The task forwards the messages to the message handler and can be cancelled by the returned
     /// `CancellationToken`.
-    fn spawn_serial(&mut self, meshtastic_serial: M) -> CancellationToken {
+    fn spawn_serial(&mut self, usb_serial: M) -> CancellationToken {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let tx = self.tx.clone();
-        tokio::spawn(async move { meshtastic_serial.inner_loop(cancellation_token, tx).await });
+        tokio::spawn(async move {
+            let description = format!("{usb_serial}");
+
+            let res = usb_serial
+                .inner_loop(tx)
+                .with_cancellation_token_owned(cancellation_token)
+                .await;
+            if res.is_none() {
+                warn!("Stopping {}", description);
+            }
+        });
 
         cancellation_token_clone
     }
@@ -86,11 +96,16 @@ mod tests {
     use crate::{meshtastic_serial::MeshtasticEvent, system_info::MacAddress};
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc::{self, Receiver, UnboundedSender};
-    use tokio_util::sync::CancellationToken;
 
     pub struct FakeMeshtasticSerial {
         mac_address: MacAddress,
         rx: Receiver<MeshPacket>,
+    }
+
+    impl Display for FakeMeshtasticSerial {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "fake meshtastic serial")
+        }
     }
 
     impl FakeMeshtasticSerial {
@@ -111,29 +126,20 @@ mod tests {
         type Output = (MeshPacket, MacAddress);
 
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-        async fn inner_loop(
-            mut self,
-            cancellation_token: CancellationToken,
-            mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-        ) {
-            let mac_address = self.mac_address;
-            cancellation_token
-                .run_until_cancelled_owned(async {
-                    loop {
-                        let event = self.next_message().await;
-                        match event {
-                            MeshtasticEvent::MeshPacket(mesh_packet) => {
-                                mesh_proto_tx
-                                    .send((mesh_packet, mac_address))
-                                    .expect("Channel unexpectedly closed");
-                            }
-                            MeshtasticEvent::Disconnected(_device_node) => {
-                                break;
-                            }
-                        }
+        async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+            loop {
+                let event = self.next_message().await;
+                match event {
+                    MeshtasticEvent::MeshPacket(mesh_packet) => {
+                        mesh_proto_tx
+                            .send((mesh_packet, self.mac_address))
+                            .expect("Channel unexpectedly closed");
                     }
-                })
-                .await;
+                    MeshtasticEvent::Disconnected(_device_node) => {
+                        break;
+                    }
+                }
+            }
         }
     }
 

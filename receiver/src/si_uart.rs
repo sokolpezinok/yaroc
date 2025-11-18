@@ -1,8 +1,7 @@
-use log::{error, warn};
+use log::error;
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
-use tokio_util::sync::CancellationToken;
 
 use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
@@ -54,37 +53,25 @@ impl RxWithIdle for TokioSerial {
 impl UsbSerialTrait for SiUart<TokioSerial> {
     type Output = RawPunch;
 
-    async fn inner_loop(
-        mut self,
-        cancellation_token: CancellationToken,
-        tx: UnboundedSender<Self::Output>,
-    ) {
-        let port = self.rx.port().to_owned();
-        let output = cancellation_token
-            .run_until_cancelled_owned(async {
-                loop {
-                    let punch = self.read().await;
-                    match punch {
-                        Ok(punches) => {
-                            for punch in punches {
-                                tx.send(punch).expect("Channel unexpectedly closed");
-                            }
-                        }
-                        Err(err) => match err {
-                            Error::UartClosedError => {
-                                error!("Removed SI UART device: {port}");
-                                break;
-                            }
-                            e => {
-                                error!("Failed to read punch: {e}");
-                            }
-                        },
+    async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
+        loop {
+            let punch = self.read().await;
+            match punch {
+                Ok(punches) => {
+                    for punch in punches {
+                        tx.send(punch).expect("Channel unexpectedly closed");
                     }
                 }
-            })
-            .await;
-        if output.is_none() {
-            warn!("Stopping SI UART device: {port}");
+                Err(err) => match err {
+                    Error::UartClosedError => {
+                        error!("Removed SI UART device: {}", self);
+                        break;
+                    }
+                    e => {
+                        error!("Failed to read punch: {e}");
+                    }
+                },
+            }
         }
     }
 }
