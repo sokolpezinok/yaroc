@@ -293,7 +293,7 @@ mod test {
             Ok(self.read(buf).await)
         }
 
-        fn port() -> &str {
+        fn port(&self) -> &str {
             "Fake UART"
         }
     }

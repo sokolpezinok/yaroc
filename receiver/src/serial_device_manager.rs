@@ -65,7 +65,7 @@ where
     ///
     /// The task forwards the messages to the message handler and can be cancelled by the returned
     /// `CancellationToken`.
-    fn spawn_serial(&mut self, usb_serial: M) -> CancellationToken {
+    fn spawn_serial(&self, usb_serial: M) -> CancellationToken {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
         let tx = self.tx.clone();
