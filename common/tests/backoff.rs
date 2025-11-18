@@ -90,8 +90,8 @@ impl SendPunchFn for FakeSendPunchFn {
         Ok(())
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
-        spawner.must_spawn(fake_send_punch_fn(msg, self, send_punch_timeout));
+    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
+        spawner.must_spawn(fake_send_punch_fn(msg, self, Duration::from_millis(1000)));
     }
 
     async fn acquire(&mut self) -> yaroc_common::Result<Self::SemaphoreReleaser> {
@@ -163,13 +163,7 @@ async fn main(spawner: Spawner) {
         .expect("Logger failed to initialize");
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
-    let backoff = BackoffRetries::new(
-        fake,
-        Duration::from_millis(100),
-        Duration::from_millis(1000),
-        2,
-        spawner,
-    );
+    let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2, spawner);
     spawner.must_spawn(backoff_loop(backoff));
 
     // First test

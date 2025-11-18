@@ -33,8 +33,6 @@ use yaroc_common::{
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type Bg77SendPunchType = SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>>;
-/// A type alias for a mutex-guarded `Option<SendPunchType>`.
-pub type Bg77SendPunchMutexType = Mutex<RawMutex, Option<Bg77SendPunchType>>;
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
@@ -42,6 +40,8 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// A signal used to trigger a MiniCallHome event.
 static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
+/// A mutex for the `SendPunch` struct.
+pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);
 // Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
 const PUNCHES_INFLIGHT: usize = 5;
 static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
@@ -56,19 +56,14 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
 /// A function that sends a punch using the BG77 modem.
 #[derive(Clone, Copy)]
 pub struct Bg77SendPunchFn {
-    send_punch_mutex: &'static Bg77SendPunchMutexType,
     bg77_punch_semaphore: &'static FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE>,
     packet_timeout: Duration,
 }
 
 impl Bg77SendPunchFn {
     /// Creates a new `Bg77SendPunchFn`.
-    pub fn new(
-        send_punch_mutex: &'static Bg77SendPunchMutexType,
-        packet_timeout: Duration,
-    ) -> Self {
+    pub fn new(packet_timeout: Duration) -> Self {
         Self {
-            send_punch_mutex,
             bg77_punch_semaphore: &BG77_PUNCH_SEMAPHORE,
             packet_timeout,
         }
@@ -101,8 +96,7 @@ impl SendPunchFn for Bg77SendPunchFn {
     >;
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
-        let mut send_punch = self
-            .send_punch_mutex
+        let mut send_punch = SEND_PUNCH_MUTEX
             .lock()
             // TODO: We avoid deadlock by adding a timeout, there might be better solutions
             .with_timeout(self.packet_timeout)
@@ -116,8 +110,8 @@ impl SendPunchFn for Bg77SendPunchFn {
         self.bg77_punch_semaphore.acquire(1).await.map_err(|_| Error::SemaphoreError)
     }
 
-    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration) {
-        spawner.must_spawn(bg77_send_punch_fn(msg, self, send_punch_timeout));
+    fn spawn(self, msg: PunchMsg, spawner: Spawner) {
+        spawner.must_spawn(bg77_send_punch_fn(msg, self, self.send_punch_timeout()));
     }
 }
 
@@ -139,25 +133,9 @@ impl<M: ModemHw> SendPunch<M> {
     /// # Arguments
     ///
     /// * `bg77`: An initialized modem instance.
-    /// * `send_punch_mutex`: A mutex to access the `SendPunch` instance.
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
-    pub fn new(
-        mut bg77: M,
-        send_punch_mutex: &'static Bg77SendPunchMutexType,
-        spawner: Spawner,
-        mqtt_config: MqttConfig,
-    ) -> Self {
-        let send_punch_fn = Bg77SendPunchFn::new(send_punch_mutex, mqtt_config.packet_timeout);
-        let backoff_retries = BackoffRetries::new(
-            send_punch_fn,
-            Duration::from_secs(10),
-            send_punch_fn.send_punch_timeout(),
-            PUNCH_QUEUE_SIZE - 1,
-            spawner,
-        );
-        spawner.must_spawn(backoff_retries_loop(backoff_retries));
-
+    pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
         let client = MqttClient::new(mqtt_config, 0, &MQTT_MSG_PUBLISHED);
         let mut handlers: Vec<UrcHandlerType, 3> = Vec::new();
         let _ = handlers.push(|response| {
@@ -369,7 +347,7 @@ pub async fn read_si_uart(
 /// * `punch_receiver`: The receiver for batched punches.
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
-    send_punch_mutex: &'static Bg77SendPunchMutexType,
+    send_punch_mutex: &'static Mutex<RawMutex, Option<Bg77SendPunchType>>,
     punch_receiver: Receiver<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     {

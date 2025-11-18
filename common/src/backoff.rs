@@ -133,8 +133,8 @@ pub trait SendPunchFn {
 
     /// Spawns a task to send a punch message with a total timeout.
     ///
-    /// The message is dropped if the timeout is exceeded.
-    fn spawn(self, msg: PunchMsg, spawner: Spawner, send_punch_timeout: Duration);
+    /// The message is dropped if a timeout is exceeded.
+    fn spawn(self, msg: PunchMsg, spawner: Spawner);
 }
 
 /// An array of signals for status updates.
@@ -165,7 +165,6 @@ pub struct BackoffRetries<S: SendPunchFn> {
     unpublished_msgs: Vec<bool, PUNCH_QUEUE_SIZE>,
     send_punch_fn: S,
     initial_backoff: Duration,
-    send_punch_timeout: Duration,
     mqtt_events: ImmediatePublisher<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     spawner: Spawner,
 }
@@ -175,7 +174,6 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     pub fn new(
         send_punch_fn: S,
         initial_backoff: Duration,
-        send_punch_timeout: Duration,
         capacity: usize,
         spawner: Spawner,
     ) -> Self {
@@ -186,7 +184,6 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
             unpublished_msgs,
             send_punch_fn,
             initial_backoff,
-            send_punch_timeout,
             mqtt_events,
             spawner,
         }
@@ -217,7 +214,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 let msg = PunchMsg::new(punches, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
-                self.send_punch_fn.spawn(msg, self.spawner, self.send_punch_timeout);
+                self.send_punch_fn.spawn(msg, self.spawner);
             }
             _ => {
                 error!("Message queue is full");

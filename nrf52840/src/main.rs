@@ -5,11 +5,12 @@ use core::str::FromStr;
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_sync::{channel::Channel, mutex::Mutex};
+use embassy_sync::channel::Channel;
+use embassy_time::Duration;
 use heapless::String;
 use yaroc_common::{
     RawMutex,
-    backoff::BatchedPunches,
+    backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{hw::ModemConfig, mqtt::MqttConfig},
     error::Error,
 };
@@ -18,14 +19,12 @@ use yaroc_nrf52840::{
     device::{Device, DeviceConfig},
     flash::ValueIndex,
     send_punch::{
-        Bg77SendPunchMutexType, SendPunch, minicallhome_loop, read_si_uart,
-        send_punch_event_handler,
+        Bg77SendPunchFn, SEND_PUNCH_MUTEX, SendPunch, backoff_retries_loop, minicallhome_loop,
+        read_si_uart, send_punch_event_handler,
     },
     system_info::{SoftdeviceTemp, sysinfo_update},
 };
 
-/// A mutex for the `SendPunch` struct.
-static SEND_PUNCH_MUTEX: Bg77SendPunchMutexType = Mutex::new(None);
 /// A channel for the SI UART.
 static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = Channel::new();
 
@@ -61,7 +60,16 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
     spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
 
-    let send_punch = SendPunch::new(bg77, &SEND_PUNCH_MUTEX, spawner, mqtt_config);
+    let send_punch_fn = Bg77SendPunchFn::new(mqtt_config.packet_timeout);
+    let backoff_retries = BackoffRetries::new(
+        send_punch_fn,
+        Duration::from_secs(10),
+        PUNCH_QUEUE_SIZE - 1,
+        spawner,
+    );
+    spawner.must_spawn(backoff_retries_loop(backoff_retries));
+
+    let send_punch = SendPunch::new(bg77, spawner, mqtt_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
