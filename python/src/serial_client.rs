@@ -5,7 +5,9 @@ use log::{error, info, warn};
 use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader, ReadHalf, WriteHalf, split};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadHalf, WriteHalf, split,
+};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
@@ -39,11 +41,15 @@ impl SerialClient {
     ///
     /// This function handles the communication protocol with orienteering software,
     /// specifically MeOS and SportIdent Reader, by sending predefined responses.
-    async fn respond_as_blue_srr(
-        computer_rx: ReadMutex<SerialStream>,
-        computer_tx: WriteMutex<SerialStream>,
+    async fn respond_as_blue_srr<R, W>(
+        computer_rx: ReadMutex<R>,
+        computer_tx: WriteMutex<W>,
         mini_reader_connect_rx: MiniReaderConnectRx,
-    ) -> Option<String> {
+    ) -> Option<String>
+    where
+        R: AsyncRead + Unpin + Send,
+        W: AsyncWrite + Unpin + Send,
+    {
         let mut rx = computer_rx.lock().await;
         let mut query = Vec::new();
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
@@ -316,5 +322,133 @@ impl SerialClient {
         _mac_addr: &str,
     ) -> PyResult<Bound<'a, PyAny>> {
         future_into_py(py, future::ready(Ok(true)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tokio::io::{DuplexStream, duplex, split};
+
+    fn init_channels() -> (
+        ReadMutex<DuplexStream>,
+        WriteMutex<DuplexStream>,
+        DuplexStream,
+    ) {
+        let (computer_serial, test_serial) = duplex(4096);
+        let (rx, tx) = split(computer_serial);
+        let computer_rx = Arc::new(Mutex::new(BufReader::new(rx)));
+        let computer_tx = Arc::new(Mutex::new(tx));
+        (computer_rx, computer_tx, test_serial)
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_blue_srr_meos() {
+        let (computer_rx, computer_tx, mut test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
+            computer_rx.clone(),
+            computer_tx.clone(),
+            mini_reader_connect_rx.clone(),
+        ));
+
+        // MeOS handshake
+        let meos_hello = b"\xff\x02\x02\xf0\x01Mm\n\x03";
+        test_serial.write_all(meos_hello).await.unwrap();
+
+        let mut buf = vec![0; FIRST_RESPONSE.len()];
+        test_serial.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, FIRST_RESPONSE);
+
+        let meos_ack = b"\x02\x83\x02\x00\x80\xbf\x17\x03";
+        test_serial.write_all(meos_ack).await.unwrap();
+
+        let mut buf = vec![0; FINAL_RESPONSE.len()];
+        test_serial.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, FINAL_RESPONSE);
+
+        let result = handle.await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_blue_srr_sportident_reader() {
+        let (computer_rx, computer_tx, mut test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
+            computer_rx.clone(),
+            computer_tx.clone(),
+            mini_reader_connect_rx.clone(),
+        ));
+
+        // SportIdent Reader handshake
+        let sir_hello = b"\xff\x02\xf0\x01Mm\n\x03";
+        test_serial.write_all(sir_hello).await.unwrap();
+
+        let mut buf = vec![0; FIRST_RESPONSE.len()];
+        test_serial.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, FIRST_RESPONSE);
+
+        let sir_ack = b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03";
+        test_serial.write_all(sir_ack).await.unwrap();
+
+        let mut buf = vec![0; FINAL_RESPONSE.len()];
+        test_serial.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, FINAL_RESPONSE);
+
+        let result = handle.await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_blue_srr_unknown_software() {
+        let (computer_rx, computer_tx, mut test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
+            computer_rx.clone(),
+            computer_tx.clone(),
+            mini_reader_connect_rx.clone(),
+        ));
+
+        let unknown_hello = b"some garbage\x03";
+        test_serial.write_all(unknown_hello).await.unwrap();
+
+        let result = handle.await.unwrap();
+        assert_eq!(result, None);
+
+        // Check that nothing is written back
+        let mut buf = [0; 1];
+        let res = tokio::time::timeout(
+            std::time::Duration::from_millis(10),
+            test_serial.read_exact(&mut buf),
+        )
+        .await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_blue_srr_mini_reader_connect() {
+        let (computer_rx, computer_tx, _test_serial) = init_channels();
+        let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
+            computer_rx.clone(),
+            computer_tx.clone(),
+            mini_reader_connect_rx.clone(),
+        ));
+
+        let device_path = "/dev/ttyUSB1".to_string();
+        mini_reader_connect_tx.send(device_path.clone()).unwrap();
+
+        let result = handle.await.unwrap();
+        assert_eq!(result, Some(device_path));
     }
 }
