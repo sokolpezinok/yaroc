@@ -1,35 +1,23 @@
 use core::str::FromStr;
 
+#[cfg(feature = "nrf")]
+use crate::at::uart::{AtUart, RxWithIdle, Tx};
 use crate::at::{
     response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
-    uart::{AtUart, RxWithIdle, Tx, UrcHandlerType},
+    uart::UrcHandlerType,
 };
 use crate::error::Error;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+#[cfg(feature = "nrf")]
+use embassy_nrf::gpio::Output;
+use embassy_time::Duration;
 use heapless::{String, Vec, format, index_map::FnvIndexMap};
 
-/// Minimum timeout for BG77 AT-command responses.
-static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 /// Timeout for network activation.
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
-
-/// PIN for turning on the modem
-pub trait ModemPin {
-    fn set_low(&mut self);
-    fn set_high(&mut self);
-}
-
 #[cfg(feature = "nrf")]
-impl ModemPin for embassy_nrf::gpio::Output<'static> {
-    fn set_low(&mut self) {
-        self.set_low();
-    }
-
-    fn set_high(&mut self) {
-        self.set_high();
-    }
-}
+/// Minimum timeout for BG77 AT-command responses.
+static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
 /// Radio Access Technology
 pub enum RAT {
@@ -207,15 +195,17 @@ impl ModemHw for FakeModem {
 }
 
 /// Struct for accessing Quectel BG77 modem
-pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
+#[cfg(feature = "nrf")]
+pub struct Bg77<T: Tx, R: RxWithIdle> {
     uart1: AtUart<T, R>,
-    modem_pin: P,
+    modem_pin: Output<'static>,
     config: ModemConfig,
 }
 
-impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
+#[cfg(feature = "nrf")]
+impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
     /// Creates a new `Bg77` modem instance.
-    pub fn new(tx: T, rx: R, modem_pin: P, config: ModemConfig) -> Self {
+    pub fn new(tx: T, rx: R, modem_pin: Output<'static>, config: ModemConfig) -> Self {
         let uart1 = AtUart::new(tx, rx);
         Self {
             uart1,
@@ -225,7 +215,8 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
     }
 }
 
-impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
+#[cfg(feature = "nrf")]
+impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
     fn spawn(&mut self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
         self.uart1.spawn_rx(urc_handlers, spawner);
     }
@@ -263,9 +254,9 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
     async fn turn_on(&mut self) -> crate::Result<()> {
         if self.simple_call_at("", None).await.is_err() {
             self.modem_pin.set_low();
-            Timer::after_secs(1).await;
+            embassy_time::Timer::after_secs(1).await;
             self.modem_pin.set_high();
-            Timer::after_secs(2).await;
+            embassy_time::Timer::after_secs(2).await;
             self.modem_pin.set_low();
             let _res = self.uart1.read(Duration::from_secs(5)).await?;
             #[cfg(feature = "defmt")]
