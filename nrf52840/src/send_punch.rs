@@ -120,7 +120,7 @@ impl SendPunchFn for Bg77SendPunchFn {
 /// This struct manages the modem, the MQTT client, and system information.
 pub struct SendPunch<M: ModemHw> {
     bg77: M,
-    client: MqttClient<M>,
+    client: MqttClient<M, 0>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
@@ -134,9 +134,9 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
-        let client = MqttClient::new(mqtt_config, 0);
+        let client = MqttClient::<_, 0>::new(mqtt_config);
         let handlers: Vec<UrcHandlerType, 3> = Vec::from_array([|response| {
-            MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())
+            MqttClient::<M, 0>::urc_handler(response, COMMAND_CHANNEL.sender())
         }]);
         bg77.spawn(spawner, handlers);
         Self {
