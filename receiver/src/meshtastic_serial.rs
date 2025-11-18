@@ -6,7 +6,8 @@ use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::time::{Instant, timeout_at};
+use tokio::time::Instant;
+use tokio_util::future::FutureExt;
 
 use crate::error::Error;
 use crate::serial_device_manager::UsbSerialTrait;
@@ -39,11 +40,10 @@ impl MeshtasticSerial {
         let stream_api = StreamApi::new();
         let serial_stream = utils::stream::build_serial_stream(port.to_owned(), None, None, None)?;
         let (mut listener, stream_api) =
-            timeout_at(deadline, stream_api.connect(serial_stream)).await?;
+            stream_api.connect(serial_stream).timeout_at(deadline).await?;
         let config_id = utils::generate_rand_id();
         let stream_api = stream_api.configure(config_id).await?;
-
-        let packet = timeout_at(deadline, listener.recv()).await?;
+        let packet = listener.recv().timeout_at(deadline).await?;
         let Some(FromRadio {
             payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
             ..

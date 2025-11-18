@@ -17,7 +17,7 @@ rumqttc = { version = "0.24.0" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-serial = { workspace = true }
-tokio-util = "0.7.16"
+tokio-util = { version = "0.7.16", features = ["time"] }
 uuid = { version = "1.17.0", features = ["v4"] }
 yaroc-common = { path = "../common", features = ["std"] }
 
