@@ -124,6 +124,7 @@ impl SerialClient {
                             let mut tx = match tx_guard.take() {
                                 Some(t) => t,
                                 None => {
+                                    info!("Locking UART TX to the computer");
                                     computer_tx.lock().await
                                 }
                             };
@@ -155,6 +156,7 @@ impl SerialClient {
                 }
                 _ = tokio::time::sleep(Duration::from_millis(800)), if tx_guard.is_some() => {
                     // Release lock on computer_tx if enough time has passed.
+                    info!("Releasing the lock of the UART TX");
                     tx_guard = None;
                 }
             }
