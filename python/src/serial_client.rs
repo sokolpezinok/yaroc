@@ -13,14 +13,18 @@ use yaroc_common::si_uart::BAUD_RATE;
 
 use crate::punch::SiPunchLog;
 
+type ReadMutex<R> = Arc<Mutex<BufReader<ReadHalf<R>>>>;
+type WriteMutex<W> = Arc<Mutex<WriteHalf<W>>>;
+type MiniReaderConnectRx = Arc<Mutex<UnboundedReceiver<String>>>;
+
 /// A client for interacting with a serial port, typically for SportIdent (SI) devices.
 ///
 /// This struct manages the reading from and writing to a serial port,
 /// allowing communication with SI devices and responding as a blue SRR (SportIdent Reader).
 #[pyclass]
 pub struct SerialClient {
-    computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
-    computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
+    computer_rx: ReadMutex<SerialStream>,
+    computer_tx: WriteMutex<SerialStream>,
     mini_reader: Arc<Mutex<Option<SerialStream>>>,
     mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
     mini_reader_connect_tx: UnboundedSender<String>,
@@ -36,9 +40,9 @@ impl SerialClient {
     /// This function handles the communication protocol with orienteering software,
     /// specifically MeOS and SportIdent Reader, by sending predefined responses.
     async fn respond_as_blue_srr(
-        computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
-        computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
-        mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+        computer_rx: ReadMutex<SerialStream>,
+        computer_tx: WriteMutex<SerialStream>,
+        mini_reader_connect_rx: MiniReaderConnectRx,
     ) -> Option<String> {
         let mut rx = computer_rx.lock().await;
         let mut query = Vec::new();
@@ -68,7 +72,7 @@ impl SerialClient {
                 let _len = rx.read_until(ETX, &mut data).await.unwrap();
 
                 match data.as_slice() {
-                    b"\x02\x83\x02\x00\x80\xbf\x17\x03" | b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03" => {}
+                    b"\x02\x83\x02\x00\x80\xbf\x17\x03" | b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03" => {} // SportIdent Reader ACK or MeOS ACK
                     _ => {
                         error!("Communicating with software failed");
                         return None;
@@ -96,10 +100,10 @@ impl SerialClient {
     /// * `computer_tx` - An `Arc<Mutex<WriteHalf<SerialStream>>>` for writing to the computer.
     /// * `mini_reader` - A mutable reference to the `SerialStream` connected to the mini-reader.
     async fn respond_as_mini_reader(
-        computer_rx: Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>,
-        computer_tx: Arc<Mutex<WriteHalf<SerialStream>>>,
+        computer_rx: ReadMutex<SerialStream>,
+        computer_tx: WriteMutex<SerialStream>,
         mini_reader: &mut SerialStream,
-        mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+        mini_reader_connect_rx: MiniReaderConnectRx,
     ) -> Option<String> {
         let mut tx_guard = None;
         let mut rx = computer_rx.lock().await;
