@@ -18,13 +18,14 @@ use yaroc_nrf52840::{
     device::{Device, DeviceConfig},
     flash::ValueIndex,
     send_punch::{
-        SendPunch, SendPunchMutexType, minicallhome_loop, read_si_uart, send_punch_event_handler,
+        Bg77SendPunchMutexType, SendPunch, minicallhome_loop, read_si_uart,
+        send_punch_event_handler,
     },
     system_info::{SoftdeviceTemp, sysinfo_update},
 };
 
 /// A mutex for the `SendPunch` struct.
-static SEND_PUNCH_MUTEX: SendPunchMutexType = Mutex::new(None);
+static SEND_PUNCH_MUTEX: Bg77SendPunchMutexType = Mutex::new(None);
 /// A channel for the SI UART.
 static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = Channel::new();
 
