@@ -1,12 +1,14 @@
 use defmt::error;
 use embassy_futures::select::{Either3, select3};
-use embassy_time::{Duration, Ticker};
+use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Instant, Ticker};
 use yaroc_common::{
-    send_punch::SendPunchCommand,
+    RawMutex,
+    send_punch::{COMMAND_CHANNEL, SendPunchCommand},
     status::{TEMPERATURE, Temp},
 };
 
-use crate::{ble::Ble, send_punch::COMMAND_CHANNEL};
+use crate::ble::Ble;
 
 /// A struct for reading the temperature from the softdevice.
 pub struct SoftdeviceTemp {
@@ -57,5 +59,26 @@ pub async fn sysinfo_update(mut temp: OwnTemp) {
             Either3::Second(_) => COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await,
             Either3::Third(_) => COMMAND_CHANNEL.send(SendPunchCommand::BatteryUpdate).await,
         }
+    }
+}
+
+/// A signal used to trigger a MiniCallHome event.
+pub static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
+
+/// A task that periodically triggers a `MiniCallHome` event.
+///
+/// # Arguments
+///
+/// * `minicallhome_interval`: The interval at which to trigger the `MiniCallHome` event.
+#[embassy_executor::task]
+pub async fn minicallhome_loop(minicallhome_interval: Duration) {
+    let mut mch_ticker = Ticker::every(minicallhome_interval);
+    loop {
+        // We use Signal, so that MiniCallHome requests do not queue up. If we do not fulfill a few
+        // requests, e.g. during a long network search, it's not a problem. There's no reason to
+        // fulfill all skipped requests, it's important to send (at least) one ping with the latest
+        // info.
+        MCH_SIGNAL.signal(Instant::now());
+        mch_ticker.next().await;
     }
 }

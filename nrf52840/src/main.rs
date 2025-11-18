@@ -13,16 +13,17 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{hw::ModemConfig, mqtt::MqttConfig},
     error::Error,
+    send_punch::SendPunch,
 };
 use yaroc_nrf52840::{
     self as _,
     device::{Device, DeviceConfig},
     flash::ValueIndex,
     send_punch::{
-        Bg77SendPunchFn, SEND_PUNCH_MUTEX, SendPunch, backoff_retries_loop, minicallhome_loop,
-        read_si_uart, send_punch_event_handler,
+        Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, read_si_uart,
+        send_punch_event_handler,
     },
-    system_info::{SoftdeviceTemp, sysinfo_update},
+    system_info::{SoftdeviceTemp, minicallhome_loop, sysinfo_update},
 };
 
 /// A channel for the SI UART.
