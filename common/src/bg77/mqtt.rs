@@ -2,6 +2,7 @@ use core::{marker::PhantomData, str::FromStr};
 #[cfg(feature = "defmt")]
 use defmt::{debug, error, info, warn};
 use embassy_sync::channel::Sender;
+use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
@@ -18,6 +19,9 @@ use crate::{
 };
 
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
+
+pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
+    LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusCode {
@@ -95,31 +99,25 @@ pub struct MqttClient<M: ModemHw> {
     last_successful_send: Instant,
     cgatt_cnt: u8,
     punch_cnt: u16,
-    mqtt_msg_published: &'static Signal<RawMutex, Instant>,
     _phantom: PhantomData<M>,
 }
 
 impl<M: ModemHw> MqttClient<M> {
     /// Creates a new `MqttClient`.
-    pub fn new(
-        config: MqttConfig,
-        client_id: u8,
-        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
-    ) -> Self {
+    pub fn new(config: MqttConfig, client_id: u8) -> Self {
         Self {
             config,
             client_id,
             last_successful_send: Instant::now(),
             cgatt_cnt: 0,
             punch_cnt: 0,
-            mqtt_msg_published,
             _phantom: PhantomData,
         }
     }
 
     /// Registers to the network.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if let Some(publish_time) = self.mqtt_msg_published.try_take() {
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
         }
 
@@ -159,11 +157,9 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Handles URCs from the modem.
-    pub fn urc_handler(
+    pub fn urc_handler<const CLIENT_ID: usize>(
         response: &'_ CommandResponse,
-        client_id: u8,
         command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
-        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
     ) -> bool {
         match response.command() {
             "QMTSTAT" | "QIURC" => {
@@ -180,17 +176,13 @@ impl<M: ModemHw> MqttClient<M> {
                 true
             }
             "CEREG" => response.values().len() == 4,
-            "QMTPUB" => Self::qmtpub_handler(response, client_id, mqtt_msg_published),
+            "QMTPUB" => Self::qmtpub_handler::<CLIENT_ID>(response),
             _ => false,
         }
     }
 
     /// Handles the `+QMTPUB` URC.
-    fn qmtpub_handler(
-        response: &CommandResponse,
-        client_id: u8,
-        mqtt_msg_published: &'static Signal<RawMutex, Instant>,
-    ) -> bool {
+    fn qmtpub_handler<const CLIENT_ID: usize>(response: &CommandResponse) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {
@@ -198,10 +190,10 @@ impl<M: ModemHw> MqttClient<M> {
             }
         };
 
-        if values[0] == client_id {
+        if values[0] == CLIENT_ID as u8 {
             let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
             if status.code == StatusCode::Published {
-                mqtt_msg_published.signal(Instant::now());
+                MQTT_MSG_PUBLISHED.get()[CLIENT_ID].signal(Instant::now());
             }
             if status.msg_id > 0 {
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status(status)).is_err() {
@@ -377,8 +369,6 @@ mod test {
     use crate::bg77::hw::FakeModem;
     use embassy_futures::block_on;
 
-    static MQTT_MSG_PUBLISHED: Signal<RawMutex, Instant> = Signal::new();
-
     #[test]
     fn test_mqtt_connect_ok() {
         let mut bg77 = FakeModem::new(&[
@@ -387,7 +377,7 @@ mod test {
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
-        let mut client = MqttClient::new(MqttConfig::default(), 1, &MQTT_MSG_PUBLISHED);
+        let mut client = MqttClient::new(MqttConfig::default(), 1);
         assert_eq!(block_on(client.mqtt_connect(&mut bg77)), Ok(()));
     }
 
@@ -398,7 +388,7 @@ mod test {
             ("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0"),
         ]);
 
-        let mut client = MqttClient::new(MqttConfig::default(), 2, &MQTT_MSG_PUBLISHED);
+        let mut client = MqttClient::new(MqttConfig::default(), 2);
         assert_eq!(block_on(client.mqtt_disconnect(&mut bg77)), Ok(()));
     }
 }

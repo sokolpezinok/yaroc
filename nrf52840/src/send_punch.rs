@@ -115,8 +115,6 @@ impl SendPunchFn for Bg77SendPunchFn {
     }
 }
 
-pub static MQTT_MSG_PUBLISHED: Signal<RawMutex, Instant> = Signal::new();
-
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
@@ -136,11 +134,10 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
-        let client = MqttClient::new(mqtt_config, 0, &MQTT_MSG_PUBLISHED);
-        let mut handlers: Vec<UrcHandlerType, 3> = Vec::new();
-        let _ = handlers.push(|response| {
-            MqttClient::<M>::urc_handler(response, 0, COMMAND_CHANNEL.sender(), &MQTT_MSG_PUBLISHED)
-        });
+        let client = MqttClient::new(mqtt_config, 0);
+        let handlers: Vec<UrcHandlerType, 3> = Vec::from_array([|response| {
+            MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())
+        }]);
         bg77.spawn(spawner, handlers);
         Self {
             bg77,
