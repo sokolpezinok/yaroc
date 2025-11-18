@@ -18,8 +18,11 @@ async fn reader(rx: UarteRxWithIdle<'static>, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for UarteRxWithIdle<'static> {
-    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
-        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);
+    fn spawn(self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
+        let at_broker = AtRxBroker::new(
+            &MAIN_RX_CHANNEL,
+            Vec::from_slice(urc_handlers).expect("Too many URC handlers, at most 3 accepted"),
+        );
         spawner.must_spawn(reader(self, at_broker));
     }
 

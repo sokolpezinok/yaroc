@@ -134,7 +134,7 @@ pub trait RxWithIdle {
     /// # Arguments
     /// * `spawner` - The task spawner.
     /// * `urc_handlers` - A list of functions for handling URCs.
-    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>);
+    fn spawn(self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
 
     /// Reads from the UART until the line is idle.
     ///
@@ -190,8 +190,11 @@ async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
 }
 
 impl RxWithIdle for FakeRxWithIdle {
-    fn spawn(self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
-        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);
+    fn spawn(self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
+        let at_broker = AtRxBroker::new(
+            &MAIN_RX_CHANNEL,
+            Vec::from_slice(urc_handlers).expect("Too many URC handlers, at most 3 accepted"),
+        );
         spawner.must_spawn(reader(self, at_broker));
     }
 
@@ -247,7 +250,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     /// # Arguments
     /// * `urc_handlers` - A list of functions for handling URCs.
     /// * `spawner` - The task spawner.
-    pub fn spawn_rx(&mut self, urc_handlers: Vec<UrcHandlerType, 3>, spawner: Spawner) {
+    pub fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner) {
         // Consume self.rx, then set self.rx = None
         let rx = self.rx.take();
         rx.unwrap().spawn(spawner, urc_handlers);

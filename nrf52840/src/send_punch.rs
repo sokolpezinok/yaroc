@@ -16,7 +16,6 @@ use femtopb::{Message, repeated};
 use heapless::{Vec, format};
 use yaroc_common::{
     PUNCH_EXTRA_LEN, RawMutex,
-    at::uart::UrcHandlerType,
     backoff::{
         BackoffRetries, BatchedPunches, PUNCH_BATCH_SIZE, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn,
     },
@@ -135,10 +134,10 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `mqtt_config`: The MQTT configuration.
     pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
         let client = MqttClient::<_, 0>::new(mqtt_config);
-        let handlers: Vec<UrcHandlerType, 3> = Vec::from_array([|response| {
-            MqttClient::<M, 0>::urc_handler(response, COMMAND_CHANNEL.sender())
-        }]);
-        bg77.spawn(spawner, handlers);
+        bg77.spawn(
+            spawner,
+            &[|response| MqttClient::<M, 0>::urc_handler(response, COMMAND_CHANNEL.sender())],
+        );
         Self {
             bg77,
             client,

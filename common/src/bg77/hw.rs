@@ -11,7 +11,7 @@ use embassy_executor::Spawner;
 #[cfg(feature = "nrf")]
 use embassy_nrf::gpio::Output;
 use embassy_time::Duration;
-use heapless::{String, Vec, format, index_map::FnvIndexMap};
+use heapless::{String, format, index_map::FnvIndexMap};
 
 /// Timeout for network activation.
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
@@ -93,7 +93,7 @@ pub trait ModemHw {
     fn configure(&mut self) -> impl core::future::Future<Output = Result<(), Error>>;
 
     /// Spawn a task for the modem and process incoming URCs using the provided handlers.
-    fn spawn(&mut self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>);
+    fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
@@ -158,7 +158,7 @@ impl ModemHw for FakeModem {
         Ok(())
     }
 
-    fn spawn(&mut self, _spawner: Spawner, _urc_handlers: Vec<UrcHandlerType, 3>) {}
+    fn spawn(&mut self, _spawner: Spawner, _urc_handlers: &[UrcHandlerType]) {}
 
     async fn simple_call_at(
         &mut self,
@@ -217,7 +217,7 @@ impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
 
 #[cfg(feature = "nrf")]
 impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
-    fn spawn(&mut self, spawner: Spawner, urc_handlers: Vec<UrcHandlerType, 3>) {
+    fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
         self.uart1.spawn_rx(urc_handlers, spawner);
     }
 

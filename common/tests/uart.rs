@@ -32,7 +32,7 @@ async fn main(spawner: Spawner) {
         &TX_CHANNEL,
     );
     let mut at_uart = AtUart::new(&TX_CHANNEL, rx);
-    at_uart.spawn_rx(Vec::new(), spawner);
+    at_uart.spawn_rx(&[], spawner);
 
     let response = at_uart.call_at("I", Duration::from_millis(10), None).await.unwrap();
     assert_eq!(
