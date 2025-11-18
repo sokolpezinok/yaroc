@@ -6,6 +6,7 @@ pub mod ble;
 pub mod device;
 pub mod flash;
 pub mod send_punch;
+pub mod si_uart;
 pub mod system_info;
 
 pub use yaroc_common::error;

@@ -20,9 +20,9 @@ use yaroc_nrf52840::{
     device::{Device, DeviceConfig},
     flash::ValueIndex,
     send_punch::{
-        Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, read_si_uart,
-        send_punch_event_handler,
+        Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
+    si_uart::read_si_uart,
     system_info::{SoftdeviceTemp, minicallhome_loop, sysinfo_update},
 };
 
@@ -74,10 +74,7 @@ async fn main(spawner: Spawner) {
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
-    spawner.must_spawn(send_punch_event_handler(
-        &SEND_PUNCH_MUTEX,
-        SI_UART_CHANNEL.receiver(),
-    ));
+    spawner.must_spawn(send_punch_event_handler(SI_UART_CHANNEL.receiver()));
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.must_spawn(sysinfo_update(temp));

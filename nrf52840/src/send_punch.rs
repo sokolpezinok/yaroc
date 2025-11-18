@@ -9,7 +9,7 @@ use embassy_futures::select::{Either3, select3};
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::{
-    channel::{Receiver, Sender},
+    channel::Receiver,
     semaphore::{FairSemaphore, Semaphore},
 };
 use embassy_time::{Duration, Instant, WithTimeout};
@@ -18,7 +18,6 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
     bg77::hw::{ACTIVATION_TIMEOUT, Bg77},
     send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
-    si_uart::SiUart,
 };
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
@@ -30,12 +29,6 @@ pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex:
 const PUNCHES_INFLIGHT: usize = 5;
 static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
     FairSemaphore::new(PUNCHES_INFLIGHT);
-
-/// A task that runs the backoff retries loop.
-#[embassy_executor::task]
-pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
-    backoff_retries.r#loop().await;
-}
 
 /// A function that sends a punch using the BG77 modem.
 #[derive(Clone, Copy)]
@@ -99,27 +92,10 @@ impl SendPunchFn for Bg77SendPunchFn {
     }
 }
 
-/// A task that reads punches from the SI-UART and sends them to a channel.
-///
-/// This task is designed to run continuously, reading punches from the `si_uart`
-/// and sending them to the `punch_sender` channel. This decouples the reading of
-/// punches from their processing, which is important because the processing might
-/// involve waiting for the modem, which can be a long operation.
+/// A task that runs the backoff retries loop.
 #[embassy_executor::task]
-pub async fn read_si_uart(
-    mut si_uart: SiUart<UarteRxWithIdle<'static>>,
-    punch_sender: Sender<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
-) {
-    loop {
-        match si_uart.read_grouped_punches().await {
-            Err(err) => punch_sender.send(Err(err)).await,
-            Ok(grouped_punches) => {
-                for punches in grouped_punches {
-                    punch_sender.send(Ok(punches)).await;
-                }
-            }
-        }
-    }
+pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
+    backoff_retries.r#loop().await;
 }
 
 /// The main event handler for the `SendPunch` struct.
@@ -133,11 +109,10 @@ pub async fn read_si_uart(
 /// * `punch_receiver`: The receiver for batched punches.
 #[embassy_executor::task]
 pub async fn send_punch_event_handler(
-    send_punch_mutex: &'static Mutex<RawMutex, Option<Bg77SendPunchType>>,
     punch_receiver: Receiver<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     {
-        let mut send_punch_unlocked = send_punch_mutex.lock().await;
+        let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
         send_punch
             .setup()
@@ -154,7 +129,7 @@ pub async fn send_punch_event_handler(
         )
         .await;
         {
-            let mut send_punch_unlocked = send_punch_mutex.lock().await;
+            let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
                 Either3::First(_) => match send_punch.send_mini_call_home().await {
