@@ -44,6 +44,9 @@ pub trait RxWithIdle {
         &mut self,
         buf: &mut [u8],
     ) -> impl core::future::Future<Output = crate::Result<usize>>;
+
+    /// Return the port this UART is associated with
+    fn port(&self) -> &str;
 }
 
 /// Implementation of `RxWithIdle` for `UarteRxWithIdle`.
@@ -55,6 +58,11 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
     /// maps the error type.
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
         self.read_until_idle(buf).await.map_err(|_| Error::UartReadError)
+    }
+
+    fn port(&self) -> &str {
+        //TODO: add a number
+        "UARTE"
     }
 }
 
@@ -263,8 +271,7 @@ impl<R: RxWithIdle + Send> SiUart<R> {
 
 impl<R: RxWithIdle + Send> Display for SiUart<R> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        //TODO: write also the port
-        write!(f, "SportIdent UART")
+        write!(f, "SportIdent UART {}", self.rx.port())
     }
 }
 
@@ -284,6 +291,10 @@ mod test {
     impl RxWithIdle for Reader<'_, RawMutex, FAKE_CAPACITY> {
         async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
             Ok(self.read(buf).await)
+        }
+
+        fn port() -> &str {
+            "Fake UART"
         }
     }
 

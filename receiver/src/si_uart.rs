@@ -34,11 +34,6 @@ impl TokioSerial {
             port: port.to_owned(),
         })
     }
-
-    /// Returns the port path of the serial connection.
-    pub fn port(&self) -> &str {
-        &self.port
-    }
 }
 
 impl RxWithIdle for TokioSerial {
@@ -47,6 +42,11 @@ impl RxWithIdle for TokioSerial {
     /// This is a thin wrapper around `tokio_serial::SerialStream::read`.
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> yaroc_common::Result<usize> {
         self.serial.read(buf).await.map_err(|_| Error::UartReadError)
+    }
+
+    /// Returns the port path of the serial connection.
+    fn port(&self) -> &str {
+        &self.port
     }
 }
 
