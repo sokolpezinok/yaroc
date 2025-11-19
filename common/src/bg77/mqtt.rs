@@ -93,20 +93,22 @@ impl Default for MqttConfig {
 }
 
 /// An MQTT client for the BG77 modem.
-pub struct MqttClient<M: ModemHw, const CLIENT_ID: u8> {
+pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
+    client_id: u8,
     cgatt_cnt: u8,
     punch_cnt: u16,
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
+impl<M: ModemHw> MqttClient<M> {
     /// Creates a new `MqttClient`.
-    pub fn new(config: MqttConfig) -> Self {
+    pub fn new(config: MqttConfig, client_id: u8) -> Self {
         Self {
             config,
             last_successful_send: Instant::now(),
+            client_id,
             cgatt_cnt: 0,
             punch_cnt: 0,
             _phantom: PhantomData,
@@ -115,7 +117,7 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
 
     /// Registers to the network.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[CLIENT_ID as usize].try_take() {
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
         }
 
@@ -155,7 +157,7 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
     }
 
     /// Handles URCs from the modem.
-    pub fn urc_handler(
+    pub fn urc_handler<const CLIENT_ID: u8>(
         response: &'_ CommandResponse,
         command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
     ) -> bool {
@@ -174,13 +176,13 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
                 true
             }
             "CEREG" => response.values().len() == 4,
-            "QMTPUB" => Self::qmtpub_handler(response),
+            "QMTPUB" => Self::qmtpub_handler::<CLIENT_ID>(response),
             _ => false,
         }
     }
 
     /// Handles the `+QMTPUB` URC.
-    fn qmtpub_handler(response: &CommandResponse) -> bool {
+    fn qmtpub_handler<const CLIENT_ID: u8>(response: &CommandResponse) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
             Err(_) => {
@@ -208,38 +210,39 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
 
     /// Opens a TCP connection to the MQTT broker.
     async fn mqtt_open(&self, bg77: &mut M) -> crate::Result<()> {
+        let cid = self.client_id;
         let opened = bg77
             .simple_call_at("+QMTOPEN?", None)
             .await?
-            .parse2::<u8, String<40>>([0, 1], Some(CLIENT_ID));
+            .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened
-            && client_id == CLIENT_ID
+            && client_id == cid
         {
             if *url == self.config.url {
                 info!("TCP connection already opened to {}", url);
                 return Ok(());
             }
             warn!("Connected to the wrong broker {}, will disconnect", url);
-            let cmd = format!(50; "+QMTCLOSE={CLIENT_ID}")?;
+            let cmd = format!(50; "+QMTCLOSE={cid}")?;
             bg77.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
         }
 
         let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{CLIENT_ID},{},2,1",
+            "+QMTCFG=\"timeout\",{cid},{},2,1",
             self.config.packet_timeout.as_secs()
         )?;
         bg77.simple_call_at(&cmd, None).await?;
         let cmd = format!(50;
-            "+QMTCFG=\"keepalive\",{CLIENT_ID},{}",
+            "+QMTCFG=\"keepalive\",{cid},{}",
             (self.config.packet_timeout * 2).as_secs()
         )?;
         bg77.simple_call_at(&cmd, None).await?;
 
-        let cmd = format!(100; "+QMTOPEN={CLIENT_ID},\"{}\",1883", self.config.url)?;
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = bg77
             .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
-            .parse2::<u8, i8>([0, 1], Some(CLIENT_ID))?;
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
             error!("Could not open TCP connection to {}", self.config.url);
             return Err(Error::MqttError(status));
@@ -255,10 +258,11 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
             .inspect_err(|err| error!("Network registration failed: {}", err))?;
         self.mqtt_open(bg77).await?;
 
+        let cid = self.client_id;
         let (_, status) = bg77
             .simple_call_at("+QMTCONN?", None)
             .await?
-            .parse2::<u8, u8>([0, 1], Some(CLIENT_ID))?;
+            .parse2::<u8, u8>([0, 1], Some(cid))?;
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
@@ -274,11 +278,11 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={CLIENT_ID},\"nrf52840-{}\"", self.config.name)?;
+                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?;
                 let (_, res, reason) = bg77
                     .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
-                    .parse3::<u8, u32, i8>([0, 1, 2], Some(CLIENT_ID))?;
+                    .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
                 if res == 0 && reason == 0 {
                     info!("Successfully connected to MQTT");
@@ -298,16 +302,17 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
     /// Disconnects from the MQTT broker.
     #[allow(dead_code)]
     pub async fn mqtt_disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
-        let cmd = format!(50; "+QMTDISC={CLIENT_ID}")?;
+        let cid = self.client_id;
+        let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = bg77
             .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
             .await?
-            .parse2::<u8, i8>([0, 1], Some(CLIENT_ID))?;
+            .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
         if result != MQTT_DISCONNECTED {
             return Err(Error::MqttError(result));
         }
-        let cmd = format!(50; "+QMTCLOSE={CLIENT_ID}")?;
+        let cmd = format!(50; "+QMTCLOSE={cid}")?;
         let _ = bg77.simple_call_at(&cmd, None).await; // TODO: Why does it fail?
         Ok(())
     }
@@ -321,8 +326,9 @@ impl<M: ModemHw, const CLIENT_ID: u8> MqttClient<M, CLIENT_ID> {
         qos: MqttQos,
         msg_id: u16,
     ) -> Result<(), Error> {
+        let cid = self.client_id;
         let cmd = format!(100;
-            "+QMTPUB={CLIENT_ID},{},{},0,\"yar/{}/{}\",{}",
+            "+QMTPUB={cid},{},{},0,\"yar/{}/{}\",{}",
             msg_id,
             qos as u8,
             &self.config.mac_address,
@@ -371,7 +377,7 @@ mod test {
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
-        let mut client = MqttClient::<_, 1>::new(MqttConfig::default());
+        let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
         assert_eq!(block_on(client.mqtt_connect(&mut bg77)), Ok(()));
     }
 
@@ -382,7 +388,7 @@ mod test {
             ("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0"),
         ]);
 
-        let mut client = MqttClient::<_, 2>::new(MqttConfig::default());
+        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
         assert_eq!(block_on(client.mqtt_disconnect(&mut bg77)), Ok(()));
     }
 }

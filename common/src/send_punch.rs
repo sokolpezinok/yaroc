@@ -37,7 +37,7 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// This struct manages the modem, the MQTT client, and system information.
 pub struct SendPunch<M: ModemHw> {
     bg77: M,
-    client: MqttClient<M, 0>,
+    client: MqttClient<M>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
@@ -51,10 +51,10 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
-        let client = MqttClient::<_, 0>::new(mqtt_config);
+        let client = MqttClient::<_>::new(mqtt_config, 0);
         bg77.spawn(
             spawner,
-            &[|response| MqttClient::<M, 0>::urc_handler(response, COMMAND_CHANNEL.sender())],
+            &[|response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())],
         );
         Self {
             bg77,
