@@ -1,3 +1,4 @@
+use chrono::{DateTime, FixedOffset};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -72,6 +73,34 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
             |response| ModemManager::urc_handler(response, COMMAND_CHANNEL.sender()),
         ];
         bg77.spawn_rx(&handlers, spawner);
+        Self {
+            bg77,
+            modem_pin,
+            mqtt_client,
+            modem_manager,
+            system_info: SystemInfo::<M>::default(),
+            last_reconnect: None,
+        }
+    }
+
+    /// Creates a new `SendPunch` instance without spawning any tasks.
+    ///
+    /// This is intended for testing purposes where a `Spawner` is not readily available.
+    ///
+    /// # Arguments
+    ///
+    /// * `bg77`: An initialized modem instance.
+    /// * `modem_pin`: The pin used to reset/turn on the modem.
+    /// * `mqtt_config`: The MQTT configuration.
+    #[cfg(test)]
+    pub fn new_without_spawning(
+        bg77: M,
+        modem_pin: P,
+        mqtt_config: MqttConfig,
+        modem_config: ModemConfig,
+    ) -> Self {
+        let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
+        let modem_manager = ModemManager::new(modem_config);
         Self {
             bg77,
             modem_pin,
@@ -191,7 +220,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     }
 
     /// Synchronizes the system time with the network time from the modem.
-    async fn synchronize_time(&mut self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
         self.system_info.current_time(&mut self.bg77, false).await
     }
 
@@ -235,5 +264,35 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
                     .inspect_err(|err| error!("Error while getting battery state: {}", err));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use embassy_futures::block_on;
+
+    use crate::{at::fake_modem::FakeModem, bg77::modem_manager::FakePin};
+
+    use super::*;
+
+    #[test]
+    fn send_punch_instantiation_test() {
+        let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
+        let fake_pin = FakePin {};
+        let mqtt_config = MqttConfig::default();
+
+        let mut send_punch = SendPunch::new_without_spawning(
+            fake_modem,
+            fake_pin,
+            mqtt_config,
+            ModemConfig::default(),
+        );
+
+        assert!(send_punch.last_reconnect.is_none());
+        let expected_date = DateTime::parse_from_rfc3339("2025-11-24T01:40:34+01:00").unwrap();
+        assert_eq!(
+            block_on(send_punch.synchronize_time()).unwrap(),
+            expected_date
+        );
     }
 }

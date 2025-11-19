@@ -26,6 +26,13 @@ pub trait ModemPin {
     fn set_low(&mut self);
 }
 
+pub struct FakePin {}
+
+impl ModemPin for FakePin {
+    fn set_high(&mut self) {}
+    fn set_low(&mut self) {}
+}
+
 #[cfg(feature = "nrf")]
 impl ModemPin for Output<'static> {
     fn set_high(&mut self) {
