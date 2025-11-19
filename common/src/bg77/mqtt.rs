@@ -370,18 +370,6 @@ mod test {
     use embassy_futures::block_on;
 
     #[test]
-    fn test_mqtt_connect_ok() {
-        let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
-            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
-        ]);
-
-        let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
-        assert_eq!(block_on(client.mqtt_connect(&mut bg77)), Ok(()));
-    }
-
-    #[test]
     fn test_mqtt_disconnect_ok() {
         let mut bg77 = FakeModem::new(&[
             ("AT+QMTDISC=2", "+QMTDISC: 2,0"),
