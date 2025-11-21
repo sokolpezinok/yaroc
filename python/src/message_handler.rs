@@ -16,6 +16,7 @@ use yaroc_receiver::system_info::MacAddress;
 use crate::punch::SiPunchLog;
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
+/// Events that can be processed by the Python application.
 #[pyclass]
 pub enum Event {
     CellularLog(CellularLog),
@@ -36,6 +37,7 @@ impl From<CellularLogMessage> for Event {
     }
 }
 
+/// Configuration for the MQTT client.
 #[pyclass]
 #[derive(Clone)]
 pub struct MqttConfig {
@@ -51,6 +53,7 @@ pub struct MqttConfig {
 
 #[pymethods]
 impl MqttConfig {
+    /// Creates a default MQTT configuration.
     #[new]
     pub fn new() -> Self {
         MqttConfigRs::default().into()
@@ -85,6 +88,7 @@ impl From<MqttConfig> for MqttConfigRs {
     }
 }
 
+/// Manages Meshtastic devices connected via serial ports.
 #[pyclass]
 pub struct MshDevHandler {
     inner: Arc<Mutex<SerialDeviceManager<MeshtasticSerial>>>,
@@ -92,6 +96,9 @@ pub struct MshDevHandler {
 
 #[pymethods]
 impl MshDevHandler {
+    /// Adds a Meshtastic device to the handler.
+    ///
+    /// The device is identified by the port (e.g. /dev/ttyUSB0) and a logical device node name.
     pub fn add_device<'a>(
         &mut self,
         py: Python<'a>,
@@ -116,6 +123,7 @@ impl MshDevHandler {
         })
     }
 
+    /// Removes a Meshtastic device from the handler.
     pub fn remove_device(&mut self, device_node: String) -> PyResult<()> {
         self.inner
             .try_lock()
@@ -127,6 +135,9 @@ impl MshDevHandler {
     }
 }
 
+/// Central handler for aggregating and dispatching messages.
+///
+/// Handles communication between various sources (Serial, Meshtastic) and sinks (MQTT).
 #[pyclass]
 pub struct MessageHandler {
     inner: Arc<Mutex<MessageHandlerRs>>,
@@ -134,6 +145,13 @@ pub struct MessageHandler {
 
 #[pymethods]
 impl MessageHandler {
+    /// Creates a new MessageHandler.
+    ///
+    /// # Arguments
+    ///
+    /// * `dns` - A list of (mac_address, name) tuples for resolving node names.
+    /// * `mqtt_config` - Optional MQTT configuration.
+    /// * `node_info_interval` - Interval for sending node info messages.
     #[new]
     #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60)))]
     pub fn new(
@@ -160,6 +178,7 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
+    /// Returns the handler for Meshtastic devices.
     pub fn msh_dev_handler(&self) -> PyResult<MshDevHandler> {
         let handler = self.get_inner()?.meshtastic_device_handler();
         Ok(MshDevHandler {
@@ -167,6 +186,7 @@ impl MessageHandler {
         })
     }
 
+    /// Waits for the next event from the message handler.
     pub fn next_event<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let handler = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, Event>(py, async move {
