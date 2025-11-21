@@ -89,6 +89,10 @@ impl Default for ModemConfig {
 }
 
 pub trait ModemHw {
+    /// Default timeout for a command. It's typically the minimum timeout, a couple hundred
+    /// milliseconds for a modem.
+    const DEFAULT_TIMEOUT: Duration;
+
     /// Configures the modem according to a modem config.
     fn configure(&mut self) -> impl core::future::Future<Output = Result<(), Error>>;
 
@@ -97,10 +101,10 @@ pub trait ModemHw {
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
-    /// The command send is `cmd` prefixed with `AT`. We wait a short time for an OK/ERROR and then
-    /// if `response_timeout` is set, we wait `response_timeout` for a response that is prefixed by
+    /// We send `cmd` prefixed by `AT`. We wait a short time for an OK/ERROR and then if
+    /// `response_timeout` is set, we wait `response_timeout` for a response that is prefixed by
     /// `cmd`.
-    fn simple_call_at(
+    fn call_at(
         &mut self,
         cmd: &str,
         response_timeout: Option<Duration>,
@@ -109,7 +113,7 @@ pub trait ModemHw {
     /// Performs an AT call to the modem and waits for an OK/ERROR response.
     ///
     /// The maximum waiting time is specified by `timeout`.
-    fn call_at(
+    fn long_call_at(
         &mut self,
         cmd: &str,
         timeout: Duration,
@@ -154,13 +158,15 @@ impl FakeModem {
 
 //TODO: might be better to use a mocking library here
 impl ModemHw for FakeModem {
+    const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
+
     async fn configure(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
     fn spawn(&mut self, _spawner: Spawner, _urc_handlers: &[UrcHandlerType]) {}
 
-    async fn simple_call_at(
+    async fn call_at(
         &mut self,
         cmd: &str,
         _response_timeout: Option<Duration>,
@@ -172,7 +178,7 @@ impl ModemHw for FakeModem {
         Ok(AtResponse::new([response, FromModem::Ok].into(), cmd))
     }
 
-    async fn call_at(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
+    async fn long_call_at(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
         todo!();
     }
 
@@ -217,19 +223,21 @@ impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
 
 #[cfg(feature = "nrf")]
 impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
+    const DEFAULT_TIMEOUT: Duration = BG77_MINIMUM_TIMEOUT;
+
     fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
         self.uart1.spawn_rx(urc_handlers, spawner);
     }
 
-    async fn simple_call_at(
+    async fn call_at(
         &mut self,
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        self.uart1.call_at(cmd, BG77_MINIMUM_TIMEOUT, response_timeout).await
+        self.uart1.call_at(cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
     }
 
-    async fn call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
+    async fn long_call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
         self.uart1.call_at(cmd, timeout, None).await
     }
 
@@ -240,19 +248,19 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
         second_read_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         match second_read_timeout {
-            None => self.uart1.call(msg, command_prefix, false, BG77_MINIMUM_TIMEOUT).await,
+            None => self.uart1.call(msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await,
             Some(timeout) => self.uart1.call(msg, command_prefix, true, timeout).await,
         }
     }
 
     async fn read(&mut self) -> crate::Result<AtResponse> {
-        let lines = self.uart1.read(BG77_MINIMUM_TIMEOUT).await?;
+        let lines = self.uart1.read(Self::DEFAULT_TIMEOUT).await?;
         // TODO: take command as parameter
         Ok(AtResponse::new(lines, "+QMTPUB"))
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {
-        if self.simple_call_at("", None).await.is_err() {
+        if self.call_at("", None).await.is_err() {
             self.modem_pin.set_low();
             embassy_time::Timer::after_secs(1).await;
             self.modem_pin.set_high();
@@ -261,7 +269,7 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
             let _res = self.uart1.read(Duration::from_secs(5)).await?;
             #[cfg(feature = "defmt")]
             defmt::info!("Modem response: {=[?]}", _res.as_slice());
-            self.call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
+            self.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
             let _res = self.uart1.read(Duration::from_secs(5)).await?;
             #[cfg(feature = "defmt")]
             defmt::info!("Modem response: {=[?]}", _res.as_slice());
@@ -269,12 +277,14 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
         Ok(())
     }
 
+    //TODO: this should move under a "network handling" struct or something similar. Some logic
+    //under MqttClient should also go there.
     async fn configure(&mut self) -> Result<(), Error> {
-        self.simple_call_at("E0", None).await?;
+        self.call_at("E0", None).await?;
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
-        let _ = self.simple_call_at(&cmd, None).await;
-        self.simple_call_at("+CEREG=2", None).await?;
-        let _ = self.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
+        let _ = self.call_at(&cmd, None).await;
+        self.call_at("+CEREG=2", None).await?;
+        let _ = self.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
 
         let (nwscanseq, iotopmode) = match self.config.rat {
             RAT::Ltem => ("02", 0),
@@ -282,11 +292,11 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
             RAT::LtemNbIot => ("00", 2),
         };
         let cmd = format!(50; "+QCFG=\"nwscanseq\",{}", nwscanseq)?;
-        self.simple_call_at(&cmd, None).await?;
+        self.call_at(&cmd, None).await?;
         let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
-        self.simple_call_at(&cmd, None).await?;
+        self.call_at(&cmd, None).await?;
         let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
-        self.simple_call_at(&cmd, None).await?;
+        self.call_at(&cmd, None).await?;
         Ok(())
     }
 }

@@ -14,14 +14,15 @@ use yaroc_common::error::Error;
 mockall::mock! {
     pub ModemHw {}
     impl ModemHw for ModemHw {
+        const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
         async fn configure(&mut self) -> Result<(), Error>;
         fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
-        async fn simple_call_at(
+        async fn call_at(
             &mut self,
             cmd: &str,
             response_timeout: Option<Duration>,
         ) -> yaroc_common::Result<AtResponse>;
-        async fn call_at(
+        async fn long_call_at(
             &mut self,
             cmd: &str,
             timeout: Duration,
@@ -43,7 +44,7 @@ fn expect_at(
     timeout_matcher: impl Predicate<Option<Duration>> + Send + 'static,
     response: Option<&'static str>,
 ) {
-    mock.expect_simple_call_at()
+    mock.expect_call_at()
         .with(cmd_matcher, timeout_matcher)
         .times(1)
         .returning(move |cmd, _| {

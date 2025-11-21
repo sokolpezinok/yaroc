@@ -126,22 +126,23 @@ impl<M: ModemHw> MqttClient<M> {
         {
             warn!("Will reattach to network because of no messages being sent for a long time");
             self.last_successful_send = Instant::now();
-            bg77.simple_call_at("E0", None).await?;
-            let _ = bg77.call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
+            bg77.call_at("E0", None).await?;
+            let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
-            let _ = bg77.call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
+            let _ = bg77.long_call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
             self.cgatt_cnt += 1;
         } else {
-            let state = bg77.simple_call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
+            let state = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
             if state == 1 {
                 info!("Already registered to network");
                 return Ok(());
             }
         }
 
-        bg77.call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
         // CGATT=1 needs additional time and reading from modem
         Timer::after_secs(1).await;
+        // TODO: this is the only ModemHw::read() in the code base, can it be removed?
         let _response = bg77.read().await;
         #[cfg(feature = "defmt")]
         if let Ok(response) = _response
@@ -150,8 +151,7 @@ impl<M: ModemHw> MqttClient<M> {
             debug!("Read {=[?]} after CGATT=1", response.lines());
         }
         // TODO: should we do something with the result?
-        let (_, _) =
-            bg77.simple_call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        let (_, _) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
 
         Ok(())
     }
@@ -212,7 +212,7 @@ impl<M: ModemHw> MqttClient<M> {
     async fn mqtt_open(&self, bg77: &mut M) -> crate::Result<()> {
         let cid = self.client_id;
         let opened = bg77
-            .simple_call_at("+QMTOPEN?", None)
+            .call_at("+QMTOPEN?", None)
             .await?
             .parse2::<u8, String<40>>([0, 1], Some(cid));
         if let Ok((client_id, url)) = opened
@@ -224,23 +224,23 @@ impl<M: ModemHw> MqttClient<M> {
             }
             warn!("Connected to the wrong broker {}, will disconnect", url);
             let cmd = format!(50; "+QMTCLOSE={cid}")?;
-            bg77.simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
+            bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
         }
 
         let cmd = format!(50;
             "+QMTCFG=\"timeout\",{cid},{},2,1",
             self.config.packet_timeout.as_secs()
         )?;
-        bg77.simple_call_at(&cmd, None).await?;
+        bg77.call_at(&cmd, None).await?;
         let cmd = format!(50;
             "+QMTCFG=\"keepalive\",{cid},{}",
             (self.config.packet_timeout * 2).as_secs()
         )?;
-        bg77.simple_call_at(&cmd, None).await?;
+        bg77.call_at(&cmd, None).await?;
 
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
         let (_, status) = bg77
-            .simple_call_at(&cmd, Some(ACTIVATION_TIMEOUT))
+            .call_at(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
@@ -259,10 +259,8 @@ impl<M: ModemHw> MqttClient<M> {
         self.mqtt_open(bg77).await?;
 
         let cid = self.client_id;
-        let (_, status) = bg77
-            .simple_call_at("+QMTCONN?", None)
-            .await?
-            .parse2::<u8, u8>([0, 1], Some(cid))?;
+        let (_, status) =
+            bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
         const MQTT_INITIALIZING: u8 = 1;
         const MQTT_CONNECTING: u8 = 2;
         const MQTT_CONNECTED: u8 = 3;
@@ -280,7 +278,7 @@ impl<M: ModemHw> MqttClient<M> {
                 info!("Will connect to MQTT");
                 let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?;
                 let (_, res, reason) = bg77
-                    .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
+                    .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
                     .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
 
@@ -305,7 +303,7 @@ impl<M: ModemHw> MqttClient<M> {
         let cid = self.client_id;
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = bg77
-            .simple_call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
+            .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         const MQTT_DISCONNECTED: i8 = 0;
@@ -313,7 +311,7 @@ impl<M: ModemHw> MqttClient<M> {
             return Err(Error::MqttError(result));
         }
         let cmd = format!(50; "+QMTCLOSE={cid}")?;
-        let _ = bg77.simple_call_at(&cmd, None).await; // TODO: Why does it fail?
+        let _ = bg77.call_at(&cmd, None).await; // TODO: Why does it fail?
         Ok(())
     }
 
@@ -335,7 +333,7 @@ impl<M: ModemHw> MqttClient<M> {
             topic,
             msg.len(),
         )?;
-        bg77.simple_call_at(&cmd, None).await?;
+        bg77.call_at(&cmd, None).await?;
 
         let second_read_timeout = if qos == MqttQos::Q0 {
             Some(Duration::from_secs(5))
