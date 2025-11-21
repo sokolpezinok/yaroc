@@ -11,6 +11,9 @@ use yaroc_receiver::si_uart::TokioSerial;
 
 type SiUartTokio = SiUart<TokioSerial>;
 
+/// `SiUartHandler` is a Python-exposed class that manages SI card readers connected via UART.
+///
+/// It provides methods to add and remove devices, and to receive raw punch data from them.
 #[pyclass]
 pub struct SiUartHandler {
     inner: Arc<Mutex<SerialDeviceManager<SiUartTokio>>>,
@@ -25,6 +28,9 @@ impl Default for SiUartHandler {
 
 #[pymethods]
 impl SiUartHandler {
+    /// Creates a new `SiUartHandler` instance.
+    ///
+    /// Initializes the internal `SerialDeviceManager` and sets up a channel for receiving punches.
     #[new]
     pub fn new() -> Self {
         let (punch_tx, punch_rx) = unbounded_channel::<RawPunch>();
@@ -35,6 +41,18 @@ impl SiUartHandler {
         }
     }
 
+    /// Adds a new SI UART device to be managed.
+    ///
+    /// This method attempts to connect to the specified serial port and, upon successful connection,
+    /// registers the device with the `SerialDeviceManager`.
+    ///
+    /// # Arguments
+    /// * `py` - Python interpreter instance.
+    /// * `port` - The serial port name (e.g., "/dev/ttyUSB0" or "COM1").
+    /// * `device_node` - A unique identifier for the device.
+    ///
+    /// # Returns
+    /// A `PyResult` indicating success or an error if the connection fails.
     pub fn add_device<'a>(
         &mut self,
         py: Python<'a>,
@@ -57,15 +75,29 @@ impl SiUartHandler {
         })
     }
 
+    /// Removes a previously added SI UART device.
+    ///
+    /// # Arguments
+    /// * `device_node` - The unique identifier of the device to remove.
+    ///
+    /// # Returns
+    /// `Ok(true)` if the device was successfully removed, `Ok(false)` if not found,
+    /// or a `PyRuntimeError` if the handler is locked.
     pub fn remove_device(&mut self, device_node: String) -> PyResult<bool> {
         self.inner
             .try_lock()
-            .map_err(|_| {
-                PyRuntimeError::new_err("Failed to lock meshtastic device handler".to_owned())
-            })
+            .map_err(|_| PyRuntimeError::new_err("Failed to lock SI UART handler".to_owned()))
             .map(|mut handler| handler.remove_device(device_node))
     }
 
+    /// Asynchronously waits for and returns the next raw punch from any connected SI device.
+    ///
+    /// # Arguments
+    /// * `py` - Python interpreter instance.
+    ///
+    /// # Returns
+    /// A `PyResult` containing a `RawPunch` on success, or a `PyConnectionError` if the
+    /// punch channel is closed, or a `PyRuntimeError` for other issues.
     pub fn next_punch<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let rx = self.punch_rx.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, RawPunch>(py, async move {
