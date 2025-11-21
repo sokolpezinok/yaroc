@@ -10,7 +10,7 @@ use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::{bind_interrupts, saadc};
 use heapless::String;
-use yaroc_common::bg77::hw::{Bg77, ModemConfig};
+use yaroc_common::bg77::hw::Bg77;
 use yaroc_common::si_uart::SiUart;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -50,7 +50,7 @@ pub struct DeviceConfig<'a> {
 
 impl Device {
     /// Initializes all the drivers and peripherals of the device
-    pub fn new(modem_config: ModemConfig, spawner: Spawner) -> Self {
+    pub fn new(spawner: Spawner) -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -67,7 +67,7 @@ impl Device {
         let _io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
-        let bg77 = Bg77::new(tx1, rx1, modem_pin, modem_config);
+        let bg77 = Bg77::new(tx1, rx1, modem_pin);
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);

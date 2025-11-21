@@ -6,7 +6,6 @@ use crate::at::{
     response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
     uart::UrcHandlerType,
 };
-use crate::error::Error;
 use embassy_executor::Spawner;
 #[cfg(feature = "nrf")]
 use embassy_nrf::gpio::Output;
@@ -93,9 +92,6 @@ pub trait ModemHw {
     /// milliseconds for a modem.
     const DEFAULT_TIMEOUT: Duration;
 
-    /// Configures the modem according to a modem config.
-    fn configure(&mut self) -> impl core::future::Future<Output = Result<(), Error>>;
-
     /// Spawn a task for the modem and process incoming URCs using the provided handlers.
     fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
 
@@ -160,10 +156,6 @@ impl FakeModem {
 impl ModemHw for FakeModem {
     const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
 
-    async fn configure(&mut self) -> crate::Result<()> {
-        Ok(())
-    }
-
     fn spawn(&mut self, _spawner: Spawner, _urc_handlers: &[UrcHandlerType]) {}
 
     async fn call_at(
@@ -205,19 +197,14 @@ impl ModemHw for FakeModem {
 pub struct Bg77<T: Tx, R: RxWithIdle> {
     uart1: AtUart<T, R>,
     modem_pin: Output<'static>,
-    config: ModemConfig,
 }
 
 #[cfg(feature = "nrf")]
 impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
     /// Creates a new `Bg77` modem instance.
-    pub fn new(tx: T, rx: R, modem_pin: Output<'static>, config: ModemConfig) -> Self {
+    pub fn new(tx: T, rx: R, modem_pin: Output<'static>) -> Self {
         let uart1 = AtUart::new(tx, rx);
-        Self {
-            uart1,
-            modem_pin,
-            config,
-        }
+        Self { uart1, modem_pin }
     }
 }
 
@@ -274,29 +261,6 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
             #[cfg(feature = "defmt")]
             defmt::info!("Modem response: {=[?]}", _res.as_slice());
         }
-        Ok(())
-    }
-
-    //TODO: this should move under a "network handling" struct or something similar. Some logic
-    //under MqttClient should also go there.
-    async fn configure(&mut self) -> Result<(), Error> {
-        self.call_at("E0", None).await?;
-        let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
-        let _ = self.call_at(&cmd, None).await;
-        self.call_at("+CEREG=2", None).await?;
-        let _ = self.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
-
-        let (nwscanseq, iotopmode) = match self.config.rat {
-            RAT::Ltem => ("02", 0),
-            RAT::NbIot => ("03", 1),
-            RAT::LtemNbIot => ("00", 2),
-        };
-        let cmd = format!(50; "+QCFG=\"nwscanseq\",{}", nwscanseq)?;
-        self.call_at(&cmd, None).await?;
-        let cmd = format!(50; "+QCFG=\"iotopmode\",{},1", iotopmode)?;
-        self.call_at(&cmd, None).await?;
-        let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
-        self.call_at(&cmd, None).await?;
         Ok(())
     }
 }

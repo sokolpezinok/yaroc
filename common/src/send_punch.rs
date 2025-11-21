@@ -9,7 +9,8 @@ use heapless::{Vec, format};
 use log::{error, info, warn};
 
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
-use crate::bg77::hw::ModemHw;
+use crate::bg77::hw::{ModemConfig, ModemHw};
+use crate::bg77::modem_manager::ModemManager;
 use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
@@ -38,6 +39,7 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 pub struct SendPunch<M: ModemHw> {
     bg77: M,
     client: MqttClient<M>,
+    modem_manager: ModemManager,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
@@ -50,8 +52,15 @@ impl<M: ModemHw> SendPunch<M> {
     /// * `bg77`: An initialized modem instance.
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
-    pub fn new(mut bg77: M, spawner: Spawner, mqtt_config: MqttConfig) -> Self {
+    /// * `modem_config`: The Modem configuration.
+    pub fn new(
+        mut bg77: M,
+        spawner: Spawner,
+        mqtt_config: MqttConfig,
+        modem_config: ModemConfig,
+    ) -> Self {
         let client = MqttClient::<_>::new(mqtt_config, 0);
+        let modem_manager = ModemManager::new(modem_config);
         bg77.spawn(
             spawner,
             &[|response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())],
@@ -59,6 +68,7 @@ impl<M: ModemHw> SendPunch<M> {
         Self {
             bg77,
             client,
+            modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
         }
@@ -153,7 +163,7 @@ impl<M: ModemHw> SendPunch<M> {
     /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
         let _ = self.bg77.turn_on().await;
-        self.bg77.configure().await?;
+        self.modem_manager.configure(&mut self.bg77).await?;
 
         let _ = self.client.mqtt_connect(&mut self.bg77).await;
         Ok(())

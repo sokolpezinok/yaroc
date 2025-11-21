@@ -32,8 +32,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 /// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let modem_config = ModemConfig::default();
-    let device = Device::new(modem_config, spawner);
+    let device = Device::new(spawner);
     let Device {
         mac_address,
         bg77,
@@ -70,7 +69,8 @@ async fn main(spawner: Spawner) {
     );
     spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
-    let send_punch = SendPunch::new(bg77, spawner, mqtt_config);
+    let modem_config = ModemConfig::default();
+    let send_punch = SendPunch::new(bg77, spawner, mqtt_config, modem_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }

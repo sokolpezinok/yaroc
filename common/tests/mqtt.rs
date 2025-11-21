@@ -7,7 +7,6 @@ use yaroc_common::at::response::{AtResponse, CommandResponse, FromModem};
 use yaroc_common::at::uart::UrcHandlerType;
 use yaroc_common::bg77::hw::{ACTIVATION_TIMEOUT, ModemHw};
 use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig};
-use yaroc_common::error::Error;
 
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
 // instead.
@@ -15,7 +14,6 @@ mockall::mock! {
     pub ModemHw {}
     impl ModemHw for ModemHw {
         const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
-        async fn configure(&mut self) -> Result<(), Error>;
         fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
         async fn call_at(
             &mut self,
