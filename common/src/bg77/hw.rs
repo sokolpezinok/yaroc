@@ -54,7 +54,11 @@ pub trait ModemHw {
     ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Reads an AT response from the modem.
-    fn read(&mut self, cmd: &str) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
+    fn read(
+        &mut self,
+        cmd: &str,
+        timeout: Duration,
+    ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
@@ -110,7 +114,7 @@ impl ModemHw for FakeModem {
         todo!()
     }
 
-    async fn read(&mut self, _cmd: &str) -> crate::Result<AtResponse> {
+    async fn read(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
         todo!()
     }
 
@@ -180,8 +184,8 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         }
     }
 
-    async fn read(&mut self, cmd: &str) -> crate::Result<AtResponse> {
-        let lines = self.uart1.read(Self::DEFAULT_TIMEOUT).await?;
+    async fn read(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
+        let lines = self.uart1.read(timeout).await?;
         Ok(AtResponse::new(lines, cmd))
     }
 
@@ -192,11 +196,12 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
             self.modem_pin.set_high();
             embassy_time::Timer::after_secs(2).await;
             self.modem_pin.set_low();
-            let _res = self.uart1.read(Duration::from_secs(5)).await?;
+            // TODO: fix command
+            let _res = self.read("", Duration::from_secs(5)).await?;
             #[cfg(feature = "defmt")]
             defmt::info!("Modem response: {=[?]}", _res.as_slice());
             self.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let _res = self.uart1.read(Duration::from_secs(5)).await?;
+            let _res = self.read("", Duration::from_secs(5)).await?;
             #[cfg(feature = "defmt")]
             defmt::info!("Modem response: {=[?]}", _res.as_slice());
         }

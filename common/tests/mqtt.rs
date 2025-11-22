@@ -35,6 +35,7 @@ mockall::mock! {
         async fn read(
             &mut self,
             cmd: &str,
+            timeout: Duration,
         ) -> yaroc_common::Result<AtResponse>;
         async fn turn_on(&mut self) -> yaroc_common::Result<()>;
     }
