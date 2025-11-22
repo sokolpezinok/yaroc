@@ -2,9 +2,10 @@ use embassy_executor::Spawner;
 use embassy_futures::block_on;
 use embassy_time::Duration;
 use mockall::{Predicate, predicate::*};
-use yaroc_common::at::response::{AtResponse, CommandResponse, FromModem};
 
-use yaroc_common::at::uart::UrcHandlerType;
+use yaroc_common::Result;
+use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromModem};
+use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
 use yaroc_common::bg77::hw::ModemHw;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig};
@@ -12,44 +13,41 @@ use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig};
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
 // instead.
 mockall::mock! {
-    pub ModemHw {}
-    impl ModemHw for ModemHw {
-        const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
-        fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]);
-        async fn call_at(
+    pub AtUart {}
+    impl AtUartTrait for AtUart {
+        fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner);
+        async fn call_at_timeout(
             &mut self,
-            cmd: &str,
+            command: &str,
+            call_timeout: Duration,
             response_timeout: Option<Duration>,
-        ) -> yaroc_common::Result<AtResponse>;
-        async fn long_call_at(
-            &mut self,
-            cmd: &str,
-            timeout: Duration,
-        ) -> yaroc_common::Result<AtResponse>;
-        async fn call(
+        ) -> Result<AtResponse>;
+        async fn call_second_read(
             &mut self,
             msg: &[u8],
             command_prefix: &str,
-            second_read_timeout: Option<Duration>,
-        ) -> yaroc_common::Result<AtResponse>;
-        async fn read(
-            &mut self,
-            cmd: &str,
+            second_read: bool,
             timeout: Duration,
-        ) -> yaroc_common::Result<AtResponse>;
+        ) -> Result<AtResponse>;
+        async fn read(
+            &self,
+            timeout: Duration,
+        ) -> Result<heapless::Vec<FromModem, AT_LINES>>;
     }
 }
 
-fn expect_at(
-    mock: &mut MockModemHw,
+const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
+
+fn expect_call_at(
+    mock: &mut MockAtUart,
     cmd_matcher: impl Predicate<str> + Send + 'static,
-    timeout_matcher: impl Predicate<Option<Duration>> + Send + 'static,
+    response_timeout_matcher: impl Predicate<Option<Duration>> + Send + 'static,
     response: Option<&'static str>,
 ) {
-    mock.expect_call_at()
-        .with(cmd_matcher, timeout_matcher)
+    mock.expect_call_at_timeout()
+        .with(cmd_matcher, eq(DEFAULT_TIMEOUT), response_timeout_matcher)
         .times(1)
-        .returning(move |cmd, _| {
+        .returning(move |cmd, _, _| {
             let mut resps = heapless::Vec::new();
             if let Some(r) = response {
                 resps
@@ -61,27 +59,31 @@ fn expect_at(
         });
 }
 
+impl ModemHw for MockAtUart {
+    const DEFAULT_TIMEOUT: Duration = DEFAULT_TIMEOUT;
+}
+
 #[test]
 fn test_mqtt_connect_ok() {
-    let mut bg77 = MockModemHw::new();
+    let mut bg77 = MockAtUart::new();
 
-    expect_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
-    expect_at(&mut bg77, eq("+QMTOPEN?"), eq(None), None);
-    expect_at(
+    expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
+    expect_call_at(&mut bg77, eq("+QMTOPEN?"), eq(None), None);
+    expect_call_at(
         &mut bg77,
         eq("+QMTCFG=\"timeout\",1,35,2,1"),
         eq(None),
         None,
     );
-    expect_at(&mut bg77, eq("+QMTCFG=\"keepalive\",1,70"), eq(None), None);
-    expect_at(
+    expect_call_at(&mut bg77, eq("+QMTCFG=\"keepalive\",1,70"), eq(None), None);
+    expect_call_at(
         &mut bg77,
         eq("+QMTOPEN=1,\"broker.emqx.io\",1883"),
         eq(Some(ACTIVATION_TIMEOUT)),
         Some("+QMTOPEN: 1,0"),
     );
-    expect_at(&mut bg77, eq("+QMTCONN?"), eq(None), Some("+QMTCONN: 1,1"));
-    expect_at(
+    expect_call_at(&mut bg77, eq("+QMTCONN?"), eq(None), Some("+QMTCONN: 1,1"));
+    expect_call_at(
         &mut bg77,
         str::starts_with("+QMTCONN=1,\"nrf52840-"),
         always(),
