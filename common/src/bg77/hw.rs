@@ -1,6 +1,5 @@
 use core::str::FromStr;
 
-#[cfg(feature = "nrf")]
 use crate::at::uart::{AtUart, AtUartTrait, RxWithIdle, Tx};
 use crate::at::{
     response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
@@ -12,7 +11,6 @@ use embassy_nrf::gpio::Output;
 use embassy_time::Duration;
 use heapless::{String, format, index_map::FnvIndexMap};
 
-#[cfg(feature = "nrf")]
 /// Minimum timeout for BG77 AT-command responses.
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
 
@@ -121,24 +119,37 @@ impl ModemHw for FakeModem {
     }
 }
 
-/// Struct for accessing Quectel BG77 modem
-#[cfg(feature = "nrf")]
-pub struct Bg77<T: Tx, R: RxWithIdle> {
-    uart1: AtUart<T, R>,
-    modem_pin: Output<'static>,
+pub trait ModemPin {
+    fn set_high(&mut self);
+    fn set_low(&mut self);
 }
 
 #[cfg(feature = "nrf")]
-impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
+impl ModemPin for Output<'static> {
+    fn set_high(&mut self) {
+        self.set_high();
+    }
+
+    fn set_low(&mut self) {
+        self.set_low();
+    }
+}
+
+/// Struct for accessing Quectel BG77 modem
+pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
+    uart1: AtUart<T, R>,
+    modem_pin: P,
+}
+
+impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
     /// Creates a new `Bg77` modem instance.
-    pub fn new(tx: T, rx: R, modem_pin: Output<'static>) -> Self {
+    pub fn new(tx: T, rx: R, modem_pin: P) -> Self {
         let uart1 = AtUart::new(tx, rx);
         Self { uart1, modem_pin }
     }
 }
 
-#[cfg(feature = "nrf")]
-impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
+impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
     const DEFAULT_TIMEOUT: Duration = BG77_MINIMUM_TIMEOUT;
 
     fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {

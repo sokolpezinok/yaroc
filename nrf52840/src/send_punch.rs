@@ -7,6 +7,7 @@ use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either3, select3};
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
+use embassy_nrf::gpio::Output;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::{
     channel::Receiver,
@@ -22,7 +23,7 @@ use yaroc_common::{
 };
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
-pub type Bg77SendPunchType = SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>>;
+pub type Bg77SendPunchType = SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>>;
 
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);

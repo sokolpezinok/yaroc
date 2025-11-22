@@ -29,7 +29,7 @@ pub struct Device {
     /// The MAC address of the device
     pub mac_address: String<12>,
     /// The BG77 modem driver
-    pub bg77: Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>,
+    pub bg77: Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>,
     /// The SAADC driver
     pub saadc: Saadc<'static, 1>,
     /// The SportIdent UART driver
