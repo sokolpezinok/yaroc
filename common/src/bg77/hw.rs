@@ -1,10 +1,10 @@
 use core::str::FromStr;
 
-use crate::at::response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem};
+use crate::at::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
 use crate::at::uart::{AtUart, AtUartTrait, RxWithIdle, Tx, UrcHandlerType};
 use embassy_executor::Spawner;
 use embassy_time::Duration;
-use heapless::{String, format, index_map::FnvIndexMap};
+use heapless::{String, Vec, format, index_map::FnvIndexMap};
 
 /// Minimum timeout for BG77 AT-command responses.
 static BG77_MINIMUM_TIMEOUT: Duration = Duration::from_millis(300);
@@ -75,39 +75,72 @@ impl FakeModem {
     }
 }
 
+impl AtUartTrait for FakeModem {
+    fn spawn_rx(&mut self, _urc_handlers: &[UrcHandlerType], _spawner: Spawner) {}
+
+    async fn call_at_timeout(
+        &mut self,
+        command: &str,
+        _call_timeout: Duration,
+        _response_timeout: Option<Duration>,
+    ) -> crate::Result<AtResponse> {
+        let at_cmd = format!(AT_COMMAND_SIZE; "AT{command}").unwrap();
+        let command_response =
+            CommandResponse::new(self.responses.get(at_cmd.as_str()).unwrap()).unwrap();
+        let response = FromModem::CommandResponse(command_response);
+        Ok(AtResponse::new([response, FromModem::Ok].into(), command))
+    }
+
+    async fn call_second_read(
+        &mut self,
+        _msg: &[u8],
+        _command_prefix: &str,
+        _second_read: bool,
+        _timeout: Duration,
+    ) -> crate::Result<AtResponse> {
+        todo!()
+    }
+
+    async fn read(&self, _timeout: Duration) -> crate::Result<Vec<FromModem, AT_LINES>> {
+        todo!()
+    }
+}
+
 //TODO: might be better to use a mocking library here
 impl ModemHw for FakeModem {
     const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
 
-    fn spawn(&mut self, _spawner: Spawner, _urc_handlers: &[UrcHandlerType]) {}
+    fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
+        self.spawn_rx(urc_handlers, spawner);
+    }
 
     async fn call_at(
         &mut self,
         cmd: &str,
-        _response_timeout: Option<Duration>,
+        response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        let at_cmd = format!(AT_COMMAND_SIZE; "AT{cmd}").unwrap();
-        let command_response =
-            CommandResponse::new(self.responses.get(at_cmd.as_str()).unwrap()).unwrap();
-        let response = FromModem::CommandResponse(command_response);
-        Ok(AtResponse::new([response, FromModem::Ok].into(), cmd))
+        self.call_at_timeout(cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
     }
 
-    async fn long_call_at(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
-        todo!();
+    async fn long_call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
+        self.call_at_timeout(cmd, timeout, None).await
     }
 
     async fn call(
         &mut self,
-        _msg: &[u8],
-        _command_prefix: &str,
-        _second_read_timeout: Option<Duration>,
+        msg: &[u8],
+        command_prefix: &str,
+        second_read_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        todo!()
+        match second_read_timeout {
+            None => self.call_second_read(msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await,
+            Some(timeout) => self.call_second_read(msg, command_prefix, true, timeout).await,
+        }
     }
 
-    async fn read(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
-        todo!()
+    async fn read(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
+        let lines = AtUartTrait::read(self, timeout).await?;
+        Ok(AtResponse::new(lines, cmd))
     }
 }
 
