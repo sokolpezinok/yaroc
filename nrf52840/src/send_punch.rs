@@ -14,17 +14,17 @@ use embassy_sync::{
     semaphore::{FairSemaphore, Semaphore},
 };
 use embassy_time::{Duration, Instant, WithTimeout};
+use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
-    bg77::hw::Bg77,
     send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
 };
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type Bg77SendPunchType =
-    SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>, Output<'static>>;
+    SendPunch<AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>, Output<'static>>;
 
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);

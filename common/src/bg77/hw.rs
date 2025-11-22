@@ -1,10 +1,7 @@
 use core::str::FromStr;
 
-use crate::at::uart::{AtUart, AtUartTrait, RxWithIdle, Tx};
-use crate::at::{
-    response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
-    uart::UrcHandlerType,
-};
+use crate::at::response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem};
+use crate::at::uart::{AtUart, AtUartTrait, RxWithIdle, Tx, UrcHandlerType};
 use embassy_executor::Spawner;
 use embassy_time::Duration;
 use heapless::{String, format, index_map::FnvIndexMap};
@@ -114,24 +111,11 @@ impl ModemHw for FakeModem {
     }
 }
 
-/// Struct for accessing Quectel BG77 modem
-pub struct Bg77<T: Tx, R: RxWithIdle> {
-    uart1: AtUart<T, R>,
-}
-
-impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
-    /// Creates a new `Bg77` modem instance.
-    pub fn new(tx: T, rx: R) -> Self {
-        let uart1 = AtUart::new(tx, rx);
-        Self { uart1 }
-    }
-}
-
-impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
+impl<T: Tx, R: RxWithIdle> ModemHw for AtUart<T, R> {
     const DEFAULT_TIMEOUT: Duration = BG77_MINIMUM_TIMEOUT;
 
     fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
-        self.uart1.spawn_rx(urc_handlers, spawner);
+        self.spawn_rx(urc_handlers, spawner);
     }
 
     async fn call_at(
@@ -139,11 +123,11 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        self.uart1.call_at(cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
+        AtUartTrait::call_at(self, cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
     }
 
     async fn long_call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
-        self.uart1.call_at(cmd, timeout, None).await
+        AtUartTrait::call_at(self, cmd, timeout, None).await
     }
 
     async fn call(
@@ -153,13 +137,15 @@ impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
         second_read_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         match second_read_timeout {
-            None => self.uart1.call(msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await,
-            Some(timeout) => self.uart1.call(msg, command_prefix, true, timeout).await,
+            None => {
+                AtUartTrait::call(self, msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await
+            }
+            Some(timeout) => AtUartTrait::call(self, msg, command_prefix, true, timeout).await,
         }
     }
 
     async fn read(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
-        let lines = self.uart1.read(timeout).await?;
+        let lines = AtUartTrait::read(self, timeout).await?;
         Ok(AtResponse::new(lines, cmd))
     }
 }
