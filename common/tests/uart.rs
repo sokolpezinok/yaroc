@@ -9,6 +9,16 @@ use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL, TxCha
 use yaroc_common::{at::uart::AtUart, error::Error};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+static URC_CHANNEL: Channel<yaroc_common::RawMutex, CommandResponse, 1> = Channel::new();
+
+fn urc_handler(response: &CommandResponse) -> bool {
+    if response.command() == "URC" {
+        URC_CHANNEL.try_send(response.clone()).unwrap();
+        true
+    } else {
+        false
+    }
+}
 
 #[test]
 fn uart_test() {
@@ -23,7 +33,7 @@ async fn main(spawner: Spawner) {
     static TX_CHANNEL: TxChannelType = Channel::new();
     let rx = FakeRxWithIdle::new(
         Vec::from_array([
-            ("ATI\r", "Fake modem\r\nOK"),
+            ("ATI\r", "Fake modem\r\n+URC: 123\r\nOK"),
             ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
             ("AT+CBC\r", "ERROR"),
             ("AT+QCSQ\r", "Text"),
@@ -32,7 +42,7 @@ async fn main(spawner: Spawner) {
         &TX_CHANNEL,
     );
     let mut at_uart = AtUart::new(&TX_CHANNEL, rx);
-    at_uart.spawn_rx(&[], spawner);
+    at_uart.spawn_rx(&[urc_handler], spawner);
 
     let response = at_uart.call_at_timeout("I", Duration::from_millis(10), None).await.unwrap();
     assert_eq!(
@@ -42,6 +52,10 @@ async fn main(spawner: Spawner) {
             FromModem::Ok
         ]
     );
+
+    let urc = URC_CHANNEL.try_receive().unwrap();
+    assert_eq!(urc.command(), "URC");
+    assert_eq!(urc.values(), ["123"]);
 
     let response = at_uart
         .call_at_timeout(

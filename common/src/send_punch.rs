@@ -64,9 +64,9 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     ) -> Self {
         let client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
-        bg77.spawn(
-            spawner,
+        bg77.spawn_rx(
             &[|response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())],
+            spawner,
         );
         Self {
             bg77,

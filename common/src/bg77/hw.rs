@@ -11,11 +11,6 @@ pub trait ModemHw: AtUartTrait {
     /// milliseconds for a modem.
     const DEFAULT_TIMEOUT: Duration;
 
-    /// Spawn a task for the modem and process incoming URCs using the provided handlers.
-    fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
-        self.spawn_rx(urc_handlers, spawner);
-    }
-
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
     /// We send `cmd` prefixed by `AT`. We wait a short time for an OK/ERROR and then if
