@@ -54,7 +54,7 @@ pub trait ModemHw {
     ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Reads an AT response from the modem.
-    fn read(&mut self) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
+    fn read(&mut self, cmd: &str) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
 
     /// Turns on the modem.
     fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
@@ -110,7 +110,7 @@ impl ModemHw for FakeModem {
         todo!()
     }
 
-    async fn read(&mut self) -> crate::Result<AtResponse> {
+    async fn read(&mut self, _cmd: &str) -> crate::Result<AtResponse> {
         todo!()
     }
 
@@ -180,10 +180,9 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
         }
     }
 
-    async fn read(&mut self) -> crate::Result<AtResponse> {
+    async fn read(&mut self, cmd: &str) -> crate::Result<AtResponse> {
         let lines = self.uart1.read(Self::DEFAULT_TIMEOUT).await?;
-        // TODO: take command as parameter
-        Ok(AtResponse::new(lines, "+QMTPUB"))
+        Ok(AtResponse::new(lines, cmd))
     }
 
     async fn turn_on(&mut self) -> crate::Result<()> {

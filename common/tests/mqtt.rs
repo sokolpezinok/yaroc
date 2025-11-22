@@ -32,7 +32,10 @@ mockall::mock! {
             command_prefix: &str,
             second_read_timeout: Option<Duration>,
         ) -> yaroc_common::Result<AtResponse>;
-        async fn read(&mut self) -> yaroc_common::Result<AtResponse>;
+        async fn read(
+            &mut self,
+            cmd: &str,
+        ) -> yaroc_common::Result<AtResponse>;
         async fn turn_on(&mut self) -> yaroc_common::Result<()>;
     }
 }

@@ -144,7 +144,7 @@ impl<M: ModemHw> MqttClient<M> {
         // CGATT=1 needs additional time and reading from modem
         Timer::after_secs(1).await;
         // TODO: this is the only ModemHw::read() in the code base, can it be removed?
-        let _response = bg77.read().await;
+        let _response = bg77.read("+CGATT").await;
         #[cfg(feature = "defmt")]
         if let Ok(response) = _response
             && !response.lines().is_empty()
