@@ -220,6 +220,52 @@ impl Tx for &'static TxChannelType {
     }
 }
 
+pub trait AtUartTrait {
+    /// Spawns a task that reads from the UART and brokers the replies.
+    ///
+    /// # Arguments
+    /// * `urc_handlers` - A list of functions for handling URCs.
+    /// * `spawner` - The task spawner.
+    fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner);
+
+    /// Calls an AT command and waits for a reply, with an optional second read for URCs.
+    ///
+    /// # Arguments
+    /// * `command` - The AT command to call.
+    /// * `call_timeout` - The timeout for the initial command call.
+    /// * `response_timeout` - An optional timeout for a second read to catch URCs.
+    fn call_at(
+        &mut self,
+        command: &str,
+        call_timeout: Duration,
+        response_timeout: Option<Duration>,
+    ) -> impl Future<Output = Result<AtResponse, Error>>;
+
+    /// Calls an AT command and waits for a reply.
+    ///
+    /// # Arguments
+    /// * `msg` - The raw message to send.
+    /// * `command_prefix` - The prefix of the command being sent.
+    /// * `second_read` - Whether to perform a second read.
+    /// * `timeout` - The timeout for each read.
+    fn call(
+        &mut self,
+        msg: &[u8],
+        command_prefix: &str,
+        second_read: bool,
+        timeout: Duration,
+    ) -> impl Future<Output = crate::Result<AtResponse>>;
+
+    /// Reads a reply from the modem.
+    ///
+    /// # Arguments
+    /// * `timeout` - The maximum time to wait for a reply.
+    fn read(
+        &self,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>, Error>>;
+}
+
 /// A UART for sending and receiving AT-commands.
 ///
 /// The TX part is represented by the `Tx` trait, and the RX part is represented by the
@@ -244,40 +290,6 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
         }
     }
 
-    /// Spawns a task that reads from the UART and brokers the replies.
-    ///
-    /// # Arguments
-    /// * `urc_handlers` - A list of functions for handling URCs.
-    /// * `spawner` - The task spawner.
-    pub fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner) {
-        // Consume self.rx, then set self.rx = None
-        let rx = self.rx.take();
-        rx.unwrap().spawn(spawner, urc_handlers);
-    }
-
-    /// Reads a reply from the modem.
-    ///
-    /// # Arguments
-    /// * `timeout` - The maximum time to wait for a reply.
-    pub async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
-        let mut res = Vec::new();
-        let deadline = Instant::now() + timeout;
-        loop {
-            let from_modem = self
-                .main_rx_channel
-                .receive()
-                .with_deadline(deadline)
-                .await
-                .map_err(|_| Error::TimeoutError)??;
-            res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
-            if from_modem.terminal() {
-                break;
-            }
-        }
-
-        Ok(res)
-    }
-
     /// Writes an AT command to the modem.
     ///
     /// # Arguments
@@ -293,38 +305,6 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     /// * `message` - The message to write.
     async fn write(&mut self, message: &[u8]) -> crate::Result<()> {
         self.tx.write(message).await.map_err(|_| Error::UartWriteError)
-    }
-
-    /// Calls an AT command and waits for a reply.
-    ///
-    /// # Arguments
-    /// * `msg` - The raw message to send.
-    /// * `command_prefix` - The prefix of the command being sent.
-    /// * `second_read` - Whether to perform a second read.
-    /// * `timeout` - The timeout for each read.
-    pub async fn call(
-        &mut self,
-        msg: &[u8],
-        command_prefix: &str,
-        second_read: bool,
-        timeout: Duration,
-    ) -> crate::Result<AtResponse> {
-        let start = Instant::now();
-        self.write(msg).await?;
-        // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
-        // technicality, the timeout is doubled this way, but it's never a problem.
-        let mut lines = self.read(timeout).await?;
-        if second_read {
-            lines.extend(self.read(timeout).await?);
-        }
-        let response = AtResponse::new(lines, command_prefix);
-        debug!(
-            "{}: {}, took {}ms",
-            command_prefix,
-            response,
-            (Instant::now() - start).as_millis()
-        );
-        Ok(response)
     }
 
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.
@@ -362,14 +342,35 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
             }
         }
     }
+}
 
-    /// Calls an AT command and waits for a reply, with an optional second read for URCs.
-    ///
-    /// # Arguments
-    /// * `command` - The AT command to call.
-    /// * `call_timeout` - The timeout for the initial command call.
-    /// * `response_timeout` - An optional timeout for a second read to catch URCs.
-    pub async fn call_at(
+impl<T: Tx, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
+    async fn call(
+        &mut self,
+        msg: &[u8],
+        command_prefix: &str,
+        second_read: bool,
+        timeout: Duration,
+    ) -> crate::Result<AtResponse> {
+        let start = Instant::now();
+        self.write(msg).await?;
+        // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
+        // technicality, the timeout is doubled this way, but it's never a problem.
+        let mut lines = self.read(timeout).await?;
+        if second_read {
+            lines.extend(self.read(timeout).await?);
+        }
+        let response = AtResponse::new(lines, command_prefix);
+        debug!(
+            "{}: {}, took {}ms",
+            command_prefix,
+            response,
+            (Instant::now() - start).as_millis()
+        );
+        Ok(response)
+    }
+
+    async fn call_at(
         &mut self,
         command: &str,
         call_timeout: Duration,
@@ -388,6 +389,31 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
             (Instant::now() - start).as_millis()
         );
         Ok(response)
+    }
+
+    async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
+        let mut res = Vec::new();
+        let deadline = Instant::now() + timeout;
+        loop {
+            let from_modem = self
+                .main_rx_channel
+                .receive()
+                .with_deadline(deadline)
+                .await
+                .map_err(|_| Error::TimeoutError)??;
+            res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
+            if from_modem.terminal() {
+                break;
+            }
+        }
+
+        Ok(res)
+    }
+
+    fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner) {
+        // Consume self.rx, then set self.rx = None
+        let rx = self.rx.take();
+        rx.unwrap().spawn(spawner, urc_handlers);
     }
 }
 

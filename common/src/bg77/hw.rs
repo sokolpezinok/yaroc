@@ -1,7 +1,7 @@
 use core::str::FromStr;
 
 #[cfg(feature = "nrf")]
-use crate::at::uart::{AtUart, RxWithIdle, Tx};
+use crate::at::uart::{AtUart, AtUartTrait, RxWithIdle, Tx};
 use crate::at::{
     response::{AT_COMMAND_SIZE, AtResponse, CommandResponse, FromModem},
     uart::UrcHandlerType,
