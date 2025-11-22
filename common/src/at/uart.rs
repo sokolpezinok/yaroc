@@ -234,21 +234,23 @@ pub trait AtUartTrait {
     /// * `command` - The AT command to call.
     /// * `call_timeout` - The timeout for the initial command call.
     /// * `response_timeout` - An optional timeout for a second read to catch URCs.
-    fn call_at(
+    fn call_at_timeout(
         &mut self,
         command: &str,
         call_timeout: Duration,
         response_timeout: Option<Duration>,
     ) -> impl Future<Output = Result<AtResponse, Error>>;
 
-    /// Calls an AT command and waits for a reply.
+    /// Calls a command and waits for a reply.
+    ///
+    /// It optionally performs a second read within the timeout.
     ///
     /// # Arguments
     /// * `msg` - The raw message to send.
     /// * `command_prefix` - The prefix of the command being sent.
     /// * `second_read` - Whether to perform a second read.
     /// * `timeout` - The timeout for each read.
-    fn call(
+    fn call_second_read(
         &mut self,
         msg: &[u8],
         command_prefix: &str,
@@ -345,7 +347,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
 }
 
 impl<T: Tx, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
-    async fn call(
+    async fn call_second_read(
         &mut self,
         msg: &[u8],
         command_prefix: &str,
@@ -370,7 +372,7 @@ impl<T: Tx, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
         Ok(response)
     }
 
-    async fn call_at(
+    async fn call_at_timeout(
         &mut self,
         command: &str,
         call_timeout: Duration,

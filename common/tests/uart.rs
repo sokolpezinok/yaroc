@@ -34,7 +34,7 @@ async fn main(spawner: Spawner) {
     let mut at_uart = AtUart::new(&TX_CHANNEL, rx);
     at_uart.spawn_rx(&[], spawner);
 
-    let response = at_uart.call_at("I", Duration::from_millis(10), None).await.unwrap();
+    let response = at_uart.call_at_timeout("I", Duration::from_millis(10), None).await.unwrap();
     assert_eq!(
         response.lines(),
         &[
@@ -44,7 +44,7 @@ async fn main(spawner: Spawner) {
     );
 
     let response = at_uart
-        .call_at(
+        .call_at_timeout(
             "+QMTOPEN=0,\"broker.com\",1883",
             Duration::from_millis(10),
             Some(Duration::from_millis(10)),
@@ -60,13 +60,13 @@ async fn main(spawner: Spawner) {
         ]
     );
 
-    let error = at_uart.call_at("+CBC", Duration::from_millis(10), None).await.err();
+    let error = at_uart.call_at_timeout("+CBC", Duration::from_millis(10), None).await.err();
     assert_eq!(error, Some(Error::AtErrorResponse));
 
-    let error = at_uart.call_at("+QCSQ", Duration::from_millis(10), None).await.err();
+    let error = at_uart.call_at_timeout("+QCSQ", Duration::from_millis(10), None).await.err();
     assert_eq!(error, Some(Error::ModemError));
 
-    let error = at_uart.call_at("+CEREG?", Duration::from_millis(10), None).await.err();
+    let error = at_uart.call_at_timeout("+CEREG?", Duration::from_millis(10), None).await.err();
     assert_eq!(error, Some(Error::TimeoutError));
 
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);

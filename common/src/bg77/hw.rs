@@ -123,11 +123,11 @@ impl<T: Tx, R: RxWithIdle> ModemHw for AtUart<T, R> {
         cmd: &str,
         response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        AtUartTrait::call_at(self, cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
+        self.call_at_timeout(cmd, Self::DEFAULT_TIMEOUT, response_timeout).await
     }
 
     async fn long_call_at(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
-        AtUartTrait::call_at(self, cmd, timeout, None).await
+        self.call_at_timeout(cmd, timeout, None).await
     }
 
     async fn call(
@@ -137,10 +137,8 @@ impl<T: Tx, R: RxWithIdle> ModemHw for AtUart<T, R> {
         second_read_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         match second_read_timeout {
-            None => {
-                AtUartTrait::call(self, msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await
-            }
-            Some(timeout) => AtUartTrait::call(self, msg, command_prefix, true, timeout).await,
+            None => self.call_second_read(msg, command_prefix, false, Self::DEFAULT_TIMEOUT).await,
+            Some(timeout) => self.call_second_read(msg, command_prefix, true, timeout).await,
         }
     }
 
