@@ -1,7 +1,82 @@
-use heapless::format;
+use core::str::FromStr;
 
-use crate::bg77::hw::{ACTIVATION_TIMEOUT, ModemConfig, ModemHw, RAT};
+use embassy_time::Duration;
+use heapless::{String, format};
+
+use crate::bg77::hw::ModemHw;
 use crate::error::Error;
+
+/// Timeout for network activation.
+pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
+
+/// Radio Access Technology
+pub enum RAT {
+    Ltem,      // LTE-M
+    NbIot,     // NB-IoT
+    LtemNbIot, // Both
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct LteBands {
+    /// LTE-M bands bitmask. Bit `n` corresponds to band `n+1`.
+    pub ltem: u128,
+    /// NB-IoT bands bitmask. Bit `n` corresponds to band `n+1`.
+    pub nbiot: u128,
+}
+
+impl LteBands {
+    /// Sets the LTE-M bands from a slice of band numbers.
+    ///
+    /// This will overwrite any previously set LTE-M bands.
+    /// Bands should be given as numbers, e.g., 20 for B20.
+    /// Invalid band numbers (0 or > 128) are ignored.
+    pub fn set_ltem_bands(&mut self, bands: &[u32]) {
+        self.ltem = 0;
+        for &band in bands {
+            if band > 0 && band <= 128 {
+                self.ltem |= 1_u128 << (band - 1);
+            }
+        }
+    }
+
+    /// Sets the NB-IoT bands from a slice of band numbers.
+    ///
+    /// This will overwrite any previously set NB-IoT bands.
+    /// Bands should be given as numbers, e.g., 20 for B20.
+    /// Invalid band numbers (0 or > 128) are ignored.
+    pub fn set_nbiot_bands(&mut self, bands: &[u32]) {
+        self.nbiot = 0;
+        for &band in bands {
+            if band > 0 && band <= 128 {
+                self.nbiot |= 1_u128 << (band - 1);
+            }
+        }
+    }
+}
+
+pub struct ModemConfig {
+    /// Access point name (APN)
+    pub apn: String<30>,
+    /// Radio access technology (RAT)
+    pub rat: RAT,
+    /// LTE bands
+    pub bands: LteBands,
+}
+
+impl Default for ModemConfig {
+    /// Creates a default modem configuration.
+    fn default() -> Self {
+        let mut bands = LteBands::default();
+        // Default bands are B20 for both LTE-M and NB-IoT
+        bands.set_ltem_bands(&[20]);
+        bands.set_nbiot_bands(&[20]);
+        Self {
+            apn: String::from_str("internet.iot").unwrap(),
+            rat: RAT::LtemNbIot,
+            bands,
+        }
+    }
+}
 
 pub struct ModemManager {
     config: ModemConfig,

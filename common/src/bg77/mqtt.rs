@@ -13,7 +13,7 @@ use crate::{
     RawMutex,
     at::response::CommandResponse,
     backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
-    bg77::hw::{ACTIVATION_TIMEOUT, ModemHw},
+    bg77::{hw::ModemHw, modem_manager::ACTIVATION_TIMEOUT},
     error::Error,
     send_punch::SendPunchCommand,
 };
@@ -115,6 +115,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    //TODO: move into modem_manager
     /// Registers to the network.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
         if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {

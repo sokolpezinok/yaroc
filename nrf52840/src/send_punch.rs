@@ -13,10 +13,11 @@ use embassy_sync::{
     semaphore::{FairSemaphore, Semaphore},
 };
 use embassy_time::{Duration, Instant, WithTimeout};
+use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
-    bg77::hw::{ACTIVATION_TIMEOUT, Bg77},
+    bg77::hw::Bg77,
     send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
 };
 

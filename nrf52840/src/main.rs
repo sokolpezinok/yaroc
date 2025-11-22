@@ -11,7 +11,7 @@ use heapless::String;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
-    bg77::{hw::ModemConfig, mqtt::MqttConfig},
+    bg77::{modem_manager::ModemConfig, mqtt::MqttConfig},
     error::Error,
     send_punch::SendPunch,
 };

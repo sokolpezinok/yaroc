@@ -9,8 +9,8 @@ use heapless::{Vec, format};
 use log::{error, info, warn};
 
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
-use crate::bg77::hw::{ModemConfig, ModemHw};
-use crate::bg77::modem_manager::ModemManager;
+use crate::bg77::hw::ModemHw;
+use crate::bg77::modem_manager::{ModemConfig, ModemManager};
 use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;

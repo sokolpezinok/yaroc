@@ -5,7 +5,8 @@ use mockall::{Predicate, predicate::*};
 use yaroc_common::at::response::{AtResponse, CommandResponse, FromModem};
 
 use yaroc_common::at::uart::UrcHandlerType;
-use yaroc_common::bg77::hw::{ACTIVATION_TIMEOUT, ModemHw};
+use yaroc_common::bg77::hw::ModemHw;
+use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig};
 
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
