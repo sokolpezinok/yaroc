@@ -10,7 +10,7 @@ use log::{error, info, warn};
 
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
-use crate::bg77::modem_manager::{ModemConfig, ModemManager};
+use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
 use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
@@ -36,25 +36,28 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
-pub struct SendPunch<M: ModemHw> {
+pub struct SendPunch<M: ModemHw, P: ModemPin> {
     bg77: M,
+    modem_pin: P,
     client: MqttClient<M>,
     modem_manager: ModemManager,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
 
-impl<M: ModemHw> SendPunch<M> {
+impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     /// Creates a new `SendPunch` instance.
     ///
     /// # Arguments
     ///
     /// * `bg77`: An initialized modem instance.
+    /// * `modem_pin`: The pin used to reset/turn on the modem.
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     /// * `modem_config`: The Modem configuration.
     pub fn new(
         mut bg77: M,
+        modem_pin: P,
         spawner: Spawner,
         mqtt_config: MqttConfig,
         modem_config: ModemConfig,
@@ -67,6 +70,7 @@ impl<M: ModemHw> SendPunch<M> {
         );
         Self {
             bg77,
+            modem_pin,
             client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
@@ -162,7 +166,7 @@ impl<M: ModemHw> SendPunch<M> {
     ///
     /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
-        let _ = self.bg77.turn_on().await;
+        self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
         self.modem_manager.configure(&mut self.bg77).await?;
 
         let _ = self.client.mqtt_connect(&mut self.bg77).await;

@@ -29,7 +29,9 @@ pub struct Device {
     /// The MAC address of the device
     pub mac_address: String<12>,
     /// The BG77 modem driver
-    pub bg77: Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>,
+    pub bg77: Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>,
+    /// The modem PIN
+    pub modem_pin: Output<'static>,
     /// The SAADC driver
     pub saadc: Saadc<'static, 1>,
     /// The SportIdent UART driver
@@ -67,7 +69,7 @@ impl Device {
         let _io3 = Input::new(p.P0_21, Pull::Up);
 
         let modem_pin = Output::new(p.P0_17, Level::Low, OutputDrive::Standard);
-        let bg77 = Bg77::new(tx1, rx1, modem_pin);
+        let bg77 = Bg77::new(tx1, rx1);
 
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
@@ -87,6 +89,7 @@ impl Device {
             _green_led: green_led,
             mac_address,
             bg77,
+            modem_pin,
             si_uart: SiUart::new(rx0),
             saadc,
             ble,

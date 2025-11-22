@@ -36,6 +36,7 @@ async fn main(spawner: Spawner) {
     let Device {
         mac_address,
         bg77,
+        modem_pin,
         si_uart,
         ble,
         mut flash,
@@ -70,7 +71,7 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
     let modem_config = ModemConfig::default();
-    let send_punch = SendPunch::new(bg77, spawner, mqtt_config, modem_config);
+    let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }

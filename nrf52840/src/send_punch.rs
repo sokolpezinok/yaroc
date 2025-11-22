@@ -24,7 +24,7 @@ use yaroc_common::{
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type Bg77SendPunchType =
-    SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>, Output<'static>>>;
+    SendPunch<Bg77<UarteTx<'static>, UarteRxWithIdle<'static>>, Output<'static>>;
 
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);

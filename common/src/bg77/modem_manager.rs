@@ -6,6 +6,25 @@ use heapless::{String, format};
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
 
+#[cfg(feature = "nrf")]
+use embassy_nrf::gpio::Output;
+
+pub trait ModemPin {
+    fn set_high(&mut self);
+    fn set_low(&mut self);
+}
+
+#[cfg(feature = "nrf")]
+impl ModemPin for Output<'static> {
+    fn set_high(&mut self) {
+        self.set_high();
+    }
+
+    fn set_low(&mut self) {
+        self.set_low();
+    }
+}
+
 /// Timeout for network activation.
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
@@ -85,6 +104,29 @@ pub struct ModemManager {
 impl ModemManager {
     pub fn new(config: ModemConfig) -> Self {
         Self { config }
+    }
+
+    pub async fn turn_on<M: ModemHw, P: ModemPin>(
+        &self,
+        bg77: &mut M,
+        modem_pin: &mut P,
+    ) -> Result<(), Error> {
+        if bg77.call_at("", None).await.is_err() {
+            modem_pin.set_low();
+            embassy_time::Timer::after_secs(1).await;
+            modem_pin.set_high();
+            embassy_time::Timer::after_secs(2).await;
+            modem_pin.set_low();
+            // TODO: fix command
+            let _res = bg77.read("", Duration::from_secs(5)).await?;
+            #[cfg(feature = "defmt")]
+            defmt::info!("Modem response: {=[?]}", _res.lines());
+            bg77.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
+            let _res = bg77.read("", Duration::from_secs(5)).await?;
+            #[cfg(feature = "defmt")]
+            defmt::info!("Modem response: {=[?]}", _res.lines());
+        }
+        Ok(())
     }
 
     pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> Result<(), Error> {

@@ -6,8 +6,6 @@ use crate::at::{
     uart::UrcHandlerType,
 };
 use embassy_executor::Spawner;
-#[cfg(feature = "nrf")]
-use embassy_nrf::gpio::Output;
 use embassy_time::Duration;
 use heapless::{String, format, index_map::FnvIndexMap};
 
@@ -59,9 +57,6 @@ pub trait ModemHw {
         cmd: &str,
         timeout: Duration,
     ) -> impl core::future::Future<Output = crate::Result<AtResponse>>;
-
-    /// Turns on the modem.
-    fn turn_on(&mut self) -> impl core::future::Future<Output = crate::Result<()>>;
 }
 
 pub struct FakeModem {
@@ -117,43 +112,22 @@ impl ModemHw for FakeModem {
     async fn read(&mut self, _cmd: &str, _timeout: Duration) -> crate::Result<AtResponse> {
         todo!()
     }
-
-    async fn turn_on(&mut self) -> crate::Result<()> {
-        todo!()
-    }
-}
-
-pub trait ModemPin {
-    fn set_high(&mut self);
-    fn set_low(&mut self);
-}
-
-#[cfg(feature = "nrf")]
-impl ModemPin for Output<'static> {
-    fn set_high(&mut self) {
-        self.set_high();
-    }
-
-    fn set_low(&mut self) {
-        self.set_low();
-    }
 }
 
 /// Struct for accessing Quectel BG77 modem
-pub struct Bg77<T: Tx, R: RxWithIdle, P: ModemPin> {
+pub struct Bg77<T: Tx, R: RxWithIdle> {
     uart1: AtUart<T, R>,
-    modem_pin: P,
 }
 
-impl<T: Tx, R: RxWithIdle, P: ModemPin> Bg77<T, R, P> {
+impl<T: Tx, R: RxWithIdle> Bg77<T, R> {
     /// Creates a new `Bg77` modem instance.
-    pub fn new(tx: T, rx: R, modem_pin: P) -> Self {
+    pub fn new(tx: T, rx: R) -> Self {
         let uart1 = AtUart::new(tx, rx);
-        Self { uart1, modem_pin }
+        Self { uart1 }
     }
 }
 
-impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
+impl<T: Tx, R: RxWithIdle> ModemHw for Bg77<T, R> {
     const DEFAULT_TIMEOUT: Duration = BG77_MINIMUM_TIMEOUT;
 
     fn spawn(&mut self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
@@ -187,24 +161,5 @@ impl<T: Tx, R: RxWithIdle, P: ModemPin> ModemHw for Bg77<T, R, P> {
     async fn read(&mut self, cmd: &str, timeout: Duration) -> crate::Result<AtResponse> {
         let lines = self.uart1.read(timeout).await?;
         Ok(AtResponse::new(lines, cmd))
-    }
-
-    async fn turn_on(&mut self) -> crate::Result<()> {
-        if self.call_at("", None).await.is_err() {
-            self.modem_pin.set_low();
-            embassy_time::Timer::after_secs(1).await;
-            self.modem_pin.set_high();
-            embassy_time::Timer::after_secs(2).await;
-            self.modem_pin.set_low();
-            // TODO: fix command
-            let _res = self.read("", Duration::from_secs(5)).await?;
-            #[cfg(feature = "defmt")]
-            defmt::info!("Modem response: {=[?]}", _res.as_slice());
-            self.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let _res = self.read("", Duration::from_secs(5)).await?;
-            #[cfg(feature = "defmt")]
-            defmt::info!("Modem response: {=[?]}", _res.as_slice());
-        }
-        Ok(())
     }
 }
