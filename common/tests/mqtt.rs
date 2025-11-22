@@ -8,7 +8,7 @@ use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromMode
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
 use yaroc_common::bg77::hw::ModemHw;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
-use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig};
+use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
 // instead.
@@ -92,4 +92,39 @@ fn test_mqtt_connect_ok() {
 
     let mut client = MqttClient::new(MqttConfig::default(), 1);
     assert!(block_on(client.mqtt_connect(&mut bg77)).is_ok());
+}
+
+#[test]
+fn test_mqtt_send_short_message_ok() {
+    let mut bg77 = MockAtUart::new();
+    let topic = "topic";
+    let message = b"hello";
+
+    expect_call_at(
+        &mut bg77,
+        // Note: The `5` here is the message length.
+        eq("+QMTPUB=1,0,0,0,\"yar/deadbeef/topic\",5"),
+        eq(None),
+        None,
+    );
+
+    // Expect the payload to be sent via call_second_read
+    bg77.expect_call_second_read()
+        .with(
+            eq(message.as_slice()),
+            eq("+QMTPUB"),
+            eq(true),
+            eq(Duration::from_secs(5)),
+        )
+        .times(1)
+        .returning(|_, _, _, _| {
+            let resps = [FromModem::CommandResponse(
+                CommandResponse::new("+QMTPUB: 0,0,0").unwrap(),
+            )]
+            .into();
+            Ok(AtResponse::new(resps, "+QMTPUB"))
+        });
+
+    let mut client = MqttClient::new(MqttConfig::default(), 1);
+    assert!(block_on(client.send_message(&mut bg77, topic, message, MqttQos::Q0, 0)).is_ok());
 }

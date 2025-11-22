@@ -32,6 +32,7 @@ pub enum StatusCode {
     Unknown,
 }
 
+/// Represents the status of an MQTT message publication.
 #[derive(Debug, PartialEq, Eq)]
 pub struct MqttStatus {
     pub msg_id: u16,
@@ -39,6 +40,11 @@ pub struct MqttStatus {
 }
 
 impl MqttStatus {
+    /// Creates an `MqttStatus` from a BG77 `+QMTPUB` URC.
+    ///
+    /// `msg_id` is the message ID.
+    /// `status` is the status code reported by the modem (0: Published, 1: Retrying, 2: Timeout).
+    /// `retries` is an optional number of retries if the status is `Retrying`.
     pub fn from_bg77_qmtpub(msg_id: u16, status: u8, retries: Option<&u8>) -> Self {
         let status = match status {
             0 => StatusCode::Published,
@@ -52,6 +58,7 @@ impl MqttStatus {
         }
     }
 
+    /// Creates an `MqttStatus` indicating an MQTT error.
     pub fn mqtt_error(msg_id: u16) -> Self {
         Self {
             msg_id,
@@ -73,10 +80,15 @@ pub enum MqttQos {
 /// Configuration for the MQTT client.
 #[derive(Clone)]
 pub struct MqttConfig {
+    /// URL of the MQTT broker.
     pub url: String<40>,
+    /// Timeout for MQTT packets.
     pub packet_timeout: Duration,
+    /// Name of the client.
     pub name: String<20>,
+    /// MAC address of the device.
     pub mac_address: String<12>,
+    /// Interval for mini call home messages.
     pub minicallhome_interval: Duration,
 }
 
@@ -86,7 +98,7 @@ impl Default for MqttConfig {
             url: String::from_str("broker.emqx.io").unwrap(),
             packet_timeout: Duration::from_secs(35),
             name: String::new(),
-            mac_address: String::new(),
+            mac_address: String::from_str("deadbeef").unwrap(),
             minicallhome_interval: Duration::from_secs(30),
         }
     }
@@ -116,7 +128,12 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     //TODO: move into modem_manager
-    /// Registers to the network.
+    /// Registers the modem to the network.
+    ///
+    /// This function first checks if any MQTT messages have been published recently.
+    /// If no messages have been sent for a prolonged period (determined by `packet_timeout` and `cgatt_cnt`),
+    /// it attempts to reattach to the network by deactivating and reactivating the GPRS context.
+    /// Otherwise, it checks the current network registration status and registers if not already registered.
     async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
         if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
@@ -157,7 +174,12 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    /// Handles URCs from the modem.
+    /// Handles Unsolicited Result Codes (URCs) from the modem.
+    ///
+    /// This function processes various URCs such as `QMTSTAT`, `QIURC`, `CEREG`, and `QMTPUB`.
+    /// It sends appropriate `BackoffCommand`s or `SendPunchCommand`s based on the URC received.
+    ///
+    /// Returns `true` if the URC was handled, `false` otherwise.
     pub fn urc_handler<const CLIENT_ID: u8>(
         response: &'_ CommandResponse,
         command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
@@ -182,7 +204,12 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
-    /// Handles the `+QMTPUB` URC.
+    /// Handles the `+QMTPUB` URC, which indicates the status of an MQTT message publication.
+    ///
+    /// If the message is successfully published, it signals `MQTT_MSG_PUBLISHED`.
+    /// It also sends a `BackoffCommand::Status` to the backoff task.
+    ///
+    /// Returns `true` if the URC was handled for the given `CLIENT_ID`, `false` otherwise.
     fn qmtpub_handler<const CLIENT_ID: u8>(response: &CommandResponse) -> bool {
         let values = match response.parse_values::<u8>() {
             Ok(values) => values,
@@ -202,6 +229,7 @@ impl<M: ModemHw> MqttClient<M> {
                 }
                 true
             } else {
+                // Message ID 0 is for QoS level 0, it's not handled as URC.
                 false
             }
         } else {
@@ -209,7 +237,11 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
-    /// Opens a TCP connection to the MQTT broker.
+    /// Opens a TCP connection to the configured MQTT broker.
+    ///
+    /// If a connection is already open to the correct broker, it does nothing.
+    /// If connected to a different broker, it disconnects first.
+    /// It also configures MQTT timeouts and keep-alive settings before opening the connection.
     async fn mqtt_open(&self, bg77: &mut M) -> crate::Result<()> {
         let cid = self.client_id;
         let opened = bg77
@@ -253,6 +285,9 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Connects to the MQTT broker.
+    ///
+    /// This function first ensures network registration and then opens a TCP connection
+    /// using `mqtt_open`. Finally, it attempts to connect to the MQTT broker.
     pub async fn mqtt_connect(&mut self, bg77: &mut M) -> crate::Result<()> {
         self.network_registration(bg77)
             .await
@@ -298,7 +333,7 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
-    /// Disconnects from the MQTT broker.
+    /// Disconnects from the MQTT broker and closes the TCP connection.
     #[allow(dead_code)]
     pub async fn mqtt_disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
         let cid = self.client_id;
@@ -316,7 +351,14 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    /// Sends a message to the MQTT broker.
+    /// Sends a message to the MQTT broker on the specified topic with the given Quality of Service (QoS).
+    ///
+    /// `topic` is the MQTT topic to publish to.
+    /// `msg` is the payload of the message.
+    /// `qos` is the Quality of Service level.
+    /// `msg_id` is the message ID.
+    ///
+    /// For QoS 0, it updates `last_successful_send` immediately upon publication.
     pub async fn send_message(
         &mut self,
         bg77: &mut M,
@@ -352,7 +394,9 @@ impl<M: ModemHw> MqttClient<M> {
         Ok(())
     }
 
-    /// Schedules a batch of punches to be sent and returns its Punch ID.
+    /// Schedules a batch of punches to be sent via the backoff mechanism.
+    ///
+    /// Returns the assigned punch ID for the scheduled batch.
     pub async fn schedule_punch(&mut self, punches: BatchedPunches) -> u16 {
         let punch_id = self.punch_cnt;
         CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches(punches, punch_id)).await;
