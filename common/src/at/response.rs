@@ -81,7 +81,7 @@ impl CommandResponse {
                         // This can happen in the `unwrap_or` branch.
                         return Err(Error::ParseError);
                     }
-                    split.push(&values[1..pos]).unwrap();
+                    split.push(&values[1..pos]).map_err(|_| Error::BufferTooSmallError)?;
                     pos + 1
                 }
                 _ => {
