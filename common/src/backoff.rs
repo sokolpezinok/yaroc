@@ -43,6 +43,7 @@ pub static CMD_FOR_BACKOFF: Channel<RawMutex, BackoffCommand, PUNCH_QUEUE_SIZE> 
 const BACKOFF_MULTIPLIER: u32 = 2;
 
 /// A command to be sent to the backoff task.
+#[derive(Debug, PartialEq, Eq)]
 pub enum BackoffCommand {
     /// Encapsulates a batch of punches to be sent.
     PublishPunches(BatchedPunches, u16),

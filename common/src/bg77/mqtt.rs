@@ -411,6 +411,8 @@ mod test {
     use super::*;
     use crate::bg77::hw::FakeModem;
     use embassy_futures::block_on;
+    use embassy_sync::channel::Channel;
+    static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
 
     #[test]
     fn test_mqtt_connect_ok() {
@@ -433,5 +435,35 @@ mod test {
 
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
         assert_eq!(block_on(client.mqtt_disconnect(&mut bg77)), Ok(()));
+    }
+
+    #[test]
+    fn test_qmtpub_handler_published() {
+        // Client ID 0, Message ID 1, Status 0 (Published), Retries 0
+        let response = CommandResponse::new("+QMTPUB: 0,1,0,0").unwrap();
+        let sender = CHANNEL.sender();
+
+        // Ensure the signal is not set initially
+        MQTT_MSG_PUBLISHED.get()[0].reset();
+        while CMD_FOR_BACKOFF.try_receive().is_ok() {}
+
+        let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
+        assert!(handled);
+        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_some());
+
+        let expected_status = MqttStatus {
+            msg_id: 1,
+            code: StatusCode::Published,
+        };
+        let status = CMD_FOR_BACKOFF.try_receive().unwrap();
+        assert_eq!(status, BackoffCommand::Status(expected_status));
+
+        // The same as above, but for client ID 1
+        let response = CommandResponse::new("+QMTPUB: 1,1,0,0").unwrap();
+        // Return false, because it's for a different client
+        let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
+        assert!(!handled);
+        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
+        assert!(CMD_FOR_BACKOFF.try_receive().is_err());
     }
 }
