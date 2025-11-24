@@ -1,10 +1,18 @@
 use core::str::FromStr;
 
-use embassy_time::Duration;
+#[cfg(feature = "defmt")]
+use defmt::error;
+use embassy_sync::channel::Sender;
+use embassy_time::{Duration, Instant};
 use heapless::{String, format};
+#[cfg(not(feature = "defmt"))]
+use log::error;
 
+use crate::RawMutex;
+use crate::at::response::CommandResponse;
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
+use crate::send_punch::SendPunchCommand;
 
 #[cfg(feature = "nrf")]
 use embassy_nrf::gpio::Output;
@@ -104,6 +112,23 @@ pub struct ModemManager {
 impl ModemManager {
     pub fn new(config: ModemConfig) -> Self {
         Self { config }
+    }
+
+    pub fn urc_handler(
+        response: &'_ CommandResponse,
+        command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
+    ) -> bool {
+        match response.command() {
+            "QIURC" => {
+                let message = SendPunchCommand::NetworkConnect(Instant::now());
+                if command_sender.try_send(message).is_err() {
+                    error!("Channel full when sending network connect command");
+                }
+                true
+            }
+            "CEREG" => response.values().len() == 4,
+            _ => false,
+        }
     }
 
     pub async fn turn_on<M: ModemHw, P: ModemPin>(

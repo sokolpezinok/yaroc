@@ -185,12 +185,10 @@ impl<M: ModemHw> MqttClient<M> {
         command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
     ) -> bool {
         match response.command() {
-            "QMTSTAT" | "QIURC" => {
-                if response.command() == "QMTSTAT" {
-                    warn!("MQTT disconnected");
-                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
-                        error!("Error while sending MQTT disconnect notification, channel full");
-                    }
+            "QMTSTAT" => {
+                warn!("MQTT disconnected");
+                if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
+                    error!("Channel full when sending MQTT disconnect notification");
                 }
                 let message = SendPunchCommand::MqttConnect(true, Instant::now());
                 if command_sender.try_send(message).is_err() {

@@ -8,6 +8,7 @@ use heapless::{Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 
+use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
@@ -26,6 +27,7 @@ pub enum SendPunchCommand {
     ///
     /// The `bool` parameter indicates whether to force a reconnection.
     MqttConnect(bool, Instant),
+    NetworkConnect(Instant),
     /// Instructs the modem to update the battery status.
     BatteryUpdate,
 }
@@ -64,10 +66,12 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     ) -> Self {
         let client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
-        bg77.spawn_rx(
-            &[|response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender())],
-            spawner,
-        );
+
+        let handlers: [UrcHandlerType; _] = [
+            |response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender()),
+            |response| ModemManager::urc_handler(response, COMMAND_CHANNEL.sender()),
+        ];
+        bg77.spawn_rx(&handlers, spawner);
         Self {
             bg77,
             modem_pin,
@@ -202,6 +206,9 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
                 let res = self.mqtt_connect().await;
                 self.last_reconnect = Some(Instant::now());
                 let _ = res.inspect_err(|err| error!("Error connecting to MQTT: {}", err));
+            }
+            SendPunchCommand::NetworkConnect(_) => {
+                //TODO: do something with it
             }
             SendPunchCommand::SynchronizeTime => {
                 let time = self.synchronize_time().await;
