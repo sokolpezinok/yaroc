@@ -1,10 +1,10 @@
 use core::{marker::PhantomData, str::FromStr};
 #[cfg(feature = "defmt")]
-use defmt::{debug, error, info, warn};
+use defmt::{error, info, warn};
 use embassy_sync::channel::Sender;
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Instant};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
@@ -13,7 +13,10 @@ use crate::{
     RawMutex,
     at::response::CommandResponse,
     backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
-    bg77::{hw::ModemHw, modem_manager::ACTIVATION_TIMEOUT},
+    bg77::{
+        hw::ModemHw,
+        modem_manager::{ACTIVATION_TIMEOUT, ModemManager},
+    },
     error::Error,
     send_punch::SendPunchCommand,
 };
@@ -109,7 +112,6 @@ pub struct MqttClient<M: ModemHw> {
     config: MqttConfig,
     last_successful_send: Instant,
     client_id: u8,
-    cgatt_cnt: u8,
     punch_cnt: u16,
     _phantom: PhantomData<M>,
 }
@@ -121,57 +123,9 @@ impl<M: ModemHw> MqttClient<M> {
             config,
             last_successful_send: Instant::now(),
             client_id,
-            cgatt_cnt: 0,
             punch_cnt: 0,
             _phantom: PhantomData,
         }
-    }
-
-    //TODO: move into modem_manager
-    /// Registers the modem to the network.
-    ///
-    /// This function first checks if any MQTT messages have been published recently.
-    /// If no messages have been sent for a prolonged period (determined by `packet_timeout` and `cgatt_cnt`),
-    /// it attempts to reattach to the network by deactivating and reactivating the GPRS context.
-    /// Otherwise, it checks the current network registration status and registers if not already registered.
-    async fn network_registration(&mut self, bg77: &mut M) -> crate::Result<()> {
-        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
-            self.last_successful_send = self.last_successful_send.max(publish_time);
-        }
-
-        if self.last_successful_send + self.config.packet_timeout * (4 + 2 * self.cgatt_cnt).into()
-            < Instant::now()
-        {
-            warn!("Will reattach to network because of no messages being sent for a long time");
-            self.last_successful_send = Instant::now();
-            bg77.call_at("E0", None).await?;
-            let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
-            Timer::after_secs(2).await;
-            let _ = bg77.long_call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
-            self.cgatt_cnt += 1;
-        } else {
-            let state = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
-            if state == 1 {
-                info!("Already registered to network");
-                return Ok(());
-            }
-        }
-
-        bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        // CGATT=1 needs additional time and reading from modem
-        Timer::after_secs(1).await;
-        // TODO: this is the only ModemHw::read() in the code base, can it be removed?
-        let _response = bg77.read("+CGATT", Duration::from_secs(1)).await;
-        #[cfg(feature = "defmt")]
-        if let Ok(response) = _response
-            && !response.lines().is_empty()
-        {
-            debug!("Read {=[?]} after CGATT=1", response.lines());
-        }
-        // TODO: should we do something with the result?
-        let (_, _) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
-
-        Ok(())
     }
 
     /// Handles Unsolicited Result Codes (URCs) from the modem.
@@ -284,14 +238,28 @@ impl<M: ModemHw> MqttClient<M> {
     /// Connects to the MQTT broker.
     ///
     /// This function first ensures network registration and then opens a TCP connection
-    /// using `mqtt_open`. Finally, it attempts to connect to the MQTT broker.
-    pub async fn connect(&mut self, bg77: &mut M) -> crate::Result<()> {
-        self.network_registration(bg77)
+    /// using `Self::open()`. Finally, it attempts to connect to the MQTT broker.
+    pub async fn connect(
+        &mut self,
+        bg77: &mut M,
+        modem_manager: &ModemManager,
+    ) -> crate::Result<()> {
+        let cid = self.client_id;
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[cid as usize].try_take() {
+            self.last_successful_send = self.last_successful_send.max(publish_time);
+        }
+        let force_reattach =
+            self.last_successful_send + self.config.packet_timeout * 4 < Instant::now();
+
+        modem_manager
+            .network_registration(bg77, force_reattach)
             .await
             .inspect_err(|err| error!("Network registration failed: {}", err))?;
+        if force_reattach {
+            self.last_successful_send = Instant::now();
+        }
         self.open(bg77).await?;
 
-        let cid = self.client_id;
         let (_, status) =
             bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
         const MQTT_INITIALIZING: u8 = 1;
@@ -320,7 +288,6 @@ impl<M: ModemHw> MqttClient<M> {
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
                         error!("Error while sending MQTT connect notification, channel full");
                     }
-                    self.cgatt_cnt = 0;
                     Ok(())
                 } else {
                     Err(Error::MqttError(reason))
@@ -407,7 +374,7 @@ impl<M: ModemHw> MqttClient<M> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::bg77::hw::FakeModem;
+    use crate::bg77::{hw::FakeModem, modem_manager::ModemConfig};
     use embassy_futures::block_on;
     use embassy_sync::channel::Channel;
     static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
@@ -421,7 +388,8 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
-        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
     }
 
     #[test]

@@ -175,13 +175,13 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
         self.modem_manager.configure(&mut self.bg77).await?;
 
-        let _ = self.mqtt_client.connect(&mut self.bg77).await;
+        let _ = self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await;
         Ok(())
     }
 
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.mqtt_client.connect(&mut self.bg77).await
+        self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await
     }
 
     /// Synchronizes the system time with the network time from the modem.

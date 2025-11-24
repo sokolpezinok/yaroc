@@ -1,12 +1,12 @@
 use core::str::FromStr;
 
 #[cfg(feature = "defmt")]
-use defmt::error;
+use defmt::{debug, error, info, warn};
 use embassy_sync::channel::Sender;
-use embassy_time::{Duration, Instant};
+use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
-use log::error;
+use log::{error, info, warn};
 
 use crate::RawMutex;
 use crate::at::response::CommandResponse;
@@ -172,6 +172,48 @@ impl ModemManager {
         bg77.call_at(&cmd, None).await?;
         let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
         bg77.call_at(&cmd, None).await?;
+        Ok(())
+    }
+
+    /// Registers the modem to the network.
+    ///
+    /// This function first checks if any MQTT messages have been published recently.
+    /// If no messages have been sent for a prolonged period (determined by `packet_timeout` and `cgatt_cnt`),
+    /// it attempts to reattach to the network by deactivating and reactivating the GPRS context.
+    /// Otherwise, it checks the current network registration status and registers if not already registered.
+    pub async fn network_registration<M: ModemHw>(
+        &self,
+        bg77: &mut M,
+        force_reattach: bool,
+    ) -> crate::Result<()> {
+        if force_reattach {
+            warn!("Will reattach to network because of no messages being sent for a long time");
+            bg77.call_at("E0", None).await?;
+            let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
+            Timer::after_secs(2).await;
+            let _ = bg77.long_call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
+        } else {
+            let state = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
+            if state == 1 {
+                info!("Already registered to network");
+                return Ok(());
+            }
+        }
+
+        bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
+        // CGATT=1 needs additional time and reading from modem
+        Timer::after_secs(1).await;
+        // TODO: this is the only ModemHw::read() in the code base, can it be removed?
+        let _response = bg77.read("+CGATT", Duration::from_secs(1)).await;
+        #[cfg(feature = "defmt")]
+        if let Ok(response) = _response
+            && !response.lines().is_empty()
+        {
+            debug!("Read {=[?]} after CGATT=1", response.lines());
+        }
+        // TODO: should we do something with the result?
+        let (_, _) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+
         Ok(())
     }
 }
