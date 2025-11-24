@@ -65,21 +65,38 @@ pub trait ModemHw: AtUartTrait {
 }
 
 pub struct FakeModem {
-    responses: FnvIndexMap<String<AT_COMMAND_SIZE>, String<60>, 8>,
+    at_responses: FnvIndexMap<String<AT_COMMAND_SIZE>, String<60>, 8>,
+    responses: FnvIndexMap<String<AT_COMMAND_SIZE>, (bool, String<60>), 2>,
 }
 
 impl FakeModem {
-    pub fn new(interactions: &[(&str, &str)]) -> Self {
-        let mut responses = FnvIndexMap::new();
-        for (command, response) in interactions {
-            responses
+    pub fn new(at_interactions: &[(&str, &str)]) -> Self {
+        let mut at_responses = FnvIndexMap::new();
+        for (command, response) in at_interactions {
+            at_responses
                 .insert(
                     String::from_str(command).unwrap(),
                     String::from_str(response).unwrap(),
                 )
                 .unwrap();
         }
-        Self { responses }
+        Self {
+            at_responses,
+            responses: Default::default(),
+        }
+    }
+
+    pub fn add_pure_interactions(&mut self, interactions: &[(&str, bool, &str)]) {
+        let mut responses = FnvIndexMap::new();
+        for (command, second_read, at_response) in interactions {
+            responses
+                .insert(
+                    String::from_str(command).unwrap(),
+                    (*second_read, String::from_str(at_response).unwrap()),
+                )
+                .unwrap();
+        }
+        self.responses = responses;
     }
 }
 
@@ -93,20 +110,34 @@ impl AtUartTrait for FakeModem {
         _response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         let at_cmd = format!(AT_COMMAND_SIZE; "AT{command}").unwrap();
-        let command_response =
-            CommandResponse::new(self.responses.get(at_cmd.as_str()).unwrap()).unwrap();
-        let response = FromModem::CommandResponse(command_response);
-        Ok(AtResponse::new([response, FromModem::Ok].into(), command))
+        let at_response_raw = self.at_responses.get(at_cmd.as_str()).unwrap();
+        let responses: Vec<_, _> = if at_response_raw.is_empty() {
+            [FromModem::Ok].into()
+        } else {
+            [
+                FromModem::CommandResponse(CommandResponse::new(at_response_raw.as_str()).unwrap()),
+                FromModem::Ok,
+            ]
+            .into()
+        };
+        Ok(AtResponse::new(responses, command))
     }
 
     async fn call_second_read(
         &mut self,
         _msg: &[u8],
-        _command_prefix: &str,
-        _second_read: bool,
+        command_prefix: &str,
+        second_read: bool,
         _timeout: Duration,
     ) -> crate::Result<AtResponse> {
-        todo!()
+        let (expected_read, at_response) =
+            self.responses.get(command_prefix).expect("Unexpected call");
+        assert_eq!(*expected_read, second_read);
+        let response = CommandResponse::new(at_response.as_str()).unwrap();
+        Ok(AtResponse::new(
+            [FromModem::CommandResponse(response), FromModem::Eof].into(),
+            command_prefix,
+        ))
     }
 
     async fn read(&self, _timeout: Duration) -> crate::Result<Vec<FromModem, AT_LINES>> {

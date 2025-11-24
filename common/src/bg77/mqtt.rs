@@ -352,11 +352,19 @@ impl<M: ModemHw> MqttClient<M> {
         if qos == MqttQos::Q0 {
             let (msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
             let status = MqttStatus::from_bg77_qmtpub(msg_id, status, None);
-            if status.code == StatusCode::Published {
-                self.last_successful_send = Instant::now();
+            match status.code {
+                StatusCode::Published => {
+                    self.last_successful_send = Instant::now();
+                    Ok(())
+                }
+                StatusCode::Retrying(_) => Ok(()),
+                StatusCode::Timeout => Err(Error::TimeoutError),
+                StatusCode::MqttError => Err(Error::MqttError(0)),
+                StatusCode::Unknown => Err(Error::MqttError(-1)),
             }
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     /// Schedules a batch of punches to be sent via the backoff mechanism.
@@ -404,9 +412,27 @@ mod test {
     }
 
     #[test]
+    fn test_mqtt_send_ok() {
+        let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
+        bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,0")]);
+        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
+        assert_eq!(res, Ok(()));
+    }
+
+    #[test]
+    fn test_mqtt_send_timeout() {
+        let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
+        bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,2")]);
+        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
+        assert_eq!(res, Err(Error::TimeoutError));
+    }
+
+    #[test]
     fn test_qmtpub_handler_published() {
         // Client ID 0, Message ID 1, Status 0 (Published), Retries 0
-        let response = CommandResponse::new("+QMTPUB: 0,1,0,0").unwrap();
+        let response = CommandResponse::new("+QMTPUB: 0,1,0").unwrap();
         let sender = CHANNEL.sender();
 
         // Ensure the signal is not set initially
@@ -425,7 +451,7 @@ mod test {
         assert_eq!(status, BackoffCommand::Status(expected_status));
 
         // The same as above, but for client ID 1
-        let response = CommandResponse::new("+QMTPUB: 1,1,0,0").unwrap();
+        let response = CommandResponse::new("+QMTPUB: 1,1,0").unwrap();
         // Return false, because it's for a different client
         let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
         assert!(!handled);
