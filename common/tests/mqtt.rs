@@ -99,6 +99,8 @@ fn test_mqtt_send_short_message_ok() {
     let mut bg77 = MockAtUart::new();
     let topic = "topic";
     let message = b"hello";
+    let mut mqtt_config = MqttConfig::default();
+    mqtt_config.packet_timeout = Duration::from_secs(27);
 
     expect_call_at(
         &mut bg77,
@@ -114,7 +116,7 @@ fn test_mqtt_send_short_message_ok() {
             eq(message.as_slice()),
             eq("+QMTPUB"),
             eq(true),
-            eq(Duration::from_secs(5)),
+            eq(Duration::from_secs(27)),
         )
         .times(1)
         .returning(|_, _, _, _| {
@@ -125,6 +127,6 @@ fn test_mqtt_send_short_message_ok() {
             Ok(AtResponse::new(resps, "+QMTPUB"))
         });
 
-    let mut client = MqttClient::new(MqttConfig::default(), 1);
+    let mut client = MqttClient::new(mqtt_config, 1);
     assert!(block_on(client.send_message(&mut bg77, topic, message, MqttQos::Q0, 0)).is_ok());
 }

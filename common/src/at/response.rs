@@ -5,16 +5,19 @@ use crate::error::Error;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Debug, PartialEq)]
+/// Represents a substring within a larger string, defined by its start and end indices.
 pub struct Substring {
     start: usize,
     end: usize,
 }
 
 impl Substring {
+    /// Creates a new `Substring`.
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
 
+    /// Returns the end index of the substring.
     pub fn end(&self) -> usize {
         self.end
     }
@@ -33,12 +36,14 @@ const AT_VALUE_LEN: usize = 40;
 const AT_VALUE_COUNT: usize = 8;
 
 #[derive(Clone, Debug, PartialEq)]
+/// Represents a parsed AT command response line.
 pub struct CommandResponse {
     line: String<AT_COMMAND_SIZE>,
     prefix: Substring,
 }
 
 impl CommandResponse {
+    /// Creates a new `CommandResponse` by parsing a raw AT response line.
     pub fn new(line: &str) -> crate::Result<Self> {
         let (prefix, rest) = Self::split_at_response(line).ok_or(Error::ParseError)?;
         Self::split_values(rest)?; // TODO: store the result
@@ -48,14 +53,17 @@ impl CommandResponse {
         })
     }
 
+    /// Returns the command prefix of the AT response.
     pub fn command(&self) -> &str {
         &self.line[1..self.prefix.end()]
     }
 
+    /// Returns a vector of string slices representing the values in the AT response.
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
         Self::split_values(&self.line[self.prefix.end() + 2..]).unwrap()
     }
 
+    /// Splits an AT response line into its prefix and the rest of the line containing values.
     fn split_at_response(line: &str) -> Option<(&str, &str)> {
         if line.starts_with('+')
             && let Some(prefix_len) = line.find(": ")
@@ -67,7 +75,7 @@ impl CommandResponse {
         None
     }
 
-    /// Parse out values out of a AT command response.
+    /// Parse values from an AT command response.
     ///
     /// Double quotes for strings are ignored. Numbers are returned as strings. For example,
     /// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
@@ -98,7 +106,7 @@ impl CommandResponse {
         Ok(split)
     }
 
-    /// Pick values from a command response given by the list of `indices`.
+    /// Pick values from a command response given a list of `indices`.
     fn pick_values<const N: usize>(
         &self,
         indices: [usize; N],
@@ -113,6 +121,7 @@ impl CommandResponse {
             .collect())
     }
 
+    /// Parses the values of the command response into a vector of a specified type `T`.
     pub fn parse_values<T: FromStr>(&self) -> Result<Vec<T, AT_VALUE_COUNT>, Error> {
         self.values()
             .iter()
@@ -136,6 +145,7 @@ impl defmt::Format for CommandResponse {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+/// Represents different types of responses received from a modem.
 pub enum FromModem {
     Line(String<AT_COMMAND_SIZE>),
     CommandResponse(CommandResponse),
@@ -145,6 +155,7 @@ pub enum FromModem {
 }
 
 impl FromModem {
+    /// Returns `true` if the `FromModem` variant indicates a terminal response (Ok, Error, Eof).
     pub fn terminal(&self) -> bool {
         matches!(self, FromModem::Ok | FromModem::Error | FromModem::Eof)
     }
@@ -165,6 +176,7 @@ impl defmt::Format for FromModem {
     }
 }
 
+/// Represents a complete AT response, which can consist of multiple lines.
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
     command: String<AT_COMMAND_SIZE>,
@@ -184,6 +196,7 @@ impl Display for AtResponse {
 }
 
 impl AtResponse {
+    /// Creates a new `AtResponse` from a vector of `FromModem` lines and the original command.
     pub fn new(lines: Vec<FromModem, AT_LINES>, command: &str) -> Self {
         let pos = command.find(['=', '?']).unwrap_or(command.len());
         let command_prefix = &command[..pos];
@@ -193,15 +206,16 @@ impl AtResponse {
         }
     }
 
+    /// Returns a slice of the `FromModem` lines contained in this `AtResponse`.
     pub fn lines(&self) -> &[FromModem] {
         self.lines.as_slice()
     }
 
     /// Returns a response to the command.
     ///
-    /// If `filter` is None, it returns the first one.
-    /// If `filter` is `(x, idx)`, returns the response with value `x` on position `idx`. If there
-    /// is no such value, returns `ModemError`.
+    /// If `filter` is `None`, it returns the first one.
+    /// If `filter` is `(x, idx)`, returns the response with value `x` at position `idx`. If no such
+    /// response is found, returns `ModemError`.
     fn response<T: FromStr + Eq>(
         &self,
         filter: Option<(T, usize)>,
@@ -227,15 +241,16 @@ impl AtResponse {
         Err(Error::ModemError)
     }
 
+    /// Counts the number of values in the first `CommandResponse` that matches the command prefix.
     pub fn count_response_values(&self) -> Result<usize, Error> {
         let response = self.response::<u8>(None)?;
         Ok(response.values().len())
     }
 
-    /// Pick values from an AT response given by the list of `indices`.
+    /// Pick values from an AT response given a list of `indices`.
     ///
-    /// If filter is None, the first at response is chosen. If `filter` is provided, only the response
-    /// for which the first chosen value (at position `indices[0]`) matches `filter`.
+    /// If `filter` is `None`, the first AT response is chosen. If `filter` is provided, the response
+    /// for which the first chosen value (at position `indices[0]`) matches `filter` is chosen.
     fn pick_values<T: FromStr + Eq, const N: usize>(
         &self,
         indices: [usize; N],
@@ -244,10 +259,12 @@ impl AtResponse {
         self.response(filter.map(|t| (t, indices[0])))?.pick_values(indices)
     }
 
+    /// Parses a string slice into a specified type `T`.
     fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
         str::parse(s).map_err(|_| Error::ParseError)
     }
 
+    /// Parses one value from the AT response into type `T`.
     pub fn parse1<T: FromStr + Eq>(
         self,
         indices: [usize; 1],
@@ -257,6 +274,7 @@ impl AtResponse {
         Self::parse::<T>(&values[0])
     }
 
+    /// Parses two values from the AT response into a tuple `(T, U)`.
     pub fn parse2<T: FromStr + Eq, U: FromStr>(
         self,
         indices: [usize; 2],
@@ -266,6 +284,7 @@ impl AtResponse {
         Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
 
+    /// Parses three values from the AT response into a tuple `(T, U, V)`.
     pub fn parse3<T: FromStr + Eq, U: FromStr, V: FromStr>(
         self,
         indices: [usize; 3],
@@ -279,6 +298,7 @@ impl AtResponse {
         ))
     }
 
+    /// Parses four values from the AT response into a tuple `(T, U, V, W)`.
     pub fn parse4<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr>(
         self,
         indices: [usize; 4],
@@ -292,6 +312,7 @@ impl AtResponse {
         ))
     }
 
+    /// Parses five values from the AT response into a tuple `(T, U, V, W, X)`.
     pub fn parse5<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr, X: FromStr>(
         self,
         indices: [usize; 5],
