@@ -196,7 +196,6 @@ impl<M: ModemHw> MqttClient<M> {
                 }
                 true
             }
-            "CEREG" => response.values().len() == 4,
             "QMTPUB" => Self::qmtpub_handler::<CLIENT_ID>(response),
             _ => false,
         }
@@ -377,7 +376,8 @@ impl<M: ModemHw> MqttClient<M> {
         bg77.call_at(&cmd, None).await?;
 
         let second_read_timeout = if qos == MqttQos::Q0 {
-            Some(Duration::from_secs(5))
+            // The response is usually very quick, but we set a longer timeout just in case
+            Some(self.config.packet_timeout)
         } else {
             None
         };
