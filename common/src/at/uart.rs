@@ -65,8 +65,8 @@ impl AtRxBroker {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
-            let to_send = match line {
-                "OK" | "RDY" | "APP RDY" | "> " => Ok(FromModem::Ok),
+            let to_send = match line.trim() {
+                "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
                 line => match CommandResponse::new(line) {
                     Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
@@ -403,8 +403,9 @@ impl<T: Tx, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
                 .with_deadline(deadline)
                 .await
                 .map_err(|_| Error::TimeoutError)??;
-            res.push(from_modem.clone()).map_err(|_| Error::BufferTooSmallError)?;
-            if from_modem.terminal() {
+            let is_terminal = from_modem.terminal();
+            res.push(from_modem).map_err(|_| Error::BufferTooSmallError)?;
+            if is_terminal {
                 break;
             }
         }
@@ -438,6 +439,15 @@ mod test_at {
         };
         let handlers = [handler].into();
         let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handlers);
+
+        block_on(broker.parse_lines("RDY\nAPP RDY\n AT+CFUN=1,0 \nOK\n"));
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
+        assert_eq!(
+            MAIN_RX_CHANNEL.try_receive().unwrap()?,
+            FromModem::Line(String::from_str("AT+CFUN=1,0").unwrap())
+        );
+        assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
 
         block_on(broker.parse_lines("OK\n+URC: 1,\"string\"\nERROR"));
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);

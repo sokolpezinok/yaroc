@@ -46,9 +46,9 @@ impl CommandResponse {
     /// Creates a new `CommandResponse` by parsing a raw AT response line.
     pub fn new(line: &str) -> crate::Result<Self> {
         let (prefix, rest) = Self::split_at_response(line).ok_or(Error::ParseError)?;
-        Self::split_values(rest)?; // TODO: store the result
+        Self::split_values(rest)?; // TODO: store the result to avoid duplicated parsing
         Ok(Self {
-            line: String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
+            line: String::from_str(line.trim()).map_err(|_| Error::BufferTooSmallError)?,
             prefix: Substring::new(1, 1 + prefix.len()),
         })
     }
@@ -132,7 +132,7 @@ impl CommandResponse {
 
 impl Display for CommandResponse {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.line.trim())
+        write!(f, "{}", self.line)
     }
 }
 

@@ -6,7 +6,7 @@ use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::RawMutex;
 use crate::at::response::CommandResponse;
@@ -136,26 +136,22 @@ impl ModemManager {
         bg77: &mut M,
         modem_pin: &mut P,
     ) -> Result<(), Error> {
-        if bg77.call_at("", None).await.is_err() {
+        if bg77.call_at("E0", None).await.is_err() {
             modem_pin.set_low();
-            embassy_time::Timer::after_secs(1).await;
+            Timer::after_secs(1).await;
             modem_pin.set_high();
-            embassy_time::Timer::after_secs(2).await;
+            Timer::after_secs(2).await;
             modem_pin.set_low();
-            // TODO: fix command
-            let _res = bg77.read("", Duration::from_secs(5)).await?;
-            #[cfg(feature = "defmt")]
-            defmt::info!("Modem response: {=[?]}", _res.lines());
+            let res = bg77.read("", Duration::from_secs(1)).await?;
+            debug!("Modem response: {}", res);
             bg77.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let _res = bg77.read("", Duration::from_secs(5)).await?;
-            #[cfg(feature = "defmt")]
-            defmt::info!("Modem response: {=[?]}", _res.lines());
+            let res = bg77.read("", Duration::from_secs(5)).await?;
+            debug!("Modem response: {}", res);
         }
         Ok(())
     }
 
     pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> Result<(), Error> {
-        bg77.call_at("E0", None).await?;
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         let _ = bg77.call_at(&cmd, None).await;
         bg77.call_at("+CEREG=2", None).await?;
