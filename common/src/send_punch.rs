@@ -41,7 +41,7 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 pub struct SendPunch<M: ModemHw, P: ModemPin> {
     bg77: M,
     modem_pin: P,
-    client: MqttClient<M>,
+    mqtt_client: MqttClient<M>,
     modem_manager: ModemManager,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
@@ -64,7 +64,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         mqtt_config: MqttConfig,
         modem_config: ModemConfig,
     ) -> Self {
-        let client = MqttClient::<_>::new(mqtt_config, 0);
+        let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
 
         let handlers: [UrcHandlerType; _] = [
@@ -75,7 +75,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         Self {
             bg77,
             modem_pin,
-            client,
+            mqtt_client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
@@ -104,7 +104,9 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        self.client.send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id).await
+        self.mqtt_client
+            .send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id)
+            .await
     }
 
     /// Sends a `MiniCallHome` message, containing system information.
@@ -121,7 +123,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     pub async fn schedule_punch(&mut self, punch: crate::Result<BatchedPunches>) {
         match punch {
             Ok(punches) => {
-                let id = self.client.schedule_punch(punches.clone()).await;
+                let id = self.mqtt_client.schedule_punches(punches.clone()).await;
                 if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
                     let today = time.date_naive();
                     for punch in punches {
@@ -173,13 +175,13 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
         self.modem_manager.configure(&mut self.bg77).await?;
 
-        let _ = self.client.mqtt_connect(&mut self.bg77).await;
+        let _ = self.mqtt_client.connect(&mut self.bg77).await;
         Ok(())
     }
 
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.client.mqtt_connect(&mut self.bg77).await
+        self.mqtt_client.connect(&mut self.bg77).await
     }
 
     /// Synchronizes the system time with the network time from the modem.

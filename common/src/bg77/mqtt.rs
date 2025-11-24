@@ -240,7 +240,7 @@ impl<M: ModemHw> MqttClient<M> {
     /// If a connection is already open to the correct broker, it does nothing.
     /// If connected to a different broker, it disconnects first.
     /// It also configures MQTT timeouts and keep-alive settings before opening the connection.
-    async fn mqtt_open(&self, bg77: &mut M) -> crate::Result<()> {
+    async fn open(&self, bg77: &mut M) -> crate::Result<()> {
         let cid = self.client_id;
         let opened = bg77
             .call_at("+QMTOPEN?", None)
@@ -286,11 +286,11 @@ impl<M: ModemHw> MqttClient<M> {
     ///
     /// This function first ensures network registration and then opens a TCP connection
     /// using `mqtt_open`. Finally, it attempts to connect to the MQTT broker.
-    pub async fn mqtt_connect(&mut self, bg77: &mut M) -> crate::Result<()> {
+    pub async fn connect(&mut self, bg77: &mut M) -> crate::Result<()> {
         self.network_registration(bg77)
             .await
             .inspect_err(|err| error!("Network registration failed: {}", err))?;
-        self.mqtt_open(bg77).await?;
+        self.open(bg77).await?;
 
         let cid = self.client_id;
         let (_, status) =
@@ -333,7 +333,7 @@ impl<M: ModemHw> MqttClient<M> {
 
     /// Disconnects from the MQTT broker and closes the TCP connection.
     #[allow(dead_code)]
-    pub async fn mqtt_disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
+    pub async fn disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
         let cid = self.client_id;
         let cmd = format!(50; "+QMTDISC={cid}")?;
         let (_, result) = bg77
@@ -395,7 +395,7 @@ impl<M: ModemHw> MqttClient<M> {
     /// Schedules a batch of punches to be sent via the backoff mechanism.
     ///
     /// Returns the assigned punch ID for the scheduled batch.
-    pub async fn schedule_punch(&mut self, punches: BatchedPunches) -> u16 {
+    pub async fn schedule_punches(&mut self, punches: BatchedPunches) -> u16 {
         let punch_id = self.punch_cnt;
         CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches(punches, punch_id)).await;
         self.punch_cnt += 1;
@@ -421,7 +421,7 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
-        assert_eq!(block_on(client.mqtt_connect(&mut bg77)), Ok(()));
+        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
     }
 
     #[test]
@@ -432,7 +432,7 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
-        assert_eq!(block_on(client.mqtt_disconnect(&mut bg77)), Ok(()));
+        assert_eq!(block_on(client.disconnect(&mut bg77)), Ok(()));
     }
 
     #[test]

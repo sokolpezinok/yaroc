@@ -91,7 +91,7 @@ fn test_mqtt_connect_ok() {
     );
 
     let mut client = MqttClient::new(MqttConfig::default(), 1);
-    assert!(block_on(client.mqtt_connect(&mut bg77)).is_ok());
+    assert!(block_on(client.connect(&mut bg77)).is_ok());
 }
 
 #[test]
