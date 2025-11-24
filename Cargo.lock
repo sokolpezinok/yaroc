@@ -1016,9 +1016,9 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1edcd5a338e64688fbdcb7531a846cfd3476a54784dcb918a0844682bc7ada5"
+checksum = "2af2455f757db2b292a9b1768c4b70186d443bcb3b316252d6b540aec1cd89ed"
 dependencies = [
  "defmt 1.0.1",
  "hash32",
@@ -1252,8 +1252,9 @@ dependencies = [
 
 [[package]]
 name = "meshtastic"
-version = "0.1.7"
-source = "git+https://github.com/meshtastic/rust?rev=70c0f7cf9aeaac00059546a68a04d04762ee78f5#70c0f7cf9aeaac00059546a68a04d04762ee78f5"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bf901325782ca58dcfb24bcc8c357e6404a5a40995afeffcc75c531d5742bb3"
 dependencies = [
  "futures-util",
  "log",
@@ -2939,7 +2940,7 @@ dependencies = [
  "femtopb",
  "femtopb-build",
  "geoutils",
- "heapless 0.9.1",
+ "heapless 0.9.2",
  "log",
  "mockall",
  "static_cell",
@@ -2966,7 +2967,7 @@ dependencies = [
  "embedded-io",
  "embedded-io-async",
  "femtopb",
- "heapless 0.9.1",
+ "heapless 0.9.2",
  "nrf-softdevice",
  "panic-probe",
  "sequential-storage",
