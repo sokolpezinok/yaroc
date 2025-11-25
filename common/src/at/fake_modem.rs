@@ -10,11 +10,11 @@ use crate::{
 use core::str::FromStr;
 use embassy_executor::Spawner;
 use embassy_time::Duration;
-use heapless::{String, Vec, index_map::FnvIndexMap};
+use heapless::{String, Vec};
 
 pub struct FakeModem {
     at_responses: std::vec::Vec<(String<AT_COMMAND_SIZE>, String<60>)>,
-    responses: FnvIndexMap<String<AT_COMMAND_SIZE>, (bool, String<60>), 2>,
+    responses: std::vec::Vec<(String<AT_COMMAND_SIZE>, bool, String<60>)>,
 }
 
 impl FakeModem {
@@ -33,20 +33,19 @@ impl FakeModem {
     }
 
     pub fn add_pure_interactions(&mut self, interactions: &[(&str, bool, &str)]) {
-        let mut responses = FnvIndexMap::new();
+        let mut responses = std::vec::Vec::new();
         for (command, second_read, at_response) in interactions {
-            responses
-                .insert(
-                    String::from_str(command).unwrap(),
-                    (*second_read, String::from_str(at_response).unwrap()),
-                )
-                .unwrap();
+            responses.push((
+                String::from_str(command).unwrap(),
+                *second_read,
+                String::from_str(at_response).unwrap(),
+            ));
         }
         self.responses = responses;
     }
 
     pub fn all_done(&self) -> bool {
-        self.at_responses.is_empty()
+        self.at_responses.is_empty() && self.responses.is_empty()
     }
 }
 
@@ -80,9 +79,9 @@ impl AtUartTrait for FakeModem {
         second_read: bool,
         _timeout: Duration,
     ) -> crate::Result<AtResponse> {
-        let (expected_read, at_response) =
-            self.responses.get(command_prefix).expect("Unexpected call");
-        assert_eq!(*expected_read, second_read);
+        let (expected_cmd, expected_read, at_response) = self.responses.remove(0);
+        assert_eq!(expected_cmd, command_prefix);
+        assert_eq!(expected_read, second_read);
         let response = CommandResponse::new(at_response.as_str()).unwrap();
         Ok(AtResponse::new(
             [FromModem::CommandResponse(response), FromModem::Eof].into(),

@@ -399,6 +399,7 @@ mod test {
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
         let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert!(bg77.all_done());
     }
 
     #[test]
@@ -410,6 +411,7 @@ mod test {
 
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
         assert_eq!(block_on(client.disconnect(&mut bg77)), Ok(()));
+        assert!(bg77.all_done());
     }
 
     #[test]
@@ -419,6 +421,7 @@ mod test {
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
         assert_eq!(res, Ok(()));
+        assert!(bg77.all_done());
     }
 
     #[test]
@@ -428,6 +431,7 @@ mod test {
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
         assert_eq!(res, Err(Error::TimeoutError));
+        assert!(bg77.all_done());
     }
 
     #[test]
