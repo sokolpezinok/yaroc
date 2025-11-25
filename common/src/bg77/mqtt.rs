@@ -382,7 +382,8 @@ impl<M: ModemHw> MqttClient<M> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::bg77::{hw::FakeModem, modem_manager::ModemConfig};
+    use crate::at::fake_modem::FakeModem;
+    use crate::bg77::modem_manager::ModemConfig;
     use embassy_futures::block_on;
     use embassy_sync::channel::Channel;
     static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();

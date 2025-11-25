@@ -217,8 +217,9 @@ impl ModemManager {
 #[cfg(feature = "std")]
 #[cfg(test)]
 mod test {
+    use crate::at::fake_modem::FakeModem;
+
     use super::*;
-    use crate::bg77::hw::FakeModem;
     use embassy_futures::block_on;
 
     #[test]
