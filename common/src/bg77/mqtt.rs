@@ -80,18 +80,29 @@ pub enum MqttQos {
     // 2 is unsupported
 }
 
-/// Configuration for the MQTT client.
+/// Represents login credentials for an MQTT broker.
+#[derive(Clone, Debug)]
+pub struct Login {
+    /// The username for MQTT authentication.
+    pub username: String<20>,
+    /// The password for MQTT authentication.
+    pub password: String<30>,
+}
+
+/// Configuration for the MQTT client to connect to a broker.
 #[derive(Clone)]
 pub struct MqttConfig {
-    /// URL of the MQTT broker.
+    /// The URL of the MQTT broker, e.g., "broker.emqx.io".
     pub url: String<40>,
-    /// Timeout for MQTT packets.
+    /// Optional login credentials for the MQTT broker.
+    pub login: Option<Login>,
+    /// The timeout duration for individual MQTT packets.
     pub packet_timeout: Duration,
-    /// Name of the client.
+    /// The name of the client, used to construct the MQTT client ID.
     pub name: String<20>,
-    /// MAC address of the device.
+    /// The MAC address of the device, used to form MQTT topics (e.g., "yar/mac_address/topic").
     pub mac_address: String<12>,
-    /// Interval for mini call home messages.
+    /// The interval at which mini call home messages are sent.
     pub minicallhome_interval: Duration,
 }
 
@@ -99,6 +110,7 @@ impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
+            login: None,
             packet_timeout: Duration::from_secs(35),
             name: String::new(),
             mac_address: String::from_str("deadbeef").unwrap(),
