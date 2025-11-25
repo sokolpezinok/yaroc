@@ -237,5 +237,6 @@ mod test {
             ("AT+QCFG=\"band\",0,4,80000", ""),
         ]);
         assert!(block_on(modem_manager.configure(&mut bg77)).is_ok());
+        assert!(bg77.all_done());
     }
 }

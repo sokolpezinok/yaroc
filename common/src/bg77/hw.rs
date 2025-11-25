@@ -4,7 +4,7 @@ use crate::at::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse
 use crate::at::uart::{AtUartTrait, UrcHandlerType};
 use embassy_executor::Spawner;
 use embassy_time::Duration;
-use heapless::{String, Vec, format, index_map::FnvIndexMap};
+use heapless::{String, Vec, index_map::FnvIndexMap};
 
 pub trait ModemHw: AtUartTrait {
     /// Default timeout for a command. It's typically the minimum timeout, a couple hundred
@@ -64,21 +64,24 @@ pub trait ModemHw: AtUartTrait {
     }
 }
 
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "std")]
 pub struct FakeModem {
-    at_responses: FnvIndexMap<String<AT_COMMAND_SIZE>, String<60>, 8>,
+    at_responses: std::vec::Vec<(String<AT_COMMAND_SIZE>, String<60>)>,
     responses: FnvIndexMap<String<AT_COMMAND_SIZE>, (bool, String<60>), 2>,
 }
 
+#[cfg(feature = "std")]
 impl FakeModem {
     pub fn new(at_interactions: &[(&str, &str)]) -> Self {
-        let mut at_responses = FnvIndexMap::new();
+        let mut at_responses = std::vec::Vec::new();
         for (command, response) in at_interactions {
-            at_responses
-                .insert(
-                    String::from_str(command).unwrap(),
-                    String::from_str(response).unwrap(),
-                )
-                .unwrap();
+            at_responses.push((
+                String::from_str(command).unwrap(),
+                String::from_str(response).unwrap(),
+            ));
         }
         Self {
             at_responses,
@@ -98,6 +101,10 @@ impl FakeModem {
         }
         self.responses = responses;
     }
+
+    pub fn all_done(&self) -> bool {
+        self.at_responses.is_empty()
+    }
 }
 
 impl AtUartTrait for FakeModem {
@@ -109,8 +116,8 @@ impl AtUartTrait for FakeModem {
         _call_timeout: Duration,
         _response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
-        let at_cmd = format!(AT_COMMAND_SIZE; "AT{command}").unwrap();
-        let at_response_raw = self.at_responses.get(at_cmd.as_str()).unwrap();
+        let (at_cmd, at_response_raw) = self.at_responses.remove(0);
+        assert_eq!(at_cmd.as_str(), std::format!("AT{command}"));
         let responses: Vec<_, _> = if at_response_raw.is_empty() {
             [FromModem::Ok].into()
         } else {
