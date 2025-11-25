@@ -289,7 +289,12 @@ impl<M: ModemHw> MqttClient<M> {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?;
+                let cmd = match &self.config.login {
+                    Some(Login { username, password }) => {
+                        format!(50; "+QMTCONN={cid},\"nrf52840-{}\",\"{username}\",\"{password}\"", self.config.name)?
+                    }
+                    None => format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?,
+                };
                 let (_, res, reason) = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
@@ -401,7 +406,7 @@ mod test {
     static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
 
     #[test]
-    fn test_mqtt_connect_ok() {
+    fn test_mqtt_already_connected() {
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
