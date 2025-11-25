@@ -213,3 +213,29 @@ impl ModemManager {
         Ok(())
     }
 }
+
+#[cfg(feature = "std")]
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::bg77::hw::FakeModem;
+    use embassy_futures::block_on;
+
+    #[test]
+    fn test_configure_modem() {
+        let mut config = ModemConfig::default();
+        config.apn = String::from_str("test-apn").unwrap();
+        config.bands.set_ltem_bands(&[3]);
+        let modem_manager = ModemManager::new(config);
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGDCONT=1,\"IP\",\"test-apn\"", ""),
+            ("AT+CEREG=2", ""),
+            ("AT+CGATT=1", ""),
+            ("AT+QCFG=\"nwscanseq\",00", ""),
+            ("AT+QCFG=\"iotopmode\",2,1", ""),
+            ("AT+QCFG=\"band\",0,4,80000", ""),
+        ]);
+        assert!(block_on(modem_manager.configure(&mut bg77)).is_ok());
+    }
+}
