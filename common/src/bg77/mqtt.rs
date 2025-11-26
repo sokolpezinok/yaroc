@@ -80,22 +80,13 @@ pub enum MqttQos {
     // 2 is unsupported
 }
 
-/// Represents login credentials for an MQTT broker.
-#[derive(Clone, Debug)]
-pub struct Login {
-    /// The username for MQTT authentication.
-    pub username: String<20>,
-    /// The password for MQTT authentication.
-    pub password: String<30>,
-}
-
 /// Configuration for the MQTT client to connect to a broker.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MqttConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
     pub url: String<40>,
-    /// Optional login credentials for the MQTT broker.
-    pub login: Option<Login>,
+    /// Optional login credentials for the MQTT broker, username and password.
+    pub credentials: Option<(String<20>, String<30>)>,
     /// The timeout duration for individual MQTT packets.
     pub packet_timeout: Duration,
     /// The name of the client, used to construct the MQTT client ID.
@@ -110,7 +101,7 @@ impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
-            login: None,
+            credentials: None,
             packet_timeout: Duration::from_secs(35),
             name: String::new(),
             mac_address: String::from_str("deadbeef").unwrap(),
@@ -289,11 +280,11 @@ impl<M: ModemHw> MqttClient<M> {
             }
             MQTT_INITIALIZING => {
                 info!("Will connect to MQTT");
-                let cmd = match &self.config.login {
-                    Some(Login { username, password }) => {
-                        format!(50; "+QMTCONN={cid},\"nrf52840-{}\",\"{username}\",\"{password}\"", self.config.name)?
+                let cmd = match &self.config.credentials {
+                    Some((username, password)) => {
+                        format!(100; "+QMTCONN={cid},\"nrf52840-{}\",\"{username}\",\"{password}\"", self.config.name)?
                     }
-                    None => format!(50; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?,
+                    None => format!(100; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?,
                 };
                 let (_, res, reason) = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))

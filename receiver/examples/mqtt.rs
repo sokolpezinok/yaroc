@@ -11,6 +11,8 @@ use yaroc_receiver::system_info::MacAddress;
 
 #[derive(Parser, Debug)]
 struct Args {
+    #[arg(short, long, default_value = "broker.emqx.io")]
+    url: String,
     #[arg(short, long)]
     dns: Vec<String>,
     #[arg(short, long)]
@@ -44,6 +46,7 @@ async fn main() {
     }
 
     let mqtt_config = MqttConfig {
+        url: args.url,
         meshtastic_channel: args.msh_channel.clone(),
         ..Default::default()
     };

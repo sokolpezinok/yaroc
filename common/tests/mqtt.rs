@@ -11,7 +11,7 @@ use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromMode
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
 use yaroc_common::bg77::hw::ModemHw;
 use yaroc_common::bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemConfig, ModemManager};
-use yaroc_common::bg77::mqtt::{Login, MqttClient, MqttConfig, MqttQos};
+use yaroc_common::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
 // instead.
@@ -102,10 +102,10 @@ fn test_mqtt_connect_ok() {
 fn test_mqtt_connect_login_ok() {
     let mut bg77 = MockAtUart::new();
     let mut config = MqttConfig::default();
-    config.login = Some(Login {
-        username: String::from_str("user").unwrap(),
-        password: String::from_str("password").unwrap(),
-    });
+    config.credentials = Some((
+        String::from_str("user").unwrap(),
+        String::from_str("password").unwrap(),
+    ));
 
     expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
     expect_call_at(
