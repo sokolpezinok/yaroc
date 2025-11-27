@@ -210,8 +210,7 @@ impl<M: ModemHw> MqttClient<M> {
                 return Ok(());
             }
             warn!("Connected to the wrong broker {}, will disconnect", url);
-            let cmd = format!(50; "+QMTCLOSE={cid}")?;
-            bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
+            self.disconnect(bg77).await?;
         }
 
         let cmd = format!(50;
@@ -305,21 +304,11 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
-    /// Disconnects from the MQTT broker and closes the TCP connection.
-    #[allow(dead_code)]
-    pub async fn disconnect(&mut self, bg77: &mut M) -> Result<(), Error> {
+    /// Close the MQTT connection to the MQTT broker.
+    pub async fn disconnect(&self, bg77: &mut M) -> Result<(), Error> {
         let cid = self.client_id;
-        let cmd = format!(50; "+QMTDISC={cid}")?;
-        let (_, result) = bg77
-            .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
-            .await?
-            .parse2::<u8, i8>([0, 1], Some(cid))?;
-        const MQTT_DISCONNECTED: i8 = 0;
-        if result != MQTT_DISCONNECTED {
-            return Err(Error::MqttError(result));
-        }
         let cmd = format!(50; "+QMTCLOSE={cid}")?;
-        let _ = bg77.call_at(&cmd, None).await; // TODO: Why does it fail?
+        bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
         Ok(())
     }
 
@@ -412,12 +401,9 @@ mod test {
 
     #[test]
     fn test_mqtt_disconnect_ok() {
-        let mut bg77 = FakeModem::new(&[
-            ("AT+QMTDISC=2", "+QMTDISC: 2,0"),
-            ("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0"),
-        ]);
+        let mut bg77 = FakeModem::new(&[("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0")]);
 
-        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let client = MqttClient::<_>::new(MqttConfig::default(), 2);
         assert_eq!(block_on(client.disconnect(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }

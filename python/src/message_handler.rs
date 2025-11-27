@@ -58,6 +58,12 @@ impl MqttConfig {
     /// Creates a default MQTT configuration.
     #[new]
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
         MqttConfigRs::default().into()
     }
 }
