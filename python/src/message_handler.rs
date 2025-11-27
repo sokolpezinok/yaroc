@@ -46,6 +46,8 @@ pub struct MqttConfig {
     #[pyo3(get, set)]
     port: u16,
     #[pyo3(get, set)]
+    credentials: Option<(String, String)>,
+    #[pyo3(get, set)]
     keep_alive: Duration,
     #[pyo3(get, set)]
     meshtastic_channel: Option<String>,
@@ -60,17 +62,12 @@ impl MqttConfig {
     }
 }
 
-impl Default for MqttConfig {
-    fn default() -> Self {
-        MqttConfigRs::default().into()
-    }
-}
-
 impl From<MqttConfigRs> for MqttConfig {
     fn from(config: MqttConfigRs) -> Self {
         Self {
             url: config.url,
             port: config.port,
+            credentials: config.credentials,
             keep_alive: config.keep_alive,
             meshtastic_channel: config.meshtastic_channel,
         }
@@ -82,6 +79,7 @@ impl From<MqttConfig> for MqttConfigRs {
         Self {
             url: config.url,
             port: config.port,
+            credentials: config.credentials,
             keep_alive: config.keep_alive,
             meshtastic_channel: config.meshtastic_channel,
         }

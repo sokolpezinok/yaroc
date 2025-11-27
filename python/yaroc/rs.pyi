@@ -81,6 +81,7 @@ class NodeInfo(object):
 class MqttConfig(object):
     url: str
     port: int
+    credentials: (str, str)
     keep_alive: timedelta
     meshtastic_channel: str | None
 

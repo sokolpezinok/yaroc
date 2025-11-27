@@ -127,6 +127,9 @@ async def main_loop() -> None:
     mqtt_config = MqttConfig()
     mqtt_config.url = config.get("broker_url", BROKER_URL)
     mqtt_config.port = config.get("broker_port", BROKER_PORT)
+    if "password" in config:
+        mqtt_config.credentials = (config["username"], config["password"])
+
     mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
     meshtastic_serial = meshtastic_conf.get("watch_serial", False)
     yaroc_daemon = YarocDaemon(

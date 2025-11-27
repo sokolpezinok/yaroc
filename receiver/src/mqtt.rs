@@ -10,6 +10,7 @@ use yaroc_common::error::Error;
 pub struct MqttConfig {
     pub url: String,
     pub port: u16,
+    pub credentials: Option<(String, String)>,
     pub keep_alive: Duration,
     pub meshtastic_channel: Option<String>,
 }
@@ -19,9 +20,16 @@ impl Default for MqttConfig {
         Self {
             url: "broker.emqx.io".to_owned(),
             port: 1883,
+            credentials: None,
             keep_alive: Duration::from_secs(15),
             meshtastic_channel: None,
         }
+    }
+}
+
+impl MqttConfig {
+    pub fn set_credentials(&mut self, username: &str, password: &str) {
+        self.credentials = Some((username.to_owned(), password.to_owned()));
     }
 }
 
@@ -45,6 +53,9 @@ impl MqttReceiver {
         let client_id = format!("yaroc-{}", Uuid::new_v4());
         let mut mqttoptions = MqttOptions::new(client_id, &config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
+        if let Some((username, password)) = config.credentials {
+            mqttoptions.set_credentials(username, password);
+        }
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 128);
         let mut topics = Vec::new();
