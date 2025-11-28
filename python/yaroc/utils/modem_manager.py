@@ -13,6 +13,8 @@ MODEM_MANAGER = "org.freedesktop.ModemManager1"
 
 
 class SmsState(Enum):
+    """State of an SMS message."""
+
     Unknown = 0
     Stored = 1
     Receiving = 2
@@ -26,6 +28,8 @@ class SmsState(Enum):
 
 @dataclass
 class SignalInfo:
+    """GSM/LTE/5G signal strength."""
+
     type: NetworkType = NetworkType.Unknown
     rsrp: float | None = None
     snr: float | None = None
@@ -42,6 +46,8 @@ class SignalInfo:
 
 
 class ModemManager:
+    """ModemManager DBus client."""
+
     def __init__(self, bus: MessageBus, modem_manager, introspection):
         self.bus = bus
         self.mm = modem_manager
@@ -49,6 +55,7 @@ class ModemManager:
 
     @staticmethod
     async def new():
+        """Connect to DBus and create a ModemManager instance."""
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         MODEM_MANAGER_PATH = "/org/freedesktop/ModemManager1"
         introspection = await bus.introspect(MODEM_MANAGER, MODEM_MANAGER_PATH)
@@ -56,6 +63,7 @@ class ModemManager:
         return ModemManager(bus, mm, introspection)
 
     async def get_modems(self) -> list[str]:
+        """Get a list of available modem object paths."""
         method = self.mm.get_interface("org.freedesktop.DBus.ObjectManager")
         managed_objects = await method.call_get_managed_objects()
         res = [
@@ -67,17 +75,20 @@ class ModemManager:
         return res
 
     async def get_modem_interface(self, modem_path, method) -> Any:
+        """Get a specific DBus interface for a modem."""
         introspection = await self.bus.introspect(MODEM_MANAGER, modem_path)
         modem = self.bus.get_proxy_object(MODEM_MANAGER, modem_path, introspection)
         return modem.get_interface(method)
 
     async def enable(self, modem_path: str):
+        """Enable the modem."""
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem"
         )
         await interface.call_enable(True)
 
     async def create_sms(self, modem_path: str, number: str, text: str) -> str:
+        """Create a new SMS."""
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Messaging"
         )
@@ -90,6 +101,7 @@ class ModemManager:
         return sms_path
 
     async def send_sms(self, sms_path: str) -> bool:
+        """Send an SMS from the given object path."""
         try:
             introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
             sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
@@ -101,18 +113,21 @@ class ModemManager:
             return False
 
     async def sms_state(self, sms_path: str) -> SmsState:
+        """Get the state of an SMS."""
         introspection = await self.bus.introspect(MODEM_MANAGER, sms_path)
         sms = self.bus.get_proxy_object(MODEM_MANAGER, sms_path, introspection)
         interface: Any = sms.get_interface("org.freedesktop.ModemManager1.Sms")
         return await interface.get_state()
 
     async def signal_setup(self, modem_path: str, rate_secs: int):
+        """Configure signal quality polling rate."""
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
         await interface.call_setup(rate_secs)
 
     async def get_signal(self, modem_path: str) -> SignalInfo:
+        """Get the current signal strength."""
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
@@ -135,6 +150,7 @@ class ModemManager:
         return SignalInfo(NetworkType.Unknown, None, None)
 
     async def get_cellid(self, modem_path: str) -> int | None:
+        """Get the current Cell ID."""
         interface = await self.get_modem_interface(
             modem_path, "org.freedesktop.ModemManager1.Modem.Location"
         )
