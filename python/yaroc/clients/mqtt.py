@@ -102,8 +102,8 @@ class MqttClient(Client):
                 if len(modems) > 0:
                     network_state = await self.mm.get_signal(modems[0])
                     logging.debug(f"Network state: {network_state}")
-                    if network_state.rssi is not None:
-                        status.mini_call_home.rsrp_dbm = round(network_state.rssi)  # TODO
+                    if network_state.rsrp is not None:
+                        status.mini_call_home.rsrp_dbm = round(network_state.rsrp)  # TODO
                     if network_state.snr is not None:
                         status.mini_call_home.signal_snr_cb = round(network_state.snr * 10)
 
@@ -217,9 +217,9 @@ class SIM7020MqttClient(Client):
             async with self._lock:
                 res = await self._sim7020.get_signal_info()
                 if res is not None:
-                    (rssi_dbm, cellid, snr, ecl) = res
+                    (rsrp_dbm, cellid, snr, ecl) = res
                     mch = status.mini_call_home
-                    mch.rsrp_dbm = rssi_dbm  # TODO
+                    mch.rsrp_dbm = rsrp_dbm
                     mch.signal_snr_cb = snr * 10
                     mch.cellid = cellid
                     if ecl == 0:

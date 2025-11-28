@@ -234,7 +234,8 @@ class SIM7020Interface:
 
     async def get_signal_info(self) -> tuple[int, int, int, int] | None:
         await self.async_at.call("AT*MGCOUNT=1,1")
-        response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [6, 3, 7, 10])
+        # RSRP, Cell ID, SNR, ECL
+        response = await self.async_at.call("AT+CENG?", "CENG: (.*)", [4, 3, 7, 10])
         if self.async_at.last_at_response() < datetime.now() - timedelta(minutes=5):
             await self.power_on()
         try:

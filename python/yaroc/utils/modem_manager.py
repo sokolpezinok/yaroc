@@ -27,7 +27,7 @@ class SmsState(Enum):
 @dataclass
 class SignalInfo:
     type: NetworkType = NetworkType.Unknown
-    rssi: float | None = None
+    rsrp: float | None = None
     snr: float | None = None
 
     def __repr__(self):
@@ -35,10 +35,10 @@ class SignalInfo:
             return "Unknown"
         if self.type == NetworkType.Lte:
             if self.snr is not None:
-                return f"{self.type} RSSI {self.rssi:.0f}dBm, SNR {self.snr:.0f}dB"
+                return f"{self.type} RSRP {self.rsrp:.0f}dBm, SNR {self.snr:.0f}dB"
             else:
-                return f"{self.type} RSSI {self.rssi:.0f}dBm"
-        return f"{self.type} RSSI {self.rssi:.0f}dBm"
+                return f"{self.type} RSRP {self.rsrp:.0f}dBm"
+        return f"{self.type} RSRP {self.rsrp:.0f}dBm"
 
 
 class ModemManager:
@@ -110,9 +110,9 @@ class ModemManager:
             modem_path, "org.freedesktop.ModemManager1.Modem.Signal"
         )
         lte = await interface.get_lte()
-        if "rssi" in lte:
+        if "rsrp" in lte:
             snr = None if "snr" not in lte else lte["snr"].value
-            return SignalInfo(NetworkType.Lte, lte["rssi"].value, snr)
+            return SignalInfo(NetworkType.Lte, lte["rsrp"].value, snr)
         umts = await interface.get_umts()
         if "rssi" in umts:
             return SignalInfo(NetworkType.Umts, umts["rssi"].value, None)
@@ -120,9 +120,9 @@ class ModemManager:
         if "rssi" in gsm:
             return SignalInfo(NetworkType.Gsm, gsm["rssi"].value, None)
         nr5g = await interface.get_nr5g()
-        if "rssi" in nr5g:
+        if "rsrp" in nr5g:
             snr = None if "snr" not in nr5g else nr5g["snr"].value
-            return SignalInfo(NetworkType.Lte, nr5g["rssi"].value, snr)
+            return SignalInfo(NetworkType.Lte, nr5g["rsrp"].value, snr)
 
         logging.error("Error getting signal strength")
         return SignalInfo(NetworkType.Unknown, None, None)
