@@ -57,7 +57,14 @@ class ModemManager:
 
     async def get_modems(self) -> list[str]:
         method = self.mm.get_interface("org.freedesktop.DBus.ObjectManager")
-        return list((await method.call_get_managed_objects()).keys())
+        managed_objects = await method.call_get_managed_objects()
+        res = [
+            key
+            for key, val in managed_objects.items()
+            if "org.freedesktop.ModemManager1.Modem" in val
+        ]
+
+        return res
 
     async def get_modem_interface(self, modem_path, method) -> Any:
         introspection = await self.bus.introspect(MODEM_MANAGER, modem_path)
