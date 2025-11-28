@@ -84,12 +84,9 @@ impl<M: ModemHw> SystemInfo<M> {
         if response.count_response_values() != Ok(5) {
             return Err(Error::NetworkRegistrationError);
         }
-        let (network, mut rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
-            response.parse5::<String<10>, i8, i16, u8, i8>([0, 1, 2, 3, 4])?;
+        let (network, rsrp_dbm, snr_mult, _) =
+            response.parse4::<String<10>, i16, u8, i8>([0, 2, 3, 4])?;
         let snr_cb = i16::from(snr_mult) * 2 - 200;
-        if rssi_dbm == 0 {
-            rssi_dbm = (rsrp_dbm - i16::from(rsrq_dbm)) as i8; // TODO: error if not i8
-        }
         let network_type = if network == "NBIoT" {
             let response =
                 bg77.call_at("+QCFG=\"celevel\"", None).await?.parse1::<u8>([1], None)?;
@@ -108,7 +105,7 @@ impl<M: ModemHw> SystemInfo<M> {
             .ok();
         Ok(CellSignalInfo {
             network_type,
-            rssi_dbm,
+            rsrp_dbm,
             snr_cb,
             cellid,
         })
@@ -169,7 +166,7 @@ mod test {
         let mch = block_on(system_info.mini_call_home(&mut bg77)).unwrap();
         let signal_info = mch.signal_info.unwrap();
         assert_eq!(signal_info.network_type, CellNetworkType::NbIotEcl1);
-        assert_eq!(signal_info.rssi_dbm, -107);
+        assert_eq!(signal_info.rsrp_dbm, -134);
         assert_eq!(signal_info.snr_cb, -130);
         assert_eq!(
             signal_info.cellid,

@@ -530,7 +530,7 @@ mod test_punch {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
                 network_type: EnumValue::Known(yaroc_common::proto::CellNetworkType::LteM),
-                signal_dbm: -80,
+                rsrp_dbm: -80,
                 signal_snr_cb: 120,
                 time: Some(timestamp),
                 ..Default::default()
@@ -548,7 +548,7 @@ mod test_punch {
         let log_message = state.status_update(&buffer, MacAddress::default(), now).unwrap();
         assert!(
             format!("{log_message}")
-                .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V")
+                .starts_with("spe01 11:12:11: 47.0°C, RSRP  -80 SNR 12.0   LTE-M, 3.85V")
         );
     }
 }

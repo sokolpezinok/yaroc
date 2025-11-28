@@ -33,7 +33,7 @@ mod test_proto {
     #[test]
     fn negative_encoding() {
         let mch = MiniCallHome {
-            signal_dbm: -1,
+            rsrp_dbm: -1,
             signal_snr_cb: -60,
             ..Default::default()
         };

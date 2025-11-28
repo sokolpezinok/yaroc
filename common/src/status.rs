@@ -75,8 +75,8 @@ impl From<proto::CellNetworkType> for CellNetworkType {
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct CellSignalInfo {
     pub network_type: CellNetworkType,
-    /// RSSI in dBm
-    pub rssi_dbm: i8,
+    /// RSRP in dBm
+    pub rsrp_dbm: i16,
     /// SNR in centibells (instead of decibells)
     pub snr_cb: i16,
     /// Cell ID
@@ -158,7 +158,7 @@ impl MiniCallHome {
                 freq: self.cpu_freq.unwrap_or(32), // 32 is the default for nrf52840
                 millivolts: self.batt_mv.unwrap_or_default() as u32,
                 network_type: femtopb::EnumValue::Known(network_type),
-                signal_dbm: i32::from(signal_info.rssi_dbm),
+                rsrp_dbm: i32::from(signal_info.rsrp_dbm),
                 signal_snr_cb: i32::from(signal_info.snr_cb),
                 cellid: signal_info.cellid.unwrap_or_default(),
                 time: Some(Timestamp {
@@ -191,7 +191,7 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
         };
         let signal_info = CellSignalInfo {
             network_type,
-            rssi_dbm: i8::try_from(value.signal_dbm).map_err(|_| Error::FormatError)?,
+            rsrp_dbm: i16::try_from(value.rsrp_dbm).map_err(|_| Error::FormatError)?,
             snr_cb: i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?,
             cellid: if value.cellid > 0 {
                 Some(value.cellid)
@@ -242,7 +242,7 @@ mod test {
             cpu_temperature: 47.2,
             freq: 1600,
             millivolts: 3782,
-            signal_dbm: -93,
+            rsrp_dbm: -93,
             signal_snr_cb: 38,
             cellid: 0x2EF46,
             network_type: EnumValue::Known(proto::CellNetworkType::LteM),
@@ -261,7 +261,7 @@ mod test {
             mch.signal_info.unwrap(),
             CellSignalInfo {
                 network_type: CellNetworkType::LteM,
-                rssi_dbm: -93,
+                rsrp_dbm: -93,
                 snr_cb: 38,
                 cellid: Some(0x2EF46)
             }
@@ -275,7 +275,7 @@ mod test {
             cpu_temperature: 47.2,
             freq: 1600,
             millivolts: 3782,
-            signal_dbm: -93,
+            rsrp_dbm: -93,
             signal_snr_cb: 38,
             cellid: 0x2EF46,
             network_type: EnumValue::Known(proto::CellNetworkType::LteM),

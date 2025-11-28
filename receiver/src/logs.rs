@@ -184,7 +184,7 @@ impl fmt::Display for MiniCallHomeLog {
         }
 
         if let Some(signal_info) = &self.mini_call_home.signal_info {
-            write!(f, ", RSSI{:5}", signal_info.rssi_dbm)?;
+            write!(f, ", RSRP{:5}", signal_info.rsrp_dbm)?;
             write!(f, " SNR{:5.1}", f32::from(signal_info.snr_cb) / 10.)?;
             let network_type = match signal_info.network_type {
                 CellNetworkType::NbIotEcl0 => "NB ECL0",
@@ -244,7 +244,7 @@ mod test_logs {
         let timestamp = DateTime::parse_from_rfc3339("2024-01-29T17:40:43+01:00").unwrap();
         let signal_info = Some(CellSignalInfo {
             network_type: CellNetworkType::NbIotEcl0,
-            rssi_dbm: -87,
+            rsrp_dbm: -87,
             snr_cb: 70,
             cellid: Some(2580590),
         });
@@ -264,7 +264,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, RSSI  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V, lat. 1.39s"
+            "spe01 17:40:43: 51.5°C, RSRP  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V, lat. 1.39s"
         );
     }
 
@@ -300,7 +300,7 @@ mod test_logs {
                 cpu_temperature: 47.0,
                 millivolts: 3847,
                 network_type: Known(yaroc_common::proto::CellNetworkType::LteM),
-                signal_dbm: -80,
+                rsrp_dbm: -80,
                 signal_snr_cb: 120,
                 time: Some(timestamp),
                 ..Default::default()
@@ -315,7 +315,7 @@ mod test_logs {
         let formatted_log_msg = format!("{cell_log_msg}");
         assert!(
             formatted_log_msg
-                .starts_with("spe01 11:12:11: 47.0°C, RSSI  -80 SNR 12.0   LTE-M, 3.85V")
+                .starts_with("spe01 11:12:11: 47.0°C, RSRP  -80 SNR 12.0   LTE-M, 3.85V")
         );
 
         let status = Status {

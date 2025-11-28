@@ -40,7 +40,7 @@ message MiniCallHome {
   uint32 min_freq = 4;
   uint32 max_freq = 5;
   uint32 millivolts = 6;
-  sint32 signal_dbm = 7;
+  sint32 rsrp_dbm = 7;
   sint32 signal_snr_cb = 8; // SNR in centibells
   uint32 cellid = 9;
   CellNetworkType network_type = 10;

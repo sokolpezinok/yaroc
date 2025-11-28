@@ -93,7 +93,7 @@ class RocClient(Client):
                 "codes": ",".join(str(code) for code in mch.codes),
                 "totaldatatx": str(mch.totaldatarx),
                 "totaldatarx": str(mch.totaldatatx),
-                "signaldBm": str(-mch.signal_dbm),
+                "signaldBm": str(-mch.rsrp_dbm),
                 "temperature": str(mch.cpu_temperature),
                 "networktype": network_type,
                 "volts": str(mch.millivolts / 1000.0),

@@ -101,7 +101,7 @@ pub struct NodeInfo {
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
-    pub rssi_dbm: Option<i16>,
+    pub rsrp_dbm: Option<i16>,
     #[pyo3(get)]
     pub snr_db: Option<f32>,
     #[pyo3(get)]
@@ -114,17 +114,17 @@ pub struct NodeInfo {
 
 impl From<NodeInfoRs> for NodeInfo {
     fn from(node_info: NodeInfoRs) -> Self {
-        let (rssi_dbm, snr_db) = match node_info.signal_info {
+        let (rsrp_dbm, snr_db) = match node_info.signal_info {
             SignalInfo::Unknown => (None, None),
             SignalInfo::Cell(cell_signal_info) => (
-                Some(cell_signal_info.rssi_dbm.into()),
+                Some(cell_signal_info.rsrp_dbm),
                 Some(cell_signal_info.snr_cb as f32 / 10.0),
             ),
             SignalInfo::Meshtastic(rssi_snr) => (Some(rssi_snr.rssi_dbm), Some(rssi_snr.snr)),
         };
         Self {
             name: node_info.name,
-            rssi_dbm,
+            rsrp_dbm,
             snr_db,
             codes: node_info.codes,
             last_update: node_info.last_update,
