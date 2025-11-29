@@ -1,14 +1,15 @@
 use crate::ble::Ble;
 use crate::flash::Flash;
-use embassy_executor::Spawner;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
-use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
-use embassy_nrf::{bind_interrupts, saadc};
+use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
+use embassy_nrf::usb::{self, Driver};
+use embassy_nrf::{bind_interrupts, saadc, temp};
+use embassy_sync::lazy_lock::LazyLock;
 use heapless::String;
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::si_uart::SiUart;
@@ -20,6 +21,8 @@ bind_interrupts!(struct Irqs {
     TEMP => temp::InterruptHandler;
     UARTE0 => uarte::InterruptHandler<UARTE0>;
     UARTE1 => uarte::InterruptHandler<UARTE1>;
+    USBD => usb::InterruptHandler<embassy_nrf::peripherals::USBD>;
+    CLOCK_POWER => usb::vbus_detect::InterruptHandler;
 });
 
 /// A struct containing all the initialized drivers and peripherals of the device
@@ -40,7 +43,12 @@ pub struct Device {
     pub ble: Ble,
     /// The flash memory driver
     pub flash: Flash,
+    /// The USB driver
+    pub usb: Driver<'static, &'static SoftwareVbusDetect>,
 }
+
+static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
+    LazyLock::new(|| SoftwareVbusDetect::new(true, true));
 
 #[derive(Clone, femtopb::Message)]
 pub struct DeviceConfig<'a> {
@@ -50,9 +58,9 @@ pub struct DeviceConfig<'a> {
     pub unknown_fields: femtopb::UnknownFields<'a>,
 }
 
-impl Device {
+impl Default for Device {
     /// Initializes all the drivers and peripherals of the device
-    pub fn new(spawner: Spawner) -> Self {
+    fn default() -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -61,6 +69,7 @@ impl Device {
         config.baudrate = uarte::Baudrate::BAUD38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
         Interrupt::UARTE1.set_priority(Priority::P2);
+        // TODO: make UART port configurable
         // P0.14 is SCL, use it for UART0. P0.20 is UART0 TX, so it's unused.
         let uart0 = uarte::Uarte::new(p.UARTE0, p.P0_14, p.P0_20, Irqs, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, Default::default());
@@ -79,8 +88,11 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
+        Interrupt::USBD.set_priority(Priority::P5);
+        Interrupt::CLOCK_POWER.set_priority(Priority::P5);
+        let usb = Driver::new(p.USBD, Irqs, VBUS_DETECT.get());
+
         let ble = Ble::new();
-        ble.must_spawn(spawner);
         let mac_address = ble.get_mac_address();
         let flash = Flash::new(ble.flash());
 
@@ -94,6 +106,7 @@ impl Device {
             saadc,
             ble,
             flash,
+            usb,
         }
     }
 }

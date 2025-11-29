@@ -32,7 +32,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 /// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let device = Device::new(spawner);
+    let device = Device::default();
     let Device {
         mac_address,
         bg77,
@@ -58,6 +58,7 @@ async fn main(spawner: Spawner) {
         mqtt_config.mac_address.as_str()
     );
 
+    ble.must_spawn(spawner);
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
     spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
 
@@ -79,4 +80,5 @@ async fn main(spawner: Spawner) {
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.must_spawn(sysinfo_update(temp));
+    info!("All background tasks are running");
 }
