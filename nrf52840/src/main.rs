@@ -49,7 +49,7 @@ async fn main(spawner: Spawner) {
 
     let mqtt_config = MqttConfig {
         name: String::from_str(device_config.map(|x| x.name).unwrap_or("spe06")).unwrap(),
-        mac_address,
+        mac_address: mac_address.clone(),
         ..Default::default()
     };
     info!(

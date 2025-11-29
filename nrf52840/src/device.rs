@@ -6,8 +6,9 @@ use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
-use embassy_nrf::temp;
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
+use embassy_nrf::usb::vbus_detect::HardwareVbusDetect;
+use embassy_nrf::usb::{self, Driver};
 use embassy_nrf::{bind_interrupts, saadc};
 use heapless::String;
 use yaroc_common::at::uart::AtUart;
@@ -17,9 +18,10 @@ use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     SAADC => saadc::InterruptHandler;
-    TEMP => temp::InterruptHandler;
     UARTE0 => uarte::InterruptHandler<UARTE0>;
     UARTE1 => uarte::InterruptHandler<UARTE1>;
+    USBD => usb::InterruptHandler<embassy_nrf::peripherals::USBD>;
+    CLOCK_POWER => usb::vbus_detect::InterruptHandler;
 });
 
 /// A struct containing all the initialized drivers and peripherals of the device
@@ -40,6 +42,8 @@ pub struct Device {
     pub ble: Ble,
     /// The flash memory driver
     pub flash: Flash,
+    /// The USB driver
+    pub usb: Driver<'static, HardwareVbusDetect>,
 }
 
 #[derive(Clone, femtopb::Message)]
@@ -79,6 +83,8 @@ impl Device {
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 
+        let usb = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
+
         let ble = Ble::new();
         ble.must_spawn(spawner);
         let mac_address = ble.get_mac_address();
@@ -94,6 +100,7 @@ impl Device {
             saadc,
             ble,
             flash,
+            usb,
         }
     }
 }
