@@ -386,6 +386,29 @@ mod test {
     static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
 
     #[test]
+    fn test_mqtt_wrong_broker_disconnects_first() {
+        let mut client_config = MqttConfig::default();
+        client_config.url = String::from_str("correct.broker.io").unwrap();
+        client_config.name = String::from_str("test_client").unwrap();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"wrong.broker.io\",1883"), // Connected to wrong broker
+            ("AT+QMTCLOSE=1", "+QMTCLOSE: 1,0"),                     // Disconnect from wrong broker
+            ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
+            ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
+            ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),
+            ("AT+QMTCONN?", "+QMTCONN: 1,1"),
+            ("AT+QMTCONN=1,\"nrf52840-test_client\"", "+QMTCONN: 1,0,0"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert!(bg77.all_done());
+    }
+
+    #[test]
     fn test_mqtt_already_connected() {
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
@@ -456,5 +479,26 @@ mod test {
         assert!(!handled);
         assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
         assert!(CMD_FOR_BACKOFF.try_receive().is_err());
+    }
+
+    #[test]
+    fn test_qmtpub_handler_timeout() {
+        // Client ID 0, Message ID 2, Status 2 (Timeout)
+        let response = CommandResponse::new("+QMTPUB: 0,2,2").unwrap();
+        let sender = CHANNEL.sender();
+
+        MQTT_MSG_PUBLISHED.get()[0].reset();
+        while CMD_FOR_BACKOFF.try_receive().is_ok() {}
+
+        let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
+        assert!(handled);
+        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
+
+        let expected_status = MqttStatus {
+            msg_id: 2,
+            code: StatusCode::Timeout,
+        };
+        let status = CMD_FOR_BACKOFF.try_receive().unwrap();
+        assert_eq!(status, BackoffCommand::Status(expected_status));
     }
 }
