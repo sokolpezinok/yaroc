@@ -40,6 +40,7 @@ async fn main(spawner: Spawner) {
         si_uart,
         ble,
         mut flash,
+        usb,
         ..
     } = device;
 
@@ -59,6 +60,7 @@ async fn main(spawner: Spawner) {
     );
 
     ble.must_spawn(spawner);
+    usb.must_spawn(spawner);
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
     spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
 

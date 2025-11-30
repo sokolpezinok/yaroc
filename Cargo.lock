@@ -3102,6 +3102,7 @@ dependencies = [
  "nrf-softdevice",
  "panic-probe",
  "sequential-storage",
+ "static_cell",
  "thiserror 2.0.17",
  "yaroc-common",
 ]

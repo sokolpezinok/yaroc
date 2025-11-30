@@ -8,6 +8,7 @@ pub mod flash;
 pub mod send_punch;
 pub mod si_uart;
 pub mod system_info;
+pub mod usb;
 
 pub use yaroc_common::error;
 type Result<T> = yaroc_common::Result<T>;

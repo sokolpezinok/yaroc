@@ -37,3 +37,4 @@ chrono = { workspace = true }
 femtopb = { workspace = true }
 heapless =  { workspace = true, features = ["defmt"] }
 thiserror = { workspace = true }
+static_cell = "2.1.1"

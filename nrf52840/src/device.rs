@@ -1,5 +1,7 @@
 use crate::ble::Ble;
 use crate::flash::Flash;
+use crate::usb::Usb;
+
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -39,12 +41,12 @@ pub struct Device {
     pub saadc: Saadc<'static, 1>,
     /// The SportIdent UART driver
     pub si_uart: SiUart<UarteRxWithIdle<'static>>,
-    /// The Bluetooth Low Energy driver
+    /// The Bluetooth Low Energy device
     pub ble: Ble,
     /// The flash memory driver
     pub flash: Flash,
-    /// The USB driver
-    pub usb: Driver<'static, &'static SoftwareVbusDetect>,
+    /// The USB device
+    pub usb: Usb,
 }
 
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
@@ -90,7 +92,8 @@ impl Default for Device {
 
         Interrupt::USBD.set_priority(Priority::P5);
         Interrupt::CLOCK_POWER.set_priority(Priority::P5);
-        let usb = Driver::new(p.USBD, Irqs, VBUS_DETECT.get());
+        let driver = Driver::new(p.USBD, Irqs, VBUS_DETECT.get());
+        let usb = Usb::new(driver);
 
         let ble = Ble::new();
         let mac_address = ble.get_mac_address();
