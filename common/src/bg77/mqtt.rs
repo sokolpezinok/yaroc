@@ -383,7 +383,9 @@ mod test {
     use crate::bg77::modem_manager::ModemConfig;
     use embassy_futures::block_on;
     use embassy_sync::channel::Channel;
+    use embassy_sync::mutex::Mutex;
     static CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
+    static CHANNEL_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
 
     #[test]
     fn test_mqtt_wrong_broker_disconnects_first() {
@@ -455,6 +457,7 @@ mod test {
     fn test_qmtpub_handler_published() {
         // Client ID 0, Message ID 1, Status 0 (Published), Retries 0
         let response = CommandResponse::new("+QMTPUB: 0,1,0").unwrap();
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let sender = CHANNEL.sender();
 
         // Ensure the signal is not set initially
@@ -479,12 +482,15 @@ mod test {
         assert!(!handled);
         assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
         assert!(CMD_FOR_BACKOFF.try_receive().is_err());
+        assert!(CHANNEL.try_receive().is_err());
     }
 
     #[test]
     fn test_qmtpub_handler_timeout() {
         // Client ID 0, Message ID 2, Status 2 (Timeout)
         let response = CommandResponse::new("+QMTPUB: 0,2,2").unwrap();
+        // Lock the channel, so that the concurrent tests do not interfere with each other
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let sender = CHANNEL.sender();
 
         MQTT_MSG_PUBLISHED.get()[0].reset();
@@ -500,5 +506,6 @@ mod test {
         };
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
         assert_eq!(status, BackoffCommand::Status(expected_status));
+        assert!(CHANNEL.try_receive().is_err());
     }
 }
