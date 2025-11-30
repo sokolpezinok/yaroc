@@ -1,6 +1,5 @@
 use crate::ble::Ble;
 use crate::flash::Flash;
-use embassy_executor::Spawner;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -54,9 +53,9 @@ pub struct DeviceConfig<'a> {
     pub unknown_fields: femtopb::UnknownFields<'a>,
 }
 
-impl Device {
+impl Default for Device {
     /// Initializes all the drivers and peripherals of the device
-    pub fn new(spawner: Spawner) -> Self {
+    fn default() -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -65,6 +64,7 @@ impl Device {
         config.baudrate = uarte::Baudrate::BAUD38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
         Interrupt::UARTE1.set_priority(Priority::P2);
+        // TODO: make UART configurable
         // P0.14 is SCL, use it for UART0. P0.20 is UART0 TX, so it's unused.
         let uart0 = uarte::Uarte::new(p.UARTE0, p.P0_14, p.P0_20, Irqs, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, Default::default());
@@ -86,7 +86,6 @@ impl Device {
         let usb = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
 
         let ble = Ble::new();
-        ble.must_spawn(spawner);
         let mac_address = ble.get_mac_address();
         let flash = Flash::new(ble.flash());
 
