@@ -4,7 +4,7 @@ use embassy_nrf::usb::Driver;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
-use postcard::from_bytes;
+use postcard::{from_bytes, to_vec};
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use yaroc_common::bg77::modem_manager::ModemConfig;
@@ -67,6 +67,11 @@ pub enum UsbCommand {
     ConfigureModem(ModemConfig),
 }
 
+#[derive(Serialize, Deserialize)]
+pub enum UsbResponse {
+    Ok,
+}
+
 #[embassy_executor::task]
 async fn usb_packet_reader_loop(usb_packet_reader: UsbPacketReader) {
     usb_packet_reader.r#loop().await;
@@ -97,12 +102,24 @@ impl UsbPacketReader {
         }
     }
 
-    #[allow(dead_code)]
     async fn write(&mut self, buf: &[u8]) -> crate::Result<()> {
         for chunk in buf.chunks(PACKET_LEN) {
             self.class.write_packet(chunk).await.map_err(|_| Error::UsbWriteError)?;
         }
+        // TODO: if PACKET_LEN divides buf.len(), we need to send an empty packet.
         Ok(())
+    }
+
+    async fn respond(&mut self, command: UsbCommand) -> crate::Result<()> {
+        let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
+        let send_punch = send_punch.as_mut().unwrap();
+        match command {
+            UsbCommand::ConfigureModem(modem_config) => {
+                send_punch.configure_modem(modem_config).await?;
+            }
+        }
+        let response = to_vec::<_, 128>(&UsbResponse::Ok).unwrap();
+        self.write(response.as_slice()).await
     }
 
     pub async fn r#loop(mut self) {
@@ -113,8 +130,11 @@ impl UsbPacketReader {
                 from_bytes::<UsbCommand>(data).map_err(|_| Error::ParseError)
             });
             match command {
-                Ok(_command) => {
-                    let _ = SEND_PUNCH_MUTEX.lock().await;
+                Ok(command) => {
+                    let _ = self
+                        .respond(command)
+                        .await
+                        .inspect_err(|_| error!("Error while responding to a USB command"));
                 }
                 Err(e) => {
                     error!("Error while reading from USB: {}", e);

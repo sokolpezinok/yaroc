@@ -179,6 +179,12 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         Ok(())
     }
 
+    /// Configures the modem
+    pub async fn configure_modem(&mut self, modem_config: ModemConfig) -> crate::Result<()> {
+        self.modem_manager.update_config(modem_config);
+        self.modem_manager.configure(&mut self.bg77).await
+    }
+
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await

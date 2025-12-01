@@ -155,6 +155,10 @@ impl ModemManager {
         Ok(())
     }
 
+    pub fn update_config(&mut self, modem_config: ModemConfig) {
+        self.config = modem_config;
+    }
+
     pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> Result<(), Error> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         let _ = bg77.call_at(&cmd, None).await;
