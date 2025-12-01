@@ -1,11 +1,16 @@
-use defmt::debug;
+use defmt::{debug, error};
 use embassy_executor::Spawner;
 use embassy_nrf::usb::Driver;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
+use postcard::from_bytes;
+use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
+use yaroc_common::bg77::modem_manager::ModemConfig;
 use yaroc_common::error::Error;
+
+use crate::send_punch::SEND_PUNCH_MUTEX;
 
 type UsbDriver = Driver<'static, &'static SoftwareVbusDetect>;
 
@@ -57,6 +62,11 @@ impl Usb {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub enum UsbCommand {
+    ConfigureModem(ModemConfig),
+}
+
 #[embassy_executor::task]
 async fn usb_packet_reader_loop(usb_packet_reader: UsbPacketReader) {
     usb_packet_reader.r#loop().await;
@@ -98,13 +108,16 @@ impl UsbPacketReader {
     pub async fn r#loop(mut self) {
         self.class.wait_connection().await;
         loop {
-            let data = self.read().await;
-            match data {
-                Ok(data) => {
-                    debug!("Read {} bytes from USB", data.len());
+            let command = self.read().await.and_then(|data| {
+                debug!("Read {} bytes from USB", data.len());
+                from_bytes::<UsbCommand>(data).map_err(|_| Error::ParseError)
+            });
+            match command {
+                Ok(_command) => {
+                    let _ = SEND_PUNCH_MUTEX.lock().await;
                 }
-                Err(_) => {
-                    todo!()
+                Err(e) => {
+                    error!("Error while reading from USB: {}", e);
                 }
             }
         }

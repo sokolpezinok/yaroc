@@ -31,7 +31,9 @@ embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-usb = { workspace = true, features = ["defmt"] }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
+postcard = { workspace = true }
 sequential-storage = "5.0.1"
+serde = { workspace = true }
 
 chrono = { workspace = true }
 femtopb = { workspace = true }

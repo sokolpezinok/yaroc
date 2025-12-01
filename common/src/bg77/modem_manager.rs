@@ -7,6 +7,7 @@ use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
 use crate::at::response::CommandResponse;
@@ -37,13 +38,15 @@ impl ModemPin for Output<'static> {
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// Radio Access Technology
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub enum RAT {
-    Ltem,      // LTE-M
-    NbIot,     // NB-IoT
+    Ltem,  // LTE-M
+    NbIot, // NB-IoT
+    #[default]
     LtemNbIot, // Both
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub struct LteBands {
     /// LTE-M bands bitmask. Bit `n` corresponds to band `n+1`.
     pub ltem: u128,
@@ -81,6 +84,7 @@ impl LteBands {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ModemConfig {
     /// Access point name (APN)
     pub apn: String<30>,

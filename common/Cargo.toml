@@ -20,8 +20,9 @@ embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
 femtopb = { workspace = true }
 geoutils = { workspace = true, optional = true }
-heapless =  { workspace = true }
+heapless =  { workspace = true, features = ["serde"] }
 log = { workspace = true }
+serde = { workspace = true}
 thiserror = { workspace = true }
 
 [build-dependencies]
