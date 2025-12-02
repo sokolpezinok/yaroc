@@ -23,6 +23,8 @@ pub enum Error {
     UartWriteError,
     #[error("USB read error")]
     UsbReadError,
+    #[error("USB disconnected")]
+    UsbDisconnected,
     #[error("USB write error")]
     UsbWriteError,
     #[error("UART unexpectedly closed")]

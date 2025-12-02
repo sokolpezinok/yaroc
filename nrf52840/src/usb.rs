@@ -1,8 +1,9 @@
-use defmt::{debug, error, info};
+use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_nrf::usb::Driver;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, UsbDevice};
 use postcard::{from_bytes, to_vec};
 use static_cell::StaticCell;
@@ -77,8 +78,10 @@ impl UsbPacketReader {
         let total_len = self.buffer.len();
         let mut remaining = self.buffer.as_mut_slice();
         loop {
-            let read_len =
-                self.class.read_packet(remaining).await.map_err(|_| Error::UsbReadError)?;
+            let read_len = self.class.read_packet(remaining).await.map_err(|err| match err {
+                EndpointError::Disabled => Error::UsbDisconnected,
+                EndpointError::BufferOverflow => Error::UsbReadError,
+            })?;
             match read_len {
                 PACKET_LEN => {
                     remaining = &mut remaining[PACKET_LEN..];
@@ -113,21 +116,28 @@ impl UsbPacketReader {
     }
 
     pub async fn r#loop(mut self) {
-        self.class.wait_connection().await;
         loop {
-            let command = self.read().await.and_then(|data| {
-                debug!("Read {} bytes from USB", data.len());
-                from_bytes::<UsbCommand>(data).map_err(|_| Error::ParseError)
-            });
-            match command {
-                Ok(command) => {
-                    let _ = self
-                        .respond(command)
-                        .await
-                        .inspect_err(|_| error!("Error while responding to a USB command"));
-                }
-                Err(e) => {
-                    error!("Error while reading from USB: {}", e);
+            self.class.wait_connection().await;
+            info!("Connected to USB");
+            loop {
+                let command = self.read().await.and_then(|data| {
+                    debug!("Read {} bytes from USB", data.len());
+                    from_bytes::<UsbCommand>(data).map_err(|_| Error::ParseError)
+                });
+                match command {
+                    Ok(command) => {
+                        let _ = self
+                            .respond(command)
+                            .await
+                            .inspect_err(|_| error!("Error while responding to a USB command"));
+                    }
+                    Err(Error::UsbDisconnected) => {
+                        warn!("USB disconnected");
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Error while reading from USB: {}", e);
+                    }
                 }
             }
         }
