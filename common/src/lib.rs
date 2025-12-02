@@ -8,6 +8,7 @@ pub mod punch;
 pub mod send_punch;
 pub mod si_uart;
 pub mod status;
+pub mod usb;
 
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/yaroc.rs"));

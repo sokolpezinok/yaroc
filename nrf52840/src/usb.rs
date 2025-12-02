@@ -1,14 +1,13 @@
-use defmt::{debug, error};
+use defmt::{debug, error, info};
 use embassy_executor::Spawner;
 use embassy_nrf::usb::Driver;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
 use postcard::{from_bytes, to_vec};
-use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
-use yaroc_common::bg77::modem_manager::ModemConfig;
 use yaroc_common::error::Error;
+use yaroc_common::usb::{UsbCommand, UsbResponse};
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
 
@@ -62,16 +61,6 @@ impl Usb {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum UsbCommand {
-    ConfigureModem(ModemConfig),
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum UsbResponse {
-    Ok,
-}
-
 #[embassy_executor::task]
 async fn usb_packet_reader_loop(usb_packet_reader: UsbPacketReader) {
     usb_packet_reader.r#loop().await;
@@ -115,6 +104,7 @@ impl UsbPacketReader {
         let send_punch = send_punch.as_mut().unwrap();
         match command {
             UsbCommand::ConfigureModem(modem_config) => {
+                info!("Will configure modem now");
                 send_punch.configure_modem(modem_config).await?;
             }
         }
