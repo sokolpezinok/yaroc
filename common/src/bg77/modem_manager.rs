@@ -18,8 +18,11 @@ use crate::send_punch::SendPunchCommand;
 #[cfg(feature = "nrf")]
 use embassy_nrf::gpio::Output;
 
+/// Trait for controlling the modem power pin.
 pub trait ModemPin {
+    /// Sets the pin output to high.
     fn set_high(&mut self);
+    /// Sets the pin output to low.
     fn set_low(&mut self);
 }
 
@@ -109,15 +112,21 @@ impl Default for ModemConfig {
     }
 }
 
+/// Manages the BG77 modem configuration and connection state.
 pub struct ModemManager {
     config: ModemConfig,
 }
 
 impl ModemManager {
+    /// Creates a new ModemManager with the given configuration.
     pub fn new(config: ModemConfig) -> Self {
         Self { config }
     }
 
+    /// Handles Unsolicited Result Codes (URC) from the modem.
+    ///
+    /// Returns true if the URC indicates a significant event that should trigger
+    /// further action, false otherwise.
     pub fn urc_handler(
         response: &'_ CommandResponse,
         command_sender: Sender<'static, RawMutex, SendPunchCommand, 10>,
@@ -135,6 +144,10 @@ impl ModemManager {
         }
     }
 
+    /// Powers on the modem hardware.
+    ///
+    /// Tries to communicate with the modem. If it doesn't respond, it toggles the power pin
+    /// to reset/turn on the modem.
     pub async fn turn_on<M: ModemHw, P: ModemPin>(
         &self,
         bg77: &mut M,
@@ -155,10 +168,12 @@ impl ModemManager {
         Ok(())
     }
 
+    /// Updates the modem configuration.
     pub fn update_config(&mut self, modem_config: ModemConfig) {
         self.config = modem_config;
     }
 
+    /// Configures the modem with the current settings (APN, RAT, Bands).
     pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> Result<(), Error> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         let _ = bg77.call_at(&cmd, None).await;
