@@ -50,8 +50,9 @@ lsp = [
 ]
 
 [project.scripts]
-yarocd = "yaroc.scripts.yarocd:main"
 send-punch = "yaroc.scripts.send_punch:main"
+yaroc-cli = "yaroc.rs:yaroc_cli"
+yarocd = "yaroc.scripts.yarocd:main"
 
 [build-system]
 requires = ["maturin>=1.7,<2.0"]

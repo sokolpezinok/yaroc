@@ -1,6 +1,7 @@
-pub mod message_handler;
-pub mod punch;
+mod message_handler;
+mod punch;
 pub mod python;
 mod serial_client;
-pub mod si_uart;
-pub mod status;
+mod si_uart;
+mod status;
+pub mod yaroc_cli;

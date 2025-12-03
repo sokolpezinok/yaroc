@@ -64,6 +64,7 @@ pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<crate::status::HostInfo>()?;
     m.add_class::<RaspberryModel>()?;
     m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::yaroc_cli::yaroc_cli, m)?)?;
 
     m.add_class::<crate::message_handler::Event>()?;
     m.add_class::<crate::message_handler::MessageHandler>()?;
