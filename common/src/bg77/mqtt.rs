@@ -95,6 +95,8 @@ pub struct MqttConfig {
     pub mac_address: String<12>,
     /// The interval at which mini call home messages are sent.
     pub minicallhome_interval: Duration,
+    /// The port of the MQTT broker.
+    pub port: u16,
 }
 
 impl Default for MqttConfig {
@@ -106,6 +108,7 @@ impl Default for MqttConfig {
             name: String::new(),
             mac_address: String::from_str("deadbeef").unwrap(),
             minicallhome_interval: Duration::from_secs(30),
+            port: 1883,
         }
     }
 }
@@ -201,15 +204,18 @@ impl<M: ModemHw> MqttClient<M> {
         let opened = bg77
             .call_at("+QMTOPEN?", None)
             .await?
-            .parse2::<u8, String<40>>([0, 1], Some(cid));
-        if let Ok((client_id, url)) = opened
+            .parse3::<u8, String<40>, u16>([0, 1, 2], Some(cid));
+        if let Ok((client_id, url, port)) = opened
             && client_id == cid
         {
-            if *url == self.config.url {
-                info!("TCP connection already opened to {}", url);
+            if *url == self.config.url && port == self.config.port {
+                info!("TCP connection already opened to {}:{}", url, port);
                 return Ok(());
             }
-            warn!("Connected to the wrong broker {}, will disconnect", url);
+            warn!(
+                "Connected to the wrong broker {}:{}, will disconnect",
+                url, port
+            );
             self.disconnect(bg77).await?;
         }
 
@@ -224,13 +230,16 @@ impl<M: ModemHw> MqttClient<M> {
         )?;
         bg77.call_at(&cmd, None).await?;
 
-        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",1883", self.config.url)?;
+        let cmd = format!(100; "+QMTOPEN={cid},\"{}\",{}", self.config.url, self.config.port)?;
         let (_, status) = bg77
             .call_at(&cmd, Some(ACTIVATION_TIMEOUT))
             .await?
             .parse2::<u8, i8>([0, 1], Some(cid))?;
         if status != 0 {
-            error!("Could not open TCP connection to {}", self.config.url);
+            error!(
+                "Could not open TCP connection to {}:{}",
+                self.config.url, self.config.port
+            );
             return Err(Error::MqttError(status));
         }
 
@@ -402,6 +411,24 @@ mod test {
             ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"nrf52840-test_client\"", "+QMTCONN: 1,0,0"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_mqtt_custom_port() {
+        let mut client_config = MqttConfig::default();
+        client_config.port = 8883;
+        client_config.name = String::from_str("test_client").unwrap();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",8883"), // Already connected to correct port
+            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
