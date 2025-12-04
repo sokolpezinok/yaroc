@@ -14,12 +14,7 @@ struct Args {
 
 #[pyfunction]
 pub fn yaroc_cli() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .format_timestamp_millis()
-        .init();
     let args = Args::parse_from(std::env::args().skip(1));
-
     let builder = tokio_serial::new(&args.port, 112800);
     let mut serial = builder.open_native().expect("Unable to open serial port");
 
