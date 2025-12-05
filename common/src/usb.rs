@@ -97,9 +97,11 @@ impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
 
     async fn write(&mut self, buf: &[u8]) -> Result<(), Error> {
         for chunk in buf.chunks(PACKET_LEN) {
-            self.class.write_packet(chunk).await.map_err(|_| Error::UsbWriteError)?;
+            self.class.write_packet(chunk).await?;
         }
-        // TODO: if PACKET_LEN divides buf.len(), we need to send an empty packet.
+        if buf.len().is_multiple_of(PACKET_LEN) {
+            self.class.write_packet(&[]).await?;
+        }
         Ok(())
     }
 
@@ -135,5 +137,86 @@ impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+    use embassy_futures::block_on;
+
+    use super::*;
+    use std::vec;
+    use std::vec::Vec;
+
+    #[derive(Default)]
+    struct FakeCdcAcm {
+        packets: Vec<Vec<u8>>,
+    }
+
+    impl FakeCdcAcm {
+        pub fn new(packets: Vec<Vec<u8>>) -> Self {
+            Self { packets }
+        }
+    }
+
+    impl CdcAcm for FakeCdcAcm {
+        async fn read_packet(&mut self, _buf: &mut [u8]) -> Result<usize, Error> {
+            core::future::pending().await
+        }
+
+        async fn write_packet(&mut self, buf: &[u8]) -> Result<(), Error> {
+            assert_eq!(self.packets[0], buf);
+            self.packets.remove(0);
+            Ok(())
+        }
+
+        async fn wait_connection(&mut self) {
+            core::future::pending().await
+        }
+    }
+
+    impl Drop for FakeCdcAcm {
+        fn drop(&mut self) {
+            assert!(self.packets.is_empty())
+        }
+    }
+
+    struct MockRequestHandler;
+
+    impl RequestHandler for MockRequestHandler {
+        async fn handle(&mut self, _command: UsbCommand) -> Result<UsbResponse, Error> {
+            core::future::pending().await
+        }
+    }
+
+    #[test]
+    fn test_write_small_packet() {
+        let cdc = FakeCdcAcm::new(vec![vec![1u8; 10]]);
+        let handler = MockRequestHandler;
+        let mut reader = UsbPacketReader::new(cdc, handler);
+
+        let small_data = [1u8; 10];
+        block_on(reader.write(&small_data)).unwrap();
+    }
+
+    #[test]
+    fn test_write_packet_chunking() {
+        let cdc = FakeCdcAcm::new(vec![vec![2u8; 64], vec![2u8; 6]]);
+        let handler = MockRequestHandler;
+        let mut reader = UsbPacketReader::new(cdc, handler);
+
+        let large_data = [2u8; 70];
+        block_on(reader.write(&large_data)).unwrap();
+    }
+
+    #[test]
+    fn test_write_packet_exact_chunking() {
+        let cdc = FakeCdcAcm::new(vec![vec![2u8; 64], vec![2u8; 64], vec![]]);
+        let handler = MockRequestHandler;
+        let mut reader = UsbPacketReader::new(cdc, handler);
+
+        let large_data = [2u8; 128];
+        block_on(reader.write(&large_data)).unwrap();
     }
 }
