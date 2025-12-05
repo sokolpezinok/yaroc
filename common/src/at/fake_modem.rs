@@ -59,7 +59,11 @@ impl AtUartTrait for FakeModem {
         _response_timeout: Option<Duration>,
     ) -> crate::Result<AtResponse> {
         let (at_cmd, at_response_raw) = self.at_responses.remove(0);
-        assert_eq!(at_cmd.as_str(), std::format!("AT{command}"));
+        assert_eq!(
+            at_cmd.as_str(),
+            std::format!("AT{command}"),
+            "Expected {at_cmd}, got AT{command}"
+        );
         let responses: Vec<_, _> = if at_response_raw.is_empty() {
             [FromModem::Ok].into()
         } else {

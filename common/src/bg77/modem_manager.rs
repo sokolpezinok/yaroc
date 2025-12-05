@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use core::str::FromStr;
 
 #[cfg(feature = "defmt")]
@@ -10,7 +11,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
-use crate::at::response::{AtResponse, CommandResponse};
+use crate::at::response::CommandResponse;
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
 use crate::send_punch::SendPunchCommand;
@@ -120,14 +121,18 @@ impl Default for ModemConfig {
 }
 
 /// Manages the BG77 modem configuration and connection state.
-pub struct ModemManager {
+pub struct ModemManager<M> {
     config: ModemConfig,
+    _phantom: PhantomData<M>,
 }
 
-impl ModemManager {
+impl<M: ModemHw> ModemManager<M> {
     /// Creates a new ModemManager with the given configuration.
     pub fn new(config: ModemConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            _phantom: PhantomData,
+        }
     }
 
     /// Handles Unsolicited Result Codes (URC) from the modem.
@@ -155,21 +160,17 @@ impl ModemManager {
     ///
     /// Tries to communicate with the modem. If it doesn't respond, it toggles the power pin
     /// to reset/turn on the modem.
-    pub async fn turn_on<M: ModemHw, P: ModemPin>(
-        &self,
-        bg77: &mut M,
-        modem_pin: &mut P,
-    ) -> Result<(), Error> {
+    pub async fn turn_on<P: ModemPin>(&self, bg77: &mut M, modem_pin: &mut P) -> Result<(), Error> {
         if bg77.call_at("E0", None).await.is_err() {
             modem_pin.set_low();
             Timer::after_secs(1).await;
             modem_pin.set_high();
             Timer::after_secs(2).await;
             modem_pin.set_low();
-            let res = bg77.read("", Duration::from_secs(1)).await?;
+            let res = bg77.read(Duration::from_secs(1)).await?;
             debug!("Modem response: {}", res);
             bg77.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let res = bg77.read("", Duration::from_secs(5)).await?;
+            let res = bg77.read(Duration::from_secs(5)).await?;
             debug!("Modem response: {}", res);
             bg77.call_at("E0", None).await?;
         }
@@ -182,7 +183,7 @@ impl ModemManager {
     }
 
     /// Configures the modem with the current settings (APN, RAT, Bands).
-    pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> crate::Result<()> {
+    pub async fn configure(&self, bg77: &mut M) -> crate::Result<()> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         bg77.call_at(&cmd, None).await?;
         bg77.call_at("+CEREG=2", None).await?;
@@ -208,7 +209,7 @@ impl ModemManager {
     /// If no messages have been sent for a prolonged period (determined by `packet_timeout` and `cgatt_cnt`),
     /// it attempts to reattach to the network by deactivating and reactivating the GPRS context.
     /// Otherwise, it checks the current network registration status and registers if not already registered.
-    pub async fn network_registration<M: ModemHw>(
+    pub async fn network_registration(
         &self,
         bg77: &mut M,
         force_reattach: bool,
@@ -255,7 +256,7 @@ mod test {
         let mut config = ModemConfig::default();
         config.apn = String::from_str("test-apn").unwrap();
         config.bands.set_ltem_bands(&[3]);
-        let modem_manager = ModemManager::new(config);
+        let modem_manager = ModemManager::<FakeModem>::new(config);
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGDCONT=1,\"IP\",\"test-apn\"", ""),

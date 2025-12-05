@@ -46,15 +46,11 @@ pub trait ModemHw: AtUartTrait {
         }
     }
 
-    /// Reads an AT response from the modem.
-    fn read(
-        &mut self,
-        cmd: &str,
-        timeout: Duration,
-    ) -> impl Future<Output = crate::Result<AtResponse>> {
+    /// Reads a response from the modem.
+    fn read(&mut self, timeout: Duration) -> impl Future<Output = crate::Result<AtResponse>> {
         async move {
             let lines = AtUartTrait::read(self, timeout).await?;
-            Ok(AtResponse::new(lines, cmd))
+            Ok(AtResponse::new(lines, ""))
         }
     }
 }

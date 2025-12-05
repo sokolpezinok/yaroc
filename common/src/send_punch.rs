@@ -43,7 +43,7 @@ pub struct SendPunch<M: ModemHw, P: ModemPin> {
     bg77: M,
     modem_pin: P,
     mqtt_client: MqttClient<M>,
-    modem_manager: ModemManager,
+    modem_manager: ModemManager<M>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
 }
@@ -70,7 +70,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
 
         let handlers: [UrcHandlerType; _] = [
             |response| MqttClient::<M>::urc_handler::<0>(response, COMMAND_CHANNEL.sender()),
-            |response| ModemManager::urc_handler(response, COMMAND_CHANNEL.sender()),
+            |response| ModemManager::<M>::urc_handler(response, COMMAND_CHANNEL.sender()),
         ];
         bg77.spawn_rx(&handlers, spawner);
         Self {

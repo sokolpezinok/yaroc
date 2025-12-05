@@ -253,7 +253,7 @@ impl<M: ModemHw> MqttClient<M> {
     pub async fn connect(
         &mut self,
         bg77: &mut M,
-        modem_manager: &ModemManager,
+        modem_manager: &ModemManager<M>,
     ) -> crate::Result<()> {
         let cid = self.client_id;
         if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[cid as usize].try_take() {
