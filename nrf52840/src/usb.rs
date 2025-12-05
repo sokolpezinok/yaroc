@@ -62,26 +62,50 @@ impl Usb {
     }
 }
 
+pub trait CdcAcm {
+    fn read_packet(&mut self, buf: &mut [u8]) -> impl Future<Output = crate::Result<usize>>;
+    fn write_packet(&mut self, buf: &[u8]) -> impl Future<Output = crate::Result<()>>;
+    fn wait_connection(&mut self) -> impl Future<Output = ()>;
+}
+
+impl<'d, D: embassy_usb::driver::Driver<'d>> CdcAcm for CdcAcmClass<'d, D> {
+    async fn read_packet(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
+        self.read_packet(buf).await.map_err(|e| match e {
+            EndpointError::BufferOverflow => panic!("Buffer overflow"),
+            EndpointError::Disabled => Error::UsbDisconnected,
+        })
+    }
+
+    async fn write_packet(&mut self, buf: &[u8]) -> crate::Result<()> {
+        self.write_packet(buf).await.map_err(|e| match e {
+            EndpointError::BufferOverflow => panic!("Buffer overflow"),
+            EndpointError::Disabled => Error::UsbDisconnected,
+        })
+    }
+
+    async fn wait_connection(&mut self) {
+        self.wait_connection().await
+    }
+}
+
 #[embassy_executor::task]
-async fn usb_packet_reader_loop(usb_packet_reader: UsbPacketReader) {
+async fn usb_packet_reader_loop(
+    usb_packet_reader: UsbPacketReader<CdcAcmClass<'static, UsbDriver>>,
+) {
     usb_packet_reader.r#loop().await;
 }
 
-struct UsbPacketReader {
+struct UsbPacketReader<T> {
     buffer: [u8; PACKET_LEN * 8],
-    // TODO: make CdcAcmClass into a trait
-    class: CdcAcmClass<'static, UsbDriver>,
+    class: T,
 }
 
-impl UsbPacketReader {
+impl<T: CdcAcm> UsbPacketReader<T> {
     async fn read(&mut self) -> crate::Result<&[u8]> {
         let total_len = self.buffer.len();
         let mut remaining = self.buffer.as_mut_slice();
         loop {
-            let read_len = self.class.read_packet(remaining).await.map_err(|err| match err {
-                EndpointError::Disabled => Error::UsbDisconnected,
-                EndpointError::BufferOverflow => Error::UsbReadError,
-            })?;
+            let read_len = self.class.read_packet(remaining).await?;
             match read_len {
                 PACKET_LEN => {
                     remaining = &mut remaining[PACKET_LEN..];
@@ -144,8 +168,8 @@ impl UsbPacketReader {
     }
 }
 
-impl From<CdcAcmClass<'static, UsbDriver>> for UsbPacketReader {
-    fn from(class: CdcAcmClass<'static, UsbDriver>) -> Self {
+impl<T> From<T> for UsbPacketReader<T> {
+    fn from(class: T) -> Self {
         Self {
             buffer: [0; _],
             class,
