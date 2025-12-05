@@ -32,6 +32,7 @@ tokio-serial = "5.4.5"
 
 [profile.release]
 debug = 2
+opt-level = "s"
 overflow-checks = false
 lto = true
 codegen-units = 1
