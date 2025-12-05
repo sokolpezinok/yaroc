@@ -1,15 +1,10 @@
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_nrf::usb::Driver;
-use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
-use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, UsbDevice};
 use static_cell::StaticCell;
 use yaroc_common::error::Error;
-use yaroc_common::usb::{
-    CdcAcm, RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse,
-};
+use yaroc_common::usb::{RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
 

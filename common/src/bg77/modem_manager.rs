@@ -10,7 +10,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
-use crate::at::response::CommandResponse;
+use crate::at::response::{AtResponse, CommandResponse};
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
 use crate::send_punch::SendPunchCommand;
@@ -171,6 +171,7 @@ impl ModemManager {
             bg77.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
             let res = bg77.read("", Duration::from_secs(5)).await?;
             debug!("Modem response: {}", res);
+            bg77.call_at("E0", None).await?;
         }
         Ok(())
     }
@@ -181,11 +182,11 @@ impl ModemManager {
     }
 
     /// Configures the modem with the current settings (APN, RAT, Bands).
-    pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> Result<(), Error> {
+    pub async fn configure<M: ModemHw>(&self, bg77: &mut M) -> crate::Result<()> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
-        let _ = bg77.call_at(&cmd, None).await;
+        bg77.call_at(&cmd, None).await?;
         bg77.call_at("+CEREG=2", None).await?;
-        let _ = bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await;
+        let _ = bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
 
         let (nwscanseq, iotopmode) = match self.config.rat {
             RAT::Ltem => ("02", 0),
@@ -226,11 +227,8 @@ impl ModemManager {
             }
         }
 
-        bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT).await?;
-        // CGATT=1 needs additional time and reading from modem
-        Timer::after_secs(1).await;
-        // TODO: this is the only ModemHw::read() in the code base, can it be removed?
-        let _response = bg77.read("+CGATT", Duration::from_secs(1)).await;
+        let _response =
+            bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
         #[cfg(feature = "defmt")]
         if let Ok(response) = _response
             && !response.lines().is_empty()
