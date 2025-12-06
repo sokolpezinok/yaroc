@@ -70,6 +70,9 @@ impl RequestHandler for SendPunchHandler {
                 info!("Will configure modem now");
                 send_punch.configure_modem(modem_config).await?;
             }
+            UsbCommand::ConfigureMqtt(_mqtt_config) => {
+                todo!();
+            }
         }
         Ok(UsbResponse::Ok)
     }

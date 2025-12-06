@@ -9,6 +9,8 @@ pub enum Error {
     FormatError,
     #[error("Cannot parse string as the given type")]
     ParseError,
+    #[error("Postcard parsing error")]
+    PostcardParseError(#[from] postcard::Error),
     #[error("Supplied wrong function argument")]
     ValueError,
     #[error("Softdevice (BLE) error")]

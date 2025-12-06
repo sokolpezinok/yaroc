@@ -6,12 +6,12 @@ rust-version = "1.90"
 
 [features]
 default = []
-defmt = ["dep:defmt", "femtopb/defmt"]
+defmt = ["dep:defmt", "femtopb/defmt", "heapless/defmt", "postcard/use-defmt", "embassy-usb/defmt"]
 nrf = ["dep:embassy-nrf", "dep:embassy-usb"]
 std = ["embassy-executor/arch-std", "embassy-time/std", "chrono/clock", "chrono/alloc", "dep:geoutils"]
 
 [dependencies]
-embassy-usb = { workspace = true, features = ["defmt"], optional = true }
+embassy-usb = { workspace = true, optional = true }
 postcard = { workspace = true }
 chrono = { workspace = true }
 defmt = { workspace = true, optional = true }

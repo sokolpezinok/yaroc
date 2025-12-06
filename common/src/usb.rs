@@ -11,6 +11,7 @@ use postcard::{from_bytes, to_vec};
 use serde::{Deserialize, Serialize};
 
 use crate::bg77::modem_manager::ModemConfig;
+use crate::bg77::mqtt::MqttConfig;
 use crate::error::Error;
 
 #[cfg(feature = "nrf")]
@@ -19,6 +20,7 @@ pub type UsbDriver = Driver<'static, &'static SoftwareVbusDetect>;
 #[derive(Serialize, Deserialize)]
 pub enum UsbCommand {
     ConfigureModem(ModemConfig),
+    ConfigureMqtt(MqttConfig),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,7 +105,7 @@ impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
 
     async fn respond(&mut self, command: UsbCommand) -> Result<(), Error> {
         let response = self.handler.handle(command).await?;
-        let response_bytes = to_vec::<_, 128>(&response).map_err(|_| Error::ParseError)?;
+        let response_bytes = to_vec::<_, 128>(&response)?;
         self.write(response_bytes.as_slice()).await
     }
 
@@ -114,7 +116,7 @@ impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
             loop {
                 let command_result = self.read().await.and_then(|data| {
                     debug!("Read {} bytes from USB", data.len());
-                    from_bytes::<UsbCommand>(data).map_err(|_| Error::ParseError)
+                    from_bytes::<UsbCommand>(data).map_err(Into::into)
                 });
                 match command_result {
                     Ok(command) => {

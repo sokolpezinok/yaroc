@@ -37,6 +37,6 @@ serde = { workspace = true }
 
 chrono = { workspace = true }
 femtopb = { workspace = true }
-heapless =  { workspace = true, features = ["defmt"] }
+heapless =  { workspace = true }
 thiserror = { workspace = true }
 static_cell = "2.1.1"
