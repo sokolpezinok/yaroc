@@ -15,22 +15,32 @@ use crate::bg77::mqtt::MqttConfig;
 use crate::error::Error;
 
 #[cfg(feature = "nrf")]
+/// Type alias for the USB driver.
 pub type UsbDriver = Driver<'static, &'static SoftwareVbusDetect>;
 
 #[derive(Serialize, Deserialize)]
+/// Commands that can be sent over USB.
 pub enum UsbCommand {
+    /// Configure the modem.
     ConfigureModem(ModemConfig),
+    /// Configure MQTT settings.
     ConfigureMqtt(MqttConfig),
 }
 
 #[derive(Serialize, Deserialize)]
+/// Responses sent back over USB.
 pub enum UsbResponse {
+    /// Operation successful.
     Ok,
 }
 
+/// Abstraction over the CDC ACM class.
 pub trait CdcAcm {
+    /// Reads a single packet into the buffer.
     fn read_packet(&mut self, buf: &mut [u8]) -> impl Future<Output = Result<usize, Error>>;
+    /// Writes a single packet from the buffer.
     fn write_packet(&mut self, buf: &[u8]) -> impl Future<Output = Result<(), Error>>;
+    /// Waits until the USB cable is connected.
     fn wait_connection(&mut self) -> impl Future<Output = ()>;
 }
 
@@ -57,12 +67,15 @@ impl CdcAcm for CdcAcmClass<'static, UsbDriver> {
     }
 }
 
+/// Trait for handling USB commands.
 pub trait RequestHandler {
+    /// Process a command and return a response.
     fn handle(&mut self, command: UsbCommand) -> impl Future<Output = Result<UsbResponse, Error>>;
 }
 
 const PACKET_LEN: usize = 64;
 
+/// Reads packets from USB, reconstructs messages, and dispatches them to the handler.
 pub struct UsbPacketReader<T, H> {
     buffer: [u8; PACKET_LEN * 8],
     class: T,
@@ -70,6 +83,7 @@ pub struct UsbPacketReader<T, H> {
 }
 
 impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
+    /// Creates a new packet reader.
     pub fn new(class: T, handler: H) -> Self {
         Self {
             buffer: [0; PACKET_LEN * 8],
@@ -111,6 +125,7 @@ impl<T: CdcAcm, H: RequestHandler> UsbPacketReader<T, H> {
         self.write(response_bytes.as_slice()).await
     }
 
+    /// Runs the packet reader loop.
     pub async fn run(mut self) {
         loop {
             self.class.wait_connection().await;
