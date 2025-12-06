@@ -8,6 +8,7 @@ use embassy_time::{Duration, Instant};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     RawMutex,
@@ -80,20 +81,41 @@ pub enum MqttQos {
     // 2 is unsupported
 }
 
+mod duration_ms {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration.as_millis())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        u64::deserialize(deserializer).map(Duration::from_millis)
+    }
+}
+
 /// Configuration for the MQTT client to connect to a broker.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MqttConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
     pub url: String<40>,
     /// Optional login credentials for the MQTT broker, username and password.
     pub credentials: Option<(String<20>, String<30>)>,
     /// The timeout duration for individual MQTT packets.
+    #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,
     /// The name of the client, used to construct the MQTT client ID.
     pub name: String<20>,
     /// The MAC address of the device, used to form MQTT topics (e.g., "yar/mac_address/topic").
     pub mac_address: String<12>,
     /// The interval at which mini call home messages are sent.
+    #[serde(with = "duration_ms")]
     pub minicallhome_interval: Duration,
     /// The port of the MQTT broker.
     pub port: u16,
@@ -534,5 +556,26 @@ mod test {
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
         assert_eq!(status, BackoffCommand::Status(expected_status));
         assert!(CHANNEL.try_receive().is_err());
+    }
+
+    #[test]
+    fn test_duration_ms_serialization() {
+        use postcard;
+        #[derive(Serialize, Deserialize, PartialEq, Debug)]
+        struct TestStruct {
+            #[serde(with = "super::duration_ms")]
+            duration: Duration,
+        }
+
+        let s = TestStruct {
+            duration: Duration::from_millis(12345),
+        };
+        let mut buf = [0u8; 8];
+        let bytes = postcard::to_slice(&s, &mut buf).unwrap();
+        assert_eq!(bytes.len(), 2);
+
+        let s2: TestStruct = postcard::from_bytes(bytes).unwrap();
+        assert_eq!(s.duration, s2.duration);
+        assert_eq!(s2.duration.as_millis(), 12345);
     }
 }
