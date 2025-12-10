@@ -20,6 +20,24 @@ static MSOS_DESCRIPTOR: StaticCell<[u8; 128]> = StaticCell::new();
 static STATE: StaticCell<State<'static>> = StaticCell::new();
 const PACKET_LEN: usize = 64;
 
+fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
+    // TODO: figure out how to pick vendor and product ID
+    let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
+    config.manufacturer = Some("Sokol Pezinok");
+    config.product = Some("Yaroc USB Serial");
+    config.max_power = 500;
+    config.max_packet_size_0 = 64;
+
+    Builder::new(
+        driver,
+        config,
+        CONFIG_DESCRIPTOR.init([0; _]).as_mut_slice(),
+        BOS_DESCRIPTOR.init([0; _]).as_mut_slice(),
+        MSOS_DESCRIPTOR.init([0; _]).as_mut_slice(),
+        CONTROL_BUF.init([0; _]).as_mut_slice(),
+    )
+}
+
 pub struct Usb {
     device: UsbDevice<'static, UsbDriver>,
     class: CdcAcmClass<'static, UsbDriver>,
@@ -27,22 +45,7 @@ pub struct Usb {
 
 impl Usb {
     pub fn new(driver: UsbDriver) -> Self {
-        // TODO: figure out how to pick vendor and product ID
-        let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-        config.manufacturer = Some("Sokol Pezinok");
-        config.product = Some("Yaroc USB Serial");
-        config.max_power = 500;
-        config.max_packet_size_0 = 64;
-
-        let mut builder = Builder::new(
-            driver,
-            config,
-            CONFIG_DESCRIPTOR.init([0; _]).as_mut_slice(),
-            BOS_DESCRIPTOR.init([0; _]).as_mut_slice(),
-            MSOS_DESCRIPTOR.init([0; _]).as_mut_slice(),
-            CONTROL_BUF.init([0; _]).as_mut_slice(),
-        );
-
+        let mut builder = builder(driver);
         let state = STATE.init(State::new());
         let class = CdcAcmClass::new(&mut builder, state, PACKET_LEN as u16);
         let device = builder.build();
