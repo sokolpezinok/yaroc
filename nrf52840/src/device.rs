@@ -52,11 +52,14 @@ pub struct Device {
     pub usb: Usb,
 }
 
+/// The mechanism for detecting VBUS (USB power) presence.
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
 
+/// Configuration for the device.
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct DeviceConfig<'a> {
+    /// The name of the device.
     pub name: &'a str,
 }
 

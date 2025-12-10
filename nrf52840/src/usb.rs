@@ -8,6 +8,9 @@ use yaroc_common::usb::{RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, 
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
 
+/// The main USB task.
+///
+/// This task manages the USB device and must be spawned for USB to work.
 #[embassy_executor::task]
 pub async fn usb_task(mut usb: UsbDevice<'static, UsbDriver>) {
     usb.run().await;
@@ -39,12 +42,14 @@ fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
     )
 }
 
+/// A wrapper around the USB device and class.
 pub struct Usb {
     device: UsbDevice<'static, UsbDriver>,
     class: CdcAcmClass<'static, UsbDriver>,
 }
 
 impl Usb {
+    /// Creates a new `Usb` instance.
     pub fn new(driver: UsbDriver) -> Self {
         let mut builder = builder(driver);
         let state = STATE.init(State::new());
@@ -54,6 +59,9 @@ impl Usb {
         Self { device, class }
     }
 
+    /// Spawns the USB tasks.
+    ///
+    /// This spawns `usb_task()` and `usb_packet_reader_loop()`.
     pub fn spawn(self, spawner: Spawner) {
         spawner.spawn(usb_task(self.device).expect("Failed to spawn task"));
         spawner.spawn(
@@ -63,6 +71,7 @@ impl Usb {
     }
 }
 
+/// A handler for USB requests that relate to `SendPunch`.
 pub struct SendPunchHandler;
 
 impl RequestHandler for SendPunchHandler {
@@ -87,6 +96,7 @@ impl RequestHandler for SendPunchHandler {
     }
 }
 
+/// A task that reads packets from the USB and handles them.
 #[embassy_executor::task]
 async fn usb_packet_reader_loop(
     usb_packet_reader: UsbPacketReader<CdcAcmClass<'static, UsbDriver>, SendPunchHandler>,

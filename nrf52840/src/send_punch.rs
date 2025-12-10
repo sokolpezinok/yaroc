@@ -53,6 +53,7 @@ impl Bg77SendPunchFn {
         }
     }
 
+    /// Returns the timeout for sending a punch.
     pub fn send_punch_timeout(&self) -> Duration {
         ACTIVATION_TIMEOUT + self.packet_timeout * 2
     }
