@@ -38,18 +38,13 @@ impl From<CellularLogMessage> for Event {
 }
 
 /// Configuration for the MQTT client.
-#[pyclass]
+#[pyclass(get_all, set_all)]
 #[derive(Clone)]
 pub struct MqttConfig {
-    #[pyo3(get, set)]
     url: String,
-    #[pyo3(get, set)]
     port: u16,
-    #[pyo3(get, set)]
     credentials: Option<(String, String)>,
-    #[pyo3(get, set)]
     keep_alive: Duration,
-    #[pyo3(get, set)]
     meshtastic_channel: Option<String>,
 }
 

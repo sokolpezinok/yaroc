@@ -8,17 +8,12 @@ use yaroc_receiver::logs::SiPunchLog as SiPunchLogRs;
 use crate::status::HostInfo;
 
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass]
+#[pyclass(get_all)]
 pub struct SiPunch {
-    #[pyo3(get)]
     pub card: u32,
-    #[pyo3(get)]
     pub code: u16,
-    #[pyo3(get)]
     pub time: DateTime<FixedOffset>,
-    #[pyo3(get)]
     mode: u8,
-    #[pyo3(get)]
     pub raw: RawPunch,
 }
 

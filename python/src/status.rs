@@ -95,20 +95,14 @@ impl From<MeshtasticLogRs> for MeshtasticLog {
     }
 }
 
-#[pyclass]
+#[pyclass(get_all)]
 #[derive(Clone)]
 pub struct NodeInfo {
-    #[pyo3(get)]
     pub name: String,
-    #[pyo3(get)]
     pub rsrp_dbm: Option<i16>,
-    #[pyo3(get)]
     pub snr_db: Option<f32>,
-    #[pyo3(get)]
     codes: Vec<u16>,
-    #[pyo3(get)]
     last_update: Option<DateTime<FixedOffset>>,
-    #[pyo3(get)]
     pub last_punch: Option<DateTime<FixedOffset>>,
 }
 
