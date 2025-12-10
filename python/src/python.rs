@@ -1,7 +1,5 @@
 use chrono::Local;
-use log::LevelFilter;
 use pyo3::prelude::*;
-use pyo3_log::{Caching, Logger};
 
 #[pyclass(eq, eq_int)]
 #[derive(PartialEq)]
@@ -58,33 +56,35 @@ pub fn current_timestamp_millis() -> i64 {
 }
 
 #[pymodule]
-pub fn rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<crate::punch::SiPunch>()?;
-    m.add_class::<crate::punch::SiPunchLog>()?;
-    m.add_class::<crate::status::HostInfo>()?;
-    m.add_class::<RaspberryModel>()?;
-    m.add_function(wrap_pyfunction!(current_timestamp_millis, m)?)?;
-    m.add_function(wrap_pyfunction!(crate::yaroc_cli::yaroc_cli, m)?)?;
+pub mod rs {
+    use pyo3::prelude::*;
 
-    m.add_class::<crate::message_handler::Event>()?;
-    m.add_class::<crate::message_handler::MessageHandler>()?;
-    m.add_class::<crate::message_handler::MqttConfig>()?;
-    m.add_class::<crate::message_handler::MshDevHandler>()?;
-    m.add_class::<crate::serial_client::SerialClient>()?;
-    m.add_class::<crate::si_uart::SiUartHandler>()?;
-    m.add_class::<crate::status::CellularLog>()?;
-    m.add_class::<crate::status::MeshtasticLog>()?;
-    m.add_class::<crate::status::NodeInfo>()?;
+    #[pymodule_export]
+    use super::{RaspberryModel, current_timestamp_millis};
+    #[pymodule_export]
+    use crate::message_handler::{Event, MessageHandler, MqttConfig, MshDevHandler};
+    #[pymodule_export]
+    use crate::punch::{SiPunch, SiPunchLog};
+    #[pymodule_export]
+    use crate::serial_client::SerialClient;
+    #[pymodule_export]
+    use crate::si_uart::SiUartHandler;
+    #[pymodule_export]
+    use crate::status::{CellularLog, HostInfo, MeshtasticLog, NodeInfo};
+    #[pymodule_export]
+    use crate::yaroc_cli::yaroc_cli;
 
-    let _ = Logger::new(m.py(), Caching::LoggersAndLevels)?
-        .filter(LevelFilter::Trace)
-        // TODO: remove `.filter_target` once https://github.com/meshtastic/rust/issues/27 is fixed
-        .filter_target(
-            "meshtastic::connections::stream_buffer".to_owned(),
-            LevelFilter::Off,
-        )
-        .install()
-        .expect("Someone installed a logger before us");
-
-    Ok(())
+    #[pymodule_init]
+    fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        pyo3_log::Logger::new(m.py(), pyo3_log::Caching::LoggersAndLevels)?
+            .filter(log::LevelFilter::Trace)
+            // TODO: remove `.filter_target` once https://github.com/meshtastic/rust/issues/27 is fixed
+            .filter_target(
+                "meshtastic::connections::stream_buffer".to_owned(),
+                log::LevelFilter::Off,
+            )
+            .install()
+            .expect("Someone installed a logger before us");
+        Ok(())
+    }
 }
