@@ -50,7 +50,7 @@ class UdevSiFactory(SiWorker):
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
         logging.info("Starting USB SportIdent device manager")
-        self.monitor = USBMonitor(({ID_VENDOR_ID: "10c4"}, {ID_VENDOR_ID: "1a86"}))
+        self.monitor = USBMonitor([{ID_VENDOR_ID: "10c4"}, {ID_VENDOR_ID: "1a86"}])
         self.monitor.start_monitoring(
             on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
         )

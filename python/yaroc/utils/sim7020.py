@@ -112,7 +112,7 @@ class SIM7020Interface:
             return self._mqtt_id
         # Last successful send a long time ago, not trusting the modem
         if time_since(self._last_success, timedelta(seconds=self._keepalive)):
-            logging.warn("Too long since a successful send, force a reconnect")
+            logging.warning("Too long since a successful send, force a reconnect")
             self._mqtt_id = ErrStr("Expired MQTT connection")
             return self._mqtt_id
         try:

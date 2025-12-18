@@ -76,12 +76,12 @@ fixable = ["ALL"]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [[tool.mypy.overrides]]
-module = "epaper.*,gpiozero.*,RPi.*,serial.*,serial_asyncio.*"
+module = "epaper.*,gpiozero.*,RPi.*,serial.*,serial_asyncio.*,usbmonitor.*,pyudev.*"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "usbmonitor.*,pyudev.*"
-ignore_missing_imports = true
+[tool.ty.src]
+include = ["yaroc"]
+exclude = ["**/*_pb2.py", "**/*_pb2.pyi"]
 
 [tool.uv.sources]
 yaroc = { path = ".", editable = true }
