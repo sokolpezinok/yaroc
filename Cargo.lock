@@ -570,6 +570,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-boot-nrf"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb12d0fabd2208b3ee5e556b50c900b5152dad6c7a622b09a7c1152cf85bcb4"
+dependencies = [
+ "cfg-if",
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt 1.0.1",
+ "embassy-boot",
+ "embassy-nrf",
+ "embassy-sync 0.7.2",
+ "embedded-storage",
+ "embedded-storage-async",
+ "nrf-softdevice-mbr",
+]
+
+[[package]]
 name = "embassy-embedded-hal"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1615,6 +1633,12 @@ dependencies = [
  "syn 1.0.109",
  "uuid",
 ]
+
+[[package]]
+name = "nrf-softdevice-mbr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f47431e7b1c13851c48a77211fac2b7b648b43a9a622f9c40debc76320b93217"
 
 [[package]]
 name = "nrf-softdevice-s140"
@@ -3235,6 +3259,7 @@ dependencies = [
  "cortex-m-semihosting",
  "defmt 1.0.1",
  "defmt-rtt",
+ "embassy-boot-nrf",
  "embassy-executor",
  "embassy-futures",
  "embassy-nrf",
