@@ -14,7 +14,7 @@ clap = { version = "4.5", features = ["derive"] }
 defmt = "1.0"
 embassy-executor = { version = "0.9", features = ["executor-thread"] }
 embassy-futures = "0.1.2"
-embassy-nrf = { version = "0.8", features = ["defmt", "nrf52840", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
+embassy-nrf = { version = "0.9", features = ["defmt", "nrf52840", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
 embassy-sync = "0.7"
 embassy-time = { version = "0.5" }
 embassy-usb = "0.5.1"
