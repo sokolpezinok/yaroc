@@ -18,7 +18,7 @@ use yaroc_common::{
 use yaroc_nrf52840::{
     self as _,
     device::{Device, DeviceConfig},
-    flash::ValueIndex,
+    flash::{Flash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
@@ -39,11 +39,12 @@ async fn main(spawner: Spawner) {
         modem_pin,
         si_uart,
         ble,
-        mut flash,
+        flash_mutex,
         usb,
         ..
     } = device;
 
+    let mut flash = Flash::new(&flash_mutex);
     let mut buffer = [0; 4096];
     let device_config: Option<DeviceConfig> =
         flash.read(ValueIndex::DeviceConfig, &mut buffer).await.unwrap();

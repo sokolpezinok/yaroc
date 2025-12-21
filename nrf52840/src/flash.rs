@@ -1,10 +1,12 @@
+use embassy_embedded_hal::flash::partition::Partition;
+use embassy_sync::mutex::Mutex;
 use femtopb::Message;
 use nrf_softdevice::Flash as NrfFlash;
 use sequential_storage::{
     cache::NoCache,
     map::{MapConfig, MapStorage, SerializationError, Value},
 };
-use yaroc_common::error::Error;
+use yaroc_common::{RawMutex, error::Error};
 
 use crate::device::DeviceConfig;
 
@@ -14,9 +16,9 @@ unsafe extern "C" {
     unsafe static _data_flash_size: u32;
 }
 
-/// A wrapper around the nrf_softdevice::Flash
-pub struct Flash {
-    map_storage: MapStorage<u8, nrf_softdevice::Flash, NoCache>,
+/// Flash abstraction for storing serializeable objects.
+pub struct Flash<'a> {
+    map_storage: MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>,
 }
 
 impl<'a> Value<'a> for DeviceConfig<'a> {
@@ -39,13 +41,15 @@ pub enum ValueIndex {
     DeviceConfig = 0,
 }
 
-impl Flash {
+impl<'a> Flash<'a> {
     /// Creates a new Flash instance
-    pub fn new(flash: NrfFlash) -> Self {
+    pub fn new(flash: &'a Mutex<RawMutex, NrfFlash>) -> Self {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
-        let data_end = data_start + unsafe { &_data_flash_size as *const u32 as u32 };
-        let config = MapConfig::new(data_start..data_end);
-        let map_storage = MapStorage::new(flash, config, NoCache::new());
+        let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
+
+        let map_partition = Partition::new(flash, data_start, data_size);
+        let config = MapConfig::new(0..data_size);
+        let map_storage = MapStorage::new(map_partition, config, NoCache::new());
 
         Self { map_storage }
     }
@@ -56,14 +60,13 @@ impl Flash {
     }
 
     /// Stores a value in the flash memory.
-    pub async fn write<'a, V: Value<'a>>(
+    pub async fn write<V: Value<'a>>(
         &mut self,
         key: ValueIndex,
         value: V,
         buffer: &'a mut [u8],
     ) -> crate::Result<()> {
         let key = key as u8;
-
         self.map_storage
             .store_item(buffer, &key, &value)
             .await
@@ -71,7 +74,7 @@ impl Flash {
     }
 
     /// Fetches a value from the flash memory.
-    pub async fn read<'a, V: Value<'a>>(
+    pub async fn read<V: Value<'a>>(
         &mut self,
         key: ValueIndex,
         buffer: &'a mut [u8],

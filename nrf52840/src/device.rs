@@ -1,5 +1,4 @@
 use crate::ble::Ble;
-use crate::flash::Flash;
 use crate::usb::Usb;
 
 use embassy_nrf::config::Config as NrfConfig;
@@ -12,7 +11,9 @@ use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_nrf::usb::{self, Driver};
 use embassy_nrf::{bind_interrupts, saadc, temp};
 use embassy_sync::lazy_lock::LazyLock;
+use embassy_sync::mutex::Mutex;
 use heapless::String;
+use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::si_uart::SiUart;
 
@@ -43,8 +44,8 @@ pub struct Device {
     pub si_uart: SiUart<UarteRxWithIdle<'static>>,
     /// The Bluetooth Low Energy device
     pub ble: Ble,
-    /// The flash memory driver
-    pub flash: Flash,
+    /// Flash mutex
+    pub flash_mutex: Mutex<RawMutex, nrf_softdevice::Flash>,
     /// The USB device
     pub usb: Usb,
 }
@@ -97,7 +98,7 @@ impl Default for Device {
 
         let ble = Ble::new();
         let mac_address = ble.get_mac_address();
-        let flash = Flash::new(ble.flash());
+        let flash = Mutex::<RawMutex, _>::new(ble.flash());
 
         Self {
             _blue_led: blue_led,
@@ -108,7 +109,7 @@ impl Default for Device {
             si_uart: SiUart::new(rx0),
             saadc,
             ble,
-            flash,
+            flash_mutex: flash,
             usb,
         }
     }
