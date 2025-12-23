@@ -27,6 +27,7 @@ fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
     config.product = Some("Yaroc USB Serial");
     config.max_power = 500;
     config.max_packet_size_0 = 64;
+    config.self_powered = true;
 
     Builder::new(
         driver,
