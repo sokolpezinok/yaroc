@@ -5,7 +5,9 @@ use embassy_time::Duration;
 use heapless::{String, Vec};
 use static_cell::StaticCell;
 use yaroc_common::at::response::{CommandResponse, FromModem};
-use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL, TxChannelType, ChannelWriter};
+use yaroc_common::at::uart::{
+    AtUartTrait, ChannelWriter, FakeRxWithIdle, MAIN_RX_CHANNEL, TxChannelType,
+};
 use yaroc_common::{at::uart::AtUart, error::Error};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();

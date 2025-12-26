@@ -280,7 +280,10 @@ pub struct AtUart<T: Write, R: RxWithIdle> {
     main_rx_channel: &'static MainRxChannelType,
 }
 
-impl<T: Write, R: RxWithIdle> AtUart<T, R> {
+impl<T: Write, R: RxWithIdle> AtUart<T, R>
+where
+    Error: From<T::Error>,
+{
     /// Creates a new `AtUart`.
     ///
     /// # Arguments
@@ -308,7 +311,7 @@ impl<T: Write, R: RxWithIdle> AtUart<T, R> {
     /// # Arguments
     /// * `message` - The message to write.
     async fn write(&mut self, message: &[u8]) -> crate::Result<()> {
-        self.tx.write_all(message).await.map_err(|_| Error::UartWriteError)
+        self.tx.write_all(message).await.map_err(From::from)
     }
 
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.
@@ -348,7 +351,10 @@ impl<T: Write, R: RxWithIdle> AtUart<T, R> {
     }
 }
 
-impl<T: Write, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
+impl<T: Write, R: RxWithIdle> AtUartTrait for AtUart<T, R>
+where
+    Error: From<T::Error>,
+{
     async fn call_second_read(
         &mut self,
         msg: &[u8],

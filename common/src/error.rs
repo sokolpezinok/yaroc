@@ -21,8 +21,9 @@ pub enum Error {
     ModemError,
     #[error("UART read error")]
     UartReadError,
-    #[error("UART write error")]
-    UartWriteError,
+    #[cfg(feature = "nrf")]
+    #[error("UART write error: {0:?}")]
+    UartWriteError(embassy_nrf::uarte::Error),
     #[error("USB read error")]
     UsbReadError,
     #[error("USB disconnected")]
@@ -57,5 +58,12 @@ impl embedded_io_async::Error for Error {
 impl From<core::fmt::Error> for Error {
     fn from(_: core::fmt::Error) -> Self {
         Error::FormatError
+    }
+}
+
+#[cfg(feature = "nrf")]
+impl From<embassy_nrf::uarte::Error> for Error {
+    fn from(e: embassy_nrf::uarte::Error) -> Self {
+        Error::UartWriteError(e)
     }
 }
