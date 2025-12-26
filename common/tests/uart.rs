@@ -5,7 +5,7 @@ use embassy_time::Duration;
 use heapless::{String, Vec};
 use static_cell::StaticCell;
 use yaroc_common::at::response::{CommandResponse, FromModem};
-use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL, TxChannelType};
+use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL, TxChannelType, ChannelWriter};
 use yaroc_common::{at::uart::AtUart, error::Error};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -41,7 +41,7 @@ async fn main(spawner: Spawner) {
         ]),
         &TX_CHANNEL,
     );
-    let mut at_uart = AtUart::new(&TX_CHANNEL, rx);
+    let mut at_uart = AtUart::new(ChannelWriter(&TX_CHANNEL), rx);
     at_uart.spawn_rx(&[urc_handler], spawner);
 
     let response = at_uart.call_at_timeout("I", Duration::from_millis(10), None).await.unwrap();

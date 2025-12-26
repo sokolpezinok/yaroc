@@ -45,6 +45,15 @@ pub enum Error {
     SemaphoreError,
 }
 
+impl embedded_io_async::Error for Error {
+    fn kind(&self) -> embedded_io_async::ErrorKind {
+        match self {
+            Error::TimeoutError => embedded_io_async::ErrorKind::TimedOut,
+            _ => embedded_io_async::ErrorKind::Other,
+        }
+    }
+}
+
 impl From<core::fmt::Error> for Error {
     fn from(_: core::fmt::Error) -> Self {
         Error::FormatError

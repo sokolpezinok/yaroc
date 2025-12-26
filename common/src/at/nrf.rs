@@ -1,15 +1,9 @@
 use crate::error::Error;
 use embassy_executor::Spawner;
-use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
+use embassy_nrf::uarte::UarteRxWithIdle;
 use heapless::Vec;
 
-use super::uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, Tx, UrcHandlerType};
-
-impl Tx for UarteTx<'static> {
-    async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {
-        self.write(buffer).await.map_err(|_| Error::UartWriteError)
-    }
-}
+use super::uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, UrcHandlerType};
 
 /// RX broker loop implemented for UarteRxWithIdle.
 #[embassy_executor::task]

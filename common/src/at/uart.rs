@@ -12,6 +12,7 @@ use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, WithTimeout};
+use embedded_io_async::{ErrorType, Write};
 use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
@@ -148,15 +149,6 @@ pub trait RxWithIdle {
     ) -> impl core::future::Future<Output = crate::Result<usize>>;
 }
 
-/// A trait for writing to a UART.
-pub trait Tx {
-    /// Writes bytes to the UART.
-    ///
-    /// # Arguments
-    /// * `buffer` - The buffer to write to the UART.
-    fn write(&mut self, buffer: &[u8]) -> impl core::future::Future<Output = crate::Result<()>>;
-}
-
 /// A channel for sending AT-commands to the modem.
 pub type TxChannelType = Channel<RawMutex, String<AT_COMMAND_SIZE>, 5>;
 
@@ -211,11 +203,21 @@ impl RxWithIdle for FakeRxWithIdle {
     }
 }
 
-impl Tx for &'static TxChannelType {
-    async fn write(&mut self, buffer: &[u8]) -> crate::Result<()> {
+pub struct ChannelWriter(pub &'static TxChannelType);
+
+impl ErrorType for ChannelWriter {
+    type Error = Error;
+}
+
+impl Write for ChannelWriter {
+    async fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
         let s = core::str::from_utf8(buffer).map_err(|_| Error::StringEncodingError)?;
         let s = String::from_str(s).map_err(|_| Error::BufferTooSmallError)?;
-        self.send(s).await;
+        self.0.send(s).await;
+        Ok(buffer.len())
+    }
+
+    async fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -270,15 +272,15 @@ pub trait AtUartTrait {
 
 /// A UART for sending and receiving AT-commands.
 ///
-/// The TX part is represented by the `Tx` trait, and the RX part is represented by the
+/// The TX part is represented by the `Write` trait, and the RX part is represented by the
 /// `RxWithIdle` trait.
-pub struct AtUart<T: Tx, R: RxWithIdle> {
+pub struct AtUart<T: Write, R: RxWithIdle> {
     tx: T,
     rx: Option<R>,
     main_rx_channel: &'static MainRxChannelType,
 }
 
-impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
+impl<T: Write, R: RxWithIdle> AtUart<T, R> {
     /// Creates a new `AtUart`.
     ///
     /// # Arguments
@@ -306,7 +308,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     /// # Arguments
     /// * `message` - The message to write.
     async fn write(&mut self, message: &[u8]) -> crate::Result<()> {
-        self.tx.write(message).await.map_err(|_| Error::UartWriteError)
+        self.tx.write_all(message).await.map_err(|_| Error::UartWriteError)
     }
 
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.
@@ -346,7 +348,7 @@ impl<T: Tx, R: RxWithIdle> AtUart<T, R> {
     }
 }
 
-impl<T: Tx, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
+impl<T: Write, R: RxWithIdle> AtUartTrait for AtUart<T, R> {
     async fn call_second_read(
         &mut self,
         msg: &[u8],

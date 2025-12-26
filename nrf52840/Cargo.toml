@@ -16,11 +16,7 @@ defmt = { workspace = true }
 defmt-rtt = "1.0"
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-embedded-io = "0.6.1"
-embedded-io-async = "0.6.1"
-
+chrono = { workspace = true }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5.0"
@@ -33,13 +29,12 @@ embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"
 embassy-usb = { workspace = true, features = ["defmt"] }
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
+# embedded-io-async = "0.7"
+femtopb = { workspace = true }
+heapless =  { workspace = true }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
 postcard = { workspace = true }
 sequential-storage = "7.0"
 serde = { workspace = true }
-
-chrono = { workspace = true }
-femtopb = { workspace = true }
-heapless =  { workspace = true }
-thiserror = { workspace = true }
 static_cell = "2.1.1"
+thiserror = { workspace = true }
