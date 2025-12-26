@@ -40,7 +40,7 @@ impl<M: ModemHw> Default for SystemInfo<M> {
 }
 
 impl<M: ModemHw> SystemInfo<M> {
-    async fn get_modem_time(bg77: &mut impl ModemHw) -> crate::Result<DateTime<FixedOffset>> {
+    async fn get_modem_time(bg77: &mut M) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = bg77.call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
         parse_qlts(&modem_clock)
     }

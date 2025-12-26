@@ -11,8 +11,9 @@ use core::str::FromStr;
 use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
+use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, Instant, WithTimeout};
-use embedded_io_async::{ErrorType, Write};
+use embedded_io_async::Write;
 use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
@@ -149,13 +150,10 @@ pub trait RxWithIdle {
     ) -> impl core::future::Future<Output = crate::Result<usize>>;
 }
 
-/// A channel for sending AT-commands to the modem.
-pub type TxChannelType = Channel<RawMutex, String<AT_COMMAND_SIZE>, 5>;
-
 /// Fake RxWithIdle, to be used in tests.
 pub struct FakeRxWithIdle {
     responses: Vec<(&'static str, &'static str), 10>,
-    tx_channel: &'static TxChannelType,
+    pipe: &'static Pipe<RawMutex, AT_COMMAND_SIZE>,
 }
 
 impl FakeRxWithIdle {
@@ -163,15 +161,12 @@ impl FakeRxWithIdle {
     ///
     /// # Arguments
     /// * `responses` - A list of expected commands and their responses.
-    /// * `tx_channel` - The channel for transmitting AT-commands.
+    /// * `pipe` - The pipe for transmitting AT-commands.
     pub fn new(
         responses: Vec<(&'static str, &'static str), 10>,
-        tx_channel: &'static TxChannelType,
+        pipe: &'static Pipe<RawMutex, AT_COMMAND_SIZE>,
     ) -> Self {
-        Self {
-            responses,
-            tx_channel,
-        }
+        Self { responses, pipe }
     }
 }
 
@@ -190,7 +185,10 @@ impl RxWithIdle for FakeRxWithIdle {
     }
 
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
-        let recv_command = self.tx_channel.receive().await;
+        let mut command_buf = [0u8; AT_COMMAND_SIZE];
+        let len = self.pipe.read(&mut command_buf).await;
+        let recv_command =
+            core::str::from_utf8(&command_buf[..len]).map_err(|_| Error::StringEncodingError)?;
         if let Some((command, response)) = self.responses.first() {
             assert_eq!(command, &recv_command);
             let bytes = response.as_bytes();
@@ -200,25 +198,6 @@ impl RxWithIdle for FakeRxWithIdle {
         } else {
             Err(Error::TimeoutError)
         }
-    }
-}
-
-pub struct ChannelWriter(pub &'static TxChannelType);
-
-impl ErrorType for ChannelWriter {
-    type Error = Error;
-}
-
-impl Write for ChannelWriter {
-    async fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
-        let s = core::str::from_utf8(buffer).map_err(|_| Error::StringEncodingError)?;
-        let s = String::from_str(s).map_err(|_| Error::BufferTooSmallError)?;
-        self.0.send(s).await;
-        Ok(buffer.len())
-    }
-
-    async fn flush(&mut self) -> Result<(), Self::Error> {
-        Ok(())
     }
 }
 

@@ -1,13 +1,12 @@
 use core::str::FromStr;
 use embassy_executor::{Executor, Spawner};
 use embassy_sync::channel::Channel;
+use embassy_sync::pipe::Pipe;
 use embassy_time::Duration;
 use heapless::{String, Vec};
 use static_cell::StaticCell;
-use yaroc_common::at::response::{CommandResponse, FromModem};
-use yaroc_common::at::uart::{
-    AtUartTrait, ChannelWriter, FakeRxWithIdle, MAIN_RX_CHANNEL, TxChannelType,
-};
+use yaroc_common::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
+use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL};
 use yaroc_common::{at::uart::AtUart, error::Error};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -32,7 +31,7 @@ fn uart_test() {
 
 #[embassy_executor::task]
 async fn main(spawner: Spawner) {
-    static TX_CHANNEL: TxChannelType = Channel::new();
+    static TX_PIPE: Pipe<yaroc_common::RawMutex, AT_COMMAND_SIZE> = Pipe::new();
     let rx = FakeRxWithIdle::new(
         Vec::from_array([
             ("ATI\r", "Fake modem\r\n+URC: 123\r\nOK"),
@@ -41,9 +40,9 @@ async fn main(spawner: Spawner) {
             ("AT+QCSQ\r", "Text"),
             ("AT+CEREG?\r", ""),
         ]),
-        &TX_CHANNEL,
+        &TX_PIPE,
     );
-    let mut at_uart = AtUart::new(ChannelWriter(&TX_CHANNEL), rx);
+    let mut at_uart = AtUart::new(&TX_PIPE, rx);
     at_uart.spawn_rx(&[urc_handler], spawner);
 
     let response = at_uart.call_at_timeout("I", Duration::from_millis(10), None).await.unwrap();

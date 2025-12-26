@@ -61,6 +61,12 @@ impl From<core::fmt::Error> for Error {
     }
 }
 
+impl From<core::convert::Infallible> for Error {
+    fn from(_: core::convert::Infallible) -> Self {
+        unreachable!()
+    }
+}
+
 #[cfg(feature = "nrf")]
 impl From<embassy_nrf::uarte::Error> for Error {
     fn from(e: embassy_nrf::uarte::Error) -> Self {
