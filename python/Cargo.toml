@@ -11,8 +11,6 @@ default = []
 walkdir = "2.3.2"
 
 [dependencies]
-yaroc-common = { path = "../common" }
-yaroc-receiver = { path = "../receiver" }
 
 chrono = { workspace = true, default-features = true }
 clap = { workspace = true }
@@ -27,6 +25,8 @@ regex = "1.11"
 thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
 tokio-serial.workspace = true
+yaroc-common = { path = "../common" }
+yaroc-receiver = { path = "../receiver" }
 
 [lib]
 name = "yaroc_rs"

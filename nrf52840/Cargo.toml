@@ -10,16 +10,15 @@ edition = "2024"
 default = []
 
 [dependencies]
-yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
-
-defmt = { workspace = true }
-defmt-rtt = "1.0"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
 
 chrono = { workspace = true }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5.0"
+
+defmt = { workspace = true }
+defmt-rtt = "1.0"
+embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-embedded-hal = "0.5.0"
 embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
 embassy-futures = { workspace = true, features = ["defmt"] }
@@ -27,14 +26,15 @@ embassy-nrf = { workspace = true, features = ["defmt"] }
 embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-usb = { workspace = true, features = ["defmt"] }
-embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
 # embedded-io-async = "0.7"
 femtopb = { workspace = true }
 heapless =  { workspace = true }
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"]}
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }
 sequential-storage = "7.0"
 serde = { workspace = true }
-static_cell = "2.1.1"
+static_cell = { workspace = true } #unified
 thiserror = { workspace = true }
+yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
