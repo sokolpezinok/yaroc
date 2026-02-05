@@ -29,7 +29,8 @@ class RocClient(Client):
             client_session=session, raise_for_status=True, retry_options=retry_options
         )
         async with self.client:
-            await asyncio.sleep(10000000)  # We need to sleep, otherwise the client will be GC-ed
+            # Sleep forever
+            await asyncio.get_running_loop().create_future()
 
     async def send_punch(
         self,

@@ -44,7 +44,8 @@ class UsbSerialManager:
             else:
                 self._handler.remove_device(device_node)
 
-        await asyncio.sleep(10000000)
+        # Sleep forever
+        await asyncio.get_running_loop().create_future()
 
     def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
         try:

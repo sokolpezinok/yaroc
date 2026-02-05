@@ -2,7 +2,7 @@ import logging
 import math
 import random
 import sys
-from asyncio import Lock, sleep
+from asyncio import Lock, sleep, get_running_loop
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Dict
@@ -188,7 +188,8 @@ class SIM7020MqttClient(Client):
     async def loop(self):
         async with self._lock:
             await self._sim7020.setup()
-        await sleep(10000000.0)
+        # Sleep forever
+        await get_running_loop().create_future()
 
     async def _send_punches(self, punches: list[bytes]) -> list[bool]:
         punches_proto = Punches()

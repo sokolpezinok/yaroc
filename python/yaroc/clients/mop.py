@@ -149,7 +149,7 @@ class MopClient(Client):
             client_session=session, raise_for_status=True, retry_options=retry_options
         )
         async with self.client:
-            await asyncio.sleep(1000000)
+            await asyncio.get_running_loop().create_future()
 
     @staticmethod
     def results_from_file(filename: str) -> List[MeosResult]:
