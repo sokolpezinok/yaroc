@@ -9,7 +9,7 @@ use std::fmt;
 
 use crate::error::Error;
 use crate::system_info::{HostInfo, MacAddress};
-use yaroc_common::status::Position;
+use yaroc_common::status::{Position, SignalStrength};
 
 /// RSSI and SNR of a received LoRa packet.
 #[derive(Clone, Debug, PartialEq)]
@@ -40,6 +40,19 @@ impl RssiSnr {
     /// Adds distance information to the `RssiSnr`.
     pub fn add_distance(&mut self, dist_m: f32, name: &str) {
         self.distance = Some((dist_m, name.to_owned()));
+    }
+
+    /// Returns the signal strength of the LoRa connection
+    pub fn signal_strength(&self) -> SignalStrength {
+        if self.rssi_dbm >= -100 && self.snr >= 0.0 {
+            SignalStrength::Excellent
+        } else if self.rssi_dbm >= -115 && self.snr >= -5.0 {
+            SignalStrength::Good
+        } else if self.rssi_dbm >= -125 && self.snr >= -10.0 {
+            SignalStrength::Fair
+        } else {
+            SignalStrength::Weak
+        }
     }
 }
 
@@ -519,6 +532,31 @@ mod test_meshtastic {
             log_message.metrics,
             MshMetrics::EnvironmentMetrics(47.0, 84.0)
         );
+    }
+
+    #[test]
+    fn test_signal_strength() {
+        use yaroc_common::status::SignalStrength;
+        let mut rssi_snr = RssiSnr::new(-90, 5.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Excellent);
+
+        rssi_snr = RssiSnr::new(-100, 0.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Excellent);
+
+        rssi_snr = RssiSnr::new(-105, -5.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Good);
+
+        rssi_snr = RssiSnr::new(-115, -5.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Good);
+
+        rssi_snr = RssiSnr::new(-115, -10.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Fair);
+
+        rssi_snr = RssiSnr::new(-125, -10.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Fair);
+
+        rssi_snr = RssiSnr::new(-130, -20.0).unwrap();
+        assert_eq!(rssi_snr.signal_strength(), SignalStrength::Weak);
     }
 }
 
