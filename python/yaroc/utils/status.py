@@ -45,8 +45,7 @@ class StatusDrawer:
             table.append(
                 [
                     node_info.name,
-                    str(node_info.rsrp_dbm) if node_info.rsrp_dbm is not None else "",
-                    f"{node_info.snr_db:.0f}" if node_info.snr_db is not None else "",
+                    node_info.signal_strength,
                     ",".join(str(code) for code in node_info.codes),
                     human_time(node_info.last_update),
                     human_time(node_info.last_punch),
@@ -103,7 +102,7 @@ class StatusDrawer:
         logging.info("Drawing new status table")
         image = StatusDrawer.draw_table(
             [
-                ["name", "rssi", "SNR", "code", "last info", "last punch"],
+                ["name", "signal", "code", "last info", "last punch"],
             ]
             + self.generate_info_table(node_infos),
             self.epd.height,

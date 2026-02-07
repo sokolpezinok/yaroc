@@ -113,11 +113,11 @@ impl CellSignalInfo {
             CellNetworkType::NbIotEcl2 => SignalStrength::Weak,
             CellNetworkType::Lte | CellNetworkType::LteM => {
                 // TODO: might need different scale for LTE
-                if self.rsrp_dbm >= -95 && self.snr_cb >= 100 {
+                if self.rsrp_dbm >= -95 && self.snr_cb >= 50 {
                     SignalStrength::Excellent
-                } else if self.rsrp_dbm >= -105 && self.snr_cb >= 50 {
+                } else if self.rsrp_dbm >= -105 && self.snr_cb >= 0 {
                     SignalStrength::Good
-                } else if self.rsrp_dbm >= -115 && self.snr_cb >= 0 {
+                } else if self.rsrp_dbm >= -115 && self.snr_cb >= -50 {
                     SignalStrength::Fair
                 } else {
                     SignalStrength::Weak

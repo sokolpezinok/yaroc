@@ -27,6 +27,16 @@ pub enum SignalInfo {
     Meshtastic(RssiSnr),
 }
 
+impl SignalInfo {
+    pub fn signal_strength(&self) -> SignalStrength {
+        match self {
+            SignalInfo::Unknown => SignalStrength::Disconnected,
+            SignalInfo::Cell(cell_signal_info) => cell_signal_info.signal_strength(),
+            SignalInfo::Meshtastic(rssi_snr) => rssi_snr.signal_strength(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct NodeInfo {
     pub name: String,

@@ -3,7 +3,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 use yaroc_receiver::logs::CellularLogMessage as CellularLogMessageRs;
 use yaroc_receiver::meshtastic::MeshtasticLog as MeshtasticLogRs;
-use yaroc_receiver::state::{NodeInfo as NodeInfoRs, SignalInfo};
+use yaroc_receiver::state::NodeInfo as NodeInfoRs;
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -99,8 +99,7 @@ impl From<MeshtasticLogRs> for MeshtasticLog {
 #[derive(Clone)]
 pub struct NodeInfo {
     pub name: String,
-    pub rsrp_dbm: Option<i16>,
-    pub snr_db: Option<f32>,
+    pub signal_strength: String,
     codes: Vec<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     pub last_punch: Option<DateTime<FixedOffset>>,
@@ -108,18 +107,17 @@ pub struct NodeInfo {
 
 impl From<NodeInfoRs> for NodeInfo {
     fn from(node_info: NodeInfoRs) -> Self {
-        let (rsrp_dbm, snr_db) = match node_info.signal_info {
-            SignalInfo::Unknown => (None, None),
-            SignalInfo::Cell(cell_signal_info) => (
-                Some(cell_signal_info.rsrp_dbm),
-                Some(cell_signal_info.snr_cb as f32 / 10.0),
-            ),
-            SignalInfo::Meshtastic(rssi_snr) => (Some(rssi_snr.rssi_dbm), Some(rssi_snr.snr)),
-        };
+        let signal_strength = match node_info.signal_info.signal_strength() {
+            yaroc_common::status::SignalStrength::Disconnected => "☆☆☆☆",
+            yaroc_common::status::SignalStrength::Weak => "★☆☆☆",
+            yaroc_common::status::SignalStrength::Fair => "★★☆☆",
+            yaroc_common::status::SignalStrength::Good => "★★★☆",
+            yaroc_common::status::SignalStrength::Excellent => "★★★★",
+        }
+        .to_owned();
         Self {
             name: node_info.name,
-            rsrp_dbm,
-            snr_db,
+            signal_strength,
             codes: node_info.codes,
             last_update: node_info.last_update,
             last_punch: node_info.last_punch,
