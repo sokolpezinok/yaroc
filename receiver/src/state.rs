@@ -8,6 +8,7 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
+use yaroc_common::status::SignalStrength;
 
 use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
@@ -84,6 +85,14 @@ impl CellularNodeStatus {
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
+        }
+    }
+
+    /// Returns the signal strength of the cellular connection
+    pub fn signal_strength(&self) -> SignalStrength {
+        match self.state {
+            Some(cell_signal_info) => cell_signal_info.signal_strength(),
+            None => SignalStrength::Disconnected,
         }
     }
 }
@@ -684,5 +693,20 @@ mod test_meshtastic {
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
+    }
+
+    #[test]
+    fn test_cellular_node_signal_strength() {
+        use yaroc_common::status::{CellNetworkType, CellSignalInfo};
+        let mut status = CellularNodeStatus::default();
+        assert_eq!(status.signal_strength(), SignalStrength::Disconnected);
+
+        status.state = Some(CellSignalInfo {
+            network_type: CellNetworkType::Lte,
+            rsrp_dbm: -90,
+            snr_cb: 110,
+            cellid: None,
+        });
+        assert_eq!(status.signal_strength(), SignalStrength::Excellent);
     }
 }

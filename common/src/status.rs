@@ -83,6 +83,52 @@ pub struct CellSignalInfo {
     pub cellid: Option<u32>,
 }
 
+/// Signal strength of the cellular connection
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SignalStrength {
+    /// Disconnected
+    Disconnected = 0,
+    /// Weak signal
+    Weak = 1,
+    /// Fair signal
+    Fair = 2,
+    /// Good signal
+    Good = 3,
+    /// Excellent signal
+    Excellent = 4,
+}
+
+impl CellSignalInfo {
+    /// Returns the signal strength based on the network type and signal quality
+    pub fn signal_strength(&self) -> SignalStrength {
+        match self.network_type {
+            CellNetworkType::NbIotEcl0 => {
+                if self.rsrp_dbm >= -100 && self.snr_cb >= 100 {
+                    SignalStrength::Excellent
+                } else {
+                    SignalStrength::Good
+                }
+            }
+            CellNetworkType::NbIotEcl1 => SignalStrength::Fair,
+            CellNetworkType::NbIotEcl2 => SignalStrength::Weak,
+            CellNetworkType::Lte | CellNetworkType::LteM => {
+                // TODO: might need different scale for LTE
+                if self.rsrp_dbm >= -95 && self.snr_cb >= 100 {
+                    SignalStrength::Excellent
+                } else if self.rsrp_dbm >= -105 && self.snr_cb >= 50 {
+                    SignalStrength::Good
+                } else if self.rsrp_dbm >= -115 && self.snr_cb >= 0 {
+                    SignalStrength::Fair
+                } else {
+                    SignalStrength::Weak
+                }
+            }
+            CellNetworkType::Umts => todo!(),
+            CellNetworkType::Unknown => todo!(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
     pub lat: f32,
@@ -293,5 +339,49 @@ mod test {
             panic!("Wrong proto type");
         };
         assert!(mch_proto == mch_proto_expected);
+    }
+
+    #[test]
+    fn test_signal_strength_ltem() {
+        let mut info = CellSignalInfo {
+            network_type: CellNetworkType::LteM,
+            rsrp_dbm: -90,
+            snr_cb: 110,
+            cellid: None,
+        };
+        assert_eq!(info.signal_strength(), SignalStrength::Excellent);
+
+        info.rsrp_dbm = -100;
+        info.snr_cb = 60;
+        assert_eq!(info.signal_strength(), SignalStrength::Good);
+
+        info.rsrp_dbm = -110;
+        info.snr_cb = 10;
+        assert_eq!(info.signal_strength(), SignalStrength::Fair);
+
+        info.rsrp_dbm = -120;
+        info.snr_cb = -10;
+        assert_eq!(info.signal_strength(), SignalStrength::Weak);
+    }
+
+    #[test]
+    fn test_signal_strength_nbiot() {
+        let mut info = CellSignalInfo {
+            network_type: CellNetworkType::NbIotEcl0,
+            rsrp_dbm: -90,
+            snr_cb: 110,
+            cellid: None,
+        };
+        assert_eq!(info.signal_strength(), SignalStrength::Excellent);
+
+        info.rsrp_dbm = -100;
+        info.snr_cb = 50;
+        assert_eq!(info.signal_strength(), SignalStrength::Good);
+
+        info.network_type = CellNetworkType::NbIotEcl1;
+        assert_eq!(info.signal_strength(), SignalStrength::Fair);
+
+        info.network_type = CellNetworkType::NbIotEcl2;
+        assert_eq!(info.signal_strength(), SignalStrength::Weak);
     }
 }
