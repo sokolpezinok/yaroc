@@ -11,7 +11,7 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
-use crate::at::response::CommandResponse;
+use crate::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
 use crate::send_punch::SendPunchCommand;
@@ -183,7 +183,16 @@ impl<M: ModemHw> ModemManager<M> {
     }
 
     /// Configures the modem with the current settings (APN, RAT, Bands).
-    pub async fn configure(&self, bg77: &mut M) -> crate::Result<()> {
+    ///
+    /// Returns the current firmware version.
+    pub async fn configure(&self, bg77: &mut M) -> crate::Result<String<AT_COMMAND_SIZE>> {
+        let firmware = bg77.call_at("+CGMR", None).await?.lines().first().and_then(|x| {
+            if let FromModem::Line(line) = x {
+                Some(line.clone())
+            } else {
+                None
+            }
+        });
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         bg77.call_at(&cmd, None).await?;
         bg77.call_at("+CEREG=2", None).await?;
@@ -200,7 +209,7 @@ impl<M: ModemHw> ModemManager<M> {
         bg77.call_at(&cmd, None).await?;
         let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
         bg77.call_at(&cmd, None).await?;
-        Ok(())
+        firmware.ok_or(Error::ModemError)
     }
 
     /// Registers the modem to the network.
@@ -259,6 +268,7 @@ mod test {
         let modem_manager = ModemManager::<FakeModem>::new(config);
 
         let mut bg77 = FakeModem::new(&[
+            ("AT+CGMR", "fake-firmware"),
             ("AT+CGDCONT=1,\"IP\",\"test-apn\"", ""),
             ("AT+CEREG=2", ""),
             ("AT+CGATT=1", ""),
@@ -266,7 +276,8 @@ mod test {
             ("AT+QCFG=\"iotopmode\",2,1", ""),
             ("AT+QCFG=\"band\",0,4,80000", ""),
         ]);
-        assert!(block_on(modem_manager.configure(&mut bg77)).is_ok());
+        let firmware = block_on(modem_manager.configure(&mut bg77));
+        assert!(firmware.is_ok());
         assert!(bg77.all_done());
     }
 }

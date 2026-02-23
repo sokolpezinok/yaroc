@@ -5,10 +5,11 @@ use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant};
 use femtopb::{Message, repeated};
-use heapless::{Vec, format};
+use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 
+use crate::at::response::AT_COMMAND_SIZE;
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
@@ -202,14 +203,20 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
         self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
-        self.modem_manager.configure(&mut self.bg77).await?;
+        let firmware = self.modem_manager.configure(&mut self.bg77).await?;
+        info!("Firmware version: {}", firmware);
 
         let _ = self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await;
         Ok(())
     }
 
     /// Configures the modem
-    pub async fn configure_modem(&mut self, modem_config: ModemConfig) -> crate::Result<()> {
+    ///
+    /// Returns the current firmware version.
+    pub async fn configure_modem(
+        &mut self,
+        modem_config: ModemConfig,
+    ) -> crate::Result<String<AT_COMMAND_SIZE>> {
         self.modem_manager.update_config(modem_config);
         self.modem_manager.configure(&mut self.bg77).await
     }

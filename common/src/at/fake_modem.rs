@@ -66,9 +66,15 @@ impl AtUartTrait for FakeModem {
         );
         let responses: Vec<_, _> = if at_response_raw.is_empty() {
             [FromModem::Ok].into()
-        } else {
+        } else if at_response_raw.starts_with('+') && at_response_raw.contains(": ") {
             [
                 FromModem::CommandResponse(CommandResponse::new(at_response_raw.as_str()).unwrap()),
+                FromModem::Ok,
+            ]
+            .into()
+        } else {
+            [
+                FromModem::Line(String::from_str(at_response_raw.as_str()).unwrap()),
                 FromModem::Ok,
             ]
             .into()

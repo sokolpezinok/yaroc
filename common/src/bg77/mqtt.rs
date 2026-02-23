@@ -420,6 +420,7 @@ mod test {
 
     #[test]
     fn test_mqtt_wrong_broker_disconnects_first() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut client_config = MqttConfig::default();
         client_config.url = String::from_str("correct.broker.io").unwrap();
         client_config.name = String::from_str("test_client").unwrap();
@@ -443,6 +444,7 @@ mod test {
 
     #[test]
     fn test_mqtt_custom_port() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut client_config = MqttConfig::default();
         client_config.port = 8883;
         client_config.name = String::from_str("test_client").unwrap();
@@ -461,6 +463,7 @@ mod test {
 
     #[test]
     fn test_mqtt_already_connected() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
@@ -475,6 +478,7 @@ mod test {
 
     #[test]
     fn test_mqtt_disconnect_ok() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0")]);
 
         let client = MqttClient::<_>::new(MqttConfig::default(), 2);
@@ -484,6 +488,7 @@ mod test {
 
     #[test]
     fn test_mqtt_send_ok() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,0")]);
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
@@ -494,6 +499,7 @@ mod test {
 
     #[test]
     fn test_mqtt_send_timeout() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,2")]);
         let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
