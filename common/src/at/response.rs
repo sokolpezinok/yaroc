@@ -110,7 +110,7 @@ impl CommandResponse {
     fn pick_values<const N: usize>(
         &self,
         indices: [usize; N],
-    ) -> Result<Vec<String<AT_VALUE_LEN>, N>, Error> {
+    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, N>> {
         let values = self.values();
         if !indices.iter().all(|idx| *idx < values.len()) {
             return Err(Error::ModemError);
@@ -122,7 +122,7 @@ impl CommandResponse {
     }
 
     /// Parses the values of the command response into a vector of a specified type `T`.
-    pub fn parse_values<T: FromStr>(&self) -> Result<Vec<T, AT_VALUE_COUNT>, Error> {
+    pub fn parse_values<T: FromStr>(&self) -> crate::Result<Vec<T, AT_VALUE_COUNT>> {
         self.values()
             .iter()
             .map(|val| str::parse::<T>(val).map_err(|_| Error::ParseError))
@@ -158,6 +158,17 @@ impl FromModem {
     /// Returns `true` if the `FromModem` variant indicates a terminal response (Ok, Error, Eof).
     pub fn terminal(&self) -> bool {
         matches!(self, FromModem::Ok | FromModem::Error | FromModem::Eof)
+    }
+
+    /// Constructs `FromModem` from a line returned by the modem.
+    pub fn from_line(line: &str) -> crate::Result<Self> {
+        // TODO: consider also adding "OK, ERROR, ..." parsing as well
+        match CommandResponse::new(line) {
+            Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
+            _ => String::from_str(line)
+                .map(FromModem::Line)
+                .map_err(|_| Error::BufferTooSmallError),
+        }
     }
 }
 

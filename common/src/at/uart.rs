@@ -6,7 +6,6 @@
 //! command-specific replies.
 
 use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
-use core::str::FromStr;
 #[cfg(feature = "defmt")]
 use defmt::{self, debug};
 use embassy_executor::Spawner;
@@ -14,7 +13,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, Instant, WithTimeout};
 use embedded_io_async::Write;
-use heapless::{String, Vec, format};
+use heapless::{Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
 
@@ -70,12 +69,7 @@ impl AtRxBroker {
             let to_send = match line.trim() {
                 "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
                 "ERROR" => Ok(FromModem::Error),
-                line => match CommandResponse::new(line) {
-                    Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
-                    _ => String::from_str(line)
-                        .map(FromModem::Line)
-                        .map_err(|_| Error::BufferTooSmallError),
-                },
+                line => FromModem::from_line(line),
             };
 
             if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref()
@@ -411,7 +405,9 @@ where
 #[cfg(test)]
 mod test_at {
     use super::*;
+    use core::str::FromStr;
     use embassy_futures::block_on;
+    use heapless::String;
 
     #[test]
     fn test_at_broker() -> crate::Result<()> {
