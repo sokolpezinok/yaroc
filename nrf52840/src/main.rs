@@ -1,13 +1,11 @@
 #![no_std]
 #![no_main]
 
-use core::str::FromStr;
-
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::Duration;
-use heapless::String;
+use heapless::format;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
@@ -47,7 +45,7 @@ async fn main(spawner: Spawner) {
     let mut flash = Flash::new(&flash_mutex);
     let mut buffer = [0; 4096];
 
-    let device_config = match flash.read(ValueIndex::DeviceConfig, &mut buffer).await {
+    let _device_config = match flash.read(ValueIndex::DeviceConfig, &mut buffer).await {
         Ok(config) => config,
         Err(err) => {
             error!("Error reading device config from flash: {}", err);
@@ -57,15 +55,11 @@ async fn main(spawner: Spawner) {
     };
 
     let mqtt_config = MqttConfig {
-        name: String::from_str(device_config.map(|x| x.name).unwrap_or("spe06")).unwrap(),
+        name: format!(20; "{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
     };
-    info!(
-        "Device initialized: {}/{}",
-        mqtt_config.name.as_str(),
-        mqtt_config.mac_address.as_str()
-    );
+    info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
     ble.must_spawn(spawner);
     usb.must_spawn(spawner);

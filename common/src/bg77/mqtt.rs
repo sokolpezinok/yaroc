@@ -312,6 +312,7 @@ impl<M: ModemHw> MqttClient<M> {
                 info!("Will connect to MQTT");
                 let cmd = match &self.config.credentials {
                     Some((username, password)) => {
+                        // TODO: mentioning nrf52840 is out of place in this crate
                         format!(100; "+QMTCONN={cid},\"nrf52840-{}\",\"{username}\",\"{password}\"", self.config.name)?
                     }
                     None => format!(100; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?,
