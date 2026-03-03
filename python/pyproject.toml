@@ -5,7 +5,7 @@ authors = [
   {name = "Lukáš Poláček", email = "lukas@polacek.email" }
 ]
 description = "Yet Another ROC, radio online control"
-license = {file = "../LICENSE"}
+license = {text = "GPL-3.0-or-later"}
 keywords = ["sport", "orienteering", "split times", "online control", "radio control"]
 requires-python = ">=3.11"
 classifiers = [
