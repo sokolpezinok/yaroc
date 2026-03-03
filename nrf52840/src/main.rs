@@ -3,7 +3,7 @@
 
 use core::str::FromStr;
 
-use defmt::info;
+use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::Duration;
@@ -46,8 +46,15 @@ async fn main(spawner: Spawner) {
 
     let mut flash = Flash::new(&flash_mutex);
     let mut buffer = [0; 4096];
-    let device_config: Option<DeviceConfig> =
-        flash.read(ValueIndex::DeviceConfig, &mut buffer).await.unwrap();
+
+    let device_config = match flash.read(ValueIndex::DeviceConfig, &mut buffer).await {
+        Ok(config) => config,
+        Err(err) => {
+            error!("Error reading device config from flash: {}", err);
+            // TODO: also write the default config here
+            Some(DeviceConfig::default())
+        }
+    };
 
     let mqtt_config = MqttConfig {
         name: String::from_str(device_config.map(|x| x.name).unwrap_or("spe06")).unwrap(),

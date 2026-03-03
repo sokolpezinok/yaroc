@@ -53,12 +53,9 @@ pub struct Device {
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
 
-#[derive(Clone, femtopb::Message)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct DeviceConfig<'a> {
-    #[femtopb(string, tag = 1)]
     pub name: &'a str,
-    #[femtopb(unknown_fields)]
-    pub unknown_fields: femtopb::UnknownFields<'a>,
 }
 
 impl Default for Device {

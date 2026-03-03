@@ -28,12 +28,11 @@ embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"
 embassy-usb = { workspace = true, features = ["defmt"] }
 embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
 # embedded-io-async = "0.7"
-femtopb = { workspace = true }
 heapless =  { workspace = true }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }
-sequential-storage = "7.0"
+sequential-storage = { version = "7.1", features = ["postcard"] }
 serde = { workspace = true }
 static_cell = { workspace = true } #unified
 thiserror = { workspace = true }

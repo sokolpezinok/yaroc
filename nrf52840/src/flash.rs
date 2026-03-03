@@ -1,10 +1,9 @@
 use embassy_embedded_hal::flash::partition::Partition;
 use embassy_sync::mutex::Mutex;
-use femtopb::Message;
 use nrf_softdevice::Flash as NrfFlash;
 use sequential_storage::{
     cache::NoCache,
-    map::{MapConfig, MapStorage, SerializationError, Value},
+    map::{MapConfig, MapStorage, PostcardValue, Value},
 };
 use yaroc_common::{RawMutex, error::Error};
 
@@ -21,20 +20,7 @@ pub struct Flash<'a> {
     map_storage: MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>,
 }
 
-impl<'a> Value<'a> for DeviceConfig<'a> {
-    fn serialize_into(&self, mut buffer: &mut [u8]) -> Result<usize, SerializationError> {
-        self.encode(&mut buffer).map_err(|_| SerializationError::BufferTooSmall)?;
-        let len = self.encoded_len();
-        Ok(len)
-    }
-
-    fn deserialize_from(buffer: &'a [u8]) -> Result<(Self, usize), SerializationError> {
-        Self::decode(buffer).map_err(|_| SerializationError::InvalidData).map(|d| {
-            let len = d.encoded_len();
-            (d, len)
-        })
-    }
-}
+impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
 
 #[repr(u8)]
 pub enum ValueIndex {
