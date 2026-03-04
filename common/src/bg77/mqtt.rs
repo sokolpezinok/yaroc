@@ -130,7 +130,7 @@ impl Default for MqttConfig {
             url: String::from_str("broker.emqx.io").unwrap(),
             credentials: None,
             packet_timeout: Duration::from_secs(35),
-            name: String::new(),
+            name: String::from_str("test_client").unwrap(),
             mac_address: String::from_str("deadbeef").unwrap(),
             minicallhome_interval: Duration::from_secs(30),
             port: 1883,

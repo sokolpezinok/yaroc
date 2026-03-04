@@ -88,7 +88,7 @@ fn test_mqtt_connect_ok() {
     expect_call_at(&mut bg77, eq("+QMTCONN?"), eq(None), Some("+QMTCONN: 1,1"));
     expect_call_at(
         &mut bg77,
-        str::starts_with("+QMTCONN=1,\"nrf52840-"),
+        str::starts_with("+QMTCONN=1,\"test_client\""),
         always(),
         Some("+QMTCONN: 1,0,0"),
     );
@@ -117,7 +117,7 @@ fn test_mqtt_connect_login_ok() {
     expect_call_at(&mut bg77, eq("+QMTCONN?"), eq(None), Some("+QMTCONN: 1,1"));
     expect_call_at(
         &mut bg77,
-        str::starts_with("+QMTCONN=1,\"nrf52840-"),
+        str::starts_with("+QMTCONN=1,\"test_client\""),
         always(),
         Some("+QMTCONN: 1,0,0"),
     );
