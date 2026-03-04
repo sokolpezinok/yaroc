@@ -8,6 +8,7 @@ use embassy_time::{Duration, Instant};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
+use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -120,6 +121,8 @@ pub struct MqttConfig {
     /// The port of the MQTT broker.
     pub port: u16,
 }
+
+impl PostcardValue<'_> for MqttConfig {}
 
 impl Default for MqttConfig {
     fn default() -> Self {
@@ -312,10 +315,9 @@ impl<M: ModemHw> MqttClient<M> {
                 info!("Will connect to MQTT");
                 let cmd = match &self.config.credentials {
                     Some((username, password)) => {
-                        // TODO: mentioning nrf52840 is out of place in this crate
-                        format!(100; "+QMTCONN={cid},\"nrf52840-{}\",\"{username}\",\"{password}\"", self.config.name)?
+                        format!(100; "+QMTCONN={cid},\"{}\",\"{username}\",\"{password}\"", self.config.name)?
                     }
-                    None => format!(100; "+QMTCONN={cid},\"nrf52840-{}\"", self.config.name)?,
+                    None => format!(100; "+QMTCONN={cid},\"{}\"", self.config.name)?,
                 };
                 let (_, res, reason) = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
@@ -434,7 +436,7 @@ mod test {
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
             ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
-            ("AT+QMTCONN=1,\"nrf52840-test_client\"", "+QMTCONN: 1,0,0"),
+            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,0"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);

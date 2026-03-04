@@ -13,6 +13,7 @@ use embassy_nrf::{bind_interrupts, saadc, temp};
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::mutex::Mutex;
 use heapless::String;
+use sequential_storage::map::PostcardValue;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::si_uart::SiUart;
@@ -57,6 +58,8 @@ static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
 pub struct DeviceConfig<'a> {
     pub name: &'a str,
 }
+
+impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
 
 impl Default for Device {
     /// Initializes all the drivers and peripherals of the device

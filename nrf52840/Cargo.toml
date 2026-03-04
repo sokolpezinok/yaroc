@@ -32,7 +32,7 @@ heapless =  { workspace = true }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "5949a5b1445cc907745c6449a35577e4544cd255", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }
-sequential-storage = { version = "7.1", features = ["postcard"] }
+sequential-storage = { version = "7.1", features = ["defmt", "postcard"] }
 serde = { workspace = true }
 static_cell = { workspace = true } #unified
 thiserror = { workspace = true }

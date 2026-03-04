@@ -42,6 +42,8 @@ async fn main(spawner: Spawner) {
         ..
     } = device;
 
+    ble.must_spawn(spawner);
+
     let mut flash = Flash::new(&flash_mutex);
     let mut buffer = [0; 4096];
 
@@ -55,13 +57,12 @@ async fn main(spawner: Spawner) {
     };
 
     let mqtt_config = MqttConfig {
-        name: format!(20; "{mac_address}").unwrap(),
+        name: format!(20; "nrf52840-{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
-    ble.must_spawn(spawner);
     usb.must_spawn(spawner);
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
     spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));

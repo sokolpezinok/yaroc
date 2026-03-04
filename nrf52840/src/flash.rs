@@ -3,11 +3,9 @@ use embassy_sync::mutex::Mutex;
 use nrf_softdevice::Flash as NrfFlash;
 use sequential_storage::{
     cache::NoCache,
-    map::{MapConfig, MapStorage, PostcardValue, Value},
+    map::{MapConfig, MapStorage, Value},
 };
 use yaroc_common::{RawMutex, error::Error};
-
-use crate::device::DeviceConfig;
 
 unsafe extern "C" {
     // These symbols are provided by the linker script (memory.x)
@@ -20,11 +18,11 @@ pub struct Flash<'a> {
     map_storage: MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>,
 }
 
-impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
-
 #[repr(u8)]
 pub enum ValueIndex {
     DeviceConfig = 0,
+    ModemConfig = 1,
+    MqttConfig = 2,
 }
 
 impl<'a> Flash<'a> {
@@ -42,7 +40,7 @@ impl<'a> Flash<'a> {
 
     /// Erases the data flash memory.
     pub async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage.erase_all().await.map_err(|_| Error::FlashError)
+        self.map_storage.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
     }
 
     /// Stores a value in the flash memory.

@@ -26,6 +26,7 @@ heapless =  { workspace = true, features = ["serde"] }
 log = { workspace = true }
 postcard = { workspace = true }
 serde = { workspace = true }
+sequential-storage = { version = "7.1", features = ["postcard"] }
 thiserror = { workspace = true }
 
 [build-dependencies]
