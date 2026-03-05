@@ -2,7 +2,7 @@ use std::io::Write;
 
 use clap::Parser;
 use log::{error, info};
-use postcard::to_vec;
+use postcard::to_stdvec;
 use pyo3::prelude::*;
 use yaroc_common::{bg77::modem_manager::ModemConfig, usb::UsbCommand};
 
@@ -20,7 +20,7 @@ pub fn yaroc_cli() {
 
     let modem_config = ModemConfig::default();
 
-    let buf = to_vec::<_, 256>(&UsbCommand::ConfigureModem(modem_config)).unwrap();
+    let buf = to_stdvec::<_>(&UsbCommand::ConfigureModem(modem_config)).unwrap();
     if serial.write_all(buf.as_slice()).is_err() {
         error!("Writing to serial failed");
     } else {
