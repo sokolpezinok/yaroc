@@ -112,7 +112,7 @@ pub struct MqttConfig {
     #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,
     /// The name of the client, used to construct the MQTT client ID.
-    pub name: String<20>,
+    pub name: String<24>,
     /// The MAC address of the device, used to form MQTT topics (e.g., "yar/mac_address/topic").
     pub mac_address: String<12>,
     /// The interval at which mini call home messages are sent.

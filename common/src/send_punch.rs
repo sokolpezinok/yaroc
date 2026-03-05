@@ -204,7 +204,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     pub async fn setup(&mut self) -> crate::Result<()> {
         self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
         let firmware = self.modem_manager.configure(&mut self.bg77).await?;
-        info!("Firmware version: {}", firmware);
+        info!("Modem firmware version: {}", firmware);
 
         let _ = self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await;
         Ok(())

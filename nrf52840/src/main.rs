@@ -15,7 +15,7 @@ use yaroc_common::{
 };
 use yaroc_nrf52840::{
     self as _,
-    device::{Device, DeviceConfig},
+    device::Device,
     flash::{Flash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
@@ -47,21 +47,25 @@ async fn main(spawner: Spawner) {
     let mut flash = Flash::new(&flash_mutex);
     let mut buffer = [0; 4096];
 
-    let _device_config = match flash.read(ValueIndex::DeviceConfig, &mut buffer).await {
-        Ok(config) => config,
-        Err(err) => {
-            error!("Error reading device config from flash: {}", err);
-            // TODO: also write the default config here
-            Some(DeviceConfig::default())
-        }
-    };
-
     let mqtt_config = MqttConfig {
-        name: format!(20; "nrf52840-{mac_address}").unwrap(),
+        name: format!(24; "nrf52840-{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
+
+    let modem_config = match flash.read(ValueIndex::ModemConfig, &mut buffer).await {
+        Ok(config) => config.unwrap_or_else(|| Default::default()),
+        Err(err) => {
+            error!("Error while reading modem config from flash: {}", err);
+            let mut buffer = [0; 4096];
+            let _ = flash
+                .write(ValueIndex::ModemConfig, ModemConfig::default(), &mut buffer)
+                .await
+                .inspect_err(|e| error!("Error while writing modem config: {}", e));
+            ModemConfig::default()
+        }
+    };
 
     usb.must_spawn(spawner);
     spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
@@ -76,7 +80,6 @@ async fn main(spawner: Spawner) {
     );
     spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
-    let modem_config = ModemConfig::default();
     let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);

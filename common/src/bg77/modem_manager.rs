@@ -8,6 +8,7 @@ use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{debug, error, info, warn};
+use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
@@ -49,7 +50,7 @@ impl ModemPin for Output<'static> {
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// Radio Access Technology
-#[derive(Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RAT {
     Ltem,  // LTE-M
     NbIot, // NB-IoT
@@ -95,7 +96,7 @@ impl LteBands {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ModemConfig {
     /// Access point name (APN)
     pub apn: String<30>,
@@ -104,6 +105,8 @@ pub struct ModemConfig {
     /// LTE bands
     pub bands: LteBands,
 }
+
+impl PostcardValue<'_> for ModemConfig {}
 
 impl Default for ModemConfig {
     /// Creates a default modem configuration.
@@ -196,7 +199,6 @@ impl<M: ModemHw> ModemManager<M> {
         let cmd = format!(100; "+CGDCONT=1,\"IP\",\"{}\"", self.config.apn)?;
         bg77.call_at(&cmd, None).await?;
         bg77.call_at("+CEREG=2", None).await?;
-        let _ = bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
 
         let (nwscanseq, iotopmode) = match self.config.rat {
             RAT::Ltem => ("02", 0),
@@ -209,6 +211,8 @@ impl<M: ModemHw> ModemManager<M> {
         bg77.call_at(&cmd, None).await?;
         let cmd = format!(100; "+QCFG=\"band\",0,{:x},{:x}", self.config.bands.ltem, self.config.bands.nbiot)?;
         bg77.call_at(&cmd, None).await?;
+
+        let _ = bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
         firmware.ok_or(Error::ModemError)
     }
 
@@ -271,10 +275,10 @@ mod test {
             ("AT+CGMR", "fake-firmware"),
             ("AT+CGDCONT=1,\"IP\",\"test-apn\"", ""),
             ("AT+CEREG=2", ""),
-            ("AT+CGATT=1", ""),
             ("AT+QCFG=\"nwscanseq\",00", ""),
             ("AT+QCFG=\"iotopmode\",2,1", ""),
             ("AT+QCFG=\"band\",0,4,80000", ""),
+            ("AT+CGATT=1", ""),
         ]);
         let firmware = block_on(modem_manager.configure(&mut bg77));
         assert!(firmware.is_ok());
