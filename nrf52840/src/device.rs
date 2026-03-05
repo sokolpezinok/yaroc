@@ -98,7 +98,7 @@ impl Default for Device {
 
         let ble = Ble::new();
         let mac_address = ble.get_mac_address();
-        let flash = Mutex::<RawMutex, _>::new(ble.flash());
+        let flash_mutex = Mutex::<RawMutex, _>::new(ble.flash());
 
         Self {
             _blue_led: blue_led,
@@ -109,7 +109,7 @@ impl Default for Device {
             si_uart: SiUart::new(rx0),
             saadc,
             ble,
-            flash_mutex: flash,
+            flash_mutex,
             usb,
         }
     }

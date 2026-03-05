@@ -15,7 +15,7 @@ unsafe extern "C" {
 
 /// Flash abstraction for storing serializeable objects.
 pub struct Flash<'a> {
-    map_storage: MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>,
+    map_storage: Mutex<RawMutex, MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>>,
 }
 
 #[repr(u8)]
@@ -35,12 +35,14 @@ impl<'a> Flash<'a> {
         let config = MapConfig::new(0..data_size);
         let map_storage = MapStorage::new(map_partition, config, NoCache::new());
 
-        Self { map_storage }
+        Self {
+            map_storage: Mutex::new(map_storage),
+        }
     }
 
     /// Erases the data flash memory.
     pub async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
+        self.map_storage.lock().await.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
     }
 
     /// Stores a value in the flash memory.
@@ -52,6 +54,8 @@ impl<'a> Flash<'a> {
     ) -> crate::Result<()> {
         let key = key as u8;
         self.map_storage
+            .lock()
+            .await
             .store_item(buffer, &key, &value)
             .await
             .map_err(|_| Error::FlashError)
@@ -64,6 +68,11 @@ impl<'a> Flash<'a> {
         buffer: &'a mut [u8],
     ) -> crate::Result<Option<V>> {
         let key = key as u8;
-        self.map_storage.fetch_item(buffer, &key).await.map_err(|_| Error::FlashError)
+        self.map_storage
+            .lock()
+            .await
+            .fetch_item(buffer, &key)
+            .await
+            .map_err(|_| Error::FlashError)
     }
 }
