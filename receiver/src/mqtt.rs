@@ -2,10 +2,14 @@ use std::time::Duration;
 
 use crate::system_info::MacAddress;
 use chrono::{DateTime, Local};
+use femtopb::Message as _;
 use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use uuid::Uuid;
-use yaroc_common::error::Error;
+use yaroc_common::{
+    error::Error,
+    proto::{Disconnected, Status, status::Msg},
+};
 
 pub struct MqttConfig {
     pub url: String,
@@ -63,6 +67,7 @@ impl MqttReceiver {
             if mac.is_full() {
                 topics.push(format!("yar/{mac}/status"));
                 topics.push(format!("yar/{mac}/p"));
+                topics.push(format!("yar/{mac}/will"));
             } else {
                 topics.push(format!("yar/2/e/serial/!{mac}"));
                 if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
@@ -117,6 +122,18 @@ impl MqttReceiver {
             match &topic[16..] {
                 "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
                 "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
+                "/will" => {
+                    let status = Status {
+                        msg: Some(Msg::Disconnected(Disconnected {
+                            client_name: str::from_utf8(payload).map_err(|_| Error::ParseError)?,
+                            ..Default::default()
+                        })),
+                        ..Default::default()
+                    };
+                    let mut payload = vec![0; status.encoded_len()];
+                    status.encode(&mut payload.as_mut_slice()).unwrap();
+                    Ok(Message::CellularStatus(mac_address, now, payload))
+                }
                 _ => Err(Error::ValueError.into()),
             }
         }
@@ -173,6 +190,7 @@ mod test {
                 "yar/2/e/cha/!12345678",
                 "yar/deadbeef9876/status",
                 "yar/deadbeef9876/p",
+                "yar/deadbeef9876/will",
             ]
         );
     }

@@ -81,6 +81,12 @@ fn test_mqtt_connect_ok() {
     expect_call_at(&mut bg77, eq("+QMTCFG=\"keepalive\",1,70"), eq(None), None);
     expect_call_at(
         &mut bg77,
+        eq("+QMTCFG=\"will\",1,1,1,1,\"yar/deadbeef/will\",\"test_client\""),
+        eq(None),
+        None,
+    );
+    expect_call_at(
+        &mut bg77,
         eq("+QMTOPEN=1,\"broker.emqx.io\",1883"),
         eq(Some(ACTIVATION_TIMEOUT)),
         Some("+QMTOPEN: 1,0"),
