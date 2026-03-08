@@ -6,6 +6,7 @@ use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::Duration;
 use heapless::format;
+use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
@@ -44,7 +45,11 @@ async fn main(spawner: Spawner) {
 
     ble.must_spawn(spawner);
 
-    let mut flash = Flash::new(&flash_mutex);
+    static FLASH_MUTEX: StaticCell<embassy_sync::mutex::Mutex<RawMutex, nrf_softdevice::Flash>> =
+        StaticCell::new();
+    let flash_mutex = FLASH_MUTEX.init(flash_mutex);
+
+    let mut flash = Flash::new(flash_mutex);
     let mut buffer = [0; 4096];
 
     let mqtt_config = MqttConfig {
@@ -55,7 +60,7 @@ async fn main(spawner: Spawner) {
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
     let modem_config = match flash.read(ValueIndex::ModemConfig, &mut buffer).await {
-        Ok(config) => config.unwrap_or_else(|| Default::default()),
+        Ok(config) => config.unwrap_or_default(),
         Err(err) => {
             error!("Error while reading modem config from flash: {}", err);
             let mut buffer = [0; 4096];
