@@ -256,7 +256,7 @@ impl<M: ModemHw> MqttClient<M> {
         bg77.call_at(&cmd, None).await?;
 
         let cmd = format!(100;
-            "+QMTCFG=\"will\",{cid},1,1,1,\"yar/{}/will\",\"{}\"",
+            "+QMTCFG=\"will\",{cid},1,1,0,\"yar/{}/will\",\"{}\"",
             self.config.mac_address, self.config.name
         )?;
         bg77.call_at(&cmd, None).await?;
@@ -441,7 +441,7 @@ mod test {
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
             (
-                "AT+QMTCFG=\"will\",1,1,1,1,\"yar/deadbeef/will\",\"test_client\"",
+                "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
                 "+QMTCFG: 1,0",
             ),
             ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),

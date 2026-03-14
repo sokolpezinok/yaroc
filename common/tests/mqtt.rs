@@ -81,7 +81,7 @@ fn test_mqtt_connect_ok() {
     expect_call_at(&mut bg77, eq("+QMTCFG=\"keepalive\",1,70"), eq(None), None);
     expect_call_at(
         &mut bg77,
-        eq("+QMTCFG=\"will\",1,1,1,1,\"yar/deadbeef/will\",\"test_client\""),
+        eq("+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\""),
         eq(None),
         None,
     );
