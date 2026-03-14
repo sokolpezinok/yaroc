@@ -24,7 +24,11 @@ class RocClient(Client):
 
     async def loop(self):
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=50))
-        retry_options = ExponentialRetry(attempts=5, start_timeout=3)
+        retry_options = ExponentialRetry(
+            attempts=5,
+            start_timeout=3,
+            exceptions={aiohttp.ServerDisconnectedError, OSError, aiohttp.ClientError},
+        )
         self.client = RetryClient(
             client_session=session, raise_for_status=True, retry_options=retry_options
         )
@@ -63,13 +67,9 @@ class RocClient(Client):
         }
 
         try:
-            async with self.client.post(ROC_SEND_PUNCH, data=data) as response:
-                if response.status < 300:
-                    logging.info("Punch sent to ROC")
-                    return True
-                else:
-                    logging.error("ROC error {}: {}", response.status, await response.text())
-                    return False
+            await self.client.post(ROC_SEND_PUNCH, data=data)
+            logging.info("Punch sent to ROC")
+            return True
         except Exception as e:
             logging.error(f"ROC error: {e}")
             return False
@@ -117,13 +117,9 @@ class RocClient(Client):
             }
 
         try:
-            async with self.client.get(ROC_RECEIVEDATA, params=params) as response:
-                if response.status < 300:
-                    logging.info("MiniCallHome sent to ROC")
-                    return True
-                else:
-                    logging.error(f"ROC error {response.status}: {await response.text()}")
-                    return False
+            await self.client.get(ROC_RECEIVEDATA, params=params)
+            logging.info("MiniCallHome sent to ROC")
+            return True
         except Exception as e:
             logging.error(f"ROC error: {e}")
             return False

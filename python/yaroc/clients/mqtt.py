@@ -2,7 +2,7 @@ import logging
 import math
 import random
 import sys
-from asyncio import Lock, sleep, get_running_loop
+from asyncio import Lock, get_running_loop, sleep
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Dict
