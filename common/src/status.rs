@@ -124,7 +124,7 @@ impl CellSignalInfo {
                 }
             }
             CellNetworkType::Umts => todo!(),
-            CellNetworkType::Unknown => todo!(),
+            CellNetworkType::Unknown => SignalStrength::Fair,
         }
     }
 }
