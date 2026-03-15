@@ -441,7 +441,7 @@ impl FleetState {
                     });
                 }
                 Err(err) => {
-                    error!("{}", err);
+                    error!("Error decoding punch from {}: {}", host_info.name, err);
                 }
             }
         }
