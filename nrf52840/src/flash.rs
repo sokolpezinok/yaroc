@@ -1,10 +1,11 @@
 use embassy_embedded_hal::flash::partition::Partition;
 use embassy_sync::mutex::Mutex;
-use nrf_softdevice::Flash as NrfFlash;
+use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
     cache::NoCache,
     map::{MapConfig, MapStorage, Value},
 };
+pub use yaroc_common::flash::{Flash, ValueIndex};
 use yaroc_common::{RawMutex, error::Error};
 
 unsafe extern "C" {
@@ -14,20 +15,13 @@ unsafe extern "C" {
 }
 
 /// Flash abstraction for storing serializeable objects.
-pub struct Flash<'a> {
-    map_storage: Mutex<RawMutex, MapStorage<u8, Partition<'a, RawMutex, NrfFlash>, NoCache>>,
+pub struct NrfFlash<'a> {
+    map_storage: Mutex<RawMutex, MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>>,
 }
 
-#[repr(u8)]
-pub enum ValueIndex {
-    DeviceConfig = 0,
-    ModemConfig = 1,
-    MqttConfig = 2,
-}
-
-impl<'a> Flash<'a> {
-    /// Creates a new Flash instance
-    pub fn new(flash: &'a Mutex<RawMutex, NrfFlash>) -> Self {
+impl<'a> NrfFlash<'a> {
+    /// Creates a new NrfFlash instance
+    pub fn new(flash: &'a Mutex<RawMutex, SdFlash>) -> Self {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
         let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
 
@@ -39,18 +33,25 @@ impl<'a> Flash<'a> {
             map_storage: Mutex::new(map_storage),
         }
     }
+}
 
+impl<'a> Flash for NrfFlash<'a> {
     /// Erases the data flash memory.
-    pub async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage.lock().await.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
+    async fn erase(&mut self) -> crate::Result<()> {
+        self.map_storage
+            .lock()
+            .await
+            .erase_all()
+            .await
+            .map_err(|_| Error::FlashError) //TODO: wrap the error
     }
 
     /// Stores a value in the flash memory.
-    pub async fn write<V: Value<'a>>(
+    async fn write<'b, V: Value<'b>>(
         &mut self,
         key: ValueIndex,
         value: V,
-        buffer: &'a mut [u8],
+        buffer: &'b mut [u8],
     ) -> crate::Result<()> {
         let key = key as u8;
         self.map_storage
@@ -62,10 +63,10 @@ impl<'a> Flash<'a> {
     }
 
     /// Fetches a value from the flash memory.
-    pub async fn read<V: Value<'a>>(
+    async fn read<'b, V: Value<'b>>(
         &mut self,
         key: ValueIndex,
-        buffer: &'a mut [u8],
+        buffer: &'b mut [u8],
     ) -> crate::Result<Option<V>> {
         let key = key as u8;
         self.map_storage

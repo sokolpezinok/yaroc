@@ -17,7 +17,7 @@ use yaroc_common::{
 use yaroc_nrf52840::{
     self as _,
     device::Device,
-    flash::{Flash, ValueIndex},
+    flash::{Flash, NrfFlash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
@@ -49,7 +49,7 @@ async fn main(spawner: Spawner) {
         StaticCell::new();
     let flash_mutex = FLASH_MUTEX.init(flash_mutex);
 
-    let mut flash = Flash::new(flash_mutex);
+    let mut flash = NrfFlash::new(flash_mutex);
     let mut buffer = [0; 4096];
 
     let mqtt_config = MqttConfig {
