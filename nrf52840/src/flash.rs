@@ -38,12 +38,7 @@ impl<'a> NrfFlash<'a> {
 impl<'a> Flash for NrfFlash<'a> {
     /// Erases the data flash memory.
     async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage
-            .lock()
-            .await
-            .erase_all()
-            .await
-            .map_err(|_| Error::FlashError) //TODO: wrap the error
+        self.map_storage.lock().await.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
     }
 
     /// Stores a value in the flash memory.

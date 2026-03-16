@@ -341,7 +341,12 @@ where
         // technicality, the timeout is doubled this way, but it's never a problem.
         let mut lines = self.read(timeout).await?;
         if second_read {
-            lines.extend(self.read(timeout).await?);
+            let new_lines = self.read(timeout).await?;
+            let remaining = lines.spare_capacity_mut().len();
+            if new_lines.len() <= remaining {
+                // TODO: extend by as much from `new_lines` as possibble.
+                lines.extend(new_lines);
+            }
         }
         let response = AtResponse::new(lines, command_prefix);
         debug!(
@@ -362,7 +367,11 @@ where
         let start = Instant::now();
         let mut lines = self.call_at_impl(command, call_timeout).await?;
         if let Some(response_timeout) = response_timeout {
-            lines.extend(self.read(response_timeout).await?);
+            let new_lines = self.read(response_timeout).await?;
+            let remaining = lines.spare_capacity_mut().len();
+            if new_lines.len() <= remaining {
+                lines.extend(new_lines);
+            }
         }
         let response = AtResponse::new(lines, command);
         debug!(

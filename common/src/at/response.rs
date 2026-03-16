@@ -31,7 +31,7 @@ impl Display for Substring {
 
 pub const AT_COMMAND_SIZE: usize = 90;
 pub const AT_RESPONSE_SIZE: usize = 50;
-pub const AT_LINES: usize = 4;
+pub const AT_LINES: usize = 5;
 const AT_VALUE_LEN: usize = 40;
 const AT_VALUE_COUNT: usize = 8;
 
