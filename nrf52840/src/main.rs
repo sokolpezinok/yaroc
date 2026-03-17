@@ -85,7 +85,7 @@ async fn main(spawner: Spawner) {
     );
     spawner.must_spawn(backoff_retries_loop(backoff_retries));
 
-    let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config);
+    let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config, flash);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }

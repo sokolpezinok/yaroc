@@ -2,6 +2,7 @@
 //! It uses a BG77 modem and MQTT to communicate with the server.
 
 use crate::error::Error;
+use crate::flash::NrfFlash;
 use crate::system_info::MCH_SIGNAL;
 use defmt::{error, info};
 use embassy_executor::Spawner;
@@ -23,8 +24,11 @@ use yaroc_common::{
 };
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
-pub type Bg77SendPunchType =
-    SendPunch<AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>, Output<'static>>;
+pub type Bg77SendPunchType = SendPunch<
+    AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>,
+    Output<'static>,
+    NrfFlash<'static>,
+>;
 
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);
@@ -76,13 +80,14 @@ impl SendPunchFn for Bg77SendPunchFn {
     >;
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
-        let mut send_punch = SEND_PUNCH_MUTEX
+        let mut send_punch_mutex = SEND_PUNCH_MUTEX
             .lock()
             // TODO: We avoid deadlock by adding a timeout, there might be better solutions
             .with_timeout(self.packet_timeout)
             .await
             .map_err(|_| Error::TimeoutError)?;
-        send_punch.as_mut().unwrap().send_punch_impl(&punch.punches, punch.msg_id).await
+        let send_punch = send_punch_mutex.as_mut().unwrap();
+        send_punch.send_punch_impl(&punch.punches, punch.msg_id).await
     }
 
     async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
@@ -117,11 +122,10 @@ pub async fn send_punch_event_handler(
     {
         let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
-        send_punch
+        let _ = send_punch
             .setup()
             .await
-            .inspect_err(|err| error!("Setup failed: {}", err))
-            .expect("Setup failed");
+            .inspect_err(|err| error!("Modem setup failed: {}", err));
     }
 
     loop {

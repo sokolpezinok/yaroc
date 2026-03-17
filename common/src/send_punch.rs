@@ -17,6 +17,7 @@ use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
 use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
+use crate::flash::Flash;
 use crate::proto::Punches;
 use crate::punch::SiPunch;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
@@ -40,16 +41,17 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
-pub struct SendPunch<M: ModemHw, P: ModemPin> {
+pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
     bg77: M,
     modem_pin: P,
     mqtt_client: MqttClient<M>,
     modem_manager: ModemManager<M>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
+    _flash: F,
 }
 
-impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
+impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Creates a new `SendPunch` instance.
     ///
     /// # Arguments
@@ -65,6 +67,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         spawner: Spawner,
         mqtt_config: MqttConfig,
         modem_config: ModemConfig,
+        flash: F,
     ) -> Self {
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
@@ -81,6 +84,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
             modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
+            _flash: flash,
         }
     }
 
@@ -99,6 +103,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
         modem_pin: P,
         mqtt_config: MqttConfig,
         modem_config: ModemConfig,
+        flash: F,
     ) -> Self {
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
@@ -109,6 +114,7 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
             modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
+            _flash: flash,
         }
     }
 
@@ -274,13 +280,40 @@ impl<M: ModemHw, P: ModemPin> SendPunch<M, P> {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use embassy_futures::block_on;
+    use sequential_storage::map::Value;
 
-    use crate::{at::fake_modem::FakeModem, bg77::modem_manager::FakePin};
+    use crate::{at::fake_modem::FakeModem, bg77::modem_manager::FakePin, flash::ValueIndex};
 
     use super::*;
+
+    struct FakeFlash;
+
+    impl Flash for FakeFlash {
+        async fn erase(&mut self) -> crate::Result<()> {
+            Ok(())
+        }
+
+        async fn write<'a, V: Value<'a>>(
+            &mut self,
+            _key: ValueIndex,
+            _value: V,
+            _buffer: &'a mut [u8],
+        ) -> crate::Result<()> {
+            Ok(())
+        }
+
+        async fn read<'a, V: Value<'a>>(
+            &mut self,
+            _key: ValueIndex,
+            _buffer: &'a mut [u8],
+        ) -> crate::Result<Option<V>> {
+            Ok(None)
+        }
+    }
 
     #[test]
     fn send_punch_instantiation_test() {
@@ -293,6 +326,7 @@ mod tests {
             fake_pin,
             mqtt_config,
             ModemConfig::default(),
+            FakeFlash,
         );
 
         assert!(send_punch.last_reconnect.is_none());

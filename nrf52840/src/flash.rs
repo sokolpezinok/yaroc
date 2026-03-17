@@ -16,8 +16,12 @@ unsafe extern "C" {
 
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
-    map_storage: Mutex<RawMutex, MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>>,
+    map_storage: MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>,
 }
+
+// nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
+// (single core) it is safe to move between tasks as they all run in Thread Mode.
+unsafe impl Send for NrfFlash<'_> {}
 
 impl<'a> NrfFlash<'a> {
     /// Creates a new NrfFlash instance
@@ -29,16 +33,14 @@ impl<'a> NrfFlash<'a> {
         let config = MapConfig::new(0..data_size);
         let map_storage = MapStorage::new(map_partition, config, NoCache::new());
 
-        Self {
-            map_storage: Mutex::new(map_storage),
-        }
+        Self { map_storage }
     }
 }
 
 impl<'a> Flash for NrfFlash<'a> {
     /// Erases the data flash memory.
     async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage.lock().await.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
+        self.map_storage.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
     }
 
     /// Stores a value in the flash memory.
@@ -50,8 +52,6 @@ impl<'a> Flash for NrfFlash<'a> {
     ) -> crate::Result<()> {
         let key = key as u8;
         self.map_storage
-            .lock()
-            .await
             .store_item(buffer, &key, &value)
             .await
             .map_err(|_| Error::FlashError)
@@ -64,11 +64,6 @@ impl<'a> Flash for NrfFlash<'a> {
         buffer: &'b mut [u8],
     ) -> crate::Result<Option<V>> {
         let key = key as u8;
-        self.map_storage
-            .lock()
-            .await
-            .fetch_item(buffer, &key)
-            .await
-            .map_err(|_| Error::FlashError)
+        self.map_storage.fetch_item(buffer, &key).await.map_err(|_| Error::FlashError)
     }
 }
