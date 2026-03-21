@@ -14,7 +14,7 @@ pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = crate::Result<f32>>;
 }
 
-pub static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
+pub static TEMPERATURE: Watch<RawMutex, f32, 2> = Watch::new();
 
 #[derive(Clone, Copy)]
 pub struct BatteryInfo {
@@ -162,13 +162,13 @@ pub struct MiniCallHome {
     pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<f32>,
     pub cpu_freq: Option<u32>,
-    pub timestamp: DateTime<FixedOffset>,
+    pub timestamp: Option<DateTime<FixedOffset>>,
     pub totaldatarx: u64,
     pub totaldatatx: u64,
 }
 
 impl MiniCallHome {
-    pub fn new(timestamp: DateTime<FixedOffset>) -> Self {
+    pub fn new(timestamp: Option<DateTime<FixedOffset>>) -> Self {
         Self {
             timestamp,
             ..Default::default()
@@ -207,8 +207,8 @@ impl MiniCallHome {
                 rsrp_dbm: i32::from(signal_info.rsrp_dbm),
                 signal_snr_cb: i32::from(signal_info.snr_cb),
                 cellid: signal_info.cellid.unwrap_or_default(),
-                time: Some(Timestamp {
-                    millis_epoch: self.timestamp.timestamp_millis() as u64,
+                time: self.timestamp.map(|timestamp| Timestamp {
+                    millis_epoch: timestamp.timestamp_millis() as u64,
                     ..Default::default()
                 }),
                 cpu_temperature: self.cpu_temperature.unwrap_or_default(),
@@ -225,12 +225,10 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
     type Error = crate::error::Error;
 
     fn try_from(value: MiniCallHomeProto) -> crate::Result<Self> {
-        // TODO: is missing timestamp such a big problem? Could we remove the question mark
-        // here?
-        let timestamp_millis = value.time.ok_or(Error::FormatError)?.millis_epoch;
-        let timestamp = DateTime::from_timestamp_millis(timestamp_millis as i64)
-            .ok_or(Error::FormatError)?
-            .into();
+        let timestamp = value
+            .time
+            .and_then(|t| DateTime::from_timestamp_millis(t.millis_epoch as i64))
+            .map(|t| t.into());
         let network_type = match value.network_type {
             EnumValue::Known(network_type) => network_type.into(),
             EnumValue::Unknown(_) => CellNetworkType::Unknown,
@@ -312,7 +310,10 @@ mod test {
                 cellid: Some(0x2EF46)
             }
         );
-        assert_eq!(mch.timestamp.to_rfc3339(), "2024-01-29T10:12:11.124+00:00");
+        assert_eq!(
+            mch.timestamp.unwrap().to_rfc3339(),
+            "2024-01-29T10:12:11.124+00:00"
+        );
     }
 
     #[test]

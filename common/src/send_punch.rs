@@ -147,8 +147,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
 
     /// Sends a `MiniCallHome` message, containing system information.
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mini_call_home =
-            self.system_info.mini_call_home(&mut self.bg77).await.ok_or(Error::ModemError)?;
+        let mini_call_home = self.system_info.mini_call_home(&mut self.bg77).await;
         self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
             .await
     }

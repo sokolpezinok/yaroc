@@ -166,9 +166,14 @@ impl MiniCallHomeLog {
         mch_proto: yaroc_common::proto::MiniCallHome,
     ) -> crate::Result<Self> {
         let mut mch: MiniCallHome = mch_proto.try_into()?;
-        mch.timestamp = mch.timestamp.with_timezone(now.offset());
+        mch.timestamp = mch.timestamp.map(|t| t.with_timezone(now.offset()));
+        let latency = if let Some(timestamp) = mch.timestamp {
+            now - timestamp
+        } else {
+            Duration::zero()
+        };
         Ok(Self {
-            latency: now - mch.timestamp,
+            latency,
             mini_call_home: mch,
             host_info,
         })
@@ -177,8 +182,16 @@ impl MiniCallHomeLog {
 
 impl fmt::Display for MiniCallHomeLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let timestamp = self.mini_call_home.timestamp.format("%H:%M:%S");
-        write!(f, "{} {timestamp}:", self.host_info.name)?;
+        if let Some(timestamp) = self.mini_call_home.timestamp {
+            write!(
+                f,
+                "{} {}:",
+                self.host_info.name,
+                timestamp.format("%H:%M:%S")
+            )?;
+        } else {
+            write!(f, "{} unknown time:", self.host_info.name)?;
+        };
         if let Some(temperature) = &self.mini_call_home.cpu_temperature {
             write!(f, " {temperature:.1}°C")?;
         }
@@ -253,7 +266,7 @@ mod test_logs {
                 signal_info,
                 batt_mv: Some(1260),
                 cpu_temperature: Some(51.54),
-                timestamp,
+                timestamp: Some(timestamp),
                 ..Default::default()
             },
             host_info: HostInfo {
@@ -325,7 +338,8 @@ mod test_logs {
             })),
             ..Default::default()
         };
-        let cell_log_msg = CellularLogMessage::from_proto(status, host_info, now);
-        assert!(cell_log_msg.is_err());
+        let cell_log_msg = CellularLogMessage::from_proto(status, host_info, now)
+            .expect("MiniCallHome proto should be valid even without time");
+        assert!(format!("{cell_log_msg}").starts_with("spe01 unknown time:"));
     }
 }

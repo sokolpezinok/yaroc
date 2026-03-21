@@ -20,7 +20,7 @@ use log::{error, info};
 
 /// Gathers and provides system information from the Quectel BG77 modem.
 pub struct SystemInfo<M: ModemHw> {
-    temp: Receiver<'static, RawMutex, f32, 1>,
+    temp: Receiver<'static, RawMutex, f32, 2>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
     battery_sender: Sender<'static, RawMutex, BatteryInfo, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
@@ -120,8 +120,8 @@ impl<M: ModemHw> SystemInfo<M> {
     }
 
     /// Gathers various pieces of system information into a `MiniCallHome` struct.
-    pub async fn mini_call_home(&mut self, bg77: &mut M) -> Option<MiniCallHome> {
-        let timestamp = self.current_time(bg77, true).await?;
+    pub async fn mini_call_home(&mut self, bg77: &mut M) -> MiniCallHome {
+        let timestamp = self.current_time(bg77, true).await;
         let cpu_temperature = self.temp.try_get();
         let mut mini_call_home = MiniCallHome::new(timestamp);
         if let Some(cpu_temperature) = cpu_temperature {
@@ -134,7 +134,7 @@ impl<M: ModemHw> SystemInfo<M> {
             mini_call_home.set_signal_info(signal_info);
         }
 
-        Some(mini_call_home)
+        mini_call_home
     }
 }
 
@@ -163,7 +163,7 @@ mod test {
         });
         let mut system_info = SystemInfo::default();
 
-        let mch = block_on(system_info.mini_call_home(&mut bg77)).unwrap();
+        let mch = block_on(system_info.mini_call_home(&mut bg77));
         let signal_info = mch.signal_info.unwrap();
         assert_eq!(signal_info.network_type, CellNetworkType::NbIotEcl1);
         assert_eq!(signal_info.rsrp_dbm, -134);
@@ -176,12 +176,25 @@ mod test {
         assert_eq!(mch.batt_percents, Some(76));
         assert_eq!(mch.cpu_temperature, Some(27.0));
         assert_eq!(
-            mch.timestamp,
+            mch.timestamp.unwrap(),
             DateTime::<FixedOffset>::parse_from_str(
                 "2024-12-24 10:48:23+01:00",
                 "%Y-%m-%d %H:%M:%S%:z"
             )
             .unwrap()
         );
+    }
+
+    #[test]
+    fn test_mini_call_home_no_timestamp() {
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QLTS=2", ""),
+            ("AT+QCSQ", "+QCSQ: \"eMTC\",-100,-90,110,-120"),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+        ]);
+        let mut system_info = SystemInfo::default();
+        let mch = block_on(system_info.mini_call_home(&mut bg77));
+        assert!(mch.timestamp.is_none());
+        assert_eq!(mch.signal_info.unwrap().rsrp_dbm, -90);
     }
 }
