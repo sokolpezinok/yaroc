@@ -4,6 +4,7 @@ use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
     cache::NoCache,
     map::{MapConfig, MapStorage, Value},
+    queue::{QueueConfig, QueueStorage},
 };
 pub use yaroc_common::flash::{Flash, ValueIndex};
 use yaroc_common::{RawMutex, error::Error};
@@ -17,11 +18,14 @@ unsafe extern "C" {
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>,
+    _queue_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
 }
 
 // nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
 // (single core) it is safe to move between tasks as they all run in Thread Mode.
 unsafe impl Send for NrfFlash<'_> {}
+
+const MAP_SIZE: u32 = 8 * 1024;
 
 impl<'a> NrfFlash<'a> {
     /// Creates a new NrfFlash instance
@@ -29,11 +33,20 @@ impl<'a> NrfFlash<'a> {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
         let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
 
-        let map_partition = Partition::new(flash, data_start, data_size);
-        let config = MapConfig::new(0..data_size);
+        let queue_size = data_size - MAP_SIZE;
+
+        let map_partition = Partition::new(flash, data_start, MAP_SIZE);
+        let config = MapConfig::new(0..MAP_SIZE);
         let map_storage = MapStorage::new(map_partition, config, NoCache::new());
 
-        Self { map_storage }
+        let queue_partition = Partition::new(flash, data_start + MAP_SIZE, queue_size);
+        let queue_config = QueueConfig::new(0..queue_size);
+        let queue_storage = QueueStorage::new(queue_partition, queue_config, NoCache::new());
+
+        Self {
+            map_storage,
+            _queue_storage: queue_storage,
+        }
     }
 }
 
