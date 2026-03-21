@@ -26,12 +26,10 @@ YAROC is pronounced phonetically as "jarok", which is Slovak for a small ditch. 
 
 # Installation
 
-Install from PyPI.
+Install from PyPI. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
 
 ```sh
-python -m venv .venv
-source .venv/bin/activate
-pip install yaroc
+uv tool install yaroc
 ```
 
 # Usage
@@ -57,7 +55,6 @@ broker_url = "broker.emqx.io"
 
 With a config file present, we are able to run `send-punch`:
 ```
-source .venv/bin/activate
 send-punch
 ```
 
@@ -126,27 +123,19 @@ enable = true
 
 With a config file present, we are able to run the YAROC daemon called `yarocd`:
 ```sh
-source .venv/bin/activate
 yarocd
 ```
 
 # Development
 
-In order to start developing, install also the `dev` dependencies:
+In order to start developing, install the dependencies using `uv`:
 
 ```sh
-source .venv/bin/activate
-pip install ".[dev]"
-pip install -e .
+cd python
+uv sync --all-extras
 ```
 
-The last line installs the package in edit mode, so you can test each file modification immediately.
-
-To use LSPs, also run the following:
-
-```sh
-pip install ".[lsp]"
-```
+This will create a `.venv` and install all extras including `dev` and `lsp`. The package is installed in edit mode by default, so you can test each file modification immediately.
 
 
 # Other projects
