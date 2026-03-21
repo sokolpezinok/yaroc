@@ -14,7 +14,7 @@ pub trait Temp {
     fn cpu_temperature(&mut self) -> impl core::future::Future<Output = crate::Result<f32>>;
 }
 
-pub static TEMPERATURE: Watch<RawMutex, f32, 2> = Watch::new();
+pub static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
 
 #[derive(Clone, Copy)]
 pub struct BatteryInfo {

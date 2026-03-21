@@ -20,7 +20,7 @@ use log::{error, info};
 
 /// Gathers and provides system information from the Quectel BG77 modem.
 pub struct SystemInfo<M: ModemHw> {
-    temp: Receiver<'static, RawMutex, f32, 2>,
+    temp: Receiver<'static, RawMutex, f32, 1>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
     battery_sender: Sender<'static, RawMutex, BatteryInfo, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
@@ -146,9 +146,13 @@ mod test {
     use super::*;
 
     use embassy_futures::block_on;
+    use embassy_sync::mutex::Mutex;
+
+    static TEST_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
 
     #[test]
     fn test_basic_system_info() {
+        let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
@@ -187,6 +191,7 @@ mod test {
 
     #[test]
     fn test_mini_call_home_no_timestamp() {
+        let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QLTS=2", ""),
             ("AT+QCSQ", "+QCSQ: \"eMTC\",-100,-90,110,-120"),
