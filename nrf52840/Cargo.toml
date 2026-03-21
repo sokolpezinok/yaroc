@@ -19,7 +19,7 @@ cortex-m-semihosting = "0.5.0"
 defmt = { workspace = true }
 defmt-rtt = "1.0"
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
-embassy-embedded-hal = "0.5.0"
+embassy-embedded-hal = { workspace = true }
 embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
 embassy-futures = { workspace = true, features = ["defmt"] }
 embassy-nrf = { workspace = true, features = ["defmt"] }
