@@ -189,7 +189,7 @@ impl<M: ModemHw> ModemManager<M> {
     ///
     /// Returns the current firmware version.
     pub async fn configure(&self, bg77: &mut M) -> crate::Result<String<AT_COMMAND_SIZE>> {
-        let firmware = bg77.call_at("+CGMR", None).await?.lines().first().and_then(|x| {
+        let firmware = bg77.call_at("+QGMR", None).await?.lines().first().and_then(|x| {
             if let FromModem::Line(line) = x {
                 Some(line.clone())
             } else {
@@ -272,7 +272,7 @@ mod test {
         let modem_manager = ModemManager::<FakeModem>::new(config);
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGMR", "fake-firmware"),
+            ("AT+QGMR", "fake-firmware"),
             ("AT+CGDCONT=1,\"IP\",\"test-apn\"", ""),
             ("AT+CEREG=2", ""),
             ("AT+QCFG=\"nwscanseq\",00", ""),
