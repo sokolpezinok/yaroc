@@ -63,8 +63,8 @@ impl Ble {
     /// Spawns the Softdevice task.
     ///
     /// This is required for the Softdevice to run.
-    pub fn must_spawn(&self, spawner: Spawner) {
-        spawner.must_spawn(softdevice_task(self.softdevice));
+    pub fn spawn(&self, spawner: Spawner) {
+        spawner.spawn(softdevice_task(self.softdevice).expect("Failed to spawn task"));
     }
 
     /// Returns the MAC address of the device as a hex string.

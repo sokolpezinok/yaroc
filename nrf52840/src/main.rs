@@ -43,7 +43,7 @@ async fn main(spawner: Spawner) {
         ..
     } = device;
 
-    ble.must_spawn(spawner);
+    ble.spawn(spawner);
 
     static FLASH_MUTEX: StaticCell<embassy_sync::mutex::Mutex<RawMutex, nrf_softdevice::Flash>> =
         StaticCell::new();
@@ -72,9 +72,10 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    usb.must_spawn(spawner);
-    spawner.must_spawn(minicallhome_loop(mqtt_config.minicallhome_interval));
-    spawner.must_spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()));
+    usb.spawn(spawner);
+    spawner
+        .spawn(minicallhome_loop(mqtt_config.minicallhome_interval).expect("Failed to spawn task"));
+    spawner.spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()).expect("Failed to spawn task"));
 
     let send_punch_fn = Bg77SendPunchFn::new(mqtt_config.packet_timeout);
     let backoff_retries = BackoffRetries::new(
@@ -83,15 +84,16 @@ async fn main(spawner: Spawner) {
         PUNCH_QUEUE_SIZE - 1,
         spawner,
     );
-    spawner.must_spawn(backoff_retries_loop(backoff_retries));
+    spawner.spawn(backoff_retries_loop(backoff_retries).expect("Failed to spawn task"));
 
     let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config, flash);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
-    spawner.must_spawn(send_punch_event_handler(SI_UART_CHANNEL.receiver()));
+    spawner
+        .spawn(send_punch_event_handler(SI_UART_CHANNEL.receiver()).expect("Failed to spawn task"));
 
     let temp = SoftdeviceTemp::new(ble);
-    spawner.must_spawn(sysinfo_update(temp));
+    spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));
     info!("All background tasks are running");
 }

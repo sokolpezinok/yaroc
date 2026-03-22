@@ -54,12 +54,12 @@ impl Usb {
         Self { device, class }
     }
 
-    pub fn must_spawn(self, spawner: Spawner) {
-        spawner.must_spawn(usb_task(self.device));
-        spawner.must_spawn(usb_packet_reader_loop(UsbPacketReader::new(
-            self.class,
-            SendPunchHandler,
-        )));
+    pub fn spawn(self, spawner: Spawner) {
+        spawner.spawn(usb_task(self.device).expect("Failed to spawn task"));
+        spawner.spawn(
+            usb_packet_reader_loop(UsbPacketReader::new(self.class, SendPunchHandler))
+                .expect("Failed to spawn task"),
+        );
     }
 }
 

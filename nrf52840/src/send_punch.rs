@@ -96,7 +96,9 @@ impl SendPunchFn for Bg77SendPunchFn {
     }
 
     fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(bg77_send_punch_fn(msg, self, self.send_punch_timeout()));
+        spawner.spawn(
+            bg77_send_punch_fn(msg, self, self.send_punch_timeout()).expect("Failed to spawn task"),
+        );
     }
 }
 

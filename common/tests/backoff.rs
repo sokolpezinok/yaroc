@@ -91,7 +91,10 @@ impl SendPunchFn for FakeSendPunchFn {
     }
 
     fn spawn(self, msg: PunchMsg, spawner: Spawner) {
-        spawner.must_spawn(fake_send_punch_fn(msg, self, Duration::from_millis(1000)));
+        spawner.spawn(
+            fake_send_punch_fn(msg, self, Duration::from_millis(1000))
+                .expect("Failed to spawn task"),
+        );
     }
 
     async fn acquire(&mut self) -> yaroc_common::Result<Self::SemaphoreReleaser> {
@@ -146,7 +149,7 @@ static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 fn backoff_test() {
     let executor = EXECUTOR.init(Executor::new());
     executor.run(|spawner| {
-        spawner.must_spawn(main(spawner));
+        spawner.spawn(main(spawner).expect("Failed to spawn task"));
     });
 }
 
@@ -164,20 +167,26 @@ async fn main(spawner: Spawner) {
     let fake: FakeSendPunchFn =
         FakeSendPunchFn::new(Duration::from_millis(400), Duration::from_millis(200));
     let backoff = BackoffRetries::new(fake, Duration::from_millis(100), 2, spawner);
-    spawner.must_spawn(backoff_loop(backoff));
+    spawner.spawn(backoff_loop(backoff).expect("Failed to spawn task"));
 
     // First test
     let mut punch0 = RawPunch::default();
     punch0[0] = 3;
-    spawner.must_spawn(respond_to_fake(0, MQTT_DISCONNECT.subscriber().unwrap()));
+    spawner.spawn(
+        respond_to_fake(0, MQTT_DISCONNECT.subscriber().unwrap()).expect("Failed to spawn task"),
+    );
     CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch0].into(), 0)).await;
     let mut punch1 = RawPunch::default();
     punch1[0] = 2;
-    spawner.must_spawn(respond_to_fake(1, MQTT_DISCONNECT.subscriber().unwrap()));
+    spawner.spawn(
+        respond_to_fake(1, MQTT_DISCONNECT.subscriber().unwrap()).expect("Failed to spawn task"),
+    );
     CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch1].into(), 1)).await;
     let mut punch2 = RawPunch::default();
     punch2[0] = 1;
-    spawner.must_spawn(respond_to_fake(2, MQTT_DISCONNECT.subscriber().unwrap()));
+    spawner.spawn(
+        respond_to_fake(2, MQTT_DISCONNECT.subscriber().unwrap()).expect("Failed to spawn task"),
+    );
     CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch2].into(), 2)).await;
 
     let disconnect_publisher = MQTT_DISCONNECT.publisher().unwrap();
@@ -212,7 +221,9 @@ async fn main(spawner: Spawner) {
     let start = Instant::now();
     let mut punch3 = RawPunch::default();
     punch3[0] = 3;
-    spawner.must_spawn(respond_to_fake(3, MQTT_DISCONNECT.subscriber().unwrap()));
+    spawner.spawn(
+        respond_to_fake(3, MQTT_DISCONNECT.subscriber().unwrap()).expect("Failed to spawn task"),
+    );
     CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches([punch3].into(), 3)).await;
 
     Timer::after_millis(300).await;

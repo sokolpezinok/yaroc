@@ -20,7 +20,7 @@ defmt = { workspace = true }
 defmt-rtt = "1.0"
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-embedded-hal = { workspace = true }
-embassy-executor = { workspace = true, features = ["arch-cortex-m", "defmt", "executor-interrupt"] }
+embassy-executor = { workspace = true, features = ["platform-cortex-m", "defmt", "executor-interrupt"] }
 embassy-futures = { workspace = true, features = ["defmt"] }
 embassy-nrf = { workspace = true, features = ["defmt"] }
 embassy-sync = { workspace = true, features = ["defmt"] }

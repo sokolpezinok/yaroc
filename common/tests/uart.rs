@@ -25,7 +25,7 @@ fn urc_handler(response: &CommandResponse) -> bool {
 fn uart_test() {
     let executor = EXECUTOR.init(Executor::new());
     executor.run(|spawner| {
-        spawner.must_spawn(main(spawner));
+        spawner.spawn(main(spawner).expect("Failed to spawn task"));
     });
 }
 

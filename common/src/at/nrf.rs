@@ -17,7 +17,7 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
             &MAIN_RX_CHANNEL,
             Vec::from_slice(urc_handlers).expect("Too many URC handlers, at most 3 accepted"),
         );
-        spawner.must_spawn(reader(self, at_broker));
+        spawner.spawn(reader(self, at_broker).expect("Failed to spawn task"));
     }
 
     async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
