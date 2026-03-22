@@ -74,8 +74,9 @@ impl RequestHandler for SendPunchHandler {
                 send_punch.configure_modem(modem_config).await?;
                 info!("Modem reconfigured");
             }
-            UsbCommand::ConfigureMqtt(_mqtt_config) => {
-                todo!();
+            UsbCommand::ConfigureMqtt(mqtt_config) => {
+                send_punch.configure_mqtt(mqtt_config).await?;
+                info!("MQTT reconfigured");
             }
         }
         Ok(UsbResponse::Ok)

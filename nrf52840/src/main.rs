@@ -52,12 +52,23 @@ async fn main(spawner: Spawner) {
     let mut flash = NrfFlash::new(flash_mutex);
     let mut buffer = [0; 4096];
 
-    let mqtt_config = MqttConfig {
+    let mut mqtt_config = MqttConfig {
         name: format!(24; "nrf52840-{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
     };
-    info!("Device initialized: {}", mqtt_config.name.as_str(),);
+    {
+        //TODO: this is not ideal, the MQTT config sent via USB should not contain name and MAC
+        //address.
+        if let Ok(Some(config)) =
+            flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await
+        {
+            mqtt_config.url = config.url;
+            mqtt_config.credentials = config.credentials;
+            mqtt_config.port = config.port;
+        }
+        info!("Device initialized: {}", mqtt_config.name.as_str(),);
+    }
 
     let modem_config = match flash.read(ValueIndex::ModemConfig, &mut buffer).await {
         Ok(config) => config.unwrap_or_default(),

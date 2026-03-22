@@ -228,6 +228,15 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         self.modem_manager.configure(&mut self.bg77).await
     }
 
+    /// Configures the MQTT client
+    pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
+        self.flash.write(ValueIndex::MqttConfig, mqtt_config.clone()).await?;
+        info!("MQTT config written to flash");
+        self.mqtt_client.update_config(mqtt_config);
+        self.mqtt_client.disconnect(&mut self.bg77).await?;
+        Ok(())
+    }
+
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await

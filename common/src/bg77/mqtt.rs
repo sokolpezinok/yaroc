@@ -159,6 +159,11 @@ impl<M: ModemHw> MqttClient<M> {
         }
     }
 
+    /// Updates the MQTT client configuration.
+    pub fn update_config(&mut self, config: MqttConfig) {
+        self.config = config;
+    }
+
     /// Handles Unsolicited Result Codes (URCs) from the modem.
     ///
     /// This function processes various URCs such as `QMTSTAT`, `QIURC`, `CEREG`, and `QMTPUB`.
