@@ -17,13 +17,12 @@ pub trait Flash {
         &mut self,
         key: ValueIndex,
         value: V,
-        buffer: &'a mut [u8],
     ) -> impl Future<Output = crate::Result<()>>;
 
     /// Fetches a value from the flash memory.
-    fn read<'a, V: Value<'a>>(
+    fn read<'b, V: Value<'b>>(
         &mut self,
         key: ValueIndex,
-        buffer: &'a mut [u8],
+        buffer: &'b mut [u8],
     ) -> impl Future<Output = crate::Result<Option<V>>>;
 }

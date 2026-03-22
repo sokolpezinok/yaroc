@@ -17,7 +17,7 @@ use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
 use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
-use crate::flash::Flash;
+use crate::flash::{Flash, ValueIndex};
 use crate::proto::Punches;
 use crate::punch::SiPunch;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
@@ -48,7 +48,7 @@ pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
     modem_manager: ModemManager<M>,
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
-    _flash: F,
+    flash: F,
 }
 
 impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
@@ -84,7 +84,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
-            _flash: flash,
+            flash,
         }
     }
 
@@ -114,7 +114,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             modem_manager,
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
-            _flash: flash,
+            flash,
         }
     }
 
@@ -222,6 +222,8 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         &mut self,
         modem_config: ModemConfig,
     ) -> crate::Result<String<AT_COMMAND_SIZE>> {
+        self.flash.write(ValueIndex::ModemConfig, modem_config.clone()).await?;
+        info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);
         self.modem_manager.configure(&mut self.bg77).await
     }
@@ -300,7 +302,6 @@ mod tests {
             &mut self,
             _key: ValueIndex,
             _value: V,
-            _buffer: &'a mut [u8],
         ) -> crate::Result<()> {
             Ok(())
         }
@@ -308,7 +309,7 @@ mod tests {
         async fn read<'a, V: Value<'a>>(
             &mut self,
             _key: ValueIndex,
-            _buffer: &'a mut [u8],
+            mut _buffer: &'a [u8],
         ) -> crate::Result<Option<V>> {
             Ok(None)
         }

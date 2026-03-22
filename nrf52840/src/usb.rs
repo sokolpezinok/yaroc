@@ -71,8 +71,8 @@ impl RequestHandler for SendPunchHandler {
         let send_punch = send_punch.as_mut().unwrap();
         match command {
             UsbCommand::ConfigureModem(modem_config) => {
-                info!("Will configure modem now");
                 send_punch.configure_modem(modem_config).await?;
+                info!("Modem reconfigured");
             }
             UsbCommand::ConfigureMqtt(_mqtt_config) => {
                 todo!();

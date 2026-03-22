@@ -63,9 +63,8 @@ async fn main(spawner: Spawner) {
         Ok(config) => config.unwrap_or_default(),
         Err(err) => {
             error!("Error while reading modem config from flash: {}", err);
-            let mut buffer = [0; 4096];
             let _ = flash
-                .write(ValueIndex::ModemConfig, ModemConfig::default(), &mut buffer)
+                .write(ValueIndex::ModemConfig, ModemConfig::default())
                 .await
                 .inspect_err(|e| error!("Error while writing modem config: {}", e));
             ModemConfig::default()

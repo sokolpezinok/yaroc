@@ -57,15 +57,11 @@ impl<'a> Flash for NrfFlash<'a> {
     }
 
     /// Stores a value in the flash memory.
-    async fn write<'b, V: Value<'b>>(
-        &mut self,
-        key: ValueIndex,
-        value: V,
-        buffer: &'b mut [u8],
-    ) -> crate::Result<()> {
+    async fn write<'b, V: Value<'b>>(&mut self, key: ValueIndex, value: V) -> crate::Result<()> {
         let key = key as u8;
+        let mut buffer = [0u8; 512];
         self.map_storage
-            .store_item(buffer, &key, &value)
+            .store_item(&mut buffer, &key, &value)
             .await
             .map_err(|_| Error::FlashError)
     }
