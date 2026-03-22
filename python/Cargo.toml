@@ -16,15 +16,18 @@ chrono = { workspace = true, default-features = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
 femtopb = { workspace = true }
+heapless = { workspace = true }
 log = { workspace = true }
 postcard = { workspace = true, features = ["use-std"] }
 pyo3 = { version = "0.27", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-async-runtimes = { version = "0.27", features = ["attributes", "tokio-runtime"] }
 pyo3-log = "0.13.0"
 regex = "1.11"
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
 tokio-serial.workspace = true
+toml = "0.8"
 yaroc-common = { path = "../common" }
 yaroc-receiver = { path = "../receiver" }
 
