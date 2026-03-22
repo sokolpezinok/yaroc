@@ -27,7 +27,7 @@ jobs:
       - name: Install uv with all available options
         uses: astral-sh/setup-uv@v7
         with:
-          version: '0.9.6'
+          version: '0.10.12'
           python-version: '3.11'
           enable-cache: false
       - name: Setup QEMU
