@@ -654,6 +654,7 @@ mod test_meshtastic {
             SignalInfo::Meshtastic(RssiSnr {
                 rssi_dbm: -98,
                 snr: 4.0,
+                hop_count: 0,
                 distance: None
             })
         );

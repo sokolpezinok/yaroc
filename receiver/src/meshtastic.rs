@@ -18,6 +18,8 @@ pub struct RssiSnr {
     pub rssi_dbm: i16,
     /// Signal-to-Noise Ratio.
     pub snr: f32,
+    /// Number of hops from the node.
+    pub hop_count: u16,
     /// Optional distance to the sender, in meters, and the name of the receiver.
     pub distance: Option<(f32, String)>,
 }
@@ -26,12 +28,13 @@ impl RssiSnr {
     /// Creates a new `RssiSnr` if the RSSI is not zero.
     ///
     /// Meshtastic devices report 0 RSSI for packets that they originate.
-    pub fn new(rssi_dbm: i32, snr: f32) -> Option<RssiSnr> {
+    pub fn new(rssi_dbm: i32, snr: f32, hop_count: u16) -> Option<RssiSnr> {
         match rssi_dbm {
             0 => None,
             rx_rssi => Some(RssiSnr {
                 rssi_dbm: rx_rssi as i16,
                 snr,
+                hop_count,
                 distance: None,
             }),
         }
@@ -137,10 +140,13 @@ impl MeshtasticLog {
                 from,
                 rx_rssi,
                 rx_snr,
+                hop_limit,
+                hop_start,
                 ..
             } => {
                 let mac_address = MacAddress::Meshtastic(from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
+                let hop_count = hop_start.saturating_sub(hop_limit) as u16;
                 Self::parse_data(
                     data,
                     HostInfo {
@@ -148,7 +154,7 @@ impl MeshtasticLog {
                         mac_address,
                     },
                     now,
-                    RssiSnr::new(rx_rssi, rx_snr),
+                    RssiSnr::new(rx_rssi, rx_snr, hop_count),
                     recv_position,
                 )
             }
@@ -321,14 +327,16 @@ impl fmt::Display for MeshtasticLog {
         if let Some(RssiSnr {
             rssi_dbm,
             snr,
+            hop_count,
             distance,
         }) = &self.rssi_snr
         {
             match distance {
-                None => write!(f, ", {}dBm {:.2}SNR", rssi_dbm, snr)?,
+                None => write!(f, ", {}dBm {:.2}SNR ({} hops)", rssi_dbm, snr, hop_count)?,
                 Some((meters, name)) => write!(
                     f,
-                    ", {rssi_dbm}dBm {snr:.2}SNR, {:.2}km from {name}",
+                    ", {rssi_dbm}dBm {snr:.2}SNR ({} hops), {:.2}km from {name}",
+                    hop_count,
                     meters / 1000.0,
                 )?,
             }
@@ -438,13 +446,14 @@ mod test_meshtastic {
             rssi_snr: Some(RssiSnr {
                 rssi_dbm: -80,
                 snr: 4.25,
+                hop_count: 3,
                 distance: Some((813., "spr02".into())),
             }),
         };
         assert_eq!(
             format!("{log_message}"),
-            "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR, 0.81km \
-            from spr02"
+            "spr01 13:15:25: coords 48.29633 17.26675 170m, latency 1.23s, -80dBm 4.25SNR (3 hops), \
+            0.81km from spr02"
         );
     }
 
@@ -473,6 +482,7 @@ mod test_meshtastic {
             Some(RssiSnr {
                 rssi_dbm: -98,
                 snr: 4.0,
+                hop_count: 0,
                 distance: None
             })
         );
@@ -518,6 +528,7 @@ mod test_meshtastic {
             Some(RssiSnr {
                 rssi_dbm: -98,
                 snr: 4.0,
+                hop_count: 0,
                 distance: None
             })
         );
@@ -537,26 +548,72 @@ mod test_meshtastic {
     #[test]
     fn test_signal_strength() {
         use yaroc_common::status::SignalStrength;
-        let mut rssi_snr = RssiSnr::new(-90, 5.0).unwrap();
+        let mut rssi_snr = RssiSnr::new(-90, 5.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Excellent);
 
-        rssi_snr = RssiSnr::new(-100, 0.0).unwrap();
+        rssi_snr = RssiSnr::new(-100, 0.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Excellent);
 
-        rssi_snr = RssiSnr::new(-105, -5.0).unwrap();
+        rssi_snr = RssiSnr::new(-105, -5.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Good);
 
-        rssi_snr = RssiSnr::new(-115, -5.0).unwrap();
+        rssi_snr = RssiSnr::new(-115, -5.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Good);
 
-        rssi_snr = RssiSnr::new(-115, -10.0).unwrap();
+        rssi_snr = RssiSnr::new(-115, -10.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Fair);
 
-        rssi_snr = RssiSnr::new(-125, -10.0).unwrap();
+        rssi_snr = RssiSnr::new(-125, -10.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Fair);
 
-        rssi_snr = RssiSnr::new(-130, -20.0).unwrap();
+        rssi_snr = RssiSnr::new(-130, -20.0, 0).unwrap();
         assert_eq!(rssi_snr.signal_strength(), SignalStrength::Weak);
+    }
+
+    #[test]
+    fn test_mesh_packet_parsing() {
+        let telemetry = Telemetry {
+            time: 1735157442,
+            variant: Some(Variant::DeviceMetrics(DeviceMetrics {
+                battery_level: Some(47),
+                voltage: Some(3.712),
+                ..Default::default()
+            })),
+        };
+        let data = Data {
+            portnum: PortNum::TelemetryApp as i32,
+            payload: telemetry.encode_to_vec(),
+            ..Default::default()
+        };
+        let packet = MeshPacket {
+            from: 0x123456,
+            payload_variant: Some(PayloadVariant::Decoded(data)),
+            rx_rssi: -90,
+            rx_snr: 5.0,
+            hop_start: 3,
+            hop_limit: 2,
+            ..Default::default()
+        };
+
+        let now = DateTime::from_timestamp(1735157447, 0).unwrap().fixed_offset();
+        let dns = HashMap::from([(MacAddress::Meshtastic(0x123456), "yaroc1".to_owned())]);
+        let log_message =
+            MeshtasticLog::from_mesh_packet(packet, now, &dns, None).unwrap().unwrap();
+
+        assert_eq!(
+            log_message.rssi_snr,
+            Some(RssiSnr {
+                rssi_dbm: -90,
+                snr: 5.0,
+                hop_count: 1,
+                distance: None
+            })
+        );
+        assert_eq!(log_message.host_info.name, "yaroc1");
+        assert_eq!(
+            log_message.host_info.mac_address,
+            MacAddress::Meshtastic(0x123456)
+        );
     }
 }
 
