@@ -1,3 +1,4 @@
+mod config;
 mod message_handler;
 mod punch;
 mod python;
