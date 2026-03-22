@@ -12,6 +12,22 @@ use yaroc_common::{
 
 use crate::config::{Args, Config};
 
+fn send_command<S: Read + Write>(
+    serial: &mut S,
+    command: UsbCommand,
+) -> Result<UsbResponse, String> {
+    let buf = to_stdvec(&command).map_err(|e| format!("Serialization failed: {e}"))?;
+    serial
+        .write_all(buf.as_slice())
+        .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
+
+    let mut read_buf = [0u8; 64];
+    let n = serial
+        .read(&mut read_buf)
+        .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
+    postcard::from_bytes(&read_buf[..n]).map_err(|e| format!("Failed to parse response: {e}"))
+}
+
 #[pyfunction]
 pub fn yaroc_cli() {
     let _ = env_logger::builder()
@@ -29,18 +45,8 @@ pub fn yaroc_cli() {
     let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
 
     let modem_config: ModemConfig = config.modem.into();
-    let buf = to_stdvec::<_>(&UsbCommand::ConfigureModem(modem_config)).unwrap();
-    if let Err(e) = serial.write_all(buf.as_slice()) {
-        error!("Writing to serial failed: {e}");
-    } else {
-        info!("Writing to serial successful");
-        let mut read_buf = [0u8; 64];
-        match serial.read(&mut read_buf) {
-            Ok(n) => match postcard::from_bytes::<UsbResponse>(&read_buf[..n]) {
-                Ok(UsbResponse::Ok) => info!("Configuration successful"),
-                Err(e) => error!("Failed to parse response: {e}"),
-            },
-            Err(e) => error!("Reading from serial failed: {e}"),
-        }
+    match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
+        Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
+        Err(e) => error!("Failed to configure modem: {e}"),
     }
 }
