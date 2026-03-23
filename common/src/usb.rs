@@ -11,7 +11,7 @@ use postcard::{from_bytes, to_vec};
 use serde::{Deserialize, Serialize};
 
 use crate::bg77::modem_manager::ModemConfig;
-use crate::bg77::mqtt::MqttConfig;
+use crate::bg77::mqtt::MqttConfigReduced;
 use crate::error::Error;
 
 #[cfg(feature = "nrf")]
@@ -24,7 +24,7 @@ pub enum UsbCommand {
     /// Configure the modem.
     ConfigureModem(ModemConfig),
     /// Configure MQTT settings.
-    ConfigureMqtt(MqttConfig),
+    ConfigureMqtt(MqttConfigReduced),
 }
 
 #[derive(Serialize, Deserialize)]

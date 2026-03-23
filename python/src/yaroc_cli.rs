@@ -7,6 +7,7 @@ use postcard::to_stdvec;
 use pyo3::prelude::*;
 use yaroc_common::{
     bg77::modem_manager::ModemConfig,
+    bg77::mqtt::MqttConfigReduced,
     usb::{UsbCommand, UsbResponse},
 };
 
@@ -48,5 +49,13 @@ pub fn yaroc_cli() {
     match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
         Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
         Err(e) => error!("Failed to configure modem: {e}"),
+    }
+
+    if let Some(mqtt) = config.mqtt {
+        let mqtt_config: MqttConfigReduced = mqtt.into();
+        match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt_config)) {
+            Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
+            Err(e) => error!("Failed to configure MQTT: {e}"),
+        }
     }
 }

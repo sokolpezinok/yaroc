@@ -3500,6 +3500,7 @@ version = "0.1.18"
 dependencies = [
  "chrono",
  "clap",
+ "embassy-time",
  "env_logger",
  "femtopb",
  "heapless 0.9.2",

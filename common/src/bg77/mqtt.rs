@@ -102,27 +102,23 @@ mod duration_ms {
 }
 
 /// Configuration for the MQTT client to connect to a broker.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct MqttConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
-    pub url: String<40>,
+    pub url: String<50>,
     /// Optional login credentials for the MQTT broker, username and password.
     pub credentials: Option<(String<20>, String<30>)>,
     /// The timeout duration for individual MQTT packets.
-    #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,
     /// The name of the client, used to construct the MQTT client ID.
     pub name: String<24>,
     /// The MAC address of the device, used to form MQTT topics (e.g., "yar/mac_address/topic").
     pub mac_address: String<12>,
     /// The interval at which mini call home messages are sent.
-    #[serde(with = "duration_ms")]
     pub minicallhome_interval: Duration,
     /// The port of the MQTT broker.
     pub port: u16,
 }
-
-impl PostcardValue<'_> for MqttConfig {}
 
 impl Default for MqttConfig {
     fn default() -> Self {
@@ -132,6 +128,47 @@ impl Default for MqttConfig {
             packet_timeout: Duration::from_secs(35),
             name: String::from_str("test_client").unwrap(),
             mac_address: String::from_str("deadbeef").unwrap(),
+            minicallhome_interval: Duration::from_secs(30),
+            port: 1883,
+        }
+    }
+}
+
+impl MqttConfig {
+    pub fn update(&mut self, reduced_config: MqttConfigReduced) {
+        self.url = reduced_config.url;
+        self.credentials = reduced_config.credentials;
+        self.packet_timeout = reduced_config.packet_timeout;
+        self.minicallhome_interval = reduced_config.minicallhome_interval;
+        self.port = reduced_config.port;
+    }
+}
+
+/// A reduced version of the MQTT configuration, without fields that are determined in code.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MqttConfigReduced {
+    /// The URL of the MQTT broker, e.g., "broker.emqx.io".
+    pub url: String<50>,
+    /// Optional login credentials for the MQTT broker, username and password.
+    pub credentials: Option<(String<20>, String<30>)>,
+    /// The timeout duration for individual MQTT packets.
+    #[serde(with = "duration_ms")]
+    pub packet_timeout: Duration,
+    /// The interval at which mini call home messages are sent.
+    #[serde(with = "duration_ms")]
+    pub minicallhome_interval: Duration,
+    /// The port of the MQTT broker.
+    pub port: u16,
+}
+
+impl PostcardValue<'_> for MqttConfigReduced {}
+
+impl Default for MqttConfigReduced {
+    fn default() -> Self {
+        Self {
+            url: String::from_str("broker.emqx.io").unwrap(),
+            credentials: None,
+            packet_timeout: Duration::from_secs(35),
             minicallhome_interval: Duration::from_secs(30),
             port: 1883,
         }
@@ -162,6 +199,11 @@ impl<M: ModemHw> MqttClient<M> {
     /// Updates the MQTT client configuration.
     pub fn update_config(&mut self, config: MqttConfig) {
         self.config = config;
+    }
+
+    /// Updates the MQTT client configuration from a reduced configuration.
+    pub fn update_reduced_config(&mut self, reduced: MqttConfigReduced) {
+        self.config.update(reduced);
     }
 
     /// Handles Unsolicited Result Codes (URCs) from the modem.

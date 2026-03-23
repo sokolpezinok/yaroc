@@ -14,7 +14,7 @@ use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
-use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttQos};
+use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttConfigReduced, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
 use crate::flash::{Flash, ValueIndex};
@@ -229,10 +229,10 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Configures the MQTT client
-    pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
+    pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfigReduced) -> crate::Result<()> {
         self.flash.write(ValueIndex::MqttConfig, mqtt_config.clone()).await?;
         info!("MQTT config written to flash");
-        self.mqtt_client.update_config(mqtt_config);
+        self.mqtt_client.update_reduced_config(mqtt_config);
         self.mqtt_client.disconnect(&mut self.bg77).await?;
         Ok(())
     }

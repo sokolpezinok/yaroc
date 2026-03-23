@@ -15,6 +15,7 @@ walkdir = "2.3.2"
 chrono = { workspace = true, default-features = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
+embassy-time = { workspace = true }
 femtopb = { workspace = true }
 heapless = { workspace = true }
 log = { workspace = true }

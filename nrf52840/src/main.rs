@@ -10,7 +10,10 @@ use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
-    bg77::{modem_manager::ModemConfig, mqtt::MqttConfig},
+    bg77::{
+        modem_manager::ModemConfig,
+        mqtt::{MqttConfig, MqttConfigReduced},
+    },
     error::Error,
     send_punch::SendPunch,
 };
@@ -45,29 +48,24 @@ async fn main(spawner: Spawner) {
 
     ble.spawn(spawner);
 
-    static FLASH_MUTEX: StaticCell<embassy_sync::mutex::Mutex<RawMutex, nrf_softdevice::Flash>> =
-        StaticCell::new();
-    let flash_mutex = FLASH_MUTEX.init(flash_mutex);
-
-    let mut flash = NrfFlash::new(flash_mutex);
-    let mut buffer = [0; 4096];
-
     let mut mqtt_config = MqttConfig {
         name: format!(24; "nrf52840-{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
     };
+    info!("Device initialized: {}", mqtt_config.name.as_str(),);
+
+    static FLASH_MUTEX: StaticCell<embassy_sync::mutex::Mutex<RawMutex, nrf_softdevice::Flash>> =
+        StaticCell::new();
+    let flash_mutex = FLASH_MUTEX.init(flash_mutex);
+    let mut flash = NrfFlash::new(flash_mutex);
+    let mut buffer = [0; 4096];
     {
-        //TODO: this is not ideal, the MQTT config sent via USB should not contain name and MAC
-        //address.
-        if let Ok(Some(config)) =
-            flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await
+        if let Ok(Some(reduced_config)) =
+            flash.read::<MqttConfigReduced>(ValueIndex::MqttConfig, &mut buffer).await
         {
-            mqtt_config.url = config.url;
-            mqtt_config.credentials = config.credentials;
-            mqtt_config.port = config.port;
+            mqtt_config.update(reduced_config);
         }
-        info!("Device initialized: {}", mqtt_config.name.as_str(),);
     }
 
     let modem_config = match flash.read(ValueIndex::ModemConfig, &mut buffer).await {

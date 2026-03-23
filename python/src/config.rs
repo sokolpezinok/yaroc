@@ -1,9 +1,11 @@
+use embassy_time::Duration;
 use std::path::PathBuf;
 
 use clap::Parser;
 use heapless::String as HString;
 use serde::Deserialize;
 use yaroc_common::bg77::modem_manager::{LteBands, ModemConfig, RAT};
+use yaroc_common::bg77::mqtt::MqttConfigReduced;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -78,8 +80,35 @@ impl From<ModemConfigToml> for ModemConfig {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct MqttConfigToml {
+    pub url: String,
+    pub credentials: Option<(String, String)>,
+    pub packet_timeout: u64,
+    pub minicallhome_interval: u64,
+    pub port: u16,
+}
+
+impl From<MqttConfigToml> for MqttConfigReduced {
+    fn from(toml: MqttConfigToml) -> Self {
+        MqttConfigReduced {
+            url: HString::try_from(toml.url.as_str()).unwrap_or_default(),
+            credentials: toml.credentials.as_ref().map(|(u, p)| {
+                (
+                    HString::try_from(u.as_str()).unwrap_or_default(),
+                    HString::try_from(p.as_str()).unwrap_or_default(),
+                )
+            }),
+            packet_timeout: Duration::from_secs(toml.packet_timeout),
+            minicallhome_interval: Duration::from_secs(toml.minicallhome_interval),
+            port: toml.port,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Config {
     pub modem: ModemConfigToml,
+    pub mqtt: Option<MqttConfigToml>,
 }
 
 #[cfg(test)]
