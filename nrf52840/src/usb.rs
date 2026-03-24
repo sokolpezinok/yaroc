@@ -78,6 +78,10 @@ impl RequestHandler for SendPunchHandler {
                 send_punch.configure_mqtt(mqtt_config).await?;
                 info!("MQTT reconfigured");
             }
+            UsbCommand::EraseFlash => {
+                send_punch.erase_flash().await?;
+                info!("Flash erased");
+            }
         }
         Ok(UsbResponse::Ok)
     }

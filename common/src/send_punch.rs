@@ -237,6 +237,11 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         Ok(())
     }
 
+    /// Erases the flash memory.
+    pub async fn erase_flash(&mut self) -> crate::Result<()> {
+        self.flash.erase().await
+    }
+
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await

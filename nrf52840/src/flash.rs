@@ -18,7 +18,7 @@ unsafe extern "C" {
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>,
-    _queue_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
+    queue_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
 }
 
 // nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
@@ -45,7 +45,7 @@ impl<'a> NrfFlash<'a> {
 
         Self {
             map_storage,
-            _queue_storage: queue_storage,
+            queue_storage,
         }
     }
 }
@@ -53,7 +53,9 @@ impl<'a> NrfFlash<'a> {
 impl<'a> Flash for NrfFlash<'a> {
     /// Erases the data flash memory.
     async fn erase(&mut self) -> crate::Result<()> {
-        self.map_storage.erase_all().await.map_err(|_| Error::FlashError) //TODO: wrap the error
+        // TODO: wrap and propagate the error
+        self.map_storage.erase_all().await.map_err(|_| Error::FlashError)?;
+        self.queue_storage.erase_all().await.map_err(|_| Error::FlashError)
     }
 
     /// Stores a value in the flash memory.

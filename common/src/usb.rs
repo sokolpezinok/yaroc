@@ -25,6 +25,8 @@ pub enum UsbCommand {
     ConfigureModem(ModemConfig),
     /// Configure MQTT settings.
     ConfigureMqtt(MqttConfigReduced),
+    /// Erase the flash memory.
+    EraseFlash,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -233,5 +235,16 @@ mod tests {
 
         let large_data = [2u8; 128];
         block_on(reader.write(&large_data)).unwrap();
+    }
+
+    #[test]
+    fn test_erase_flash_serialization() {
+        let command = UsbCommand::EraseFlash;
+        let bytes = to_vec::<_, 8>(&command).unwrap();
+        let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
+        match decoded {
+            UsbCommand::EraseFlash => (),
+            _ => panic!("Expected EraseFlash"),
+        }
     }
 }
