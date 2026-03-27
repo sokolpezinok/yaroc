@@ -5,7 +5,7 @@ use clap::Parser;
 use heapless::String as HString;
 use serde::Deserialize;
 use yaroc_common::bg77::modem_manager::{LteBands, ModemConfig, RAT};
-use yaroc_common::bg77::mqtt::MqttConfigReduced;
+use yaroc_common::bg77::mqtt::MqttConfig;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -88,9 +88,9 @@ pub struct MqttConfigToml {
     pub port: u16,
 }
 
-impl From<MqttConfigToml> for MqttConfigReduced {
+impl From<MqttConfigToml> for MqttConfig {
     fn from(toml: MqttConfigToml) -> Self {
-        MqttConfigReduced {
+        MqttConfig {
             url: HString::try_from(toml.url.as_str()).unwrap_or_default(),
             credentials: toml.credentials.as_ref().map(|(u, p)| {
                 (

@@ -103,7 +103,7 @@ mod duration_ms {
 
 /// Configuration for the MQTT client to connect to a broker.
 #[derive(Clone, Debug)]
-pub struct MqttConfig {
+pub struct MqttClientConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
     pub url: String<50>,
     /// Optional login credentials for the MQTT broker, username and password.
@@ -120,7 +120,7 @@ pub struct MqttConfig {
     pub port: u16,
 }
 
-impl Default for MqttConfig {
+impl Default for MqttClientConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
@@ -134,8 +134,8 @@ impl Default for MqttConfig {
     }
 }
 
-impl MqttConfig {
-    pub fn update(&mut self, reduced_config: MqttConfigReduced) {
+impl MqttClientConfig {
+    pub fn update(&mut self, reduced_config: MqttConfig) {
         self.url = reduced_config.url;
         self.credentials = reduced_config.credentials;
         self.packet_timeout = reduced_config.packet_timeout;
@@ -146,7 +146,7 @@ impl MqttConfig {
 
 /// A reduced version of the MQTT configuration, without fields that are determined in code.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MqttConfigReduced {
+pub struct MqttConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
     pub url: String<50>,
     /// Optional login credentials for the MQTT broker, username and password.
@@ -161,9 +161,9 @@ pub struct MqttConfigReduced {
     pub port: u16,
 }
 
-impl PostcardValue<'_> for MqttConfigReduced {}
+impl PostcardValue<'_> for MqttConfig {}
 
-impl Default for MqttConfigReduced {
+impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             url: String::from_str("broker.emqx.io").unwrap(),
@@ -177,7 +177,7 @@ impl Default for MqttConfigReduced {
 
 /// An MQTT client for the BG77 modem.
 pub struct MqttClient<M: ModemHw> {
-    config: MqttConfig,
+    config: MqttClientConfig,
     last_successful_send: Instant,
     client_id: u8,
     punch_cnt: u16,
@@ -186,7 +186,7 @@ pub struct MqttClient<M: ModemHw> {
 
 impl<M: ModemHw> MqttClient<M> {
     /// Creates a new `MqttClient`.
-    pub fn new(config: MqttConfig, client_id: u8) -> Self {
+    pub fn new(config: MqttClientConfig, client_id: u8) -> Self {
         Self {
             config,
             last_successful_send: Instant::now(),
@@ -197,12 +197,12 @@ impl<M: ModemHw> MqttClient<M> {
     }
 
     /// Updates the MQTT client configuration.
-    pub fn update_config(&mut self, config: MqttConfig) {
+    pub fn update_config(&mut self, config: MqttClientConfig) {
         self.config = config;
     }
 
     /// Updates the MQTT client configuration from a reduced configuration.
-    pub fn update_reduced_config(&mut self, reduced: MqttConfigReduced) {
+    pub fn update_reduced_config(&mut self, reduced: MqttConfig) {
         self.config.update(reduced);
     }
 
@@ -477,7 +477,7 @@ mod test {
     #[test]
     fn test_mqtt_wrong_broker_disconnects_first() {
         let _lock = block_on(CHANNEL_MUTEX.lock());
-        let mut client_config = MqttConfig::default();
+        let mut client_config = MqttClientConfig::default();
         client_config.url = String::from_str("correct.broker.io").unwrap();
         client_config.name = String::from_str("test_client").unwrap();
 
@@ -505,7 +505,7 @@ mod test {
     #[test]
     fn test_mqtt_custom_port() {
         let _lock = block_on(CHANNEL_MUTEX.lock());
-        let mut client_config = MqttConfig::default();
+        let mut client_config = MqttClientConfig::default();
         client_config.port = 8883;
         client_config.name = String::from_str("test_client").unwrap();
 
@@ -530,7 +530,7 @@ mod test {
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
-        let mut client = MqttClient::<_>::new(MqttConfig::default(), 1);
+        let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 1);
         let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
         assert!(bg77.all_done());
@@ -541,7 +541,7 @@ mod test {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0")]);
 
-        let client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         assert_eq!(block_on(client.disconnect(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
@@ -551,7 +551,7 @@ mod test {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,0")]);
-        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
         assert_eq!(res, Ok(()));
         assert!(bg77.all_done());
@@ -562,7 +562,7 @@ mod test {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[("AT+QMTPUB=2,0,0,0,\"yar/deadbeef/tpc\",1", "")]);
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,2")]);
-        let mut client = MqttClient::<_>::new(MqttConfig::default(), 2);
+        let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
         assert_eq!(res, Err(Error::TimeoutError));
         assert!(bg77.all_done());

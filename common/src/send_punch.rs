@@ -14,7 +14,7 @@ use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
-use crate::bg77::mqtt::{MqttClient, MqttConfig, MqttConfigReduced, MqttQos};
+use crate::bg77::mqtt::{MqttClient, MqttClientConfig, MqttConfig, MqttQos};
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
 use crate::flash::{Flash, ValueIndex};
@@ -65,7 +65,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         mut bg77: M,
         modem_pin: P,
         spawner: Spawner,
-        mqtt_config: MqttConfig,
+        mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
         flash: F,
     ) -> Self {
@@ -101,7 +101,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     pub fn new_without_spawning(
         bg77: M,
         modem_pin: P,
-        mqtt_config: MqttConfig,
+        mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
         flash: F,
     ) -> Self {
@@ -229,7 +229,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Configures the MQTT client
-    pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfigReduced) -> crate::Result<()> {
+    pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
         self.flash.write(ValueIndex::MqttConfig, mqtt_config.clone()).await?;
         info!("MQTT config written to flash");
         self.mqtt_client.update_reduced_config(mqtt_config);
@@ -333,7 +333,7 @@ mod tests {
     fn send_punch_instantiation_test() {
         let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
         let fake_pin = FakePin {};
-        let mqtt_config = MqttConfig::default();
+        let mqtt_config = MqttClientConfig::default();
 
         let mut send_punch = SendPunch::new_without_spawning(
             fake_modem,

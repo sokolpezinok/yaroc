@@ -12,7 +12,7 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{
         modem_manager::ModemConfig,
-        mqtt::{MqttConfig, MqttConfigReduced},
+        mqtt::{MqttClientConfig, MqttConfig},
     },
     error::Error,
     send_punch::SendPunch,
@@ -48,7 +48,7 @@ async fn main(spawner: Spawner) {
 
     ble.spawn(spawner);
 
-    let mut mqtt_config = MqttConfig {
+    let mut mqtt_config = MqttClientConfig {
         name: format!(24; "nrf52840-{mac_address}").unwrap(),
         mac_address,
         ..Default::default()
@@ -62,7 +62,7 @@ async fn main(spawner: Spawner) {
     let mut buffer = [0; 4096];
     {
         if let Ok(Some(reduced_config)) =
-            flash.read::<MqttConfigReduced>(ValueIndex::MqttConfig, &mut buffer).await
+            flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await
         {
             mqtt_config.update(reduced_config);
         }
