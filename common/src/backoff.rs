@@ -15,7 +15,7 @@
 
 use crate::{
     RawMutex,
-    bg77::mqtt::{MqttStatus, StatusCode},
+    mqtt::{MqttStatus, StatusCode},
     punch::RawPunch,
 };
 #[cfg(feature = "defmt")]

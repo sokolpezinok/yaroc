@@ -9,7 +9,7 @@ use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PunchMsg, SendPunchFn},
-    bg77::mqtt::{MqttStatus, StatusCode},
+    mqtt::{MqttStatus, StatusCode},
     punch::RawPunch,
 };
 

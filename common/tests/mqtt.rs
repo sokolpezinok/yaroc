@@ -11,7 +11,8 @@ use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromMode
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
 use yaroc_common::bg77::hw::ModemHw;
 use yaroc_common::bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemConfig, ModemManager};
-use yaroc_common::bg77::mqtt::{MqttClient, MqttClientConfig, MqttQos};
+use yaroc_common::bg77::mqtt::MqttClient;
+use yaroc_common::mqtt::{MqttClientConfig, MqttQos};
 
 // mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
 // instead.

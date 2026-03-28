@@ -7,7 +7,7 @@ use postcard::to_stdvec;
 use pyo3::prelude::*;
 use yaroc_common::{
     bg77::modem_manager::ModemConfig,
-    bg77::mqtt::MqttConfig,
+    mqtt::MqttConfig,
     usb::{UsbCommand, UsbResponse},
 };
 

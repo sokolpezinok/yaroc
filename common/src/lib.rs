@@ -5,6 +5,7 @@ pub mod backoff;
 pub mod bg77;
 pub mod error;
 pub mod flash;
+pub mod mqtt;
 pub mod punch;
 pub mod send_punch;
 pub mod si_uart;

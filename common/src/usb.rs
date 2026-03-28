@@ -11,8 +11,8 @@ use postcard::{from_bytes, to_vec};
 use serde::{Deserialize, Serialize};
 
 use crate::bg77::modem_manager::ModemConfig;
-use crate::bg77::mqtt::MqttConfig;
 use crate::error::Error;
+use crate::mqtt::MqttConfig;
 
 #[cfg(feature = "nrf")]
 /// Type alias for the USB driver.

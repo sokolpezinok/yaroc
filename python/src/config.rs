@@ -5,7 +5,7 @@ use clap::Parser;
 use heapless::String as HString;
 use serde::Deserialize;
 use yaroc_common::bg77::modem_manager::{LteBands, ModemConfig, RAT};
-use yaroc_common::bg77::mqtt::MqttConfig;
+use yaroc_common::mqtt::MqttConfig;
 
 #[derive(Parser, Debug)]
 pub struct Args {
