@@ -4,6 +4,7 @@ use chrono::{Duration, prelude::*};
 use pyo3::prelude::*;
 use yaroc_common::punch::{RawPunch, SiPunch as SiPunchRs};
 use yaroc_receiver::logs::SiPunchLog as SiPunchLogRs;
+use yaroc_receiver::meshtastic::RssiSnr;
 
 use crate::status::HostInfo;
 
@@ -52,6 +53,7 @@ pub struct SiPunchLog {
     pub latency: Duration,
     #[pyo3(get)]
     pub host_info: HostInfo,
+    rssi_snr: Option<RssiSnr>,
 }
 
 impl From<SiPunchLogRs> for SiPunchLog {
@@ -60,6 +62,7 @@ impl From<SiPunchLogRs> for SiPunchLog {
             punch: punch_log.punch.into(),
             latency: punch_log.latency,
             host_info: punch_log.host_info.into(),
+            rssi_snr: punch_log.rssi_snr,
         }
     }
 }
@@ -72,6 +75,7 @@ impl SiPunchLog {
             latency: now - punch.time,
             punch,
             host_info: host_info.clone(),
+            rssi_snr: None,
         }
     }
 
@@ -94,6 +98,13 @@ impl fmt::Display for SiPunchLog {
             self.punch.code
         )?;
         write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
+        if let Some(rssi_snr) = &self.rssi_snr {
+            write!(
+                f,
+                ", {}dBm {:.2}SNR ({} hops)",
+                rssi_snr.rssi_dbm, rssi_snr.snr, rssi_snr.hop_count
+            )?;
+        }
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", latency {:4.2}s", millis)
     }
