@@ -405,19 +405,29 @@ impl FleetState {
         packet: MeshPacket,
         now: DateTime<Local>,
     ) -> crate::Result<Vec<SiPunchLog>> {
-        let mac_address = MacAddress::Meshtastic(packet.from);
+        let MeshPacket {
+            from,
+            rx_rssi,
+            rx_snr,
+            hop_limit,
+            hop_start,
+            payload_variant,
+            channel,
+            ..
+        } = packet;
+        let mac_address = MacAddress::Meshtastic(from);
         const SERIAL_APP: i32 = PortNum::SerialApp as i32;
         let host_info = self.resolve(mac_address);
         let Some(PayloadVariant::Decoded(Data {
             portnum: SERIAL_APP,
             payload,
             ..
-        })) = packet.payload_variant
+        })) = payload_variant
         else {
             // Encrypted message or wrong portnum (but wrong portnum should be filtered away)
             return Err(Error::EncryptionError {
-                node_id: packet.from,
-                channel_id: packet.channel,
+                node_id: from,
+                channel_id: channel,
             });
         };
 
@@ -430,6 +440,7 @@ impl FleetState {
             now.date_naive(),
             now.offset(),
         );
+        let rssi_snr = RssiSnr::new(rx_rssi, rx_snr, hop_start.saturating_sub(hop_limit) as u16);
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
@@ -438,12 +449,17 @@ impl FleetState {
                         latency: now - punch.time,
                         punch,
                         host_info: host_info.clone(),
+                        rssi_snr: rssi_snr.clone(),
                     });
                 }
                 Err(err) => {
                     error!("Error decoding punch from {}: {}", host_info.name, err);
                 }
             }
+        }
+
+        if let Some(rssi_snr) = rssi_snr {
+            status.update_rssi_snr(rssi_snr);
         }
 
         Ok(result)
@@ -596,25 +612,41 @@ mod test_meshtastic {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = yaroc_common::punch::SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
-        let message = envelope(
+        let mut env = envelope(
             0xdeadbeef,
             Data {
                 portnum: PortNum::SerialApp as i32,
                 payload: punch.to_vec(),
                 ..Default::default()
             },
-        )
-        .encode_to_vec();
+        );
+        env.packet.as_mut().unwrap().rx_rssi = -90;
+        env.packet.as_mut().unwrap().rx_snr = 4.5;
+        let message = env.encode_to_vec();
+
         let mut state = FleetState::default();
         let punch_logs = state.msh_serial_service_envelope(&message, Local::now()).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
+        let rssi_snr = punch_logs[0].rssi_snr.clone().unwrap();
+        assert_eq!(rssi_snr.rssi_dbm, -90);
+        assert_eq!(rssi_snr.snr, 4.5);
+
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(
             node_infos[0].last_punch.unwrap().time(),
             NaiveTime::from_hms_opt(10, 0, 3).unwrap()
+        );
+        assert_eq!(
+            node_infos[0].signal_info,
+            SignalInfo::Meshtastic(RssiSnr {
+                rssi_dbm: -90,
+                snr: 4.5,
+                hop_count: 0,
+                distance: None
+            })
         );
     }
 

@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration};
 use femtopb::{EnumValue, Message};
 use std::fmt;
 
+use crate::meshtastic::RssiSnr;
 use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
@@ -15,6 +16,7 @@ pub struct SiPunchLog {
     pub punch: SiPunch,
     pub latency: chrono::Duration,
     pub host_info: HostInfo,
+    pub rssi_snr: Option<RssiSnr>,
 }
 
 impl SiPunchLog {
@@ -29,6 +31,7 @@ impl SiPunchLog {
                 latency: now - punch.time,
                 punch,
                 host_info,
+                rssi_snr: None,
             },
             rest,
         ))
@@ -43,6 +46,13 @@ impl core::fmt::Display for SiPunchLog {
             self.host_info.name, self.punch.card, self.punch.code
         )?;
         write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
+        if let Some(rssi_snr) = &self.rssi_snr {
+            write!(
+                f,
+                ", {}dBm {:.2}SNR ({} hops)",
+                rssi_snr.rssi_dbm, rssi_snr.snr, rssi_snr.hop_count
+            )?;
+        }
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", latency {:4.2}s", millis)
     }
@@ -250,6 +260,31 @@ mod test_logs {
             b"\x03\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50";
         let log = SiPunchLog::from_bytes(short_punch, HostInfo::default(), Local::now().into());
         assert!(log.is_none());
+    }
+
+    #[test]
+    fn test_meshtastic_punch() {
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let host_info = HostInfo {
+            name: "msh01".into(),
+            mac_address: MacAddress::Meshtastic(0x1234),
+        };
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2);
+        let log = SiPunchLog {
+            punch,
+            latency: Duration::milliseconds(1230),
+            host_info,
+            rssi_snr: Some(RssiSnr {
+                rssi_dbm: -90,
+                snr: 4.5,
+                hop_count: 1,
+                distance: None,
+            }),
+        };
+        assert_eq!(
+            format!("{log}"),
+            "msh01 1715004 punched 47 at 10:00:03.793, -90dBm 4.50SNR (1 hops), latency 1.23s"
+        );
     }
 
     #[test]
