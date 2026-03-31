@@ -4,7 +4,7 @@
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
-use embassy_time::Duration;
+use embassy_time::{Duration, Ticker};
 use heapless::format;
 use static_cell::StaticCell;
 use yaroc_common::{
@@ -36,6 +36,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 async fn main(spawner: Spawner) {
     let device = Device::default();
     let Device {
+        mut green_led,
         mac_address,
         bg77,
         modem_pin,
@@ -45,6 +46,7 @@ async fn main(spawner: Spawner) {
         usb,
         ..
     } = device;
+    green_led.set_high();
 
     ble.spawn(spawner);
 
@@ -104,4 +106,10 @@ async fn main(spawner: Spawner) {
     let temp = SoftdeviceTemp::new(ble);
     spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));
     info!("All background tasks are running");
+
+    let mut green_led_ticker = Ticker::every(Duration::from_millis(700));
+    loop {
+        green_led_ticker.next().await;
+        green_led.toggle();
+    }
 }
