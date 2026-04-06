@@ -71,9 +71,9 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/sk-SK/docs
 
 3. Attach SportIdent's SRR module to a UART port, a photo will be added later. Configure it using instructions below.
 
-### Configure receiving punches over UART
+### Configure meshtastic UART
 
-First, enable the right serial mode.
+To forward SportIdent's SRR punches over LoRa, we need to configure meshtastic to send them over LoRa. First, enable the right serial mode.
 
 ```sh
 meshtastic --set serial.mode SIMPLE --set serial.enabled true -set serial.baud BAUD_38400 \
@@ -99,26 +99,52 @@ meshtastic --set serial.rxd 13 --set serial.txd 14
 ```
 
 
-
 ## Receive punches
 
-First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should receive the punches: ROC, SIRAP, serial, etc.
-
-TODO: full list of clients
+First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should send the punches: ROC, SIRAP, serial, etc.
 
 ```toml
+# Note: "SPE" is the shortcut of our club name, we use it to name things, so our ROC units are prefixed "SPE-".
+
 log_level = "info"
+display = "epd2in66" # You can use a Waveshare e-ink display to show a status table of all YAROC units.
 
 [mac-addresses]
-spe01 = "b827eb78912f"
+spe01 = "b827eb78912e" # YAROC unit with a SIM card
+spr01 = "4e18f7a5" # Meshtastic uses a 32-bit ID, which is 8 hex characters
+spr02 = "7bfaf584"
 
-[client.sirap]
-enable = true
-ip = "192.168.1.10"
-port = 10000
+[meshtastic]
+main_channel = "spe"
+# By default, meshtastic packets are only received via MQTT but you can also
+# connect a meshtastic device using a USB cable. Set `watch_serial = true` to
+# detect meshtastic device connected via USB.
+watch_serial = true
 
 [client.roc]
 enable = true
+
+[client.roc.override]
+# Sometimes you don't have a device registered for ROC. You can remap the device
+# MAC address to another one registered to ROC. Especially useful for meshtastic
+# devices, which can't be registered to ROC.
+# Tip: you can register new MAC # addresses to ROC using the SI-Droid ROC app
+# and then use the phone's MAC here.
+spr01 = "b827eba22867"
+spr02 = "b827eba22867"
+
+[client.serial]
+# Connect a device such as "Waveshare CP2102 USB UART Board" to your Raspberry
+# Pi and receive punches directly to the orienteering software of your choice
+# (MeOS, # etc.).
+enable = true
+port = "/dev/ttyAMA0" # Use "/dev/ttyS0" on newer Raspberry Pi's (3 and newer)
+
+[client.sirap]
+# Note: SIRAP is not well tested, use with caution
+enable = true
+ip = "192.168.1.10"
+port = 10000
 ```
 
 With a config file present, we are able to run the YAROC daemon called `yarocd`:
