@@ -12,19 +12,22 @@ It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de)
 
 # Features
 
-* **Very low latency, very low bandwith**. Using a fast medium such as Wi-Fi or LTE allows for latencies around 100 to 200 milliseconds. Bandwidth used during one competition is well bellow 1 MB for each YAROC forest unit. This allows you to use cheap IoT SIM cards.
-* **Supports multiple physical layers: radio (LoRa), NB-IoT, LTE, Wi-Fi, LAN**. Low power technologies such as NB-IoT and LoRa are the best solution for remote sport events. The other 3 (LTE, Wi-Fi and LAN) offer minimum latency.
-* **Simple integration via USB** recognizable by most orienteering softwares. Just plug in a Raspberry Pi in the finish area, connect it to internet and you are done!
-* **ROC-compatible mode**. If you own a ROC device, you can use YAROC instead and it will work almost the same (some features missing).
+* **Very low latency, very low bandwidth**: Wi-Fi or LTE/LTE-M can achieve latencies as low as 100–200ms. Bandwidth usage under 1 MB per day allows the use of cheap IoT SIM cards. Uses Protobuf for data serialization to minimize packet size.
+* **Support for multiple physical layers**: NB-IoT, LTE-M, Radio (LoRa), LTE, Wi-Fi, LAN. Also supports BLE and USB for short-range communication.
+* **Radio mesh**: Seamless integration with **Meshtastic** allows for LoRa-based mesh networks. Punches can be hopped across multiple nodes to reach a gateway, which can then bridge the data to the internet or directly to an orienteering software (MeOs, etc.).
+* **Simple integration via USB** recognizable by most orienteering softwares. Pluge an ethernet cable into a Raspberry Pi in the finish area, connect it via USB cable to a computer and you are done!
+* **Broad hardware compatibility**: Runs on everything from Linux machines (Raspberry Pi, PC) to specialized microcontrollers like the nRF52840.
+* **Reliability**: Features built-in retries, exponential backoff, and buffering to ensure no punch is lost during network outages.
+* **Multiple output protocols**: Integration with ROC, SIRAP, MQTT, and MeOS (MOP) protocols.
 * **Generator of fake SportIdent punches**: very useful for load testing of the system, for example to determine the right LoRa settings respecing duty cycle limits.
-* **Radio mesh**. When using LoRa, the LoRa devices create a mesh network and transmit punches using other LoRa nodes to the finish area. The mesh can connect to the internet via LTE, so placing one node on a hill makes the whole mesh online.
-* **Run everywhere: Linux, Windows, Raspberry Pi, microcontrollers**. We're searching for [the right hardware](https://github.com/sokolpezinok/yaroc/issues/6) for NB-IoT but in principle this is just a matter of time when it happens.
 * **Open-source**
 
 
 # Etymology
 
-YAROC is pronounced phonetically as "jarok", which is Slovak for minor water channel. Thus the ISOM map symbol of YAROC is [306 Minor/seasonal water channel]([https://omapwiki.orienteering.sport/symbols/108-small-erosion-gully/](https://omapwiki.orienteering.sport/symbols/306-minor-seasonal-water-channel/)). The project logo is created using the symbol.
+YAROC is pronounced phonetically as **"jarok"** (/'jarɔk/), which is the Slovak word for a small ditch or minor water channel. 
+
+Reflecting this name, the project's logo is based on the orienteering ISOM map symbol **[306 Minor/seasonal water channel](https://omapwiki.orienteering.sport/symbols/306-minor-seasonal-water-channel/)**.
 
 # Installation
 
