@@ -3,8 +3,8 @@ name = "yaroc-nrf52840"
 version = "0.1.0"
 authors = ["Lukáš Poláček <lukas@polacek.email>"]
 resolver = "2"
-rust-version = "1.90"
 edition = "2024"
+rust-version = "1.93"
 
 [features]
 default = []
