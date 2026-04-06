@@ -47,7 +47,7 @@ impl RssiSnr {
 
     /// Returns the signal strength of the LoRa connection
     pub fn signal_strength(&self) -> SignalStrength {
-        if self.rssi_dbm >= -100 && self.snr >= 0.0 {
+        if self.rssi_dbm >= -105 && self.snr >= 0.0 {
             SignalStrength::Excellent
         } else if self.rssi_dbm >= -115 && self.snr >= -5.0 {
             SignalStrength::Good

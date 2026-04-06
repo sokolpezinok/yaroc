@@ -25,14 +25,16 @@ pub enum SignalInfo {
     Unknown,
     Cell(CellSignalInfo),
     Meshtastic(RssiSnr),
+    MeshtasticOverMqtt,
 }
 
 impl SignalInfo {
     pub fn signal_strength(&self) -> SignalStrength {
         match self {
-            SignalInfo::Unknown => SignalStrength::Disconnected,
             SignalInfo::Cell(cell_signal_info) => cell_signal_info.signal_strength(),
             SignalInfo::Meshtastic(rssi_snr) => rssi_snr.signal_strength(),
+            SignalInfo::MeshtasticOverMqtt => SignalStrength::Excellent,
+            SignalInfo::Unknown => SignalStrength::Disconnected,
         }
     }
 }
@@ -148,8 +150,9 @@ impl MeshtasticNodeStatus {
 
     pub fn serialize(&self) -> NodeInfo {
         let signal_info = match &self.rssi_snr {
+            // TODO: if RSSI info is too old, consider marking it disconnected
             Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
-            None => SignalInfo::Unknown,
+            None => SignalInfo::MeshtasticOverMqtt,
         };
         NodeInfo {
             name: self.name.clone(),
@@ -700,7 +703,11 @@ mod test_meshtastic {
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
-        assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
+        assert_eq!(node_infos[0].signal_info, SignalInfo::MeshtasticOverMqtt);
+        assert_eq!(
+            node_infos[0].signal_info.signal_strength(),
+            SignalStrength::Excellent
+        );
     }
 
     #[test]
