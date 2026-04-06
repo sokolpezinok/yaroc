@@ -26,7 +26,7 @@ YAROC is pronounced phonetically as "jarok", which is Slovak for a small ditch. 
 
 # Installation
 
-Install from PyPI. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
+Install the `yaroc` package from PyPI, which provides the `send-punch` and `yarocd` commands. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
 
 ```sh
 uv tool install yaroc
@@ -104,21 +104,22 @@ meshtastic --set serial.rxd 13 --set serial.txd 14
 First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should send the punches: ROC, SIRAP, serial, etc.
 
 ```toml
-# Note: "SPE" is the shortcut of our club name, we use it to name things, so our ROC units are prefixed "SPE-".
+# Note: "SPE" is the shortcut of "**S**okol **Pe**zinok", our club name. We use it to # name things, so our
+# YAROC units are prefixed "SPE-".
 
 log_level = "info"
 display = "epd2in66" # You can use a Waveshare e-ink display to show a status table of all YAROC units.
 
 [mac-addresses]
-spe01 = "b827eb78912e" # YAROC unit with a SIM card
-spr01 = "4e18f7a5" # Meshtastic uses a 32-bit ID, which is 8 hex characters
+spe01 = "b827eb78912e" # YAROC unit (e.g. with a SIM card)
+spr01 = "4e18f7a5" # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
 spr02 = "7bfaf584"
 
 [meshtastic]
 main_channel = "spe"
-# By default, meshtastic packets are only received via MQTT but you can also
-# connect a meshtastic device using a USB cable. Set `watch_serial = true` to
-# detect meshtastic device connected via USB.
+# By default, Meshtastic packets are only received via MQTT but you can also
+# connect a Meshtastic device using a USB cable. Set `watch_serial = true` to
+# detect Meshtastic device connected via USB.
 watch_serial = true
 
 [client.roc]
@@ -136,9 +137,9 @@ spr02 = "b827eba22867"
 [client.serial]
 # Connect a device such as "Waveshare CP2102 USB UART Board" to your Raspberry
 # Pi and receive punches directly to the orienteering software of your choice
-# (MeOS, # etc.).
+# (MeOS, etc.).
 enable = true
-port = "/dev/ttyAMA0" # Use "/dev/ttyS0" on newer Raspberry Pi's (3 and newer)
+port = "/dev/serial0" # Use "/dev/serial0" on Raspberry Pi (automatically maps to the correct UART)
 
 [client.sirap]
 # Note: SIRAP is not well tested, use with caution
