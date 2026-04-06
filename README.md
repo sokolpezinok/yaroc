@@ -1,5 +1,7 @@
 # YAROC
 
+![yaroc-logo](https://github.com/user-attachments/assets/2765a80f-fc0c-4b2d-97a1-495be607f95a)
+
 Yet Another [ROC](https://roc.olresultat.se). Radio Online Control for orienteering and other sports that use SportIdent timing (trail running, MTB enduro).
 
 [![Python (Linux)](https://github.com/sokolpezinok/yaroc/actions/workflows/linux-python.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/linux-python.yml)
@@ -22,7 +24,7 @@ It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de)
 
 # Etymology
 
-YAROC is pronounced phonetically as "jarok", which is Slovak for a small ditch. Thus the ISOM map symbol of YAROC is [108 Small erosion gully](https://omapwiki.orienteering.sport/symbols/108-small-erosion-gully/). Symbol 108 will be the logo of the project once I have some time to create one.
+YAROC is pronounced phonetically as "jarok", which is Slovak for minor water channel. Thus the ISOM map symbol of YAROC is [306 Minor/seasonal water channel]([https://omapwiki.orienteering.sport/symbols/108-small-erosion-gully/](https://omapwiki.orienteering.sport/symbols/306-minor-seasonal-water-channel/)). The project logo is created using the symbol.
 
 # Installation
 
