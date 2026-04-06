@@ -109,42 +109,38 @@ meshtastic --set serial.rxd 13 --set serial.txd 14
 First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should send the punches: ROC, SIRAP, serial, etc.
 
 ```toml
-# Note: "SPE" is the shortcut of "**S**okol **Pe**zinok", our club name. We use it to # name things, so our
-# YAROC units are prefixed "SPE-".
+# "SPE" is the shortcut for "Sokol Pezinok", our club name. We use it to name things,
+# so our YAROC units are prefixed "SPE-".
 
 log_level = "info"
-display = "epd2in66" # You can use a Waveshare e-ink display to show a status table of all YAROC units.
+# You can use a Waveshare e-ink display to show a status table of all YAROC units.
+display = "epd2in66"
 
 [mac-addresses]
-spe01 = "b827eb78912e" # YAROC unit (e.g. with a SIM card)
-spr01 = "4e18f7a5" # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
+spe01 = "b827eb78912e" # YAROC unit with a SIM card
+spr01 = "4e18f7a5"     # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
 spr02 = "7bfaf584"
 
 [meshtastic]
 main_channel = "spe"
-# By default, Meshtastic packets are only received via MQTT but you can also
-# connect a Meshtastic device using a USB cable. Set `watch_serial = true` to
-# detect Meshtastic device connected via USB.
+# By default, Meshtastic packets are received via MQTT but you can also connect
+# a Meshtastic device using a USB cable.
 watch_serial = true
 
 [client.roc]
 enable = true
 
 [client.roc.override]
-# Sometimes you don't have a device registered for ROC. You can remap the device
-# MAC address to another one registered to ROC. Especially useful for meshtastic
-# devices, which can't be registered to ROC.
-# Tip: you can register new MAC # addresses to ROC using the SI-Droid ROC app
-# and then use the phone's MAC here.
+# If you don't have a device registered for ROC, you can remap the device MAC address to
+# another one. Useful for meshtastic devices, which can't be registered to ROC directly.
 spr01 = "b827eba22867"
 spr02 = "b827eba22867"
 
 [client.serial]
-# Connect a device such as "Waveshare CP2102 USB UART Board" to your Raspberry
-# Pi and receive punches directly to the orienteering software of your choice
-# (MeOS, etc.).
+# Connect a "UART to USB" board to your Raspberry Pi and receive punches directly
+# into orienteering software (MeOS, etc.) over USB.
 enable = true
-port = "/dev/serial0" # Use "/dev/serial0" on Raspberry Pi (automatically maps to the correct UART)
+port = "/dev/serial0" # Use "/dev/serial0" on Raspberry Pi (maps to the correct UART)
 
 [client.sirap]
 # Note: SIRAP is not well tested, use with caution
