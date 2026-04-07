@@ -1,4 +1,5 @@
 use core::str::FromStr;
+use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_executor::{Executor, Spawner};
 use embassy_sync::channel::Channel;
 use embassy_sync::pipe::Pipe;
@@ -11,6 +12,7 @@ use yaroc_common::{at::uart::AtUart, error::Error};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static URC_CHANNEL: Channel<yaroc_common::RawMutex, CommandResponse, 1> = Channel::new();
+static DONE: AtomicBool = AtomicBool::new(false);
 
 fn urc_handler(response: &CommandResponse) -> bool {
     if response.command() == "URC" {
@@ -24,9 +26,12 @@ fn urc_handler(response: &CommandResponse) -> bool {
 #[test]
 fn uart_test() {
     let executor = EXECUTOR.init(Executor::new());
-    executor.run(|spawner| {
-        spawner.spawn(main(spawner).expect("Failed to spawn task"));
-    });
+    executor.run_until(
+        |spawner| {
+            spawner.spawn(main(spawner).expect("Failed to spawn task"));
+        },
+        || DONE.load(Ordering::Relaxed),
+    );
 }
 
 #[embassy_executor::task]
@@ -85,5 +90,5 @@ async fn main(spawner: Spawner) {
     assert_eq!(error, Some(Error::TimeoutError));
 
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);
-    std::process::exit(0); // TODO: this is ugly, is there a better way?
+    DONE.store(true, Ordering::Relaxed);
 }
