@@ -1,4 +1,4 @@
-// Note: this test is not finished yet, there's no asserts and it takes too long
+use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_executor::{Executor, Spawner};
 use embassy_sync::{
     channel::Channel,
@@ -47,6 +47,7 @@ static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] = 
 ];
 static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 3, PUNCH_COUNT, 1> = PubSubChannel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_COUNT> = Channel::new();
+static DONE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Default)]
 struct FakeSendPunchFn {
@@ -148,9 +149,12 @@ static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 #[test]
 fn backoff_test() {
     let executor = EXECUTOR.init(Executor::new());
-    executor.run(|spawner| {
-        spawner.spawn(main(spawner).expect("Failed to spawn task"));
-    });
+    executor.run_until(
+        |spawner| {
+            spawner.spawn(main(spawner).expect("Failed to spawn task"));
+        },
+        || DONE.load(Ordering::Relaxed),
+    );
 }
 
 #[embassy_executor::task]
@@ -239,5 +243,5 @@ async fn main(spawner: Spawner) {
     // End of second test
 
     assert!(PUBLISH_EVENTS.is_empty());
-    std::process::exit(0); // Exit from executor
+    DONE.store(true, Ordering::Relaxed);
 }
