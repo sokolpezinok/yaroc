@@ -131,7 +131,7 @@ async def main_loop() -> None:
         mqtt_config.credentials = (config["username"], config["password"])
 
     mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
-    meshtastic_serial = meshtastic_conf.get("watch_serial", False)
+    meshtastic_serial = meshtastic_conf.get("watch_usb", False)
     yaroc_daemon = YarocDaemon(
         dns,
         client_group,

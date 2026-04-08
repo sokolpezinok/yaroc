@@ -123,9 +123,9 @@ spr02 = "7bfaf584"
 
 [meshtastic]
 main_channel = "spe"
-# By default, Meshtastic packets are received via MQTT but you can also connect
-# a Meshtastic device using a USB cable.
-watch_serial = true
+# By default, Meshtastic packets are received via MQTT but you can also connect a Meshtastic
+# device using a USB cable. `watch_usb` set to true will watch for USB Meshtastic devices.
+watch_usb = true
 
 [client.roc]
 enable = true
