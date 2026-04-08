@@ -106,30 +106,35 @@ class YarocDaemon:
 async def main_loop() -> None:
     with open("yarocd.toml", "rb") as f:
         config = tomllib.load(f)
-    config.pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
-    config.pop("sim7020", None)  # Disallow MQTT forwarding to break infinite loops
 
     container = Container()
     container.config.from_dict(config)
     container.init_resources()
     container.wire(modules=["yaroc.utils.container"])
 
-    mac_addresses = config["mac-addresses"]
-    si_device_notifier: Queue[str] = Queue()
+    mqtt_toml_conf = config.get("mqtt", {})
+    mqtt_config = MqttConfig()
+    mqtt_config.url = mqtt_toml_conf.get("broker_url", BROKER_URL)
+    mqtt_config.port = mqtt_toml_conf.get("broker_port", BROKER_PORT)
+    if "password" in mqtt_toml_conf:
+        mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
+
+    mac_addresses = mqtt_toml_conf["mac-addresses"]
+    si_device_notifier: Queue[str] | None = (
+        Queue() if config.get("sportident", {}).get("watch_usb", False) else None
+    )
+
+    if "client" in config:
+        config["client"].pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
+        config["client"].pop("sim7020", None)  # ... also for SIM7020
     client_group = await create_clients(
         container.client_factories, mac_addresses, si_device_notifier=si_device_notifier
     )
     if client_group.len() == 0:
         logging.info("Listening without forwarding")
 
-    dns = [(mac_address, name) for name, mac_address in config["mac-addresses"].items()]
+    dns = [(mac_address, name) for name, mac_address in mac_addresses.items()]
     meshtastic_conf = config.get("meshtastic", {})
-    mqtt_config = MqttConfig()
-    mqtt_config.url = config.get("broker_url", BROKER_URL)
-    mqtt_config.port = config.get("broker_port", BROKER_PORT)
-    if "password" in config:
-        mqtt_config.credentials = (config["username"], config["password"])
-
     mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
     meshtastic_serial = meshtastic_conf.get("watch_usb", False)
     yaroc_daemon = YarocDaemon(

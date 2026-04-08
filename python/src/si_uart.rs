@@ -69,7 +69,7 @@ impl SiUartHandler {
                     Ok(())
                 }
                 Err(err) => Err(PyConnectionError::new_err(format!(
-                    "Error connecting to {port}: {err}"
+                    "Error connecting to SI UART at {port}: {err}"
                 ))),
             }
         })

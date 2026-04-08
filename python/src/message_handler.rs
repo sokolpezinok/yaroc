@@ -115,7 +115,7 @@ impl MshDevHandler {
                     info!("Connected to meshtastic device: {mac_address} at {port}",);
                 }
                 Err(err) => {
-                    error!("Error connecting to {port}: {err}");
+                    error!("Error connecting to meshtastic device at {port}: {err}");
                 }
             }
             Ok(())

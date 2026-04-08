@@ -188,7 +188,12 @@ impl SerialClient {
         builder
             .open_native_async()
             .inspect(|_| info!("Connected to mini-reader at {port}"))
-            .map_err(|e| PyConnectionError::new_err(format!("Error connecting to {}: {e}", port)))
+            .map_err(|e| {
+                PyConnectionError::new_err(format!(
+                    "Error connecting to SportIdent device {}: {e}",
+                    port
+                ))
+            })
     }
 }
 
