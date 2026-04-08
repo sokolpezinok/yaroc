@@ -38,14 +38,12 @@ impl AtRxBroker {
     ///
     /// # Arguments
     /// * `main_channel` - The channel for routing non-URC replies.
-    /// * `urc_handlers` - A list of functions for handling URCs.
-    pub fn new(
-        main_channel: &'static MainRxChannelType,
-        urc_handlers: Vec<UrcHandlerType, 3>,
-    ) -> Self {
+    /// * `urc_handlers` - A list of functions for handling URCs. At most 3 are accepted.
+    pub fn new(main_channel: &'static MainRxChannelType, urc_handlers: &[UrcHandlerType]) -> Self {
         Self {
             main_channel,
-            urc_handlers,
+            urc_handlers: Vec::from_slice(urc_handlers)
+                .expect("Too many URC handlers, at most 3 accepted"),
         }
     }
 
@@ -171,10 +169,7 @@ async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
 
 impl RxWithIdle for FakeRxWithIdle {
     fn spawn(self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
-        let at_broker = AtRxBroker::new(
-            &MAIN_RX_CHANNEL,
-            Vec::from_slice(urc_handlers).expect("Too many URC handlers, at most 3 accepted"),
-        );
+        let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);
         spawner.spawn(reader(self, at_broker).expect("Failed to spawn AT reader"));
     }
 
@@ -429,8 +424,7 @@ mod test_at {
             }
             _ => false,
         };
-        let handlers = [handler].into();
-        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, handlers);
+        let broker = AtRxBroker::new(&MAIN_RX_CHANNEL, &[handler]);
 
         block_on(broker.parse_lines("RDY\nAPP RDY\n AT+CFUN=1,0 \nOK\n"));
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Ok);
