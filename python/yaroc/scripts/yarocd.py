@@ -119,7 +119,7 @@ async def main_loop() -> None:
     if "password" in mqtt_toml_conf:
         mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
 
-    mac_addresses = mqtt_toml_conf["mac-addresses"]
+    mac_addresses = config.get("mac-addresses", {})
     si_device_notifier: Queue[str] | None = (
         Queue() if config.get("sportident", {}).get("watch_usb", False) else None
     )

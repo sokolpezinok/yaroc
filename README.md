@@ -121,7 +121,7 @@ broker_url = "broker.emqx.io"
 # username = joe
 # password = mynameisjoe
 
-[mqtt.mac-addresses]
+[mac-addresses]
 spe01 = "b827eb78912e" # YAROC unit with a SIM card
 spr01 = "4e18f7a5"     # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
 spr02 = "7bfaf584"
