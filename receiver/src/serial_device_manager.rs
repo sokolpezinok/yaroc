@@ -45,6 +45,11 @@ where
         self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
+    /// Indicates whether the device is connected and running.
+    pub fn is_running(&self, device_node: &str) -> bool {
+        self.cancellation_tokens.contains_key(device_node)
+    }
+
     /// Disconnects a serial device.
     ///
     /// This function cancels the task that handles messages from the device and returns true if
@@ -82,11 +87,6 @@ where
         });
 
         cancellation_token_clone
-    }
-
-    #[cfg(test)]
-    fn is_running(&self, device_node: &str) -> bool {
-        self.cancellation_tokens.contains_key(device_node)
     }
 }
 
