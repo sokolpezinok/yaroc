@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Packages
       run: sudo apt update && sudo apt install -y protobuf-compiler libdbus-1-dev pkg-config
     - name: Cargo format
