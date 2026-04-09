@@ -2,7 +2,7 @@
 Description=YAROC daemon
 
 [Service]
-ExecStart=/home/pi/yaroc/.venv/bin/yarocd
+ExecStart=/home/pi/.local/bin/yarocd
 WorkingDirectory=/home/pi
 User=pi
 Restart=always

@@ -1,8 +1,8 @@
 [Unit]
-Description=YAROC Send Punches
+Description=YAROC Send Punch daemon
 
 [Service]
-ExecStart=/home/pi/yaroc/.venv/bin/send-punch
+ExecStart=/home/pi/.local/bin/send-punch
 WorkingDirectory=/home/pi
 User=pi
 Restart=always
