@@ -219,5 +219,5 @@ class MopClient(Client):
 
             return MopClient._competitors_from_meos_xml(xml)
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
-        return True
+    async def send_status(self, status: Status, mac_addr: str):
+        pass

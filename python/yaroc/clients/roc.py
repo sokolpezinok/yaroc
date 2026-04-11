@@ -75,7 +75,7 @@ class RocClient(Client):
         except Exception as e:
             raise ConnectionError(f"{e}")
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
+    async def send_status(self, status: Status, mac_addr: str):
         mac_addr = self.mac_override_map.get(mac_addr, mac_addr)
         oneof = status.WhichOneof("msg")
         if oneof == "mini_call_home":
@@ -120,6 +120,5 @@ class RocClient(Client):
         try:
             await self.client.get(ROC_RECEIVEDATA, params=params)
             logging.info("MiniCallHome sent to ROC")
-            return True
         except Exception as e:
             raise ConnectionError(f"{e}")

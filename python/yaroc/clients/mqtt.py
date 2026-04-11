@@ -98,7 +98,7 @@ class MqttClient(Client):
         topics = self.get_topics(punch_log.host_info.mac_address)
         await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
+    async def send_status(self, status: Status, mac_addr: str):
         try:
             if status.WhichOneof("msg") == "mini_call_home" and self.mm is not None:
                 modems = await self.mm.get_modems()
@@ -127,7 +127,6 @@ class MqttClient(Client):
 
         topics = self.get_topics(mac_addr)
         await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
-        return True
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
@@ -217,7 +216,7 @@ class SIM7020MqttClient(Client):
     ):
         await self._retries.send(punch_log.punch.raw)
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
+    async def send_status(self, status: Status, mac_addr: str):
         if status.WhichOneof("msg") == "mini_call_home":
             async with self._lock:
                 res = await self._sim7020.get_signal_info()
@@ -234,7 +233,7 @@ class SIM7020MqttClient(Client):
                     elif ecl == 2:
                         mch.network_type = CellNetworkType.NbIotEcl2  # type: ignore
 
-        return await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
+        await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
         async with self._lock:

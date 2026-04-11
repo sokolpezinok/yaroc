@@ -24,8 +24,8 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
-        return True
+    async def send_status(self, status: Status, mac_addr: str):
+        pass
 
     @abstractmethod
     def name(self) -> str:
@@ -40,7 +40,7 @@ class ClientGroup:
     def len(self) -> int:
         return len(self.clients)
 
-    def handle_results(self, results: Sequence[bool | BaseException | None]):
+    def handle_results(self, results: Sequence[BaseException | None]):
         for result, client in zip(results, self.clients):
             if isinstance(result, Exception):
                 logging.error(f"{client.name()} failed: {result}")
@@ -49,7 +49,7 @@ class ClientGroup:
         loops = [client.loop() for client in self.clients]
         await asyncio.gather(*loops, return_exceptions=True)
 
-    async def send_status(self, status: Status, mac_address: str) -> Sequence[bool | BaseException]:
+    async def send_status(self, status: Status, mac_address: str) -> Sequence[None | BaseException]:
         handles = [client.send_status(status, mac_address) for client in self.clients]
         results = await asyncio.gather(*handles, return_exceptions=True)
         self.handle_results(results)

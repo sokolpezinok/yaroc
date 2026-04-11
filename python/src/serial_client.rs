@@ -352,7 +352,7 @@ impl SerialClient {
         _status: &Bound<'_, PyAny>,
         _mac_addr: &str,
     ) -> PyResult<Bound<'a, PyAny>> {
-        future_into_py(py, future::ready(Ok(true)))
+        future_into_py(py, future::ready(Ok(())))
     }
 }
 

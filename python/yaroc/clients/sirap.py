@@ -69,8 +69,8 @@ class SirapClient(Client):
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
         await self._send(message)
 
-    async def send_status(self, status: Status, mac_addr: str) -> bool:
-        return True
+    async def send_status(self, status: Status, mac_addr: str):
+        pass
 
     @staticmethod
     def _serialize_card(
