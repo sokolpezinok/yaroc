@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use yaroc_common::status::SignalStrength;
+use yaroc_common::status::voltage_to_percent;
 
 use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
@@ -52,7 +53,7 @@ pub struct NodeInfo {
 pub struct CellularNodeStatus {
     host_info: HostInfo,
     state: Option<CellSignalInfo>,
-    voltage: Option<f64>,
+    battery_percentage: Option<u8>,
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     last_punch: Option<DateTime<FixedOffset>>,
@@ -71,8 +72,9 @@ impl CellularNodeStatus {
         self.last_update = Some(Local::now().into());
     }
 
-    pub fn update_voltage(&mut self, voltage: f64) {
-        self.voltage = Some(voltage);
+    pub fn update_voltage(&mut self, mv: u16) {
+        let percent = voltage_to_percent(mv);
+        self.battery_percentage = Some(percent);
     }
 
     pub fn mqtt_connect_update(&mut self, signal_info: CellSignalInfo) {
@@ -281,7 +283,7 @@ impl FleetState {
                     status.mqtt_connect_update(signal_info);
                 }
                 if let Some(batt_mv) = mch.batt_mv {
-                    status.update_voltage(f64::from(batt_mv) / 1000.);
+                    status.update_voltage(batt_mv);
                 }
             }
             CellularLogMessage::Disconnected { .. } => {

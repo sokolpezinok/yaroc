@@ -223,8 +223,10 @@ impl fmt::Display for MiniCallHomeLog {
                 write!(f, ", cell {cellid:X}")?;
             }
         }
-        if let Some(batt_mv) = self.mini_call_home.batt_mv {
-            write!(f, ", {:.2}V", f32::from(batt_mv) / 1000.0)?;
+        if let Some(batt_mv) = self.mini_call_home.batt_mv
+            && let Some(batt_p) = self.mini_call_home.batt_percents
+        {
+            write!(f, ", {:.2}V {:2}%", f32::from(batt_mv) / 1000.0, batt_p)?;
         }
         let secs = self.latency.num_milliseconds() as f64 / 1000.0;
         write!(f, ", lat. {:4.2}s", secs)
@@ -300,6 +302,7 @@ mod test_logs {
             mini_call_home: yaroc_common::status::MiniCallHome {
                 signal_info,
                 batt_mv: Some(1260),
+                batt_percents: Some(50),
                 cpu_temperature: Some(51.54),
                 timestamp: Some(timestamp),
                 ..Default::default()
@@ -312,7 +315,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, RSRP  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V, lat. 1.39s"
+            "spe01 17:40:43: 51.5°C, RSRP  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V 50%, lat. 1.39s"
         );
     }
 
