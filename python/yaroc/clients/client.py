@@ -57,6 +57,6 @@ class ClientGroup:
 
     async def send_punch(self, punch: SiPunchLog) -> Sequence[bool | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
-        results = await asyncio.gather(*handles)
+        results = await asyncio.gather(*handles, return_exceptions=True)
         self.handle_results(results)
         return results

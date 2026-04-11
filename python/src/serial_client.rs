@@ -30,6 +30,7 @@ pub struct SerialClient {
     mini_reader: Arc<Mutex<Option<SerialStream>>>,
     mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
     mini_reader_connect_tx: UnboundedSender<String>,
+    port: String,
 }
 
 const FIRST_RESPONSE: &[u8] = &[0xff, 0x02, 0xf0, 0x03, 0x12, 0x8c, 0x4d, 0x62, 0x3f, 0x03];
@@ -225,13 +226,14 @@ impl SerialClient {
                 mini_reader: Arc::default(),
                 mini_reader_connect_rx: Arc::new(Mutex::new(mini_reader_connect_rx)),
                 mini_reader_connect_tx,
+                port: computer_port,
             })
         })
     }
 
     /// Name of the client
     fn name(&self) -> String {
-        "SerialClient".to_owned()
+        format!("serial-{}", self.port)
     }
 
     /// Starts an asynchronous loop to continuously respond as a blue SRR dongle.

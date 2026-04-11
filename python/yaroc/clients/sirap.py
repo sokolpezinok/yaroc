@@ -25,7 +25,7 @@ class SirapClient(Client):
         self.connected = False
 
     def name(self) -> str:
-        return f"SIRAP {self.host}:{self.port}"
+        return f"sirap-{self.host}:{self.port}"
 
     def __del__(self):
         # TODO: should we close self._reader and self._writer?

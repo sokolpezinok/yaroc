@@ -51,7 +51,7 @@ class MqttClient(Client):
         broker_port: int | None,
     ):
         self.topics: Dict[str, Topics] = {}
-        self._name = f"MQTT {hostname}"
+        self._name = f"aiomqtt-{hostname}"
         self.mac_addr = mac_addr
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
@@ -134,9 +134,7 @@ class MqttClient(Client):
             logging.info(f"{message_type} sent via MQTT")
             return True
         except MqttCodeError as e:
-            # TODO: consider raising here and catching it inside ClientGroup
-            logging.error(f"{message_type} not sent: {e}")
-            return False
+            raise ConnectionError(f"{message_type} not sent: {e}")
 
     async def loop(self):
         try:
