@@ -23,6 +23,30 @@ pub struct BatteryInfo {
 }
 pub static BATTERY: Watch<RawMutex, BatteryInfo, 1> = Watch::new();
 
+const OCV_MV: [u16; 11] = [
+    4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100,
+];
+
+/// Converts battery voltage in millivolts to percentage using Meshtastic's Li-Ion OCV table.
+pub fn voltage_to_percent(mv: u16) -> u8 {
+    if mv >= OCV_MV[0] {
+        return 100;
+    }
+
+    for i in 0..10 {
+        if mv >= OCV_MV[i + 1] {
+            // Interpolate from start to end.
+            let end = u32::from(OCV_MV[i]);
+            let start = u32::from(OCV_MV[i + 1]);
+            let percentage_start = (9 - i as u32) * 10;
+
+            let p = percentage_start + (u32::from(mv) - start) * 10 / (end - start);
+            return p as u8;
+        }
+    }
+    0
+}
+
 /// Cell network type, currently only NB-IoT and LTE-M is supported
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum CellNetworkType {
@@ -233,7 +257,7 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
         Ok(Self {
             signal_info: Some(signal_info),
             batt_mv: Some(value.millivolts as u16),
-            batt_percents: None, // TODO
+            batt_percents: Some(voltage_to_percent(value.millivolts as u16)),
             cpu_temperature: Some(value.cpu_temperature),
             cpu_freq: Some(value.freq),
             timestamp,
@@ -271,6 +295,7 @@ mod test {
         assert_eq!(mch.cpu_temperature.unwrap(), 47.2);
         assert_eq!(mch.cpu_freq.unwrap(), 1600);
         assert_eq!(mch.batt_mv.unwrap(), 3782);
+        assert_eq!(mch.batt_percents.unwrap(), 57);
         assert_eq!(
             mch.signal_info.unwrap(),
             CellSignalInfo {
@@ -354,5 +379,21 @@ mod test {
 
         info.network_type = CellNetworkType::NbIotEcl2;
         assert_eq!(info.signal_strength(), SignalStrength::Weak);
+    }
+
+    #[test]
+    fn test_voltage_to_percent() {
+        assert_eq!(voltage_to_percent(4134), 96);
+        assert_eq!(voltage_to_percent(4078), 92);
+        assert_eq!(voltage_to_percent(3930), 74);
+        assert_eq!(voltage_to_percent(3881), 69);
+        assert_eq!(voltage_to_percent(3802), 60);
+        assert_eq!(voltage_to_percent(3643), 41);
+        assert_eq!(voltage_to_percent(3603), 37);
+        assert_eq!(voltage_to_percent(3501), 27);
+        assert_eq!(voltage_to_percent(3467), 24);
+        assert_eq!(voltage_to_percent(4200), 100);
+        assert_eq!(voltage_to_percent(3100), 0);
+        assert_eq!(voltage_to_percent(3000), 0);
     }
 }
