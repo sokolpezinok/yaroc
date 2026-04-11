@@ -229,6 +229,11 @@ impl SerialClient {
         })
     }
 
+    /// Name of the client
+    fn name(&self) -> String {
+        "SerialClient".to_owned()
+    }
+
     /// Starts an asynchronous loop to continuously respond as a blue SRR dongle.
     ///
     /// This method runs an infinite loop that calls `respond_as_blue_srr` to handle

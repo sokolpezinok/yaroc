@@ -22,6 +22,9 @@ class RocClient(Client):
     def __init__(self, mac_override_map: Dict[str, str] = {}):
         self.mac_override_map = mac_override_map
 
+    def name(self) -> str:
+        return "ROC"
+
     async def loop(self):
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=50))
         retry_options = ExponentialRetry(

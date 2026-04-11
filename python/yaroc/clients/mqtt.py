@@ -51,14 +51,14 @@ class MqttClient(Client):
         broker_port: int | None,
     ):
         self.topics: Dict[str, Topics] = {}
-        self.name = f"aiomqtt-{hostname}"
+        self._name = f"MQTT {hostname}"
         self.mac_addr = mac_addr
         self.broker_url = BROKER_URL if broker_url is None else broker_url
         self.broker_port = BROKER_PORT if broker_port is None else broker_port
         self.mm = None
 
         disconnected = Disconnected()
-        disconnected.client_name = self.name
+        disconnected.client_name = self._name
 
         status = Status()
         status.disconnected.CopyFrom(disconnected)
@@ -70,7 +70,7 @@ class MqttClient(Client):
             self.broker_port,
             timeout=20,
             will=will,
-            identifier=self.name,
+            identifier=self._name,
             clean_session=False,
             max_inflight_messages=100,
             logger=logging.getLogger(),
@@ -81,6 +81,9 @@ class MqttClient(Client):
             return self.topics[mac_addr]
         self.topics[mac_addr] = Topics.from_mac(mac_addr)
         return self.topics[mac_addr]
+
+    def name(self) -> str:
+        return self._name
 
     async def send_punch(
         self,
@@ -131,6 +134,7 @@ class MqttClient(Client):
             logging.info(f"{message_type} sent via MQTT")
             return True
         except MqttCodeError as e:
+            # TODO: consider raising here and catching it inside ClientGroup
             logging.error(f"{message_type} not sent: {e}")
             return False
 
@@ -170,11 +174,11 @@ class SIM7020MqttClient(Client):
         connect_timeout: float = CONNECT_TIMEOUT,
     ):
         self.topics = Topics.from_mac(mac_address)
-        name = f"SIM7020-{hostname}"
+        self._name = f"SIM7020-{hostname}"
         self._sim7020 = SIM7020Interface(
             async_at,
             self.topics.status,
-            name,
+            self._name,
             connect_timeout,
             BROKER_URL if broker_url is None else broker_url,
             BROKER_PORT if broker_port is None else broker_port,
@@ -184,6 +188,9 @@ class SIM7020MqttClient(Client):
             self._send_punches, False, 2.0, math.sqrt(2.0), timedelta(hours=3), batch_count=4
         )
         self._lock = Lock()
+
+    def name(self) -> str:
+        return self._name
 
     async def loop(self):
         async with self._lock:

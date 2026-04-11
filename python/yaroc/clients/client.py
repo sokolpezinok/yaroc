@@ -27,6 +27,10 @@ class Client(ABC):
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True
 
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
 
 class ClientGroup:
     def __init__(self, clients: list[Client], tasks: list[Task]):
@@ -36,12 +40,10 @@ class ClientGroup:
     def len(self) -> int:
         return len(self.clients)
 
-    @staticmethod
-    def handle_results(results: Sequence[bool | BaseException]):
-        for result in results:
+    def handle_results(self, results: Sequence[bool | BaseException]):
+        for result, client in zip(results, self.clients):
             if isinstance(result, Exception):
-                # TODO: write client name too
-                logging.error(f"{result}")
+                logging.error(f"{client.name()} failed: {result}")
 
     async def loop(self):
         loops = [client.loop() for client in self.clients]
@@ -50,11 +52,11 @@ class ClientGroup:
     async def send_status(self, status: Status, mac_address: str) -> Sequence[bool | BaseException]:
         handles = [client.send_status(status, mac_address) for client in self.clients]
         results = await asyncio.gather(*handles, return_exceptions=True)
-        ClientGroup.handle_results(results)
+        self.handle_results(results)
         return results
 
     async def send_punch(self, punch: SiPunchLog) -> Sequence[bool | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
         results = await asyncio.gather(*handles)
-        ClientGroup.handle_results(results)
+        self.handle_results(results)
         return results

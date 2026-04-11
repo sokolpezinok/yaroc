@@ -53,6 +53,9 @@ class MopClient(Client):
         else:
             self.results = []
 
+    def name(self) -> str:
+        return "MOP"
+
     @staticmethod
     def _parse_int(s: str | None) -> int | None:
         if s is None:

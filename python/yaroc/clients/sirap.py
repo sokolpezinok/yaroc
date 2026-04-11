@@ -24,9 +24,12 @@ class SirapClient(Client):
         self.port = port
         self.connected = False
 
+    def name(self) -> str:
+        return f"SIRAP {self.host}:{self.port}"
+
     def __del__(self):
-        if self._socket is not None:
-            self._socket.close()
+        # TODO: should we close self._reader and self._writer?
+        pass
 
     async def _connect(self, host: str, port: int):
         if self.connected:
