@@ -42,7 +42,7 @@ class RocClient(Client):
     async def send_punch(
         self,
         punch_log: SiPunchLog,
-    ) -> bool:
+    ):
         def length(x: int):
             if x == 0:
                 return 1
@@ -72,7 +72,6 @@ class RocClient(Client):
         try:
             await self.client.post(ROC_SEND_PUNCH, data=data)
             logging.info("Punch sent to ROC")
-            return True
         except Exception as e:
             raise ConnectionError(f"{e}")
 

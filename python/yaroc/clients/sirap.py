@@ -64,10 +64,10 @@ class SirapClient(Client):
             + SirapClient._time_to_bytes(si_daytime)
         )
 
-    async def send_punch(self, punch_log: SiPunchLog) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog):
         punch = punch_log.punch
         message = SirapClient._serialize_punch(punch.card, punch.time.time(), punch.code)
-        return await self._send(message)
+        await self._send(message)
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         return True

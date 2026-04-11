@@ -88,7 +88,7 @@ class MqttClient(Client):
     async def send_punch(
         self,
         punch_log: SiPunchLog,
-    ) -> bool:
+    ):
         punches = Punches()
         try:
             punches.punches.append(punch_log.punch.raw)
@@ -97,7 +97,6 @@ class MqttClient(Client):
         punches.sending_timestamp.millis_epoch = current_timestamp_millis()
         topics = self.get_topics(punch_log.host_info.mac_address)
         await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
-        return True
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         try:
@@ -215,9 +214,8 @@ class SIM7020MqttClient(Client):
     async def send_punch(
         self,
         punch_log: SiPunchLog,
-    ) -> bool:
-        res = await self._retries.send(punch_log.punch.raw)
-        return res if res is not None else False
+    ):
+        await self._retries.send(punch_log.punch.raw)
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         if status.WhichOneof("msg") == "mini_call_home":

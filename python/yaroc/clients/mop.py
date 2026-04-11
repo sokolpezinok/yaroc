@@ -172,7 +172,7 @@ class MopClient(Client):
                 result.time = tim - result.start
             result.stat = MopClient.STAT_OK
 
-    async def send_punch(self, punch_log: SiPunchLog) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog):
         punch = punch_log.punch
         si_time = punch.time
         si_time.replace(microsecond=0)
@@ -185,10 +185,8 @@ class MopClient(Client):
             result = self.results[idx]
             MopClient.update_result(result, punch.code, si_time)
             await self.send_result(result)
-            return True
         else:
             logging.error(f"Competitor with card {punch.card} not in database")
-            return False
 
     async def send_result(self, result: MeosResult):
         root = ET.Element("MOPDiff", {"xmlns": "http://www.melin.nu/mop"})

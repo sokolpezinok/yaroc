@@ -20,7 +20,7 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    async def send_punch(self, punch_log: SiPunchLog) -> bool:
+    async def send_punch(self, punch_log: SiPunchLog):
         pass
 
     @abstractmethod
@@ -40,7 +40,7 @@ class ClientGroup:
     def len(self) -> int:
         return len(self.clients)
 
-    def handle_results(self, results: Sequence[bool | BaseException]):
+    def handle_results(self, results: Sequence[bool | BaseException | None]):
         for result, client in zip(results, self.clients):
             if isinstance(result, Exception):
                 logging.error(f"{client.name()} failed: {result}")
@@ -55,7 +55,7 @@ class ClientGroup:
         self.handle_results(results)
         return results
 
-    async def send_punch(self, punch: SiPunchLog) -> Sequence[bool | BaseException]:
+    async def send_punch(self, punch: SiPunchLog) -> Sequence[None | BaseException]:
         handles = [client.send_punch(punch) for client in self.clients]
         results = await asyncio.gather(*handles, return_exceptions=True)
         self.handle_results(results)
