@@ -203,7 +203,7 @@ impl SerialClient {
     /// Creates a new `SerialClient` instance and connects to the specified serial port.
     ///
     /// # Arguments
-    /// * `computer_port` - The path to the serial port (e.g., "/dev/ttyUSB0").
+    /// * `computer_port` - The path to the serial port (e.g., /dev/serial0, /dev/ttyUSB0).
     /// * `py` - Python interpreter instance.
     ///
     /// # Returns
@@ -326,9 +326,9 @@ impl SerialClient {
             for (i, wait_time) in wait_times.iter().enumerate() {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
-                tx.write_all(&raw_punch).await.map_err(|e| {
-                    PyRuntimeError::new_err(format!("Error sending punch via serial port: {e}"))
-                })?;
+                tx.write_all(&raw_punch)
+                    .await
+                    .map_err(|e| PyConnectionError::new_err(format!("{e}")))?;
                 info!("Punch {} sent via serial port, try #{}", card, i + 1);
             }
             Ok(())

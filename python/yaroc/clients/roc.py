@@ -74,11 +74,10 @@ class RocClient(Client):
             logging.info("Punch sent to ROC")
             return True
         except Exception as e:
-            logging.error(f"ROC error: {e}")
-            return False
+            raise ConnectionError(f"{e}")
 
-    async def send_status(self, status: Status, mac_address: str) -> bool:
-        mac_address = self.mac_override_map.get(mac_address, mac_address)
+    async def send_status(self, status: Status, mac_addr: str) -> bool:
+        mac_addr = self.mac_override_map.get(mac_addr, mac_addr)
         oneof = status.WhichOneof("msg")
         if oneof == "mini_call_home":
             mch = status.mini_call_home
@@ -91,7 +90,7 @@ class RocClient(Client):
             params = {
                 "function": "callhome",
                 "command": "setmini",
-                "macaddr": mac_address,
+                "macaddr": mac_addr,
                 "failedcallhomes": "0",
                 "localipaddress": ".".join(map(lambda x: str(int(x)), mch.local_ip.to_bytes(4))),
                 "codes": ",".join(str(code) for code in mch.codes),
@@ -114,7 +113,7 @@ class RocClient(Client):
             params = {
                 "function": "callhome",
                 "command": "setmini",
-                "macaddr": mac_address,
+                "macaddr": mac_addr,
                 "failedcallhomes": "0",
                 "codes": codes,
             }
@@ -124,5 +123,4 @@ class RocClient(Client):
             logging.info("MiniCallHome sent to ROC")
             return True
         except Exception as e:
-            logging.error(f"ROC error: {e}")
-            return False
+            raise ConnectionError(f"{e}")

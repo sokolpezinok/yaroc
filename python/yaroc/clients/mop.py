@@ -184,33 +184,28 @@ class MopClient(Client):
         if idx != -1:
             result = self.results[idx]
             MopClient.update_result(result, punch.code, si_time)
-            return await self.send_result(result)
+            await self.send_result(result)
+            return True
         else:
             logging.error(f"Competitor with card {punch.card} not in database")
             return False
-            # TODO: log to a file
 
-    async def send_result(self, result: MeosResult) -> bool:
+    async def send_result(self, result: MeosResult):
         root = ET.Element("MOPDiff", {"xmlns": "http://www.melin.nu/mop"})
         root.append(MopClient._result_to_xml(result))
         headers = {"pwd": self.api_key}
 
-        try:
-            async with self.client.post(
-                "https://api.oresults.eu/meos",
-                data=ET.tostring(root, encoding="utf-8"),
-                headers=headers,
-            ) as response:
-                if response.status == 200:
-                    logging.info("Sending to OResults successful")
-                    logging.debug(f"Response: {await response.text()}")
-                    return True
-                else:
-                    logging.error("Sending unsuccessful: {} {}", response, await response.text())
-                    return False
-        except Exception as e:
-            logging.error(f"MOP error: {e}")
-            return False
+        async with self.client.post(
+            "https://api.oresults.eu/meos",
+            data=ET.tostring(root, encoding="utf-8"),
+            headers=headers,
+        ) as response:
+            if response.status == 200:
+                logging.info("Sending to OResults successful")
+                logging.debug(f"Response: {await response.text()}")
+            else:
+                text = await response.text()
+                raise ConnectionError(f"Sending unsuccessful: {response} {text}")
 
     async def fetch_results(self, address: str, port: int) -> List[MeosResult]:
         async with self.client.get(f"http://{address}:{port}/meos?difference=zero") as response:

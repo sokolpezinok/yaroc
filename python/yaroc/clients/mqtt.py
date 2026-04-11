@@ -96,7 +96,8 @@ class MqttClient(Client):
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.millis_epoch = current_timestamp_millis()
         topics = self.get_topics(punch_log.host_info.mac_address)
-        return await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
+        await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
+        return True
 
     async def send_status(self, status: Status, mac_addr: str) -> bool:
         try:
@@ -126,13 +127,13 @@ class MqttClient(Client):
             logging.error(f"Error while getting signal strength: {e}")
 
         topics = self.get_topics(mac_addr)
-        return await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
+        await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
+        return True
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
             await self.client.publish(topic, payload=msg, qos=qos)
             logging.info(f"{message_type} sent via MQTT")
-            return True
         except MqttCodeError as e:
             raise ConnectionError(f"{message_type} not sent: {e}")
 
