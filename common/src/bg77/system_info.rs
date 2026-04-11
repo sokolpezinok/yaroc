@@ -4,12 +4,9 @@ use crate::{
     RawMutex,
     bg77::hw::ModemHw,
     error::Error,
-    status::{
-        BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE,
-        parse_qlts,
-    },
+    status::{BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE},
 };
-use chrono::{DateTime, FixedOffset, TimeDelta};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeDelta};
 #[cfg(feature = "defmt")]
 use defmt::{error, info};
 use embassy_sync::watch::{Receiver, Sender};
@@ -40,9 +37,24 @@ impl<M: ModemHw> Default for SystemInfo<M> {
 }
 
 impl<M: ModemHw> SystemInfo<M> {
+    /// Parses the output of AT+QLTS=2 command into date and time.
+    fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
+        let naive_date = NaiveDateTime::parse_from_str(&modem_clock[..19], "%Y/%m/%d,%H:%M:%S")
+            .map_err(|_| Error::ParseError)?;
+
+        let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
+        Ok(naive_date
+            .and_local_timezone(
+                FixedOffset::east_opt(i32::from(offset) * 900).ok_or(Error::ParseError)?,
+            )
+            .unwrap()
+            .fixed_offset())
+    }
+
+    /// Gets modem time from the QLTS command
     async fn get_modem_time(bg77: &mut M) -> crate::Result<DateTime<FixedOffset>> {
         let modem_clock = bg77.call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
-        parse_qlts(&modem_clock)
+        Self::parse_qlts(&modem_clock)
     }
 
     /// Returns the current time from the modem.
@@ -142,6 +154,7 @@ impl<M: ModemHw> SystemInfo<M> {
 #[cfg(test)]
 mod test {
     use crate::at::fake_modem::FakeModem;
+    use chrono::{NaiveDate, NaiveTime};
 
     use super::*;
 
@@ -201,5 +214,20 @@ mod test {
         let mch = block_on(system_info.mini_call_home(&mut bg77));
         assert!(mch.timestamp.is_none());
         assert_eq!(mch.signal_info.unwrap().rsrp_dbm, -90);
+    }
+
+    #[test]
+    fn test_qlts() {
+        let datetime = SystemInfo::<FakeModem>::parse_qlts("2024/11/25,22:12:11+04extra").unwrap();
+        let naive_dt = datetime.naive_local();
+        assert_eq!(
+            naive_dt.date(),
+            NaiveDate::from_ymd_opt(2024, 11, 25).unwrap()
+        );
+        assert_eq!(
+            naive_dt.time(),
+            NaiveTime::from_hms_opt(22, 12, 11).unwrap()
+        );
+        assert_eq!(datetime.offset().local_minus_utc(), 3600);
     }
 }

@@ -23,20 +23,6 @@ pub struct BatteryInfo {
 }
 pub static BATTERY: Watch<RawMutex, BatteryInfo, 1> = Watch::new();
 
-/// Parses the output of AT+QLTS=2 command into a date+time.
-pub fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
-    let naive_date = NaiveDateTime::parse_from_str(&modem_clock[..19], "%Y/%m/%d,%H:%M:%S")
-        .map_err(|_| Error::ParseError)?;
-
-    let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
-    Ok(naive_date
-        .and_local_timezone(
-            FixedOffset::east_opt(i32::from(offset) * 900).ok_or(Error::ParseError)?,
-        )
-        .unwrap()
-        .fixed_offset())
-}
-
 /// Cell network type, currently only NB-IoT and LTE-M is supported
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum CellNetworkType {
@@ -263,22 +249,6 @@ mod test {
 
     use super::*;
     use crate::proto::status::Msg;
-    use chrono::{NaiveDate, NaiveTime};
-
-    #[test]
-    fn test_cclk() {
-        let dt = parse_qlts("2024/11/25,22:12:11+04extra").unwrap();
-        let naive_dt = dt.naive_local();
-        assert_eq!(
-            naive_dt.date(),
-            NaiveDate::from_ymd_opt(2024, 11, 25).unwrap()
-        );
-        assert_eq!(
-            naive_dt.time(),
-            NaiveTime::from_hms_opt(22, 12, 11).unwrap()
-        );
-        assert_eq!(dt.offset().local_minus_utc(), 3600);
-    }
 
     #[test]
     fn test_mini_call_home_proto_conversion() {
