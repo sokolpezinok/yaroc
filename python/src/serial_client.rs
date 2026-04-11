@@ -308,13 +308,22 @@ impl SerialClient {
     ) -> PyResult<Bound<'a, PyAny>> {
         let computer_tx = self.computer_tx.clone();
         let raw_punch = punch_log.punch.raw;
+        let card = punch_log.punch.card;
 
+        let wait_times = [
+            Duration::ZERO,
+            Duration::from_mins(1),
+            Duration::from_mins(10),
+        ];
         future_into_py(py, async move {
-            let mut tx = computer_tx.lock().await;
-            tx.write_all(&raw_punch).await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Error sending punch via serial port: {e}"))
-            })?;
-            info!("Punch sent via serial port");
+            for (i, wait_time) in wait_times.iter().enumerate() {
+                tokio::time::sleep(*wait_time).await;
+                let mut tx = computer_tx.lock().await;
+                tx.write_all(&raw_punch).await.map_err(|e| {
+                    PyRuntimeError::new_err(format!("Error sending punch via serial port: {e}"))
+                })?;
+                info!("Punch {} sent via serial port, try #{}", card, i + 1);
+            }
             Ok(())
         })
     }

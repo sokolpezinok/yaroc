@@ -142,10 +142,12 @@ spr01 = "b827eba22867"
 spr02 = "b827eba22867"
 
 [client.serial]
-# Connect a "UART to USB" board to your Raspberry Pi and receive punches directly
-# into orienteering software (MeOS, etc.) over USB.
+# Connect a "UART to USB" board to your Raspberry Pi and receive punches directly into
+# orienteering software (MeOS, etc.) over USB.
+# Each punch is resent after 1 minute and 10 minutes, because the serial interface does not
+# acknowledge receiving punches. The times are not yet configurable.
 enable = true
-port = "/dev/serial0" # Use "/dev/serial0" on Raspberry Pi (maps to the correct UART)
+port = "/dev/serial0" # Use "/dev/serial0" on Raspberry Pi
 
 [client.sirap]
 # Note: SIRAP is not well tested, use with caution
