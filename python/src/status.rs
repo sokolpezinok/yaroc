@@ -110,11 +110,11 @@ pub struct NodeInfo {
 impl From<NodeInfoRs> for NodeInfo {
     fn from(node_info: NodeInfoRs) -> Self {
         let signal_strength = match node_info.signal_info.signal_strength() {
-            SignalStrength::Disconnected => "☆☆☆☆",
-            SignalStrength::Weak => "★☆☆☆",
-            SignalStrength::Fair => "★★☆☆",
-            SignalStrength::Good => "★★★☆",
-            SignalStrength::Excellent => "★★★★",
+            SignalStrength::Disconnected => "____",
+            SignalStrength::Weak => "▂___",
+            SignalStrength::Fair => "▂▄__",
+            SignalStrength::Good => "▂▄▆_",
+            SignalStrength::Excellent => "▂▄▆█",
         }
         .to_owned();
         Self {
