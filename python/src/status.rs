@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
+use yaroc_common::status::SignalStrength;
 use yaroc_receiver::logs::CellularLogMessage as CellularLogMessageRs;
 use yaroc_receiver::meshtastic::MeshtasticLog as MeshtasticLogRs;
 use yaroc_receiver::state::NodeInfo as NodeInfoRs;
@@ -100,6 +101,7 @@ impl From<MeshtasticLogRs> for MeshtasticLog {
 pub struct NodeInfo {
     pub name: String,
     pub signal_strength: String,
+    pub battery_percentage: Option<u8>,
     codes: Vec<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     pub last_punch: Option<DateTime<FixedOffset>>,
@@ -108,16 +110,17 @@ pub struct NodeInfo {
 impl From<NodeInfoRs> for NodeInfo {
     fn from(node_info: NodeInfoRs) -> Self {
         let signal_strength = match node_info.signal_info.signal_strength() {
-            yaroc_common::status::SignalStrength::Disconnected => "☆☆☆☆",
-            yaroc_common::status::SignalStrength::Weak => "★☆☆☆",
-            yaroc_common::status::SignalStrength::Fair => "★★☆☆",
-            yaroc_common::status::SignalStrength::Good => "★★★☆",
-            yaroc_common::status::SignalStrength::Excellent => "★★★★",
+            SignalStrength::Disconnected => "☆☆☆☆",
+            SignalStrength::Weak => "★☆☆☆",
+            SignalStrength::Fair => "★★☆☆",
+            SignalStrength::Good => "★★★☆",
+            SignalStrength::Excellent => "★★★★",
         }
         .to_owned();
         Self {
             name: node_info.name,
             signal_strength,
+            battery_percentage: node_info.battery_percentage,
             codes: node_info.codes,
             last_update: node_info.last_update,
             last_punch: node_info.last_punch,

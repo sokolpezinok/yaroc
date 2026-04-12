@@ -73,6 +73,7 @@ class RaspberryModel(IntEnum):
 class NodeInfo(object):
     name: str
     signal_strength: str
+    battery_percentage: int | None
     codes: list[int]
     last_update: datetime
     last_punch: datetime

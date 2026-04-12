@@ -42,6 +42,9 @@ class StatusDrawer:
         table = []
         for node_info in node_infos:
             node_info.codes.sort()
+            if len(node_info.codes) > 3:
+                # At most 3 codes, otherwise the column is too long
+                node_info.codes = node_info.codes[:3]
             table.append(
                 [
                     node_info.name,
