@@ -44,6 +44,7 @@ impl SignalInfo {
 pub struct NodeInfo {
     pub name: String,
     pub signal_info: SignalInfo,
+    pub battery_percentage: Option<u8>,
     pub codes: Vec<u16>,
     pub last_update: Option<DateTime<FixedOffset>>,
     pub last_punch: Option<DateTime<FixedOffset>>,
@@ -96,6 +97,7 @@ impl CellularNodeStatus {
         NodeInfo {
             name: self.host_info.name.to_string(),
             signal_info,
+            battery_percentage: self.battery_percentage,
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
@@ -114,7 +116,7 @@ impl CellularNodeStatus {
 #[derive(Default, Clone)]
 pub struct MeshtasticNodeStatus {
     pub name: String,
-    battery: Option<u32>,
+    battery_percentage: Option<u8>,
     pub rssi_snr: Option<RssiSnr>,
     pub position: Option<yaroc_common::status::Position>,
     codes: HashSet<u16>,
@@ -130,8 +132,8 @@ impl MeshtasticNodeStatus {
         }
     }
 
-    pub fn update_battery(&mut self, percent: u32) {
-        self.battery = Some(percent);
+    pub fn update_battery(&mut self, percent: u8) {
+        self.battery_percentage = Some(percent);
         self.last_update = Some(Local::now().into());
     }
 
@@ -159,6 +161,7 @@ impl MeshtasticNodeStatus {
         NodeInfo {
             name: self.name.clone(),
             signal_info,
+            battery_percentage: self.battery_percentage,
             codes: self.codes.iter().copied().collect(),
             last_update: self.last_update,
             last_punch: self.last_punch,
@@ -375,7 +378,7 @@ impl FleetState {
                 let status = self.msh_node_status(&log_message.host_info);
                 match log_message.metrics {
                     MshMetrics::Battery { percent, .. } => {
-                        status.update_battery(percent);
+                        status.update_battery(percent as u8);
                     }
                     MshMetrics::Position(position) => status.position = Some(position),
                     // TODO: handle temperature
