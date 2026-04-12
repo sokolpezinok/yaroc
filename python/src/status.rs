@@ -8,7 +8,7 @@ use yaroc_receiver::state::NodeInfo as NodeInfoRs;
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct HostInfo {
     inner: HostInfoRs,
 }
@@ -50,7 +50,7 @@ impl From<HostInfo> for HostInfoRs {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct CellularLog {
     inner: CellularLogMessageRs,
@@ -77,7 +77,7 @@ impl CellularLog {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct MeshtasticLog {
     inner: MeshtasticLogRs,
@@ -96,7 +96,7 @@ impl From<MeshtasticLogRs> for MeshtasticLog {
     }
 }
 
-#[pyclass(get_all)]
+#[pyclass(get_all, from_py_object)]
 #[derive(Clone)]
 pub struct NodeInfo {
     pub name: String,

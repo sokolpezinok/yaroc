@@ -38,7 +38,7 @@ impl From<CellularLogMessage> for Event {
 }
 
 /// Configuration for the MQTT client.
-#[pyclass(get_all, set_all)]
+#[pyclass(get_all, set_all, from_py_object)]
 #[derive(Clone)]
 pub struct MqttConfig {
     url: String,
