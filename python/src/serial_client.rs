@@ -308,7 +308,7 @@ impl SerialClient {
     ///
     /// # Returns
     /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves when the punch is sent.
-    pub fn send_punch<'a>(
+    pub fn send_punch_noexcept<'a>(
         &self,
         py: Python<'a>,
         punch_log: &SiPunchLog,
@@ -326,10 +326,10 @@ impl SerialClient {
             for (i, wait_time) in wait_times.iter().enumerate() {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
-                tx.write_all(&raw_punch)
-                    .await
-                    .map_err(|e| PyConnectionError::new_err(format!("{e}")))?;
-                info!("Punch {} sent via serial port, try #{}", card, i + 1);
+                match tx.write_all(&raw_punch).await {
+                    Ok(()) => info!("Punch {} sent via serial port, try #{}", card, i + 1),
+                    Err(e) => error!("serial failed to send punch {card}, try {}: {e}", i + 1),
+                }
             }
             Ok(())
         })
@@ -346,7 +346,7 @@ impl SerialClient {
     ///
     /// # Returns
     /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves immediately to `true`.
-    pub fn send_status<'a>(
+    pub fn send_status_noexcept<'a>(
         &self,
         py: Python<'a>,
         _status: &Bound<'_, PyAny>,
