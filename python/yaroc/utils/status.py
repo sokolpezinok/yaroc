@@ -45,10 +45,16 @@ class StatusDrawer:
             if len(node_info.codes) > 3:
                 # At most 3 codes, otherwise the column is too long
                 node_info.codes = node_info.codes[:3]
+            batt_percentage = (
+                str(node_info.battery_percentage)
+                if node_info.battery_percentage is not None
+                else "??"
+            )
             table.append(
                 [
                     node_info.name,
                     node_info.signal_strength,
+                    batt_percentage,
                     ",".join(str(code) for code in node_info.codes),
                     human_time(node_info.last_update),
                     human_time(node_info.last_punch),
@@ -64,7 +70,7 @@ class StatusDrawer:
 
         image = Image.new("1", (width, height), 0xFF)
         draw = ImageDraw.Draw(image)
-        char_height = 12
+        char_height = 13
         font = ImageFont.truetype("DejaVuSans.ttf", char_height)
 
         total_horiz_pad = 1 + horiz_pad * 2
@@ -105,7 +111,7 @@ class StatusDrawer:
         logging.info("Drawing new status table")
         image = StatusDrawer.draw_table(
             [
-                ["name", "signal", "code", "last info", "last punch"],
+                ["name", "signal", "bat%", "code", "last info", "last punch"],
             ]
             + self.generate_info_table(node_infos),
             self.epd.height,
