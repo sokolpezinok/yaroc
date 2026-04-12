@@ -81,7 +81,7 @@ class StatusDrawer:
         cols = [int(max(font.getlength(row[z]) for row in table)) for z in range(col_count)]
 
         def calc_row_start(row: int) -> int:
-            return row * char_height + row - 1
+            return row * char_height + 2 * row - 1
 
         def calc_col_start(col: int, partial_sum: int) -> int:
             return col * total_horiz_pad + partial_sum
@@ -111,7 +111,7 @@ class StatusDrawer:
         logging.info("Drawing new status table")
         image = StatusDrawer.draw_table(
             [
-                ["name", "signal", "bat%", "code", "last info", "last punch"],
+                ["name", "signal", "bat", "code", "last info", "last punch"],
             ]
             + self.generate_info_table(node_infos),
             self.epd.height,
