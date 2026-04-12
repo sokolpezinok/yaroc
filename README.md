@@ -72,9 +72,32 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/sk-SK/docs
 
     1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison).
     2. Use the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode)
-    3. Add a channel named `serial`, it'll be used to transport punches through LoRa.
+    3. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT.
 
-3. Attach SportIdent's SRR module to a UART port, a photo will be added later. Configure it using instructions below.
+       ```sh
+       meshtastic --set lora.ok_to_mqtt true
+       ```
+
+    4. Add a channel named `serial`, it'll be used to transport punches through LoRa. Set **Uplink Enabled** to `true` for the `serial` channel (and any other channel you want to bridge). If your `serial` channel is at index 1:
+
+       ```sh
+       meshtastic --ch-index 1 --ch-set uplink_enabled true
+       ```
+3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
+
+4. Gateway/MQTT configuration: At least one node in the mesh needs to be connected to the internet (via Wi-Fi or Ethernet) to bridge the packets to MQTT.
+    1. [Enable MQTT](https://meshtastic.org/docs/configuration/module/mqtt/) in the Meshtastic settings, set the broker URL and root topic to `yar`.
+
+       ```sh
+       meshtastic --set mqtt.enabled true --set mqtt.root yar
+       ```
+    2. Set the **MQTT server** to the one you use in `yarocd.toml` (e.g., `broker.emqx.io`) and the same username and password. Or set it to empty, if not used.
+
+       ```sh
+       meshtastic --set mqtt.address broker.emqx.io --set mqtt.username "" --set mqtt.password "" 
+       ```
+
+
 
 ### Configure meshtastic UART
 
