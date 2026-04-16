@@ -14,12 +14,12 @@ It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de)
 
 * **Very low latency, very low bandwidth**: Wi-Fi or LTE/LTE-M can achieve latencies as low as 100–200ms. Bandwidth usage under 1 MB per day allows the use of cheap IoT SIM cards. Uses Protobuf for data serialization to minimize packet size.
 * **Support for multiple physical layers**: NB-IoT, LTE-M, Radio (LoRa), LTE, Wi-Fi, LAN. Also supports BLE and USB for short-range communication.
-* **Radio mesh**: Seamless integration with **Meshtastic** allows for LoRa-based mesh networks. Punches can be hopped across multiple nodes to reach a gateway, which can then bridge the data to the internet or directly to an orienteering software (MeOs, etc.).
-* **Simple integration via USB** recognizable by most orienteering softwares. Pluge an ethernet cable into a Raspberry Pi in the finish area, connect it via USB cable to a computer and you are done!
+* **Radio mesh**: Seamless integration with **Meshtastic** allows for LoRa-based mesh networks. Punches can be hopped across multiple nodes to reach a gateway, which can then bridge the data to the internet or directly to orienteering software (MeOs, etc.).
+* **Simple integration via USB** recognizable by most orienteering software. Plug an ethernet cable into a Raspberry Pi in the finish area, connect it via USB cable to a computer and you are done!
 * **Broad hardware compatibility**: Runs on everything from Linux machines (Raspberry Pi, PC) to specialized microcontrollers like the nRF52840.
 * **Reliability**: Features built-in retries, exponential backoff, and buffering to ensure no punch is lost during network outages.
 * **Multiple output protocols**: Integration with ROC, SIRAP, MQTT, and MeOS (MOP) protocols.
-* **Generator of fake SportIdent punches**: very useful for load testing of the system, for example to determine the right LoRa settings respecing duty cycle limits.
+* **Generator of fake SportIdent punches**: Very useful for load testing of the system, for example to determine the right LoRa settings respecting duty cycle limits.
 * **Open-source**
 
 
@@ -65,14 +65,14 @@ send-punch
 
 ## Send punches using LoRa radio
 
-Follow the official [Meshtastic documentation](https://meshtastic.org/sk-SK/docs/introduction/):
+Follow the official [Meshtastic documentation](https://meshtastic.org/docs/introduction/):
 
 1. [Flash firmware](https://meshtastic.org/docs/getting-started/flashing-firmware)
-2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/), we recommend a private encrypted channel.
+2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/). We recommend using a **private encrypted channel** to avoid unnecessary traffic on public meshes.
 
     1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison).
     2. Use the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode)
-    3. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT.
+    3. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT:
 
        ```sh
        meshtastic --set lora.ok_to_mqtt true
@@ -83,6 +83,13 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/sk-SK/docs
        ```sh
        meshtastic --ch-index 1 --ch-set uplink_enabled true
        ```
+    5. Enable device telemetry (every 5 minutes) to monitor mesh health and battery status:
+       ```sh
+       meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
+       ```
+
+    > **Note:** There seems to be a bug in some Meshtastic versions. You need to specify interval equal to 500 for a 5-minute update interval.
+
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
 4. Gateway/MQTT configuration: At least one node in the mesh needs to be connected to the internet (via Wi-Fi or Ethernet) to bridge the packets to MQTT.
