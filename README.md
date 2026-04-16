@@ -88,7 +88,7 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
        meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
        ```
 
-    > **Note:** There seems to be a bug in some Meshtastic versions. You need to specify interval equal to 500 for a 5-minute update interval.
+    > **Note:** This is not a bug, but a "feature" of some Meshtastic versions: the telemetry interval is scaled down to 60% for small meshes, so an interval of 5 minutes becomes 3 minutes in reality. To achieve a 5-minute update interval, set it to `500` instead of `300` (see [issue #8619](https://github.com/meshtastic/firmware/issues/8619)).
 
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
