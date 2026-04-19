@@ -22,13 +22,14 @@ jobs:
     strategy:
       matrix:
         target: [x86_64, aarch64, armv7]
+        python_version: ['3.11', '3.14']
     steps:
       - uses: actions/checkout@v5
       - name: Install uv with all available options
         uses: astral-sh/setup-uv@v7
         with:
           version: '0.10.12'
-          python-version: '3.11'
+          python-version: ${{ matrix.python_version }}
           enable-cache: false
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v4
