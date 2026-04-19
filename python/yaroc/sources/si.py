@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator
 
 from usbmonitor import USBMonitor
-from usbmonitor.attributes import DEVNAME, ID_VENDOR_ID
+from usbmonitor.attributes import ID_VENDOR_ID
 
 from ..rs import SiPunch, SiUartHandler
 from ..utils.sys_info import tty_device_from_usb
@@ -46,7 +46,7 @@ class SiWorker:
 class UdevSiFactory(SiWorker):
     def __init__(self) -> None:
         super().__init__()
-        self._device_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
+        self._device_queue: Queue[tuple[str, dict[str, Any], str]] = Queue()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
@@ -62,8 +62,7 @@ class UdevSiFactory(SiWorker):
             self._add_usb_device(device_id, parent_device_info)
 
         while True:
-            action, parent_device_info = await self._device_queue.get()
-            device_id = parent_device_info[DEVNAME]
+            action, parent_device_info, device_id = await self._device_queue.get()
 
             try:
                 if action == "add":
@@ -84,7 +83,7 @@ class UdevSiFactory(SiWorker):
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):
-        return device_info[ID_VENDOR_ID].lower() == SI_LABS
+        return device_info.get(ID_VENDOR_ID, "").lower() == SI_LABS
 
     async def get_punches(self, queue: Queue[SiPunch]):
         while True:
@@ -100,19 +99,19 @@ class UdevSiFactory(SiWorker):
         self._observer.stop()
         self.monitor.stop_monitoring()
 
-    def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
+    def _add_usb_device(self, device_id: str, device_info: dict[str, Any]):
         try:
             if not self._is_silabs(device_info):
                 return
             asyncio.run_coroutine_threadsafe(
-                self._device_queue.put(("add", device_info)), self._loop
+                self._device_queue.put(("add", device_info, device_id)), self._loop
             )
         except Exception as err:
             logging.error(err)
 
-    def _remove_usb_device(self, _device_id: str, device_info: dict[str, Any]):
+    def _remove_usb_device(self, device_id: str, device_info: dict[str, Any]):
         asyncio.run_coroutine_threadsafe(
-            self._device_queue.put(("remove", device_info)), self._loop
+            self._device_queue.put(("remove", device_info, device_id)), self._loop
         )
 
 

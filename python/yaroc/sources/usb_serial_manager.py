@@ -7,6 +7,7 @@ from usbmonitor import USBMonitor
 from usbmonitor.attributes import DEVNAME, ID_VENDOR_ID
 
 from ..rs import MshDevHandler
+from ..sources.si import SI_LABS
 from ..utils.sys_info import tty_device_from_usb
 
 
@@ -22,13 +23,12 @@ class UsbSerialManager:
         self._si_device_notifier = si_device_notifier
 
     @staticmethod
-    def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:
-        device_node = device_info[DEVNAME]
-        return (tty_device_from_usb(device_info), device_node)
+    def _tty_acm(device_info: dict[str, Any]) -> str | None:
+        return tty_device_from_usb(device_info)
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):
-        return device_info[ID_VENDOR_ID] == "10c4"
+        return device_info.get(ID_VENDOR_ID, "").lower() == SI_LABS
 
     async def loop(self):
         monitor = USBMonitor()
@@ -47,12 +47,13 @@ class UsbSerialManager:
         # Sleep forever
         await asyncio.get_running_loop().create_future()
 
-    def _add_usb_device(self, _device_id: str, device_info: dict[str, Any]):
+    def _add_usb_device(self, device_id: str, device_info: dict[str, Any]):
         try:
-            tty_acm, device_node = self._tty_acm(device_info)
+            tty_acm = self._tty_acm(device_info)
             if tty_acm is None:
                 return
-            if not device_node.endswith("001") and "ACM" in tty_acm:
+            device_node = device_info.get(DEVNAME, device_id)
+            if not device_node.endswith("001") and any(x in tty_acm for x in ["ACM", "COM"]):
                 asyncio.run_coroutine_threadsafe(
                     self._msh_dev_queue.put((True, tty_acm, device_node)), self._loop
                 )
@@ -61,8 +62,8 @@ class UsbSerialManager:
         except Exception as err:
             logging.error(err)
 
-    def _remove_usb_device(self, _device_id: str, device_info: dict[str, Any]):
-        device_node = device_info[DEVNAME]
+    def _remove_usb_device(self, device_id: str, device_info: dict[str, Any]):
+        device_node = device_info.get(DEVNAME, device_id)
         asyncio.run_coroutine_threadsafe(
             self._msh_dev_queue.put((False, "Unknown", device_node)), self._loop
         )

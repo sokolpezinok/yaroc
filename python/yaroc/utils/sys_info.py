@@ -1,4 +1,3 @@
-from usbmonitor.attributes import DEVNAME, ID_MODEL
 import io
 import logging
 import os
@@ -13,6 +12,7 @@ from enum import Enum
 from math import floor
 
 import psutil
+from usbmonitor.attributes import DEVNAME, ID_MODEL
 
 from ..pb.status_pb2 import MiniCallHome
 from ..rs import RaspberryModel, current_timestamp_millis
