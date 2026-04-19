@@ -1,9 +1,13 @@
 import unittest
 
-from yaroc.utils.modem_manager import SignalInfo
-from yaroc.utils.sys_info import NetworkType
+from yaroc.utils.sys_info import is_windows
+
+if not is_windows():
+    from yaroc.utils.modem_manager import SignalInfo
+    from yaroc.utils.sys_info import NetworkType
 
 
+@unittest.skipIf(is_windows(), "ModemManager is not supported on Windows")
 class TestSignalInfo(unittest.TestCase):
     def test_repr(self):
         ns = SignalInfo(NetworkType.Lte, -86, 11)
