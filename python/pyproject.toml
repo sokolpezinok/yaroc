@@ -22,14 +22,14 @@ classifiers = [
 
 dependencies = [
   'aiohttp-retry==2.9.1',
-  'aiohttp==3.12.*',
-  'aiomqtt==2.4.*',
+  'aiohttp==3.13.*',
+  'aiomqtt==2.5.*',
   'dbus-next==0.2.*; platform_system == "Linux"',
   'dependency-injector==4.48.*',
   'gpiozero==2.0.*',
-  'pillow==11.3.*',
+  'pillow==12.2.*',
   'protobuf==5.29.*',
-  'psutil==7.1.*',
+  'psutil==7.2.*',
   'pyserial-asyncio==0.6',
   'RPi.GPIO==0.7.1; platform_system == "Linux" and (platform_machine == "armv6l" or platform_machine == "armv7l" or platform_machine == "aarch64")',
   'usb-monitor>=1.17',
