@@ -16,6 +16,7 @@ DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
 FINISH_MODE = 4
 BEACON_CONTROL = 18
+SI_LABS = "10c4"
 
 
 @dataclass
@@ -50,7 +51,7 @@ class UdevSiFactory(SiWorker):
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self._loop = asyncio.get_event_loop()
         logging.info("Starting USB SportIdent device manager")
-        self.monitor = USBMonitor([{ID_VENDOR_ID: "10c4"}, {ID_VENDOR_ID: "1a86"}])
+        self.monitor = USBMonitor([{ID_VENDOR_ID: SI_LABS.upper()}, {ID_VENDOR_ID: SI_LABS}])
         self.monitor.start_monitoring(
             on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
         )
@@ -62,28 +63,28 @@ class UdevSiFactory(SiWorker):
 
         while True:
             action, parent_device_info = await self._device_queue.get()
-            parent_device_node = parent_device_info[DEVNAME]
+            device_id = parent_device_info[DEVNAME]
 
             try:
                 if action == "add":
                     await asyncio.sleep(2.0)  # Give the TTY subystem more time
 
-                    tty_usb = tty_device_from_usb(parent_device_node)
+                    tty_usb = tty_device_from_usb(parent_device_info)
                     if tty_usb is None:
                         continue
                     logging.info(f"Inserted SportIdent device {tty_usb}")
 
-                    await self.handler.add_device(tty_usb, parent_device_node)
+                    await self.handler.add_device(tty_usb, device_id)
                     await status_queue.put(DeviceEvent(True, tty_usb))
                 elif action == "remove":
-                    self.handler.remove_device(parent_device_node)
-                    await status_queue.put(DeviceEvent(False, parent_device_node))
+                    self.handler.remove_device(device_id)
+                    await status_queue.put(DeviceEvent(False, device_id))
             except Exception as e:
                 logging.error(e)
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):
-        return device_info[ID_VENDOR_ID] == "10c4"
+        return device_info[ID_VENDOR_ID].lower() == SI_LABS
 
     async def get_punches(self, queue: Queue[SiPunch]):
         while True:

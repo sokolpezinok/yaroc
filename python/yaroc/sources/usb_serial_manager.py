@@ -24,7 +24,7 @@ class UsbSerialManager:
     @staticmethod
     def _tty_acm(device_info: dict[str, Any]) -> tuple[str | None, str]:
         device_node = device_info[DEVNAME]
-        return (tty_device_from_usb(device_node), device_node)
+        return (tty_device_from_usb(device_info), device_node)
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):
