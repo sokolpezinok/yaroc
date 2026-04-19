@@ -113,11 +113,11 @@ def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
         return None
 
 
-def extract_com(model_id: str) -> str:
+def extract_com(model_id: str) -> str | None:
     # Extract COM name from model ID
     match = re.match(r".*\((COM[0-9]*)\)", model_id)
     if match is None or len(match.groups()) == 0:
-        raise Exception(f"Invalid model ID: {model_id}")
+        return None
     return match.groups()[0]
 
 
