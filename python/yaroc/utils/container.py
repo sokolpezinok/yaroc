@@ -66,7 +66,9 @@ class Container(containers.DeclarativeContainer):
     async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.port)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
-        serial=providers.Callable(SerialClient.create, config.client.serial.port),
+        serial=providers.Callable(
+            SerialClient.create, config.client.serial.port, config.client.serial.retry
+        ),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
         mqtt=providers.Factory(MqttClient, config.hostname, config.mac_addr, config.client.mqtt),

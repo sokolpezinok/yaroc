@@ -31,6 +31,7 @@ pub struct SerialClient {
     mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
     mini_reader_connect_tx: UnboundedSender<String>,
     port: String,
+    retry_times: Vec<Duration>,
 }
 
 const FIRST_RESPONSE: &[u8] = &[0xff, 0x02, 0xf0, 0x03, 0x12, 0x8c, 0x4d, 0x62, 0x3f, 0x03];
@@ -204,12 +205,17 @@ impl SerialClient {
     ///
     /// # Arguments
     /// * `computer_port` - The path to the serial port (e.g., /dev/serial0, /dev/ttyUSB0).
+    /// * `retry` - If true, retries sending each punch 2 more times.
     /// * `py` - Python interpreter instance.
     ///
     /// # Returns
     /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves to a `SerialClient` instance.
     #[staticmethod]
-    pub fn create<'a>(computer_port: String, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+    pub fn create<'a>(
+        computer_port: String,
+        retry: Option<bool>,
+        py: Python<'a>,
+    ) -> PyResult<Bound<'a, PyAny>> {
         future_into_py::<_, SerialClient>(py, async move {
             let builder = tokio_serial::new(&computer_port, BAUD_RATE);
             let computer_serial = builder.open_native_async().map_err(|e| {
@@ -220,6 +226,16 @@ impl SerialClient {
             let rx = BufReader::new(rx);
             let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
 
+            let retry_times = if retry.unwrap_or_default() {
+                vec![
+                    Duration::ZERO,
+                    Duration::from_mins(1),
+                    Duration::from_mins(10),
+                ]
+            } else {
+                vec![Duration::ZERO]
+            };
+
             Ok(Self {
                 computer_rx: Arc::new(Mutex::new(rx)),
                 computer_tx: Arc::new(Mutex::new(tx)),
@@ -227,6 +243,7 @@ impl SerialClient {
                 mini_reader_connect_rx: Arc::new(Mutex::new(mini_reader_connect_rx)),
                 mini_reader_connect_tx,
                 port: computer_port,
+                retry_times,
             })
         })
     }
@@ -316,14 +333,10 @@ impl SerialClient {
         let computer_tx = self.computer_tx.clone();
         let raw_punch = punch_log.punch.raw;
         let card = punch_log.punch.card;
+        let retry_times = self.retry_times.clone();
 
-        let wait_times = [
-            Duration::ZERO,
-            Duration::from_mins(1),
-            Duration::from_mins(10),
-        ];
         future_into_py(py, async move {
-            for (i, wait_time) in wait_times.iter().enumerate() {
+            for (i, wait_time) in retry_times.iter().enumerate() {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
                 match tx.write_all(&raw_punch).await {
