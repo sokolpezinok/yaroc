@@ -19,6 +19,10 @@ embassy-time = { workspace = true }
 femtopb = { workspace = true }
 heapless = { workspace = true }
 log = { workspace = true }
+nusb = "0.2"
+futures-util = "0.3"
+udev = "0.9"
+serialport = "4"
 postcard = { workspace = true, features = ["use-std"] }
 pyo3 = { version = "0.28", features = ["extension-module", "chrono", "abi3-py311"] }
 pyo3-async-runtimes = { version = "0.28", features = ["attributes", "tokio-runtime"] }

@@ -4,13 +4,9 @@ import time
 from asyncio import Queue
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncIterator
-
-from usbmonitor import USBMonitor
-from usbmonitor.attributes import ID_VENDOR_ID
+from typing import AsyncIterator
 
 from ..rs import SiPunch, SiUartHandler
-from ..utils.sys_info import tty_device_from_usb
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -46,84 +42,24 @@ class SiWorker:
 class UdevSiFactory(SiWorker):
     def __init__(self) -> None:
         super().__init__()
-        self._device_queue: Queue[tuple[str, dict[str, Any], str]] = Queue()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self._loop = asyncio.get_event_loop()
-        logging.info("Starting USB SportIdent device manager")
-        self.monitor = USBMonitor([{ID_VENDOR_ID: SI_LABS.upper()}, {ID_VENDOR_ID: SI_LABS}])
-        self.monitor.start_monitoring(
-            on_connect=self._add_usb_device, on_disconnect=self._remove_usb_device
-        )
         self.handler = SiUartHandler()
-        _handler_task = asyncio.create_task(self.get_punches(queue))
-
-        for device_id, parent_device_info in self.monitor.get_available_devices().items():
-            self._add_usb_device(device_id, parent_device_info)
-
-        try:
-            while True:
-                action, device_info, device_id = await self._device_queue.get()
-                await self._handle_device(action, device_info, device_id, status_queue)
-        finally:
-            _handler_task.cancel()
-            await asyncio.gather(_handler_task, return_exceptions=True)
-
-    async def _handle_device(
-        self,
-        action: str,
-        device_info: dict[str, Any],
-        device_id: str,
-        status_queue: Queue[DeviceEvent],
-    ):
-        try:
-            match action:
-                case "add":
-                    await asyncio.sleep(2.0)  # Give the TTY subsystem more time
-                    tty_usb = tty_device_from_usb(device_info)
-                    if tty_usb is None:
-                        return
-                    logging.info(f"Inserted SportIdent device {tty_usb}")
-                    await self.handler.add_device(tty_usb, device_id)
-                    await status_queue.put(DeviceEvent(True, tty_usb))
-                case "remove":
-                    self.handler.remove_device(device_id)
-                    await status_queue.put(DeviceEvent(False, device_id))
-        except Exception as e:
-            logging.error(e)
-
-    @staticmethod
-    def _is_silabs(device_info: dict[str, Any]):
-        return device_info.get(ID_VENDOR_ID, "").lower() == SI_LABS
+        self.receiver = self.handler.punch_receiver()
+        await asyncio.gather(
+            self.handler.loop(),
+            self.get_punches(queue),
+        )
 
     async def get_punches(self, queue: Queue[SiPunch]):
         while True:
             try:
-                raw_punch = await self.handler.next_punch()
+                raw_punch = await self.receiver.next_punch()
                 punch = SiPunch.from_raw(raw_punch, datetime.now().astimezone())
                 if punch is not None:
                     await self.process_punch(punch, queue)
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")
-
-    def stop(self):
-        self._observer.stop()
-        self.monitor.stop_monitoring()
-
-    def _add_usb_device(self, device_id: str, device_info: dict[str, Any]):
-        try:
-            if not self._is_silabs(device_info):
-                return
-            asyncio.run_coroutine_threadsafe(
-                self._device_queue.put(("add", device_info, device_id)), self._loop
-            )
-        except Exception as err:
-            logging.error(err)
-
-    def _remove_usb_device(self, device_id: str, device_info: dict[str, Any]):
-        asyncio.run_coroutine_threadsafe(
-            self._device_queue.put(("remove", device_info, device_id)), self._loop
-        )
 
 
 class FakeSiWorker(SiWorker):

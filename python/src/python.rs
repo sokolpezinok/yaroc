@@ -68,7 +68,7 @@ pub mod rs {
     #[pymodule_export]
     use crate::serial_client::SerialClient;
     #[pymodule_export]
-    use crate::si_uart::SiUartHandler;
+    use crate::si_uart::{SiUartHandler, SiUartPunchReceiver};
     #[pymodule_export]
     use crate::status::{CellularLog, HostInfo, MeshtasticLog, NodeInfo};
     #[pymodule_export]

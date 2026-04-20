@@ -40,8 +40,8 @@ where
     /// Connects to a serial device.
     ///
     /// This function spawns a task to handle messages from the device.
-    pub fn add_device(&mut self, msh_serial: M, device_node: &str) {
-        let token = self.spawn_serial(msh_serial);
+    pub fn add_device(&mut self, usb_serial: M, device_node: &str) {
+        let token = self.spawn_serial(usb_serial);
         self.cancellation_tokens.insert(device_node.to_owned(), token);
     }
 
