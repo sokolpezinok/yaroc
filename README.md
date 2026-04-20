@@ -56,6 +56,7 @@ interval = 8
 [client.mqtt]
 enable = true
 broker_url = "broker.emqx.io"
+broker_port = 1883
 ```
 
 With a config file present, we are able to run `send-punch`:

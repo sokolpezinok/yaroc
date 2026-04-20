@@ -5,7 +5,7 @@ import sys
 from asyncio import Lock, get_running_loop, sleep
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict
+from typing import Any, Dict
 
 from aiomqtt import Client as AioMqttClient
 from aiomqtt import MqttCodeError, MqttError
@@ -43,18 +43,12 @@ class Topics:
 class MqttClient(Client):
     """Class for a simple MQTT reporting"""
 
-    def __init__(
-        self,
-        hostname: str,
-        mac_addr: str,
-        broker_url: str | None,
-        broker_port: int | None,
-    ):
+    def __init__(self, hostname: str, mac_addr: str, config: Dict[str, Any]):
         self.topics: Dict[str, Topics] = {}
         self._name = f"aiomqtt-{hostname}"
         self.mac_addr = mac_addr
-        self.broker_url = BROKER_URL if broker_url is None else broker_url
-        self.broker_port = BROKER_PORT if broker_port is None else broker_port
+        self.broker_url = config.get("broker_url", BROKER_URL)
+        self.broker_port = config.get("broker_port", BROKER_PORT)
         self.mm = None
 
         disconnected = Disconnected()
@@ -147,14 +141,14 @@ class MqttClient(Client):
         while True:
             try:
                 async with self.client:
-                    logging.info(f"Connected to mqtt://{BROKER_URL}")
+                    logging.info(f"Connected to mqtt://{self.broker_url}")
                     topics = self.get_topics(self.mac_addr)
                     await self.client.subscribe(topics.command)
                     async for message in self.client.messages:
                         logging.info("Got a command message, processing is not implemented")
 
             except MqttError:
-                logging.error(f"Connection lost to mqtt://{BROKER_URL}")
+                logging.error(f"Connection lost to mqtt://{self.broker_url}")
                 await sleep(5.0)
 
 
@@ -166,8 +160,7 @@ class SIM7020MqttClient(Client):
         hostname: str,
         mac_address: str,
         async_at: AsyncATCom,
-        broker_url: str | None,
-        broker_port: int | None,
+        config: Dict[str, Any],
         connect_timeout: float = CONNECT_TIMEOUT,
     ):
         self.topics = Topics.from_mac(mac_address)
@@ -177,8 +170,8 @@ class SIM7020MqttClient(Client):
             self.topics.status,
             self._name,
             connect_timeout,
-            BROKER_URL if broker_url is None else broker_url,
-            BROKER_PORT if broker_port is None else broker_port,
+            config.get("broker_url", BROKER_URL),
+            config.get("broker_port", BROKER_PORT),
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
