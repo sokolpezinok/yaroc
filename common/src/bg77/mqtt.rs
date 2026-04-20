@@ -4,6 +4,7 @@ use defmt::{error, info, warn};
 use embassy_sync::channel::Sender;
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::signal::Signal;
+use embassy_sync::watch::Watch;
 use embassy_time::{Duration, Instant};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
@@ -27,6 +28,8 @@ static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
     LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
+
+pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusCode {
@@ -219,6 +222,7 @@ impl<M: ModemHw> MqttClient<M> {
         match response.command() {
             "QMTSTAT" => {
                 warn!("MQTT disconnected");
+                MQTT_CONNECTION_STATUS.sender().send(false);
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                     error!("Channel full when sending MQTT disconnect notification");
                 }
@@ -379,6 +383,7 @@ impl<M: ModemHw> MqttClient<M> {
 
                 if res == 0 && reason == 0 {
                     info!("Successfully connected to MQTT");
+                    MQTT_CONNECTION_STATUS.sender().send(true);
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
                         error!("Error while sending MQTT connect notification, channel full");
                     }

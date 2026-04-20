@@ -4,7 +4,7 @@
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
-use embassy_time::{Duration, Ticker};
+use embassy_time::{Duration, Timer};
 use heapless::format;
 use static_cell::StaticCell;
 use yaroc_common::{
@@ -12,7 +12,7 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{
         modem_manager::ModemConfig,
-        mqtt::{MqttClientConfig, MqttConfig},
+        mqtt::{MQTT_CONNECTION_STATUS, MqttClientConfig, MqttConfig},
     },
     error::Error,
     send_punch::SendPunch,
@@ -107,9 +107,16 @@ async fn main(spawner: Spawner) {
     spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));
     info!("All background tasks are running");
 
-    let mut green_led_ticker = Ticker::every(Duration::from_millis(700));
+    let mut mqtt_status =
+        MQTT_CONNECTION_STATUS.receiver().expect("Only one watcher of MQTT status");
     loop {
-        green_led_ticker.next().await;
+        let connected = mqtt_status.try_get().unwrap_or_default();
+        let delay = if connected {
+            Duration::from_millis(2000)
+        } else {
+            Duration::from_millis(500)
+        };
+        Timer::after(delay).await;
         green_led.toggle();
     }
 }
