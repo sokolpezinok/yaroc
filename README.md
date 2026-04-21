@@ -37,6 +37,22 @@ Install the `yaroc` package from PyPI, which provides the `send-punch` and `yaro
 uv tool install yaroc
 ```
 
+To install a beta version, use the `--pre` flag:
+
+```sh
+uv tool install --pre yaroc
+```
+
+Alternatively, you can use `pip` within a virtual environment:
+
+```sh
+python -m venv .venv
+source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+pip install yaroc
+# or for beta versions:
+pip install --pre yaroc
+```
+
 # Usage
 
 ## Send punches from an online control
