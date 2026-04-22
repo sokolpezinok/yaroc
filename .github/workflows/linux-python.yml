@@ -82,15 +82,31 @@ jobs:
           name: wheels-linux-armv6
           path: python/dist
 
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+          working-directory: "python"
+      - name: Upload sdist
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheels-sdist
+          path: python/dist
+
   release:
     name: Release
     runs-on: ubuntu-latest
     if: "startsWith(github.ref, 'refs/tags/')"
-    needs: [linux, linux-armv6]
+    needs: [linux, linux-armv6, sdist]
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: wheels-linux-*
+          pattern: wheels-*
           path: dist
           merge-multiple: true
       - name: Install uv
