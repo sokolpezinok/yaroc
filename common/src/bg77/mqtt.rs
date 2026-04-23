@@ -362,6 +362,7 @@ impl<M: ModemHw> MqttClient<M> {
         match status {
             MQTT_CONNECTED => {
                 info!("Already connected to MQTT");
+                MQTT_CONNECTION_STATUS.sender().send(true);
                 Ok(())
             }
             MQTT_DISCONNECTING | MQTT_CONNECTING => {
