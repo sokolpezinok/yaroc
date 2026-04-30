@@ -61,25 +61,36 @@ class UdevSiFactory(SiWorker):
         for device_id, parent_device_info in self.monitor.get_available_devices().items():
             self._add_usb_device(device_id, parent_device_info)
 
-        while True:
-            action, parent_device_info, device_id = await self._device_queue.get()
+        try:
+            while True:
+                action, device_info, device_id = await self._device_queue.get()
+                await self._handle_device(action, device_info, device_id, status_queue)
+        finally:
+            _handler_task.cancel()
+            await asyncio.gather(_handler_task, return_exceptions=True)
 
-            try:
-                if action == "add":
-                    await asyncio.sleep(2.0)  # Give the TTY subystem more time
-
-                    tty_usb = tty_device_from_usb(parent_device_info)
+    async def _handle_device(
+        self,
+        action: str,
+        device_info: dict[str, Any],
+        device_id: str,
+        status_queue: Queue[DeviceEvent],
+    ):
+        try:
+            match action:
+                case "add":
+                    await asyncio.sleep(2.0)  # Give the TTY subsystem more time
+                    tty_usb = tty_device_from_usb(device_info)
                     if tty_usb is None:
-                        continue
+                        return
                     logging.info(f"Inserted SportIdent device {tty_usb}")
-
                     await self.handler.add_device(tty_usb, device_id)
                     await status_queue.put(DeviceEvent(True, tty_usb))
-                elif action == "remove":
+                case "remove":
                     self.handler.remove_device(device_id)
                     await status_queue.put(DeviceEvent(False, device_id))
-            except Exception as e:
-                logging.error(e)
+        except Exception as e:
+            logging.error(e)
 
     @staticmethod
     def _is_silabs(device_info: dict[str, Any]):

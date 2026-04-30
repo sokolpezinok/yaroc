@@ -58,17 +58,21 @@ class YarocDaemon:
         while True:
             try:
                 ev = await self.handler.next_event()
-                match ev:
-                    case Event.SiPunchLogs():
-                        asyncio.create_task(self._handle_punches(ev[0]))
-                    case Event.CellularLog():
-                        asyncio.create_task(self._handle_cellular_log(ev[0]))
-                    case Event.MeshtasticLog():
-                        asyncio.create_task(self._handle_meshtastic_log(ev[0]))
-                    case Event.NodeInfos():
-                        asyncio.create_task(self._draw_table(ev[0]))
+                self._handle_event(ev)
             except Exception as e:
                 logging.error(f"Error while getting next message: {e}")
+
+    def _handle_event(self, ev: Event) -> asyncio.Task | None:
+        match ev:
+            case Event.SiPunchLogs():
+                return asyncio.create_task(self._handle_punches(ev[0]))
+            case Event.CellularLog():
+                return asyncio.create_task(self._handle_cellular_log(ev[0]))
+            case Event.MeshtasticLog():
+                return asyncio.create_task(self._handle_meshtastic_log(ev[0]))
+            case Event.NodeInfos():
+                return asyncio.create_task(self._draw_table(ev[0]))
+        return None
 
     async def _draw_table(self, node_infos: list[NodeInfo]):
         self.executor.submit(self.drawer.draw_status, node_infos)
@@ -82,23 +86,37 @@ class YarocDaemon:
 
         shutdown_event = asyncio.Event()
 
-        def shutdown(signum, frame):
-            signal_name = signal.Signals(signum).name
-            logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
+        def shutdown(signum=None, frame=None):
+            if signum is not None:
+                signal_name = signal.Signals(signum).name
+                logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
             shutdown_event.set()
 
-        signal.signal(signal.SIGTERM, shutdown)
+        if is_windows():
+            signal.signal(signal.SIGTERM, shutdown)
+            signal.signal(signal.SIGINT, shutdown)
+        else:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, shutdown)
 
-        asyncio.create_task(self.client_group.loop())
-        asyncio.create_task(self.handle_messages())
+        tasks = [
+            asyncio.create_task(self.client_group.loop()),
+            asyncio.create_task(self.handle_messages()),
+        ]
         if self.serial_manager is not None:
-            asyncio.create_task(self.serial_manager.loop())
+            tasks.append(asyncio.create_task(self.serial_manager.loop()))
 
         try:
             await shutdown_event.wait()
         except asyncio.exceptions.CancelledError:
-            logging.error("Interrupted, exiting ...")
+            logging.info("Interrupted, exiting ...")
 
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.executor.shutdown(wait=True)
         self.drawer.clear()
         logging.info("Main loop shutting down")
 

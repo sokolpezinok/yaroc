@@ -68,7 +68,12 @@ class ClientGroup:
     async def loop(self):
         """Run the infinite loops of all clients in the group."""
         loops = [client.loop() for client in self.clients]
-        await asyncio.gather(*loops, return_exceptions=True)
+        try:
+            await asyncio.gather(*loops, return_exceptions=True)
+        finally:
+            for task in self.tasks:
+                task.cancel()
+            await asyncio.gather(*self.tasks, return_exceptions=True)
 
     async def send_status(self, status: Status, mac_address: str) -> Sequence[bool]:
         """Send a status update to all clients in the group."""
