@@ -64,13 +64,13 @@ class YarocDaemon:
 
     def _handle_event(self, ev: Event) -> asyncio.Task | None:
         match ev:
-            case Event.SiPunchLogs():
+            case Event.SiPunchLogs():  # type: ignore
                 return asyncio.create_task(self._handle_punches(ev[0]))
-            case Event.CellularLog():
+            case Event.CellularLog():  # type: ignore
                 return asyncio.create_task(self._handle_cellular_log(ev[0]))
-            case Event.MeshtasticLog():
+            case Event.MeshtasticLog():  # type: ignore
                 return asyncio.create_task(self._handle_meshtastic_log(ev[0]))
-            case Event.NodeInfos():
+            case Event.NodeInfos():  # type: ignore
                 return asyncio.create_task(self._draw_table(ev[0]))
         return None
 

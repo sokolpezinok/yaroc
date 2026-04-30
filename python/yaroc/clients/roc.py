@@ -105,10 +105,11 @@ class RocClient(Client):
             }
         elif oneof == "dev_event":
             dev_event = status.dev_event
+            port = dev_event.port.removeprefix("/dev/")
             if dev_event.type == EventType.Added:  # type: ignore
-                codes = f"siadded-{dev_event.port}"
+                codes = f"siadded-{port}"
             else:
-                codes = f"siremoved-{dev_event.port}"
+                codes = f"siremoved-{port}"
             params = {
                 "function": "callhome",
                 "command": "setmini",
