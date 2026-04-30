@@ -28,16 +28,12 @@ class StatusDrawer:
             if timestamp is None:
                 return ""
             delta = datetime.now().astimezone() - timestamp
-            if delta.total_seconds() < 10:
-                return f"{delta.total_seconds():.1f}s ago"
             if delta.total_seconds() < 60:
-                return f"{delta.total_seconds():.0f}s ago"
+                return "now"
             minutes = delta.total_seconds() / 60
-            if minutes < 10:
-                return f"{minutes:.1f}m ago"
             if minutes < 60:
                 return f"{minutes:.0f}m ago"
-            return f"{minutes / 60:.1f}h ago"
+            return f"{minutes / 60:.0f}h ago"
 
         table = []
         for node_info in node_infos:
