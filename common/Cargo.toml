@@ -8,7 +8,7 @@ rust-version = "1.93"
 default = []
 defmt = ["dep:defmt", "femtopb/defmt", "heapless/defmt", "postcard/use-defmt", "embassy-usb/defmt"]
 nrf = ["dep:embassy-nrf", "dep:embassy-usb"]
-std = ["embassy-executor/platform-std", "embassy-time/std", "chrono/clock", "chrono/alloc", "dep:geoutils"]
+std = ["embassy-executor/platform-std", "embassy-time/std", "chrono/clock", "chrono/alloc", "dep:geoutils", "serde/std", "postcard/use-std"]
 
 [dependencies]
 chrono = { workspace = true }

@@ -142,12 +142,14 @@ pub trait RxWithIdle {
     ) -> impl core::future::Future<Output = crate::Result<usize>>;
 }
 
+#[cfg(feature = "std")]
 /// Fake RxWithIdle, to be used in tests.
 pub struct FakeRxWithIdle {
     responses: Vec<(&'static str, &'static str), 10>,
     pipe: &'static Pipe<RawMutex, AT_COMMAND_SIZE>,
 }
 
+#[cfg(feature = "std")]
 impl FakeRxWithIdle {
     /// Creates a new `FakeRxWithIdle`.
     ///
@@ -162,11 +164,13 @@ impl FakeRxWithIdle {
     }
 }
 
+#[cfg(feature = "std")]
 #[embassy_executor::task]
 async fn reader(rx: FakeRxWithIdle, at_broker: AtRxBroker) {
     at_broker.broker_loop(rx).await;
 }
 
+#[cfg(feature = "std")]
 impl RxWithIdle for FakeRxWithIdle {
     fn spawn(self, spawner: Spawner, urc_handlers: &[UrcHandlerType]) {
         let at_broker = AtRxBroker::new(&MAIN_RX_CHANNEL, urc_handlers);

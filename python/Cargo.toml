@@ -29,7 +29,7 @@ thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
 tokio-serial.workspace = true
 toml = "1.0"
-yaroc-common = { path = "../common" }
+yaroc-common = { path = "../common", features = ["std"] }
 yaroc-receiver = { path = "../receiver" }
 
 [lib]
