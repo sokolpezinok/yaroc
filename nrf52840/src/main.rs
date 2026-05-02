@@ -25,7 +25,7 @@ use yaroc_nrf52840::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
     si_uart::read_si_uart,
-    system_info::{SoftdeviceTemp, minicallhome_loop, sysinfo_update},
+    system_info::{SoftdeviceTemp, battery_update, minicallhome_loop, sysinfo_update},
 };
 
 /// A channel for the SI UART.
@@ -44,6 +44,7 @@ async fn main(spawner: Spawner) {
         ble,
         flash_mutex,
         usb,
+        saadc,
         ..
     } = device;
     green_led.set_high();
@@ -105,6 +106,7 @@ async fn main(spawner: Spawner) {
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));
+    spawner.spawn(battery_update(saadc).expect("Failed to spawn task"));
     info!("All background tasks are running");
 
     let mut mqtt_status =

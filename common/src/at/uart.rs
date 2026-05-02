@@ -10,6 +10,7 @@ use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, Fr
 use defmt::{self, debug};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
+#[cfg(feature = "std")]
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, Instant, WithTimeout};
 use embedded_io_async::Write;

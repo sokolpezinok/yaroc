@@ -1,11 +1,12 @@
-use defmt::error;
-use embassy_futures::select::{Either3, select3};
+use defmt::{error, info};
+use embassy_futures::select::{Either, select};
+use embassy_nrf::saadc::Saadc;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker};
 use yaroc_common::{
     RawMutex,
     send_punch::{COMMAND_CHANNEL, SendPunchCommand},
-    status::{TEMPERATURE, Temp},
+    status::{BATTERY, BatteryInfo, TEMPERATURE, Temp, voltage_to_percent},
 };
 
 use crate::ble::Ble;
@@ -34,30 +35,22 @@ pub type OwnTemp = SoftdeviceTemp;
 /// A task that periodically updates the system info.
 #[embassy_executor::task]
 pub async fn sysinfo_update(mut temp: OwnTemp) {
-    // Initial commands in the beginning
+    // Initial commands to get measurements
     COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await;
-    COMMAND_CHANNEL.send(SendPunchCommand::BatteryUpdate).await;
+
     let temp_sender = TEMPERATURE.sender();
     let mut temperature_ticker = Ticker::every(Duration::from_secs(120));
     let mut time_sync_ticker = Ticker::every(Duration::from_secs(1800));
-    let mut battery_update = Ticker::every(Duration::from_secs(120));
     loop {
-        match select3(
-            temperature_ticker.next(),
-            time_sync_ticker.next(),
-            battery_update.next(),
-        )
-        .await
-        {
-            Either3::First(_) => {
+        match select(temperature_ticker.next(), time_sync_ticker.next()).await {
+            Either::First(_) => {
                 let _ = temp
                     .cpu_temperature()
                     .await
                     .map(|t| temp_sender.send(t))
                     .inspect_err(|err| error!("Temperature update failed: {}", err));
             }
-            Either3::Second(_) => COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await,
-            Either3::Third(_) => COMMAND_CHANNEL.send(SendPunchCommand::BatteryUpdate).await,
+            Either::Second(_) => COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await,
         }
     }
 }
@@ -80,5 +73,38 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
         // info.
         MCH_SIGNAL.signal(Instant::now());
         mch_ticker.next().await;
+    }
+}
+
+/// A task that periodically updates the battery voltage.
+///
+/// The battery voltage calculation is based on the WisBlock RAK4630 implementation:
+/// https://github.com/RAKWireless/WisBlock/blob/master/examples/RAK4630/power/RAK4630_Battery_Level_Detect/Read_Battery_Level/Read_Battery_Level.ino
+///
+/// Hardware constants:
+/// - ADC resolution: 12-bit (0-4095)
+/// - ADC reference: 3.0V (using internal reference)
+/// - Voltage divider factor: 1.6667 (hardware divider to bring Vbat within ADC range: 1M / (1M + 1.5M))
+/// - Multiplier: (3000mV / 4096) * 1.6667 = 0.732421875 * 1.6666666667 ≈ 1.220703125
+#[embassy_executor::task]
+pub async fn battery_update(mut saadc: Saadc<'static, 1>) {
+    saadc.calibrate().await;
+    let mut buf = [0; 1];
+    let battery_sender = BATTERY.sender();
+
+    // TODO: take the interval as an argument
+    let mut ticker = Ticker::every(Duration::from_secs(120));
+    loop {
+        saadc.sample(&mut buf).await;
+        // WisBlock uses a 1.6667 voltage divider and 12-bit ADC with 3.0V reference.
+        // The raw value is in buf[0].
+        let raw = buf[0].max(0);
+        let mv = (f32::from(raw) * 1.2207031) as u16;
+        info!("battery: {} mV", mv);
+        battery_sender.send(BatteryInfo {
+            mv,
+            percents: voltage_to_percent(mv),
+        });
+        ticker.next().await;
     }
 }

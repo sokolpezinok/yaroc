@@ -5,7 +5,7 @@ use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
-use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc};
+use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc, Time};
 use embassy_nrf::uarte::{self, UarteRxWithIdle, UarteTx};
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_nrf::usb::{self, Driver};
@@ -90,8 +90,12 @@ impl Default for Device {
         let green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
         let blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
 
-        let saadc_config = SaadcConfig::default();
-        let channel_config = ChannelConfig::single_ended(p.P0_05);
+        let mut saadc_config = SaadcConfig::default();
+        saadc_config.resolution = saadc::Resolution::_12BIT;
+        saadc_config.oversample = saadc::Oversample::OVER4X;
+        let mut channel_config = ChannelConfig::single_ended(p.P0_05);
+        channel_config.gain = saadc::Gain::GAIN1_5;
+        channel_config.time = Time::_40US;
         Interrupt::SAADC.set_priority(Priority::P5);
         let saadc = Saadc::new(p.SAADC, Irqs, saadc_config, [channel_config]);
 

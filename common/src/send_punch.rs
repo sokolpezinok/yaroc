@@ -31,8 +31,6 @@ pub enum SendPunchCommand {
     /// The `bool` parameter indicates whether to force a reconnection.
     MqttConnect(bool, Instant),
     NetworkConnect(Instant),
-    /// Instructs the modem to update the battery status.
-    BatteryUpdate,
 }
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
@@ -283,13 +281,6 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
                         info!("Modem time: {}", format!(40; "{}", time).unwrap())
                     }
                 }
-            }
-            SendPunchCommand::BatteryUpdate => {
-                let _ = self
-                    .system_info
-                    .update_battery_state(&mut self.bg77)
-                    .await
-                    .inspect_err(|err| error!("Error while getting battery state: {}", err));
             }
         }
     }
