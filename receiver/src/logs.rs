@@ -46,6 +46,8 @@ impl core::fmt::Display for SiPunchLog {
             self.host_info.name, self.punch.card, self.punch.code
         )?;
         write!(f, "at {}", self.punch.time.format("%H:%M:%S.%3f"))?;
+        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
+        write!(f, ", latency {:4.2}s", millis)?;
         if let Some(rssi_snr) = &self.rssi_snr {
             write!(
                 f,
@@ -53,8 +55,7 @@ impl core::fmt::Display for SiPunchLog {
                 rssi_snr.rssi_dbm, rssi_snr.snr, rssi_snr.hop_count
             )?;
         }
-        let millis = self.latency.num_milliseconds() as f64 / 1000.0;
-        write!(f, ", latency {:4.2}s", millis)
+        Ok(())
     }
 }
 
@@ -285,7 +286,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log}"),
-            "msh01 1715004 punched 47 at 10:00:03.793, -90dBm 4.50SNR (1 hops), latency 1.23s"
+            "msh01 1715004 punched 47 at 10:00:03.793, latency 1.23s, -90dBm 4.50SNR (1 hops)"
         );
     }
 
