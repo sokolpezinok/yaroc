@@ -78,11 +78,6 @@ pub mod rs {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         pyo3_log::Logger::new(m.py(), pyo3_log::Caching::LoggersAndLevels)?
             .filter(log::LevelFilter::Trace)
-            // TODO: remove `.filter_target` once https://github.com/meshtastic/rust/issues/27 is fixed
-            .filter_target(
-                "meshtastic::connections::stream_buffer".to_owned(),
-                log::LevelFilter::Off,
-            )
             .install()
             .expect("Someone installed a logger before us");
         Ok(())
