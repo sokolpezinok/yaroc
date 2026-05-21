@@ -1,4 +1,4 @@
-use log::warn;
+use log::info;
 use std::collections::{HashMap, hash_map::Entry};
 use std::fmt::Display;
 use tokio::sync::mpsc::UnboundedSender;
@@ -82,7 +82,7 @@ where
                 .with_cancellation_token_owned(cancellation_token)
                 .await;
             if res.is_none() {
-                warn!("Stopping {}", description);
+                info!("Stopping {}", description);
             }
         });
 

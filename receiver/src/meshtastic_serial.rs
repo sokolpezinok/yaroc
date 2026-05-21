@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::time::Duration;
 
-use log::{error, warn};
+use log::warn;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
 use meshtastic::utils;
@@ -110,12 +110,9 @@ impl UsbSerialTrait for MeshtasticSerial {
                 }
                 MeshtasticEvent::Disconnected(_device_node) => {
                     warn!("Removed meshtastic device: {}", self.mac_address);
-                    // TODO: this seems to always error, check why
-                    let _ = self
-                        .stream_api
-                        .disconnect()
-                        .await
-                        .inspect_err(|e| error!("Error while disconnecting meshtastic: {e}"));
+                    // Disconnect can return an error if the connection was already lost (e.g. EOF)
+                    // We ignore it here as we are already handling the disconnection.
+                    let _ = self.stream_api.disconnect().await;
                     break;
                 }
             }
