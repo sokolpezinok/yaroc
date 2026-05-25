@@ -1518,8 +1518,9 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "meshtastic"
-version = "0.1.8"
-source = "git+https://github.com/lukipuki/meshtastic-rust?branch=fix-serial-polluted-logs#8ee145d406794c01ca6c3fcf60238050821d68dd"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "181991c1fd7812f0be99f7229daa8c3b4d77acbafd6f640c4d87b4eb4791cf70"
 dependencies = [
  "futures-util",
  "log",
