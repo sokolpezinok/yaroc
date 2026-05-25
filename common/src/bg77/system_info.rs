@@ -9,7 +9,7 @@ use crate::{
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeDelta};
 #[cfg(feature = "defmt")]
 use defmt::{error, info};
-use embassy_sync::watch::{Receiver, Sender};
+use embassy_sync::watch::Receiver;
 use embassy_time::Instant;
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
@@ -19,7 +19,6 @@ use log::{error, info};
 pub struct SystemInfo<M: ModemHw> {
     temp: Receiver<'static, RawMutex, f32, 1>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
-    battery_sender: Sender<'static, RawMutex, BatteryInfo, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
     _phantom: PhantomData<M>,
 }
@@ -29,7 +28,6 @@ impl<M: ModemHw> Default for SystemInfo<M> {
         Self {
             temp: TEMPERATURE.receiver().unwrap(),
             battery: BATTERY.receiver().unwrap(),
-            battery_sender: BATTERY.sender(),
             boot_time: None,
             _phantom: PhantomData,
         }
@@ -82,13 +80,6 @@ impl<M: ModemHw> SystemInfo<M> {
             let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
             boot_time.checked_add_signed(delta).unwrap()
         })
-    }
-
-    /// Fetches the battery state from the modem and updates the global `BATTERY` status.
-    pub async fn update_battery_state(&self, bg77: &mut M) -> Result<(), Error> {
-        let (percents, mv) = bg77.call_at("+CBC", None).await?.parse2::<u8, u16>([1, 2], None)?;
-        self.battery_sender.send(BatteryInfo { mv, percents });
-        Ok(())
     }
 
     async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
