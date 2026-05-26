@@ -69,17 +69,6 @@ pub struct PunchMsg {
     pub msg_id: u16,
 }
 
-impl PunchMsg {
-    /// Returns the time when the next send attempt should be made.
-    pub fn next_send(&self) -> Instant {
-        Instant::now() + self.backoff
-    }
-
-    fn halve_backoff(&mut self) {
-        self.backoff /= 2;
-    }
-}
-
 impl Default for PunchMsg {
     fn default() -> Self {
         Self {
@@ -107,9 +96,19 @@ impl PunchMsg {
         }
     }
 
-    /// Updates the backoff duration for the next retry.
-    pub fn update_backoff(&mut self) {
+    /// Muliplies the backoff duration by BACKOFF_MULTIPLIER for the next retry.
+    pub fn multiply_backoff(&mut self) {
         self.backoff *= BACKOFF_MULTIPLIER;
+    }
+
+    /// Reduce backoff by BACKOFF_MULTIPLIER.
+    fn reduce_backoff(&mut self) {
+        self.backoff /= BACKOFF_MULTIPLIER;
+    }
+
+    /// Returns the time when the next send attempt should be made.
+    pub fn next_send(&self) -> Instant {
+        Instant::now() + self.backoff
     }
 }
 
@@ -313,14 +312,16 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         loop {
             match select(Timer::at(next_send), mqtt_events.next_message_pure()).await {
                 Either::First(_) => {
-                    punch_msg.update_backoff();
+                    punch_msg.multiply_backoff();
                     return;
                 }
                 Either::Second(MqttEvent::Connect) => {
-                    // After MQTT connect we halve the backoff. Note also that this interrupts a
-                    // a backoff timer, meaning that the message will be immediately sent with
-                    // halved backoff.
-                    punch_msg.halve_backoff();
+                    // After MQTT connect we halve the backoff twice, reducing it by a factor of 4.
+                    // Note also that this interrupts a a backoff timer, meaning that the message
+                    // will be immediately sent. If that fails, the next backoff is half of what it
+                    // was before, 2/4 = 1/2.
+                    punch_msg.reduce_backoff();
+                    punch_msg.reduce_backoff();
                     return;
                 }
                 _ => {}

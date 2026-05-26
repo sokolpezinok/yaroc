@@ -239,7 +239,7 @@ async fn main(spawner: Spawner) {
 
     let (punch_id, time) = PUBLISH_EVENTS.receive().await;
     assert_eq!(punch_id, 3);
-    assert!((time - start).as_millis().abs_diff(1700) <= 15);
+    assert!((time - start).as_millis().abs_diff(1650) <= 15);
     // End of second test
 
     assert!(PUBLISH_EVENTS.is_empty());
