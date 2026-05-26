@@ -10,11 +10,9 @@ use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
-    bg77::{
-        modem_manager::ModemConfig,
-        mqtt::{MQTT_CONNECTION_STATUS, MqttClientConfig, MqttConfig},
-    },
+    bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
+    mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,
 };
 use yaroc_nrf52840::{
