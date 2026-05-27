@@ -26,6 +26,30 @@ impl Default for SiUartHandler {
     }
 }
 
+// Pure Rust (non-Python) methods
+impl SiUartHandler {
+    /// Pure Rust synchronous method to connect and add a device.
+    fn add_device_inner(
+        manager: &mut SerialDeviceManager<SiUartTokio>,
+        port: &str,
+        device_node: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let serial = TokioSerial::new(port)?;
+        let si_uart = SiUart::new(serial);
+        manager.add_device(si_uart, device_node);
+        info!("Connected to SI UART device at {port} ({device_node})");
+        Ok(())
+    }
+
+    /// Pure Rust synchronous method to remove a device.
+    fn remove_device_inner(
+        manager: &mut SerialDeviceManager<SiUartTokio>,
+        device_node: &str,
+    ) -> bool {
+        manager.remove_device(device_node.to_owned())
+    }
+}
+
 #[pymethods]
 impl SiUartHandler {
     /// Creates a new `SiUartHandler` instance.
@@ -61,17 +85,10 @@ impl SiUartHandler {
     ) -> PyResult<Bound<'a, PyAny>> {
         let mutex = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py::<_, ()>(py, async move {
-            match TokioSerial::new(port.as_str()) {
-                Ok(serial) => {
-                    let si_uart = SiUart::new(serial);
-                    mutex.lock().await.add_device(si_uart, &device_node);
-                    info!("Connected to SI UART device at {port}",);
-                    Ok(())
-                }
-                Err(err) => Err(PyConnectionError::new_err(format!(
-                    "Error connecting to SI UART at {port}: {err}"
-                ))),
-            }
+            let mut manager = mutex.lock().await;
+            Self::add_device_inner(&mut manager, &port, &device_node).map_err(|err| {
+                PyConnectionError::new_err(format!("Error connecting to SI UART at {port}: {err}"))
+            })
         })
     }
 
@@ -84,10 +101,11 @@ impl SiUartHandler {
     /// `Ok(true)` if the device was successfully removed, `Ok(false)` if not found,
     /// or a `PyRuntimeError` if the handler is locked.
     pub fn remove_device(&mut self, device_node: String) -> PyResult<bool> {
-        self.inner
+        let mut manager = self
+            .inner
             .try_lock()
-            .map_err(|_| PyRuntimeError::new_err("Failed to lock SI UART handler".to_owned()))
-            .map(|mut handler| handler.remove_device(device_node))
+            .map_err(|_| PyRuntimeError::new_err("Failed to lock SI UART handler".to_owned()))?;
+        Ok(Self::remove_device_inner(&mut manager, &device_node))
     }
 
     /// Asynchronously waits for and returns the next raw punch from any connected SI device.
