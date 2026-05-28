@@ -1,14 +1,19 @@
-use log::{debug, error, info};
+use futures::StreamExt;
+use log::{error, info};
+use meshtastic::protobufs::MeshPacket;
+use nusb::hotplug::HotplugEvent;
+use serialport::SerialPortType;
 use std::collections::{HashMap, hash_map::Entry};
 use std::fmt::Display;
+use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
 
+use crate::meshtastic_serial::MeshtasticSerial;
 use crate::si_uart::TokioSerial;
-use nusb::hotplug::HotplugEvent;
-use serialport::SerialPortType;
-use std::time::Duration;
+use crate::system_info::MacAddress;
+use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::SiUart;
 
 pub trait UsbSerialTrait {
@@ -18,37 +23,96 @@ pub trait UsbSerialTrait {
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
 }
 
-/// Serial device manager
-///
-/// Handles connecting and disconnecting of serial devices. Supports only serial port
-/// connections right now.
-pub struct SerialDeviceManager<M: UsbSerialTrait + Send + 'static> {
-    cancellation_tokens: HashMap<String, CancellationToken>,
-    tx: UnboundedSender<M::Output>,
+#[derive(Debug, Clone)]
+pub enum DetectedDevice {
+    Meshtastic {
+        port_name: String,
+        device_id: String,
+    },
+    SportIdent {
+        port_name: String,
+        device_id: String,
+    },
 }
 
-impl<M: UsbSerialTrait + Send + 'static> SerialDeviceManager<M>
-where
-    <M as UsbSerialTrait>::Output: Send,
-    M: Display,
-{
+/// Serial device manager
+///
+/// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
+pub struct SerialDeviceManager {
+    cancellation_tokens: HashMap<String, CancellationToken>,
+    mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
+    si_tx: Option<UnboundedSender<RawPunch>>,
+    enable_meshtastic: bool,
+    enable_sportident: bool,
+}
+
+const SI_LABS: u16 = 0x10c4;
+
+impl SerialDeviceManager {
     /// Creates a new `SerialDeviceManager`.
-    ///
-    /// The handler is responsible for forwarding messages from the serial devices to the
-    /// message handler.
-    pub fn new(tx: UnboundedSender<M::Output>) -> Self {
+    pub fn new(
+        mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
+        si_tx: Option<UnboundedSender<RawPunch>>,
+    ) -> Self {
         Self {
             cancellation_tokens: HashMap::new(),
-            tx,
+            enable_meshtastic: mesh_tx.is_some(),
+            enable_sportident: si_tx.is_some(),
+            mesh_tx,
+            si_tx,
         }
     }
 
-    /// Connects to a serial device.
-    ///
-    /// This function spawns a task to handle messages from the device.
-    pub fn add_device(&mut self, usb_serial: M, device_node: &str) {
-        let token = self.spawn_serial(usb_serial);
-        self.cancellation_tokens.insert(device_node.to_owned(), token);
+    /// Connects to a Meshtastic serial device.
+    pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
+    where
+        M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + Display + 'static,
+    {
+        if let Some(tx) = &self.mesh_tx {
+            let token = self.spawn_serial(msh_serial, tx.clone());
+            self.cancellation_tokens.insert(device_node.to_owned(), token);
+        }
+    }
+
+    /// Adds a new Meshtastic device to be managed.
+    pub async fn add_meshtastic_device(
+        &mut self,
+        port: &str,
+        device_node: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let msh_serial = MeshtasticSerial::new(port, device_node, Duration::from_secs(12))
+            .await
+            .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
+                err.to_string().into()
+            })?;
+        let mac_address = msh_serial.mac_address();
+        self.add_meshtastic_device_inner(msh_serial, device_node);
+        info!("Connected to Meshtastic device: {mac_address} at {port}");
+        Ok(())
+    }
+
+    /// Connects to a SportIdent serial device.
+    pub fn add_sportident_device_inner<M>(&mut self, si_uart: M, device_node: &str)
+    where
+        M: UsbSerialTrait<Output = RawPunch> + Send + Display + 'static,
+    {
+        if let Some(tx) = &self.si_tx {
+            let token = self.spawn_serial(si_uart, tx.clone());
+            self.cancellation_tokens.insert(device_node.to_owned(), token);
+        }
+    }
+
+    /// Adds a new SI UART device to be managed.
+    pub fn add_sportident_device(
+        &mut self,
+        port: &str,
+        device_node: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let serial = TokioSerial::new(port)?;
+        let si_uart = SiUart::new(serial);
+        self.add_sportident_device_inner(si_uart, device_node);
+        info!("Connected to SI UART device at {port}");
+        Ok(())
     }
 
     /// Indicates whether the device is connected and running.
@@ -62,8 +126,6 @@ where
     /// the device was connected.
     pub fn remove_device(&mut self, device_node: String) -> bool {
         if let Entry::Occupied(occupied_entry) = self.cancellation_tokens.entry(device_node) {
-            // Note: the message in spawn_serial is logged first, but with a MAC address. We do not
-            // log anything here.
             occupied_entry.get().cancel();
             occupied_entry.remove();
             true
@@ -73,16 +135,15 @@ where
     }
 
     /// Spawns a task to read messages from a serial connection.
-    ///
-    /// The task forwards the messages to the message handler and can be cancelled by the returned
-    /// `CancellationToken`.
-    fn spawn_serial(&self, usb_serial: M) -> CancellationToken {
+    fn spawn_serial<M>(&self, usb_serial: M, tx: UnboundedSender<M::Output>) -> CancellationToken
+    where
+        M: UsbSerialTrait + Send + Display + 'static,
+        M::Output: Send,
+    {
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
-        let tx = self.tx.clone();
         tokio::spawn(async move {
             let description = format!("{usb_serial}");
-
             let res = usb_serial
                 .inner_loop(tx)
                 .with_cancellation_token_owned(cancellation_token)
@@ -94,117 +155,81 @@ where
 
         cancellation_token_clone
     }
-}
 
-const SI_LABS: u16 = 0x10c4;
-type SiUartTokio = SiUart<TokioSerial>;
-
-impl SerialDeviceManager<SiUartTokio> {
-    /// Adds a new SI UART device to be managed.
-    ///
-    /// This method attempts to connect to the specified serial port and, upon successful connection,
-    /// registers the device with the `SerialDeviceManager`.
-    ///
-    /// # Arguments
-    /// * `port` - The serial port name (e.g., "/dev/ttyUSB0" or "COM1").
-    /// * `device_node` - A unique identifier for the device.
-    ///
-    /// # Returns
-    /// A `Result` indicating success or an error if the connection fails.
-    pub fn add_device_inner(
-        &mut self,
-        port: &str,
-        device_node: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let serial = TokioSerial::new(port)?;
-        let si_uart = SiUart::new(serial);
-        self.add_device(si_uart, device_node);
-        info!("Connected to SI UART device at {port}");
-        Ok(())
-    }
-
-    /// Detects the serial port name and device ID for a given USB device.
-    ///
-    /// This method checks if the USB device is manufactured by Silicon Labs (matching the vendor ID
-    /// `SI_LABS`). If so, it scans the available system serial ports and matches them by comparing
-    /// serial numbers and vendor IDs.
-    ///
-    /// # Arguments
-    /// * `dev` - A reference to the `nusb::DeviceInfo` of the USB device to inspect.
-    ///
-    /// # Returns
-    /// An `Option` containing a tuple of `(port_name, device_id)` if a matching serial port
-    /// is found, or `None` otherwise.
-    pub fn detect_port(dev: &nusb::DeviceInfo) -> Option<(String, String)> {
-        if dev.vendor_id() == SI_LABS {
-            let Ok(ports) = serialport::available_ports() else {
-                return None;
-            };
-            for port in ports {
-                debug!("{port:?}");
-                if let SerialPortType::UsbPort(usb_info) = port.port_type
-                    && usb_info.vid == SI_LABS
-                {
-                    let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
-                        (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
-                        (None, None) => true,
-                        _ => false,
-                    };
-                    if sn_matches {
-                        return Some((port.port_name, format!("{:?}", dev.id())));
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// Monitors USB hotplug events and manages SI UART devices dynamically.
-    ///
-    /// This method performs an initial scan of currently connected USB devices to find and register
-    /// any matching SI UART devices. It then listens indefinitely for USB connection and disconnection
-    /// events, registering new devices as they are plugged in (after a brief delay to allow the OS
-    /// to initialize the serial port) and removing devices when they are unplugged.
-    ///
-    /// # Returns
-    /// A `Result` that is `Ok(())` on successful monitoring loop termination, or an error if
-    /// the hotplug watcher fails to initialize.
+    /// Monitors USB hotplug events and manages devices dynamically.
     pub async fn monitor_usb_devices(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Starting USB SportIdent device manager");
+        // TODO: print whether we are monitoring meshtastic and Sportident
+        info!("Starting USB device manager");
         if let Ok(devices) = nusb::list_devices().await {
             for dev in devices {
-                if let Some((port_name, dev_id)) = Self::detect_port(&dev) {
-                    let _ = self.add_device_inner(&port_name, &dev_id).inspect_err(|err| {
-                        error!("Failed to connect to SI UART device at {port_name}: {err}")
-                    });
-                }
+                self.detect_device(&dev).await;
             }
         }
 
         let mut watcher = nusb::watch_devices()?;
-        use futures::StreamExt;
         while let Some(event) = watcher.next().await {
             match event {
                 HotplugEvent::Connected(dev) => {
                     // Give the OS TTY subsystem a brief moment to register the node
-                    // TODO: is there a way to avaoid this sleep? Listen to tty subsystem events?
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    if let Some((port_name, dev_id)) = Self::detect_port(&dev) {
-                        let _ = self.add_device_inner(&port_name, &dev_id).inspect_err(|err| {
-                            error!("Failed to connect to SI UART device at {port_name}: {err}")
-                        });
-                    }
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    self.detect_device(&dev).await;
                 }
                 HotplugEvent::Disconnected(dev_id) => {
-                    self.remove_device(format!("{:?}", dev_id));
-                    info!("Disconnected SI UART device {dev_id:?}");
+                    let device_node = format!("{:?}", dev_id);
+                    if self.remove_device(device_node.clone()) {
+                        info!("Disconnected USB device {device_node}");
+                    }
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Detects the serial port name, device ID, and type for a given USB device.
+    async fn detect_device(&mut self, dev: &nusb::DeviceInfo) {
+        let Ok(ports) = serialport::available_ports() else {
+            return;
+        };
+        for port in ports {
+            if let SerialPortType::UsbPort(usb_info) = &port.port_type
+                && usb_info.vid == dev.vendor_id()
+            {
+                let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+                    (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
+                    (None, None) => true,
+                    _ => false,
+                };
+                if !sn_matches {
+                    return;
+                }
+                if usb_info.vid == SI_LABS && self.enable_sportident {
+                    let _ = self
+                        .add_sportident_device(&port.port_name, &format!("{:?}", dev.id()))
+                        .inspect_err(|err| {
+                            error!(
+                                "Failed to connect to SI UART device at {}: {err}",
+                                port.port_name
+                            )
+                        });
+                } else if port.port_name.contains("ACM") || port.port_name.contains("COM") {
+                    if !self.enable_meshtastic {
+                        return;
+                    }
+                    let _ = self
+                        .add_meshtastic_device(&port.port_name, &format!("{:?}", dev.id()))
+                        .await
+                        .inspect_err(|err| {
+                            error!(
+                                "Failed to connect to Meshtastic device at {}: {err}",
+                                port.port_name
+                            )
+                        });
+                }
+            }
+        }
     }
 }
 
@@ -273,8 +298,8 @@ mod tests {
         };
         tx.send(packet.clone()).await.unwrap();
         let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
-        let mut handler = SerialDeviceManager::new(proto_tx);
-        handler.add_device(fake_serial, "/some");
+        let mut handler = SerialDeviceManager::new(Some(proto_tx), None);
+        handler.add_meshtastic_device_inner(fake_serial, "/some");
 
         let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
         assert_eq!(recv_mac, Default::default());

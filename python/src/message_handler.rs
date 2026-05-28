@@ -90,7 +90,7 @@ impl From<MqttConfig> for MqttConfigRs {
 /// Manages Meshtastic devices connected via serial ports.
 #[pyclass]
 pub struct MshDevHandler {
-    inner: Arc<Mutex<SerialDeviceManager<MeshtasticSerial>>>,
+    inner: Arc<Mutex<SerialDeviceManager>>,
 }
 
 #[pymethods]
@@ -114,7 +114,7 @@ impl MshDevHandler {
             {
                 Ok(msh_serial) => {
                     let mac_address = msh_serial.mac_address();
-                    handler.add_device(msh_serial, &device_node);
+                    handler.add_meshtastic_device_inner(msh_serial, &device_node);
                     info!("Connected to meshtastic device: {mac_address} at {port}",);
                 }
                 Err(err) => {

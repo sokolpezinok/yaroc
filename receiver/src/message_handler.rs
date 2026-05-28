@@ -1,5 +1,4 @@
 use crate::{
-    meshtastic_serial::MeshtasticSerial,
     mqtt::{MqttConfig, MqttReceiver},
     serial_device_manager::SerialDeviceManager,
     state::{Event, FleetState},
@@ -80,7 +79,7 @@ impl MessageHandler {
     }
 
     /// Returns a new `SerialDeviceManager` that can be used to handle Meshtastic devices.
-    pub fn meshtastic_device_handler(&self) -> SerialDeviceManager<MeshtasticSerial> {
-        SerialDeviceManager::new(self.mesh_proto_tx.clone())
+    pub fn meshtastic_device_handler(&self) -> SerialDeviceManager {
+        SerialDeviceManager::new(Some(self.mesh_proto_tx.clone()), None)
     }
 }

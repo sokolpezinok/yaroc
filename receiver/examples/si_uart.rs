@@ -14,7 +14,7 @@ async fn main() {
         .init();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut manager = SerialDeviceManager::new(tx);
+    let mut manager = SerialDeviceManager::new(None, Some(tx));
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = manager.monitor_usb_devices().await {
