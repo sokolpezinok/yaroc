@@ -25,7 +25,7 @@ class YarocDaemon:
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        self.msh_dev_handler = self.handler.msh_dev_handler() if meshtastic_serial else None
+        self.usb_serial_manager = self.handler.usb_serial_manager() if meshtastic_serial else None
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
@@ -99,8 +99,8 @@ class YarocDaemon:
             asyncio.create_task(self.client_group.loop()),
             asyncio.create_task(self.handle_messages()),
         ]
-        if self.msh_dev_handler is not None:
-            tasks.append(asyncio.ensure_future(self.msh_dev_handler.loop()))
+        if self.usb_serial_manager is not None:
+            tasks.append(asyncio.ensure_future(self.usb_serial_manager.loop()))
 
         try:
             await shutdown_event.wait()

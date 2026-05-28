@@ -1,7 +1,6 @@
-import asyncio
 import logging
 import sys
-from asyncio import Queue, Task
+from asyncio import Task
 from typing import Any, Dict
 
 from dependency_injector import containers, providers

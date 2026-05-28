@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use yaroc_receiver::usb_serial_manager::UsbSerialManager;
+use yaroc_receiver::usb_serial_manager::UsbSerialManager as UsbSerialManagerRs;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
@@ -87,12 +87,12 @@ impl From<MqttConfig> for MqttConfigRs {
 
 /// Manages Meshtastic devices connected via serial ports.
 #[pyclass]
-pub struct MshDevHandler {
-    inner: Arc<Mutex<UsbSerialManager>>,
+pub struct UsbSerialManager {
+    inner: Arc<Mutex<UsbSerialManagerRs>>,
 }
 
 #[pymethods]
-impl MshDevHandler {
+impl UsbSerialManager {
     /// Asynchronously runs a background loop to automatically monitor USB hotplug events
     /// and add/remove Meshtastic devices accordingly.
     pub fn r#loop<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
@@ -151,9 +151,9 @@ impl MessageHandler {
     }
 
     /// Returns the handler for Meshtastic devices.
-    pub fn msh_dev_handler(&self) -> PyResult<MshDevHandler> {
+    pub fn usb_serial_manager(&self) -> PyResult<UsbSerialManager> {
         let handler = self.get_inner()?.usb_serial_manager(true);
-        Ok(MshDevHandler {
+        Ok(UsbSerialManager {
             inner: Arc::new(Mutex::new(handler)),
         })
     }
