@@ -7,8 +7,6 @@ use yaroc_receiver::{message_handler::MessageHandler, state::Event, system_info:
 struct Args {
     #[arg(short, long)]
     dns: Vec<String>,
-    #[arg(short, long)]
-    port: String,
 }
 
 #[tokio::main]
@@ -34,32 +32,42 @@ async fn main() {
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
     let mut serial_device_manager = msg_handler.usb_serial_manager(true);
-    serial_device_manager
-        .add_meshtastic_device(&args.port, "/some/node")
-        .await
-        .expect("Can't connect to a meshtastic device at {args.port}");
+
+    let monitor_task = tokio::spawn(async move {
+        if let Err(e) = serial_device_manager.monitor_usb_devices().await {
+            error!("Error in USB monitoring: {e}");
+        }
+    });
 
     info!("Everything initialized, starting the loop");
     loop {
-        let event = msg_handler.next_event().await;
-        match event {
-            Ok(event) => match event {
-                Event::CellularLog(cellular_log_message) => {
-                    info!("{cellular_log_message}");
+        tokio::select! {
+            event = msg_handler.next_event() => {
+                match event {
+                    Ok(event) => match event {
+                        Event::CellularLog(cellular_log_message) => {
+                            info!("{cellular_log_message}");
+                        }
+                        Event::SiPunches(si_punch_logs) => {
+                            for punch in si_punch_logs {
+                                info!("{punch}");
+                            }
+                        }
+                        Event::MeshtasticLog(log) => {
+                            info!("{log}");
+                        }
+                        Event::NodeInfos(node_infos) => {
+                            info!("{node_infos:?}");
+                        }
+                    },
+                    Err(err) => error!("{err}"),
                 }
-                Event::SiPunches(si_punch_logs) => {
-                    for punch in si_punch_logs {
-                        info!("{punch}");
-                    }
-                }
-                Event::MeshtasticLog(log) => {
-                    info!("{log}");
-                }
-                Event::NodeInfos(node_infos) => {
-                    info!("{node_infos:?}");
-                }
-            },
-            Err(err) => error!("{err}"),
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("Ctrl-C received, shutting down...");
+                monitor_task.abort();
+                break;
+            }
         }
     }
 }

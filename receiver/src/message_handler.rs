@@ -1,12 +1,12 @@
 use crate::{
-    mqtt::{MqttConfig, MqttReceiver},
+    mqtt::{Message, MqttConfig, MqttReceiver},
     state::{Event, FleetState},
     system_info::MacAddress,
     usb_serial_manager::UsbSerialManager,
 };
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
-use std::time::Duration;
+use std::{future::pending, pin::Pin, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 /// Orchestrates the overall message flow.
@@ -48,11 +48,17 @@ impl MessageHandler {
     /// This function is a long-running task that should be polled.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
-            let mqtt_futures: Vec<_> = self
+            let mut mqtt_futures: Vec<_> = self
                 .mqtt_receivers
                 .iter_mut()
-                .map(|receiver: &mut MqttReceiver| Box::pin(receiver.next_message()))
+                .map(|receiver: &mut MqttReceiver| {
+                    Box::pin(receiver.next_message())
+                        as Pin<Box<dyn Future<Output = crate::Result<Message>> + Send>>
+                })
                 .collect();
+            if mqtt_futures.is_empty() {
+                mqtt_futures.push(Box::pin(pending::<crate::Result<Message>>()));
+            }
             tokio::select! {
                 (mqtt_message, _idx, _) = select_all(mqtt_futures.into_iter()) => {
                     if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
