@@ -13,8 +13,10 @@ femtopb = { workspace = true }
 futures = "0.3.31"
 log = { workspace = true }
 meshtastic = { workspace = true }
+nusb = "0.2"
 prost = "0.14"
 rumqttc = { version = "0.24.0" }
+serialport = { version = "4", default-features = false }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-serial = { workspace = true }

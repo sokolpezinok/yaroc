@@ -1,9 +1,15 @@
-use log::info;
+use log::{debug, error, info};
 use std::collections::{HashMap, hash_map::Entry};
 use std::fmt::Display;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
+
+use crate::si_uart::TokioSerial;
+use nusb::hotplug::HotplugEvent;
+use serialport::SerialPortType;
+use std::time::Duration;
+use yaroc_common::si_uart::SiUart;
 
 pub trait UsbSerialTrait {
     type Output;
@@ -87,6 +93,118 @@ where
         });
 
         cancellation_token_clone
+    }
+}
+
+const SI_LABS: u16 = 0x10c4;
+type SiUartTokio = SiUart<TokioSerial>;
+
+impl SerialDeviceManager<SiUartTokio> {
+    /// Adds a new SI UART device to be managed.
+    ///
+    /// This method attempts to connect to the specified serial port and, upon successful connection,
+    /// registers the device with the `SerialDeviceManager`.
+    ///
+    /// # Arguments
+    /// * `port` - The serial port name (e.g., "/dev/ttyUSB0" or "COM1").
+    /// * `device_node` - A unique identifier for the device.
+    ///
+    /// # Returns
+    /// A `Result` indicating success or an error if the connection fails.
+    pub fn add_device_inner(
+        &mut self,
+        port: &str,
+        device_node: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let serial = TokioSerial::new(port)?;
+        let si_uart = SiUart::new(serial);
+        self.add_device(si_uart, device_node);
+        info!("Connected to SI UART device at {port}");
+        Ok(())
+    }
+
+    /// Detects the serial port name and device ID for a given USB device.
+    ///
+    /// This method checks if the USB device is manufactured by Silicon Labs (matching the vendor ID
+    /// `SI_LABS`). If so, it scans the available system serial ports and matches them by comparing
+    /// serial numbers and vendor IDs.
+    ///
+    /// # Arguments
+    /// * `dev` - A reference to the `nusb::DeviceInfo` of the USB device to inspect.
+    ///
+    /// # Returns
+    /// An `Option` containing a tuple of `(port_name, device_id)` if a matching serial port
+    /// is found, or `None` otherwise.
+    pub fn detect_port(dev: &nusb::DeviceInfo) -> Option<(String, String)> {
+        if dev.vendor_id() == SI_LABS {
+            let Ok(ports) = serialport::available_ports() else {
+                return None;
+            };
+            for port in ports {
+                debug!("{port:?}");
+                if let SerialPortType::UsbPort(usb_info) = port.port_type
+                    && usb_info.vid == SI_LABS
+                {
+                    let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+                        (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
+                        (None, None) => true,
+                        _ => false,
+                    };
+                    if sn_matches {
+                        return Some((port.port_name, format!("{:?}", dev.id())));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Monitors USB hotplug events and manages SI UART devices dynamically.
+    ///
+    /// This method performs an initial scan of currently connected USB devices to find and register
+    /// any matching SI UART devices. It then listens indefinitely for USB connection and disconnection
+    /// events, registering new devices as they are plugged in (after a brief delay to allow the OS
+    /// to initialize the serial port) and removing devices when they are unplugged.
+    ///
+    /// # Returns
+    /// A `Result` that is `Ok(())` on successful monitoring loop termination, or an error if
+    /// the hotplug watcher fails to initialize.
+    pub async fn monitor_usb_devices(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Starting USB SportIdent device manager");
+        if let Ok(devices) = nusb::list_devices().await {
+            for dev in devices {
+                if let Some((port_name, dev_id)) = Self::detect_port(&dev) {
+                    let _ = self.add_device_inner(&port_name, &dev_id).inspect_err(|err| {
+                        error!("Failed to connect to SI UART device at {port_name}: {err}")
+                    });
+                }
+            }
+        }
+
+        let mut watcher = nusb::watch_devices()?;
+        use futures::StreamExt;
+        while let Some(event) = watcher.next().await {
+            match event {
+                HotplugEvent::Connected(dev) => {
+                    // Give the OS TTY subsystem a brief moment to register the node
+                    // TODO: is there a way to avaoid this sleep? Listen to tty subsystem events?
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    if let Some((port_name, dev_id)) = Self::detect_port(&dev) {
+                        let _ = self.add_device_inner(&port_name, &dev_id).inspect_err(|err| {
+                            error!("Failed to connect to SI UART device at {port_name}: {err}")
+                        });
+                    }
+                }
+                HotplugEvent::Disconnected(dev_id) => {
+                    self.remove_device(format!("{:?}", dev_id));
+                    info!("Disconnected SI UART device {dev_id:?}");
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
