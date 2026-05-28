@@ -10,8 +10,8 @@ use tokio::time::Instant;
 use tokio_util::future::FutureExt;
 
 use crate::error::Error;
-use crate::serial_device_manager::UsbSerialTrait;
 use crate::system_info::MacAddress;
+use crate::usb_serial_manager::UsbSerialTrait;
 
 /// An enum representing a message from a Meshtastic device.
 pub enum MeshtasticEvent {

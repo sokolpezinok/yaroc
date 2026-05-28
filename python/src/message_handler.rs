@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use yaroc_receiver::serial_device_manager::SerialDeviceManager;
+use yaroc_receiver::usb_serial_manager::UsbSerialManager;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::meshtastic_serial::MeshtasticSerial;
@@ -90,7 +90,7 @@ impl From<MqttConfig> for MqttConfigRs {
 /// Manages Meshtastic devices connected via serial ports.
 #[pyclass]
 pub struct MshDevHandler {
-    inner: Arc<Mutex<SerialDeviceManager>>,
+    inner: Arc<Mutex<UsbSerialManager>>,
 }
 
 #[pymethods]
@@ -182,7 +182,7 @@ impl MessageHandler {
 
     /// Returns the handler for Meshtastic devices.
     pub fn msh_dev_handler(&self) -> PyResult<MshDevHandler> {
-        let handler = self.get_inner()?.meshtastic_device_handler();
+        let handler = self.get_inner()?.usb_serial_manager(true);
         Ok(MshDevHandler {
             inner: Arc::new(Mutex::new(handler)),
         })

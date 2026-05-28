@@ -1,8 +1,8 @@
 use crate::{
     mqtt::{MqttConfig, MqttReceiver},
-    serial_device_manager::SerialDeviceManager,
     state::{Event, FleetState},
     system_info::MacAddress,
+    usb_serial_manager::UsbSerialManager,
 };
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
@@ -78,8 +78,13 @@ impl MessageHandler {
         }
     }
 
-    /// Returns a new `SerialDeviceManager` that can be used to handle Meshtastic devices.
-    pub fn meshtastic_device_handler(&self) -> SerialDeviceManager {
-        SerialDeviceManager::new(Some(self.mesh_proto_tx.clone()), None)
+    /// Returns a new `UsbSerialManager` that can be used to handle Meshtastic and SportIdent devices.
+    pub fn usb_serial_manager(&self, enable_meshtastic: bool) -> UsbSerialManager {
+        let mesh_tx = if enable_meshtastic {
+            Some(self.mesh_proto_tx.clone())
+        } else {
+            None
+        };
+        UsbSerialManager::new(mesh_tx, None)
     }
 }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use yaroc_common::punch::RawPunch;
-use yaroc_receiver::serial_device_manager::SerialDeviceManager;
+use yaroc_receiver::usb_serial_manager::UsbSerialManager;
 
 /// `SiUartPunchReceiver` is a Python-exposed class that receives punches from SI card readers.
 #[pyclass]
@@ -17,7 +17,7 @@ pub struct SiUartPunchReceiver {
 /// It provides methods to add and remove devices, and to receive raw punch data from them.
 #[pyclass]
 pub struct SiUartHandler {
-    inner: Arc<Mutex<SerialDeviceManager>>,
+    inner: Arc<Mutex<UsbSerialManager>>,
     punch_rx: Arc<Mutex<Option<UnboundedReceiver<RawPunch>>>>,
 }
 
@@ -35,7 +35,7 @@ impl SiUartHandler {
     #[new]
     pub fn new() -> Self {
         let (punch_tx, punch_rx) = unbounded_channel::<RawPunch>();
-        let inner = SerialDeviceManager::new(None, Some(punch_tx));
+        let inner = UsbSerialManager::new(None, Some(punch_tx));
         Self {
             inner: Arc::new(Mutex::new(inner)),
             punch_rx: Arc::new(Mutex::new(Some(punch_rx))),

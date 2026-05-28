@@ -23,22 +23,10 @@ pub trait UsbSerialTrait {
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
 }
 
-#[derive(Debug, Clone)]
-pub enum DetectedDevice {
-    Meshtastic {
-        port_name: String,
-        device_id: String,
-    },
-    SportIdent {
-        port_name: String,
-        device_id: String,
-    },
-}
-
 /// Serial device manager
 ///
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
-pub struct SerialDeviceManager {
+pub struct UsbSerialManager {
     cancellation_tokens: HashMap<String, CancellationToken>,
     mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
     si_tx: Option<UnboundedSender<RawPunch>>,
@@ -48,7 +36,7 @@ pub struct SerialDeviceManager {
 
 const SI_LABS: u16 = 0x10c4;
 
-impl SerialDeviceManager {
+impl UsbSerialManager {
     /// Creates a new `SerialDeviceManager`.
     pub fn new(
         mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
@@ -298,7 +286,7 @@ mod tests {
         };
         tx.send(packet.clone()).await.unwrap();
         let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
-        let mut handler = SerialDeviceManager::new(Some(proto_tx), None);
+        let mut handler = UsbSerialManager::new(Some(proto_tx), None);
         handler.add_meshtastic_device_inner(fake_serial, "/some");
 
         let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();

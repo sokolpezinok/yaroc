@@ -7,7 +7,7 @@ use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
-use crate::serial_device_manager::UsbSerialTrait;
+use crate::usb_serial_manager::UsbSerialTrait;
 
 pub struct TokioSerial {
     serial: SerialStream,

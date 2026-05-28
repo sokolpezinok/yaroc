@@ -4,9 +4,9 @@ pub mod meshtastic;
 pub mod meshtastic_serial;
 pub mod message_handler;
 pub mod mqtt;
-pub mod serial_device_manager;
 pub mod si_uart;
 pub mod state;
 pub mod system_info;
+pub mod usb_serial_manager;
 
 pub type Result<T> = std::result::Result<T, error::Error>;

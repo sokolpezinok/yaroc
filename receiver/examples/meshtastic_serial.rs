@@ -1,10 +1,7 @@
 use clap::Parser;
 use log::{error, info};
 use std::time::Duration;
-use yaroc_receiver::{
-    meshtastic_serial::MeshtasticSerial, message_handler::MessageHandler, state::Event,
-    system_info::MacAddress,
-};
+use yaroc_receiver::{message_handler::MessageHandler, state::Event, system_info::MacAddress};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -36,7 +33,7 @@ async fn main() {
     }
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
-    let mut serial_device_manager = msg_handler.meshtastic_device_handler();
+    let mut serial_device_manager = msg_handler.usb_serial_manager(true);
     serial_device_manager
         .add_meshtastic_device(&args.port, "/some/node")
         .await
