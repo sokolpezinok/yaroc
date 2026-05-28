@@ -100,7 +100,7 @@ class YarocDaemon:
             asyncio.create_task(self.handle_messages()),
         ]
         if self.msh_dev_handler is not None:
-            tasks.append(asyncio.create_task(self.msh_dev_handler.loop()))
+            tasks.append(asyncio.ensure_future(self.msh_dev_handler.loop()))
 
         try:
             await shutdown_event.wait()

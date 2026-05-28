@@ -1,8 +1,6 @@
 import io
 import logging
 import os
-import platform
-import re
 import shlex
 import socket
 import subprocess
@@ -12,7 +10,6 @@ from enum import Enum
 from math import floor
 
 import psutil
-from usbmonitor.attributes import DEVNAME, ID_MODEL
 
 from ..pb.status_pb2 import MiniCallHome
 from ..rs import RaspberryModel, current_timestamp_millis
@@ -110,34 +107,4 @@ def is_time_off(modem_clock: str, now: datetime) -> datetime | None:
         return None
     except Exception as err:
         logging.error(f"Failed to check time: {err}")
-        return None
-
-
-def extract_com(model_id: str) -> str | None:
-    # Extract COM name from model ID
-    match = re.match(r".*\((COM[0-9]*)\)", model_id)
-    if match is None or len(match.groups()) == 0:
-        return None
-    return match.groups()[0]
-
-
-def tty_device_from_usb(device_info: dict) -> str | None:
-    if platform.system().startswith("Linux"):
-        from pyudev import Context, Devices
-
-        context = Context()
-        device_node = device_info.get(DEVNAME)
-        if device_node is None:
-            return None
-        parent_device = Devices.from_device_file(context, device_node)
-        lst = list(context.list_devices(subsystem="tty").match_parent(parent_device))
-        if len(lst) == 0:
-            return None
-        return lst[0].device_node
-    elif is_windows():
-        id_model = device_info.get(ID_MODEL)
-        if id_model is None:
-            return None
-        return extract_com(id_model)
-    else:
         return None

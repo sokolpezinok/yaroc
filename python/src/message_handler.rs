@@ -1,4 +1,3 @@
-use log::{error, info};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::sync::Arc;
@@ -7,7 +6,6 @@ use tokio::sync::Mutex;
 use yaroc_receiver::usb_serial_manager::UsbSerialManager;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
-use yaroc_receiver::meshtastic_serial::MeshtasticSerial;
 use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
