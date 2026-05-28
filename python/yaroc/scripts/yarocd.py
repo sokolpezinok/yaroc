@@ -2,7 +2,6 @@ import asyncio
 import logging
 import signal
 import tomllib
-from asyncio import Queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
@@ -10,7 +9,6 @@ from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
 from ..rs import CellularLog, Event, MeshtasticLog, MessageHandler, MqttConfig, NodeInfo, SiPunchLog
-from ..sources.usb_serial_manager import UsbSerialManager
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import is_windows
@@ -24,13 +22,10 @@ class YarocDaemon:
         display_model: str | None = None,
         mqtt_config: MqttConfig | None = None,
         meshtastic_serial: bool = False,
-        si_device_notifier: Queue[str] | None = None,
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        self.serial_manager = UsbSerialManager(
-            self.handler.msh_dev_handler() if meshtastic_serial else None, si_device_notifier
-        )
+        self.msh_dev_handler = self.handler.msh_dev_handler() if meshtastic_serial else None
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
 
@@ -82,15 +77,15 @@ class YarocDaemon:
             msg = context.get("exception", context["message"])
             logging.error(f"Caught exception: {msg}")
 
-        asyncio.get_event_loop().set_exception_handler(handle_exception)
-
-        shutdown_event = asyncio.Event()
-
         def shutdown(signum=None, frame=None):
             if signum is not None:
                 signal_name = signal.Signals(signum).name
                 logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
             shutdown_event.set()
+
+        asyncio.get_event_loop().set_exception_handler(handle_exception)
+
+        shutdown_event = asyncio.Event()
 
         if is_windows():
             signal.signal(signal.SIGTERM, shutdown)
@@ -104,8 +99,8 @@ class YarocDaemon:
             asyncio.create_task(self.client_group.loop()),
             asyncio.create_task(self.handle_messages()),
         ]
-        if self.serial_manager is not None:
-            tasks.append(asyncio.create_task(self.serial_manager.loop()))
+        if self.msh_dev_handler is not None:
+            tasks.append(asyncio.create_task(self.msh_dev_handler.loop()))
 
         try:
             await shutdown_event.wait()
@@ -138,16 +133,11 @@ async def main_loop() -> None:
         mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
 
     mac_addresses = config.get("mac-addresses", {})
-    si_device_notifier: Queue[str] | None = (
-        Queue() if config.get("sportident", {}).get("watch_usb", False) else None
-    )
 
     if "client" in config:
         config["client"].pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
         config["client"].pop("sim7020", None)  # ... also for SIM7020
-    client_group = await create_clients(
-        container.client_factories, mac_addresses, si_device_notifier=si_device_notifier
-    )
+    client_group = await create_clients(container.client_factories, mac_addresses)
     if client_group.len() == 0:
         logging.info("Listening without forwarding")
 
@@ -161,7 +151,6 @@ async def main_loop() -> None:
         config.get("display", None),
         mqtt_config,
         meshtastic_serial=meshtastic_serial,
-        si_device_notifier=si_device_notifier,
     )
     await yaroc_daemon.loop()
 

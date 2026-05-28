@@ -19,7 +19,6 @@ from ..sources.si import (
     SiWorker,
     UdevSiFactory,
 )
-from ..sources.usb_serial_manager import forward_queue
 from ..utils.async_serial import AsyncATCom
 
 
@@ -90,7 +89,6 @@ async def create_clients(
     client_factories: providers.FactoryAggregate,
     mac_addresses: Dict[str, str] = {},
     config: Dict[str, Any] | None = Provide[Container.config.client],
-    si_device_notifier: Queue[str] | None = None,
 ) -> ClientGroup:
     clients: list[Client] = []
     tasks: list[Task] = []
@@ -98,11 +96,6 @@ async def create_clients(
         if config.get("serial", {}).get("enable", False):
             logging.info(f"Enabled serial client at {config['serial']['port']}")
             serial: SerialClient = await client_factories.serial()
-
-            if si_device_notifier is not None:
-                t = asyncio.create_task(forward_queue(serial.add_mini_reader, si_device_notifier))
-                tasks.append(t)
-
             clients.append(serial)
         if config.get("sim7020", {}).get("enable", False):
             clients.append(await client_factories.sim7020())

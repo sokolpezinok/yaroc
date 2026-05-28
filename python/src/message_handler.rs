@@ -95,45 +95,17 @@ pub struct MshDevHandler {
 
 #[pymethods]
 impl MshDevHandler {
-    /// Adds a Meshtastic device to the handler.
-    ///
-    /// The device is identified by the port (e.g. /dev/ttyUSB0) and a logical device node name.
-    pub fn add_device<'a>(
-        &mut self,
-        py: Python<'a>,
-        port: String,
-        device_node: String,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let mutex = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut handler = mutex.lock().await;
-            if handler.is_running(&device_node) {
-                return Ok(());
-            }
-            match MeshtasticSerial::new(port.as_str(), &device_node, Duration::from_secs(12)).await
-            {
-                Ok(msh_serial) => {
-                    let mac_address = msh_serial.mac_address();
-                    handler.add_meshtastic_device_inner(msh_serial, &device_node);
-                    info!("Connected to meshtastic device: {mac_address} at {port}",);
-                }
-                Err(err) => {
-                    error!("Error connecting to meshtastic device at {port}: {err}");
-                }
-            }
-            Ok(())
+    /// Asynchronously runs a background loop to automatically monitor USB hotplug events
+    /// and add/remove Meshtastic devices accordingly.
+    pub fn r#loop<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let inner = self.inner.clone();
+        pyo3_async_runtimes::tokio::future_into_py::<_, ()>(py, async move {
+            let mut manager = inner.lock().await;
+            manager
+                .monitor_usb_devices()
+                .await
+                .map_err(|err| PyRuntimeError::new_err(format!("USB monitor error: {err}")))
         })
-    }
-
-    /// Removes a Meshtastic device from the handler.
-    pub fn remove_device(&mut self, device_node: String) -> PyResult<()> {
-        self.inner
-            .try_lock()
-            .map_err(|_| {
-                PyRuntimeError::new_err("Failed to lock meshtastic device handler".to_owned())
-            })?
-            .remove_device(device_node);
-        Ok(())
     }
 }
 
