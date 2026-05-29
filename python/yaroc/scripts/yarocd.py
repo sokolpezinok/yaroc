@@ -5,7 +5,7 @@ import signal
 import socket
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, cast
+from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
@@ -20,7 +20,6 @@ from ..rs import (
     NodeInfo,
     SiPunch,
     SiPunchLog,
-    UsbSerialManager,
 )
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer

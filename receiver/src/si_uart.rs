@@ -58,21 +58,6 @@ impl RxWithIdle for TokioSerial {
 impl UsbSerialTrait for SiUart<TokioSerial> {
     type Output = SportIdentMessage;
 
-    /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
-    /// the vendor ID matches Silicon Labs (0x10c4), which is commonly used by SI USB adapters.
-    fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
-        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
-                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
-                (None, None) => true,
-                _ => false,
-            };
-            sn_matches && usb_info.vid == 0x10c4
-        } else {
-            false
-        }
-    }
-
     /// Read loop that consumes punches from the SI UART device and sends them as
     /// `SportIdentMessage::RawPunch` through the channel until the serial connection is closed.
     async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
@@ -127,12 +112,27 @@ impl SportIdentFactory {
             si_tx,
         }
     }
+
+    /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
+    /// the vendor ID matches Silicon Labs (0x10c4), which is commonly used by SI USB adapters.
+    pub fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
+            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
+                (None, None) => true,
+                _ => false,
+            };
+            sn_matches && usb_info.vid == 0x10c4
+        } else {
+            false
+        }
+    }
 }
 
 impl UsbSerialFactory for SportIdentFactory {
     /// Detects if a USB device matches a SportIdent serial device.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
-        SiUart::detect_device(dev, port)
+        Self::detect_device(dev, port)
     }
 
     /// Asynchronously connects to a SportIdent serial device at the given port, spawns its

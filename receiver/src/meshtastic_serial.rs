@@ -102,21 +102,6 @@ impl MeshtasticSerial {
 impl UsbSerialTrait for MeshtasticSerial {
     type Output = (MeshPacket, MacAddress);
 
-    /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
-    /// and ensuring the port name is an ACM/COM interface.
-    fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
-        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
-                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
-                (None, None) => true,
-                _ => false,
-            };
-            sn_matches && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
-        } else {
-            false
-        }
-    }
-
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
         loop {
@@ -172,9 +157,19 @@ impl MeshtasticFactory {
 }
 
 impl UsbSerialFactory for MeshtasticFactory {
-    /// Detects if a USB device matches a Meshtastic serial device.
+    /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
+    /// and ensuring the port name is an ACM/COM interface.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
-        MeshtasticSerial::detect_device(dev, port)
+        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
+            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
+                (None, None) => true,
+                _ => false,
+            };
+            sn_matches && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
+        } else {
+            false
+        }
     }
 
     /// Asynchronously connects to a Meshtastic serial device at the given port, creates

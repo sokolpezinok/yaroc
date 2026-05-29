@@ -14,11 +14,6 @@ pub trait UsbSerialTrait {
     /// An inner loop that reads messages from the serial device and sends them to a channel.
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
 
-    /// Detects if a USB device matches this serial reader type.
-    fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool
-    where
-        Self: Sized;
-
     /// Spawns a task to read messages from a serial connection.
     fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> CancellationToken
     where
@@ -167,10 +162,6 @@ mod tests {
 
     impl UsbSerialTrait for FakeMeshtasticSerial {
         type Output = (MeshPacket, MacAddress);
-
-        fn detect_device(_dev: &nusb::DeviceInfo, _port: &serialport::SerialPortInfo) -> bool {
-            false
-        }
 
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
         async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
