@@ -146,13 +146,13 @@ impl MessageHandler {
                 ))
             })
             .collect();
-        let message_handler_rs = MessageHandlerRs::new(
+        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerRs::new(
             dns?,
             mqtt_config.map(|config| config.into()).into_iter().collect(),
             node_info_interval,
+            enable_meshtastic,
+            enable_sportident,
         );
-        let usb_serial_manager_rs =
-            message_handler_rs.usb_serial_manager(enable_meshtastic, enable_sportident);
         let inner = Arc::new(Mutex::new(message_handler_rs));
         Ok((
             Self { inner },

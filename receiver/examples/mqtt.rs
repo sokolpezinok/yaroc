@@ -50,10 +50,12 @@ async fn main() {
         url: "broker.hivemq.com".to_owned(),
         ..Default::default()
     };
-    let mut handler = MessageHandler::new(
+    let (mut handler, _serial_manager) = MessageHandler::new(
         dns,
         vec![mqtt_config, mqtt_config2],
         Duration::from_secs(60),
+        false,
+        false,
     );
 
     info!("Everything initialized, starting the loop");

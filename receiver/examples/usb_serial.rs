@@ -32,11 +32,11 @@ async fn main() {
         }
     }
 
-    let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
-    let mut serial_device_manager = msg_handler.usb_serial_manager(true, true);
+    let (mut msg_handler, mut usb_serial_manager) =
+        MessageHandler::new(dns, Vec::new(), Duration::from_secs(60), true, true);
 
     let monitor_task = tokio::spawn(async move {
-        if let Err(e) = serial_device_manager.monitor_usb_devices().await {
+        if let Err(e) = usb_serial_manager.monitor_usb_devices().await {
             error!("Error in USB monitoring: {e}");
         }
     });

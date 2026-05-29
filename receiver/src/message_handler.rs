@@ -10,7 +10,7 @@ use chrono::Local;
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
 use std::{future::pending, pin::Pin, time::Duration};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use yaroc_common::punch::SiPunch;
 
 /// Orchestrates the overall message flow.
@@ -20,36 +20,44 @@ use yaroc_common::punch::SiPunch;
 pub struct MessageHandler {
     fleet_state: FleetState,
     mqtt_receivers: Vec<MqttReceiver>,
-    mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-    mesh_proto_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
-    punch_tx: UnboundedSender<SportIdentMessage>,
+    mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     punch_rx: UnboundedReceiver<SportIdentMessage>,
 }
 
 impl MessageHandler {
-    /// Creates a new `MessageHandler`.
+    /// Creates a new `MessageHandler` along with a `UsbSerialManager`.
     ///
-    /// This function initializes the `FleetState` and an optional `MqttReceiver`.
+    /// This function initializes the `FleetState`, the optional `MqttReceiver`s,
+    /// and the `UsbSerialManager`.
     pub fn new(
         dns: Vec<(String, MacAddress)>,
         mqtt_configs: Vec<MqttConfig>,
         node_infos_interval: Duration,
-    ) -> Self {
+        enable_meshtastic: bool,
+        enable_sportident: bool,
+    ) -> (Self, UsbSerialManager) {
         let macs = dns.iter().map(|(_, mac)| mac);
         let mqtt_receivers = mqtt_configs
             .into_iter()
             .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
-        let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
+        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
-        Self {
+        let handler = Self {
             fleet_state: FleetState::new(dns, node_infos_interval),
             mqtt_receivers,
-            mesh_proto_tx,
-            mesh_proto_rx,
-            punch_tx,
+            mesh_packet_rx,
             punch_rx,
+        };
+
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        if enable_meshtastic {
+            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx)));
         }
+        if enable_sportident {
+            factories.push(Box::new(SportIdentFactory::new(punch_tx)));
+        }
+        (handler, UsbSerialManager::new(factories))
     }
 
     /// Returns the next event.
@@ -75,7 +83,7 @@ impl MessageHandler {
                         return Ok(message);
                     }
                 }
-                mesh_recv = self.mesh_proto_rx.recv() => {
+                mesh_recv = self.mesh_packet_rx.recv() => {
                     match mesh_recv {
                         Some((mesh_packet, mac_address)) => {
                             if let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)? {
@@ -107,21 +115,5 @@ impl MessageHandler {
                 }
             }
         }
-    }
-
-    /// Returns a new `UsbSerialManager` that can be used to handle Meshtastic and SportIdent devices.
-    pub fn usb_serial_manager(
-        &self,
-        enable_meshtastic: bool,
-        enable_sportident: bool,
-    ) -> UsbSerialManager {
-        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
-        if enable_meshtastic {
-            factories.push(Box::new(MeshtasticFactory::new(self.mesh_proto_tx.clone())));
-        }
-        if enable_sportident {
-            factories.push(Box::new(SportIdentFactory::new(self.punch_tx.clone())));
-        }
-        UsbSerialManager::new(factories)
     }
 }
