@@ -29,6 +29,9 @@ thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
 tokio-serial.workspace = true
 toml = "1.0"
+futures = "0.3.31"
+nusb = "0.2"
+serialport = { version = "4", default-features = false }
 yaroc-common = { path = "../common", features = ["std"] }
 yaroc-receiver = { path = "../receiver" }
 

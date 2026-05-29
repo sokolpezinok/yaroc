@@ -1,8 +1,10 @@
 use std::time::Duration;
 use std::{future, sync::Arc};
 
+use futures::FutureExt as _;
+use futures::future::BoxFuture;
 use log::{error, info, warn};
-use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
+use pyo3::exceptions::PyConnectionError;
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::io::{
@@ -11,9 +13,12 @@ use tokio::io::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
-use yaroc_common::si_uart::BAUD_RATE;
+use yaroc_receiver::error::Error;
 
 use crate::punch::SiPunchLog;
+use yaroc_common::si_uart::BAUD_RATE;
+use yaroc_receiver::si_uart::SportIdentFactory;
+use yaroc_receiver::usb_serial_manager::UsbSerialFactory;
 
 type ReadMutex<R> = Arc<Mutex<BufReader<ReadHalf<R>>>>;
 type WriteMutex<W> = Arc<Mutex<WriteHalf<W>>>;
@@ -296,27 +301,6 @@ impl SerialClient {
         })
     }
 
-    /// Adds a mini-reader to the client.
-    ///
-    /// This method sends the port of the mini-reader to the main loop, which will then
-    /// connect to it.
-    ///
-    /// # Arguments
-    /// * `py` - Python interpreter instance.
-    /// * `port` - The path to the serial port of the mini-reader (e.g., "/dev/ttyUSB1").
-    ///
-    /// # Returns
-    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves when the port is sent.
-    pub fn add_mini_reader<'a>(&self, py: Python<'a>, port: String) -> PyResult<Bound<'a, PyAny>> {
-        let tx = self.mini_reader_connect_tx.clone();
-        future_into_py(py, async move {
-            tx.send(port).map_err(|e| {
-                PyRuntimeError::new_err(format!("Error sending mini reader port: {e}"))
-            })?;
-            Ok(())
-        })
-    }
-
     /// Sends a SportIdent punch log via the serial port.
     ///
     /// # Arguments
@@ -366,6 +350,48 @@ impl SerialClient {
         _mac_addr: &str,
     ) -> PyResult<Bound<'a, PyAny>> {
         future_into_py(py, future::ready(Ok(())))
+    }
+}
+
+impl UsbSerialFactory for SerialClient {
+    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        SportIdentFactory::detect_device(dev, port)
+    }
+
+    /// Adds a mini-reader to the client.
+    ///
+    /// This method sends the port of the mini-reader to the main loop, which will then
+    /// connect to it.
+    ///
+    /// # Arguments
+    /// * `port` - The path to the serial port of the mini-reader (e.g., "/dev/ttyUSB1").
+    ///
+    /// # Returns
+    /// A `Result` potentially containing an error from sending the port to the main loop.
+    fn add_device<'a>(
+        &'a mut self,
+        port: &'a str,
+        _device_node: &'a str,
+    ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>> {
+        let tx = self.mini_reader_connect_tx.clone();
+        future::ready(
+            tx.send(port.to_owned())
+                .inspect_err(|e| error!("Error sending mini reader port: {e}"))
+                .map_err(|_| {
+                    Box::new(Error::ChannelSendError) as Box<dyn std::error::Error + Send + Sync>
+                }),
+        )
+        .boxed()
+    }
+
+    fn remove_device(&mut self, _device_node: &str) -> bool {
+        //TODO
+        true
+    }
+
+    fn is_running(&self, _device_node: &str) -> bool {
+        //TODO
+        true
     }
 }
 
