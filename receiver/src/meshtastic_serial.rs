@@ -102,6 +102,8 @@ impl MeshtasticSerial {
 impl UsbSerialTrait for MeshtasticSerial {
     type Output = (MeshPacket, MacAddress);
 
+    /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
+    /// and ensuring the port name is an ACM/COM interface.
     fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
             let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
@@ -143,12 +145,14 @@ impl Display for MeshtasticSerial {
     }
 }
 
+/// A factory for creating and managing background tasks for Meshtastic serial devices.
 pub struct MeshtasticFactory {
     devices: HashMap<String, CancellationToken>,
     mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>,
 }
 
 impl MeshtasticFactory {
+    /// Creates a new `MeshtasticFactory` that forwards mesh packets through the given sender.
     pub fn new(mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>) -> Self {
         Self {
             devices: HashMap::new(),
@@ -156,6 +160,8 @@ impl MeshtasticFactory {
         }
     }
 
+    /// Spawns the serial reading background loop for the given Meshtastic serial device and
+    /// registers its cancellation token.
     pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
     where
         M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + Display + 'static,
@@ -166,10 +172,13 @@ impl MeshtasticFactory {
 }
 
 impl UsbSerialFactory for MeshtasticFactory {
+    /// Detects if a USB device matches a Meshtastic serial device.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         MeshtasticSerial::detect_device(dev, port)
     }
 
+    /// Asynchronously connects to a Meshtastic serial device at the given port, creates
+    /// a new `MeshtasticSerial` instance, and adds it to the active device map.
     fn add_device<'a>(
         &'a mut self,
         port: &'a str,
@@ -190,6 +199,7 @@ impl UsbSerialFactory for MeshtasticFactory {
         .boxed()
     }
 
+    /// Removes a Meshtastic serial device by triggering its background task cancellation.
     fn remove_device(&mut self, device_node: &str) -> bool {
         if let Some(token) = self.devices.remove(device_node) {
             token.cancel();
@@ -201,6 +211,7 @@ impl UsbSerialFactory for MeshtasticFactory {
         }
     }
 
+    /// Checks if a connection background task is currently running for the given device node.
     fn is_running(&self, device_node: &str) -> bool {
         self.devices.contains_key(device_node)
     }

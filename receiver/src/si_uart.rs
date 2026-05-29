@@ -58,6 +58,8 @@ impl RxWithIdle for TokioSerial {
 impl UsbSerialTrait for SiUart<TokioSerial> {
     type Output = SportIdentMessage;
 
+    /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
+    /// the vendor ID matches Silicon Labs (0x10c4), which is commonly used by SI USB adapters.
     fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
             let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
@@ -71,6 +73,8 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
         }
     }
 
+    /// Read loop that consumes punches from the SI UART device and sends them as
+    /// `SportIdentMessage::RawPunch` through the channel until the serial connection is closed.
     async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
         loop {
             let punch = self.read().await;
@@ -94,9 +98,12 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
     }
 }
 
+/// An event or punch message emitted by a SportIdent device.
 #[derive(Debug, Clone)]
 pub enum SportIdentMessage {
+    /// A raw punch.
     RawPunch(RawPunch),
+    /// A hardware connection event indicating whether a device was added or removed.
     DeviceEvent { added: bool, device: String },
 }
 
@@ -106,12 +113,14 @@ impl From<RawPunch> for SportIdentMessage {
     }
 }
 
+/// A factory for creating and managing background tasks for SportIdent serial devices.
 pub struct SportIdentFactory {
     devices: HashMap<String, (CancellationToken, String)>,
     si_tx: UnboundedSender<SportIdentMessage>,
 }
 
 impl SportIdentFactory {
+    /// Creates a new `SportIdentFactory` that forwards SportIdent messages through the given sender.
     pub fn new(si_tx: UnboundedSender<SportIdentMessage>) -> Self {
         Self {
             devices: HashMap::new(),
@@ -121,10 +130,13 @@ impl SportIdentFactory {
 }
 
 impl UsbSerialFactory for SportIdentFactory {
+    /// Detects if a USB device matches a SportIdent serial device.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         SiUart::detect_device(dev, port)
     }
 
+    /// Asynchronously connects to a SportIdent serial device at the given port, spawns its
+    /// connection background task, and registers its cancellation token.
     fn add_device<'a>(
         &'a mut self,
         port: &'a str,
@@ -146,6 +158,8 @@ impl UsbSerialFactory for SportIdentFactory {
         .boxed()
     }
 
+    /// Removes a SportIdent serial device by triggering its background task cancellation and
+    /// sending a device-removed event.
     fn remove_device(&mut self, device_node: &str) -> bool {
         if let Some((token, port)) = self.devices.remove(device_node) {
             token.cancel();
@@ -160,6 +174,7 @@ impl UsbSerialFactory for SportIdentFactory {
         }
     }
 
+    /// Checks if a connection background task is currently running for the given device node.
     fn is_running(&self, device_node: &str) -> bool {
         self.devices.contains_key(device_node)
     }

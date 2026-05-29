@@ -28,8 +28,22 @@ pub struct MessageHandler {
 impl MessageHandler {
     /// Creates a new `MessageHandler` along with a `UsbSerialManager`.
     ///
-    /// This function initializes the `FleetState`, the optional `MqttReceiver`s,
-    /// and the `UsbSerialManager`.
+    /// This function initializes the `FleetState`, sets up background tasks for the optional
+    /// `MqttReceiver`s, and prepares the `UsbSerialManager` with appropriate factory instances.
+    ///
+    /// # Arguments
+    ///
+    /// * `dns` - A mapping of DNS-like host names to device MAC addresses.
+    /// * `mqtt_configs` - Configs for the MQTT servers to connect to and listen for messages.
+    /// * `node_infos_interval` - The interval at which node info updates are published.
+    /// * `enable_meshtastic` - If true, initializes a `MeshtasticFactory` to receive serial data.
+    /// * `enable_sportident` - If true, initializes a `SportIdentFactory` to receive raw punches.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// 1. The initialized `MessageHandler`.
+    /// 2. The `UsbSerialManager` that oversees the USB serial devices.
     pub fn new(
         dns: Vec<(String, MacAddress)>,
         mqtt_configs: Vec<MqttConfig>,
@@ -82,9 +96,15 @@ impl MessageHandler {
         (handler, UsbSerialManager::new(factories))
     }
 
-    /// Returns the next event.
+    /// Returns the next processed event from the active event sources.
     ///
-    /// This function is a long-running task that should be polled.
+    /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
+    /// packet receiver channel, SportIdent punch receiver channel, and node info publication interval)
+    /// using `tokio::select!`. It returns the first successfully decoded and processed `Event`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the underlying event parsing or state updates fail.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
             tokio::select! {
@@ -136,6 +156,7 @@ impl MessageHandler {
 }
 
 impl Drop for MessageHandler {
+    /// Cleans up the `MessageHandler` by aborting all spawned MQTT receiver background tasks.
     fn drop(&mut self) {
         for task in &self.mqtt_tasks {
             task.abort();
