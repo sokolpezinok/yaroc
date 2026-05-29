@@ -127,12 +127,14 @@ impl MessageHandler {
     /// * `mqtt_config` - Optional MQTT configuration.
     /// * `node_info_interval` - Interval for sending node info messages.
     #[new]
-    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60)))]
+    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=true, enable_sportident=true))]
     pub fn new(
         dns: Vec<(String, String)>,
         mqtt_config: Option<MqttConfig>,
         node_info_interval: Duration,
-    ) -> PyResult<Self> {
+        enable_meshtastic: bool,
+        enable_sportident: bool,
+    ) -> PyResult<(Self, UsbSerialManager)> {
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
             .map(|(mac, name)| {
@@ -144,25 +146,20 @@ impl MessageHandler {
                 ))
             })
             .collect();
-        let inner = Arc::new(Mutex::new(MessageHandlerRs::new(
+        let message_handler_rs = MessageHandlerRs::new(
             dns?,
             mqtt_config.map(|config| config.into()).into_iter().collect(),
             node_info_interval,
-        )));
-        Ok(Self { inner })
-    }
-
-    /// Returns the handler for serial devices.
-    #[pyo3(signature = (enable_meshtastic=true, enable_sportident=true))]
-    pub fn usb_serial_manager(
-        &self,
-        enable_meshtastic: bool,
-        enable_sportident: bool,
-    ) -> PyResult<UsbSerialManager> {
-        let handler = self.get_inner()?.usb_serial_manager(enable_meshtastic, enable_sportident);
-        Ok(UsbSerialManager {
-            inner: Arc::new(Mutex::new(handler)),
-        })
+        );
+        let usb_serial_manager_rs =
+            message_handler_rs.usb_serial_manager(enable_meshtastic, enable_sportident);
+        let inner = Arc::new(Mutex::new(message_handler_rs));
+        Ok((
+            Self { inner },
+            UsbSerialManager {
+                inner: Arc::new(Mutex::new(usb_serial_manager_rs)),
+            },
+        ))
     }
 
     /// Waits for the next event from the message handler.
@@ -185,13 +182,5 @@ impl MessageHandler {
                 EventRs::DeviceEvent { added, device } => Ok(Event::DeviceEvnt { added, device }),
             }
         })
-    }
-}
-
-impl MessageHandler {
-    fn get_inner(&self) -> PyResult<tokio::sync::MutexGuard<'_, MessageHandlerRs>> {
-        self.inner
-            .try_lock()
-            .map_err(|_| PyRuntimeError::new_err("Failed to lock message handler".to_owned()))
     }
 }

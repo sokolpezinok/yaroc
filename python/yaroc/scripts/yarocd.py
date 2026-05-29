@@ -5,7 +5,7 @@ import signal
 import socket
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
@@ -20,6 +20,7 @@ from ..rs import (
     NodeInfo,
     SiPunch,
     SiPunchLog,
+    UsbSerialManager,
 )
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
@@ -36,10 +37,13 @@ class YarocDaemon:
         meshtastic_serial: bool = False,
     ):
         self.client_group = client_group
-        self.handler = MessageHandler(dns, mqtt_config)
-        self.usb_serial_manager = (
-            self.handler.usb_serial_manager(True, False) if meshtastic_serial else None
+        self.handler, usb_serial_manager = cast(
+            tuple[MessageHandler, UsbSerialManager],
+            MessageHandler(
+                dns, mqtt_config, enable_meshtastic=meshtastic_serial, enable_sportident=False
+            ),
         )
+        self.usb_serial_manager = usb_serial_manager if meshtastic_serial else None
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
         hostname = socket.gethostname()

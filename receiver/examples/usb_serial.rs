@@ -41,7 +41,9 @@ async fn main() {
         }
     });
 
-    info!("Everything initialized, listening for any connected Meshtastic or SportIdent devices...");
+    info!(
+        "Everything initialized, listening for any connected Meshtastic or SportIdent devices..."
+    );
     loop {
         tokio::select! {
             event = msg_handler.next_event() => {

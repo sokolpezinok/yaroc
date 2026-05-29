@@ -4,9 +4,9 @@ import time
 from asyncio import Queue
 from dataclasses import dataclass
 from datetime import datetime
-from typing import AsyncIterator
+from typing import AsyncIterator, cast
 
-from ..rs import Event, MessageHandler, SiPunch
+from ..rs import Event, MessageHandler, SiPunch, UsbSerialManager
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -44,8 +44,10 @@ class UdevSiFactory(SiWorker):
         super().__init__()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self.handler = MessageHandler([], None)
-        self.usb_serial_manager = self.handler.usb_serial_manager(False, True)
+        self.handler, self.usb_serial_manager = cast(
+            tuple[MessageHandler, UsbSerialManager],
+            MessageHandler([], None, enable_meshtastic=False, enable_sportident=True),
+        )
         await asyncio.gather(
             self.usb_serial_manager.loop(),
             self.get_punches(queue, status_queue),
