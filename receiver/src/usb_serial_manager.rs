@@ -21,6 +21,25 @@ pub trait UsbSerialTrait {
 
     /// An inner loop that reads messages from the serial device and sends them to a channel.
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
+
+    /// Spawns a task to read messages from a serial connection.
+    fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> CancellationToken
+    where
+        Self: Sized + Send + Display + 'static,
+        Self::Output: Send,
+    {
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+        tokio::spawn(async move {
+            let description = format!("{self}");
+            let res = self.inner_loop(tx).with_cancellation_token_owned(cancellation_token).await;
+            if res.is_none() {
+                info!("Stopping {}", description);
+            }
+        });
+
+        cancellation_token_clone
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -77,7 +96,7 @@ impl UsbSerialManager {
         M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + Display + 'static,
     {
         if let Some(tx) = &self.mesh_tx {
-            let token = self.spawn_serial(msh_serial, tx.clone());
+            let token = msh_serial.spawn_serial(tx.clone());
             self.devices.insert(device_node.to_owned(), ManagedDevice::Meshtastic(token));
         }
     }
@@ -105,7 +124,7 @@ impl UsbSerialManager {
         M: UsbSerialTrait<Output = SportIdentMessage> + Send + Display + 'static,
     {
         if let Some(tx) = &self.si_tx {
-            let token = self.spawn_serial(si_uart, tx.clone());
+            let token = si_uart.spawn_serial(tx.clone());
             self.devices.insert(
                 device_node.to_owned(),
                 ManagedDevice::SportIdent {
@@ -167,28 +186,6 @@ impl UsbSerialManager {
         } else {
             false
         }
-    }
-
-    /// Spawns a task to read messages from a serial connection.
-    fn spawn_serial<M>(&self, usb_serial: M, tx: UnboundedSender<M::Output>) -> CancellationToken
-    where
-        M: UsbSerialTrait + Send + Display + 'static,
-        M::Output: Send,
-    {
-        let cancellation_token = CancellationToken::new();
-        let cancellation_token_clone = cancellation_token.clone();
-        tokio::spawn(async move {
-            let description = format!("{usb_serial}");
-            let res = usb_serial
-                .inner_loop(tx)
-                .with_cancellation_token_owned(cancellation_token)
-                .await;
-            if res.is_none() {
-                info!("Stopping {}", description);
-            }
-        });
-
-        cancellation_token_clone
     }
 
     /// Monitors USB hotplug events and manages devices dynamically.
