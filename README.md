@@ -61,9 +61,8 @@ First, create a `send-punch.toml` file where you configure punch sources and cli
 
 ```toml
 log_level = "info"
-
-[punch_source.usb]
-enable = true
+# USB sources are enabled by default: SRR dongle, mini-reader or BSM7-USB
+# You can disable that using `punch_source.usb.enable = false`
 
 [punch_source.fake]
 enable = true

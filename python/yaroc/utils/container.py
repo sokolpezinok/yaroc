@@ -38,12 +38,16 @@ def get_log_level(log_level: str | None) -> int:
 def create_si_workers(
     source_factories: providers.FactoryAggregate,
     config: Dict[str, Any] | None,
+    meshtastic_config: Dict[str, Any] | None = None,
 ) -> list[SiWorker]:
     workers: list[SiWorker] = []
     if config is not None:
-        if config.get("usb", {}).get("enable", False):
+        if config.get("usb", {}).get("enable", True):
             logging.info("Enabled USB punch source")
-            workers.append(source_factories.udev())
+            watch_usb = False
+            if meshtastic_config is not None:
+                watch_usb = meshtastic_config.get("watch_usb", False)
+            workers.append(source_factories.udev(enable_meshtastic=watch_usb))
         if config.get("fake", {}).get("enable", False):
             logging.info("Enabled fake punch source")
             workers.append(source_factories.fake())
@@ -79,7 +83,9 @@ class Container(containers.DeclarativeContainer):
         udev=providers.Factory(UdevSiFactory),
         fake=providers.Factory(FakeSiWorker, config.punch_source.fake.interval),
     )
-    workers = providers.Callable(create_si_workers, source_factories, config.punch_source)
+    workers = providers.Callable(
+        create_si_workers, source_factories, config.punch_source, config.meshtastic
+    )
     si_manager = providers.Factory(SiPunchManager, workers)
 
 

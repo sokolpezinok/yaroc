@@ -93,3 +93,38 @@ class TestSiWorker(unittest.IsolatedAsyncioTestCase):
             dev_ev = await status_queue.get()
             self.assertEqual(dev_ev.device, "test_device")
             self.assertTrue(dev_ev.added)
+
+
+class TestContainer(unittest.TestCase):
+    def test_container_meshtastic_disabled(self):
+        from yaroc.utils.container import Container
+
+        config = {
+            "punch_source": {
+                "usb": {"enable": True},
+            },
+        }
+        container = Container()
+        container.config.from_dict(config)
+
+        workers = container.workers()
+        self.assertEqual(len(workers), 1)
+        self.assertFalse(workers[0].enable_meshtastic)
+
+    def test_container_meshtastic_enabled(self):
+        from yaroc.utils.container import Container
+
+        config = {
+            "punch_source": {
+                "usb": {"enable": True},
+            },
+            "meshtastic": {
+                "watch_usb": True,
+            },
+        }
+        container = Container()
+        container.config.from_dict(config)
+
+        workers = container.workers()
+        self.assertEqual(len(workers), 1)
+        self.assertTrue(workers[0].enable_meshtastic)
