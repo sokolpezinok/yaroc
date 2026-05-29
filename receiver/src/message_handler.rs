@@ -4,10 +4,12 @@ use crate::{
     system_info::MacAddress,
     usb_serial_manager::UsbSerialManager,
 };
+use chrono::Local;
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
 use std::{future::pending, pin::Pin, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use yaroc_common::punch::{RawPunch, SiPunch};
 
 /// Orchestrates the overall message flow.
 ///
@@ -18,6 +20,8 @@ pub struct MessageHandler {
     mqtt_receivers: Vec<MqttReceiver>,
     mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
     mesh_proto_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
+    punch_tx: UnboundedSender<RawPunch>,
+    punch_rx: UnboundedReceiver<RawPunch>,
 }
 
 impl MessageHandler {
@@ -35,11 +39,14 @@ impl MessageHandler {
             .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
         let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
+        let (punch_tx, punch_rx) = unbounded_channel::<RawPunch>();
         Self {
             fleet_state: FleetState::new(dns, node_infos_interval),
             mqtt_receivers,
             mesh_proto_tx,
             mesh_proto_rx,
+            punch_tx,
+            punch_rx,
         }
     }
 
@@ -60,6 +67,7 @@ impl MessageHandler {
                 mqtt_futures.push(Box::pin(pending::<crate::Result<Message>>()));
             }
             tokio::select! {
+                // TODO: solve this differently than tokio::select! on select_all
                 (mqtt_message, _idx, _) = select_all(mqtt_futures.into_iter()) => {
                     if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
                         return Ok(message);
@@ -77,6 +85,18 @@ impl MessageHandler {
                         }
                     }
                 },
+                punch_recv = self.punch_rx.recv() => {
+                    match punch_recv {
+                        Some(raw_punch) => {
+                            let now = Local::now().fixed_offset();
+                            let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
+                            return Ok(Event::SiPunch(punch));
+                        }
+                        None => {
+                            //TODO: closed channel
+                        }
+                    }
+                }
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
                 }
@@ -85,12 +105,21 @@ impl MessageHandler {
     }
 
     /// Returns a new `UsbSerialManager` that can be used to handle Meshtastic and SportIdent devices.
-    pub fn usb_serial_manager(&self, enable_meshtastic: bool) -> UsbSerialManager {
+    pub fn usb_serial_manager(
+        &self,
+        enable_meshtastic: bool,
+        enable_sportident: bool,
+    ) -> UsbSerialManager {
         let mesh_tx = if enable_meshtastic {
             Some(self.mesh_proto_tx.clone())
         } else {
             None
         };
-        UsbSerialManager::new(mesh_tx, None)
+        let si_tx = if enable_sportident {
+            Some(self.punch_tx.clone())
+        } else {
+            None
+        };
+        UsbSerialManager::new(mesh_tx, si_tx)
     }
 }

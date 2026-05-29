@@ -2,16 +2,18 @@ import asyncio
 import logging
 import signal
 import tomllib
+import datetime
+import socket
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..pb.status_pb2 import Status
-from ..rs import CellularLog, Event, MeshtasticLog, MessageHandler, MqttConfig, NodeInfo, SiPunchLog
+from ..rs import CellularLog, Event, MeshtasticLog, MessageHandler, MqttConfig, NodeInfo, SiPunchLog, HostInfo, SiPunch
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
-from ..utils.sys_info import is_windows
+from ..utils.sys_info import eth_mac_addr, is_windows
 
 
 class YarocDaemon:
@@ -25,9 +27,14 @@ class YarocDaemon:
     ):
         self.client_group = client_group
         self.handler = MessageHandler(dns, mqtt_config)
-        self.usb_serial_manager = self.handler.usb_serial_manager() if meshtastic_serial else None
+        self.usb_serial_manager = (
+            self.handler.usb_serial_manager(True, False) if meshtastic_serial else None
+        )
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
+        hostname = socket.gethostname()
+        mac_addr = eth_mac_addr() or "000000000000"
+        self.host_info = HostInfo.new(hostname, mac_addr)
 
     async def _handle_punches(self, punches: list[SiPunchLog]):
         tasks = []
@@ -35,6 +42,12 @@ class YarocDaemon:
             logging.info(punch)
             tasks.append(self.client_group.send_punch(punch))
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _handle_punch(self, punch: SiPunch):
+        logging.info(f"Local punch: {punch.card} punched {punch.code}")
+        await self.client_group.send_punch(
+            SiPunchLog.new(punch, self.host_info, datetime.datetime.now().astimezone())
+        )
 
     async def _handle_cellular_log(self, log: CellularLog):
         logging.info(log)
@@ -61,6 +74,8 @@ class YarocDaemon:
         match ev:
             case Event.SiPunchLogs():  # type: ignore
                 return asyncio.create_task(self._handle_punches(ev[0]))
+            case Event.SiPunch():  # type: ignore
+                return asyncio.create_task(self._handle_punch(ev[0]))
             case Event.CellularLog():  # type: ignore
                 return asyncio.create_task(self._handle_cellular_log(ev[0]))
             case Event.MeshtasticLog():  # type: ignore

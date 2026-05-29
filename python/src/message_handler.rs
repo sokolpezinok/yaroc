@@ -11,7 +11,7 @@ use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
 use yaroc_receiver::system_info::MacAddress;
 
-use crate::punch::SiPunchLog;
+use crate::punch::{SiPunch, SiPunchLog};
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
 /// Events that can be processed by the Python application.
@@ -19,6 +19,7 @@ use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 pub enum Event {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
+    SiPunch(SiPunch),
     MeshtasticLog(MeshtasticLog),
     NodeInfos(Vec<NodeInfo>),
 }
@@ -150,9 +151,14 @@ impl MessageHandler {
         Ok(Self { inner })
     }
 
-    /// Returns the handler for Meshtastic devices.
-    pub fn usb_serial_manager(&self) -> PyResult<UsbSerialManager> {
-        let handler = self.get_inner()?.usb_serial_manager(true);
+    /// Returns the handler for serial devices.
+    #[pyo3(signature = (enable_meshtastic=true, enable_sportident=true))]
+    pub fn usb_serial_manager(
+        &self,
+        enable_meshtastic: bool,
+        enable_sportident: bool,
+    ) -> PyResult<UsbSerialManager> {
+        let handler = self.get_inner()?.usb_serial_manager(enable_meshtastic, enable_sportident);
         Ok(UsbSerialManager {
             inner: Arc::new(Mutex::new(handler)),
         })
@@ -168,6 +174,7 @@ impl MessageHandler {
             match message {
                 EventRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 EventRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
+                EventRs::SiPunch(si_punch) => Ok(Event::SiPunch(si_punch.into())),
                 EventRs::MeshtasticLog(meshtastic_log) => {
                     Ok(Event::MeshtasticLog(meshtastic_log.into()))
                 }

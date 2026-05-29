@@ -173,6 +173,7 @@ impl MeshtasticNodeStatus {
 pub enum Event {
     CellularLog(CellularLogMessage),
     SiPunches(Vec<SiPunchLog>),
+    SiPunch(SiPunch),
     MeshtasticLog(MeshtasticLog),
     NodeInfos(Vec<NodeInfo>),
 }

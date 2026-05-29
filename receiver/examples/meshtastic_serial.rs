@@ -31,7 +31,7 @@ async fn main() {
     }
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
-    let mut serial_device_manager = msg_handler.usb_serial_manager(true);
+    let mut serial_device_manager = msg_handler.usb_serial_manager(true, false);
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = serial_device_manager.monitor_usb_devices().await {
@@ -52,6 +52,9 @@ async fn main() {
                             for punch in si_punch_logs {
                                 info!("{punch}");
                             }
+                        }
+                        Event::SiPunch(punch) => {
+                            info!("Local punch: {punch:?}");
                         }
                         Event::MeshtasticLog(log) => {
                             info!("{log}");
