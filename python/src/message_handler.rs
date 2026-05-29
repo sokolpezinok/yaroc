@@ -127,7 +127,7 @@ impl MessageHandler {
     /// * `mqtt_config` - Optional MQTT configuration.
     /// * `node_info_interval` - Interval for sending node info messages.
     #[new]
-    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=true, enable_sportident=true))]
+    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false))]
     pub fn new(
         dns: Vec<(String, String)>,
         mqtt_config: Option<MqttConfig>,

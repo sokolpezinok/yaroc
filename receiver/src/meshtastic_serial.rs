@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 
-use futures::future::BoxFuture;
 use futures::FutureExt as _;
+use futures::future::BoxFuture;
 use log::{info, warn};
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};

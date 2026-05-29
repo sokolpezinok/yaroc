@@ -1,7 +1,11 @@
+import asyncio
 import unittest
+from asyncio import Queue
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
-from yaroc.rs import SiPunch
+from yaroc.rs import Event, HostInfo, SiPunch, SiPunchLog
+from yaroc.sources.si import UdevSiFactory
 
 
 class TestSportident(unittest.TestCase):
@@ -38,3 +42,54 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.minute, 29)
         self.assertEqual(punch.time.second, 14)
         self.assertEqual(punch.time.microsecond, 722656)
+
+
+class TestSiWorker(unittest.IsolatedAsyncioTestCase):
+    async def test_udev_si_factory_punches(self):
+        # Create UdevSiFactory
+        worker = UdevSiFactory(enable_meshtastic=True)
+        self.assertTrue(worker.enable_meshtastic)
+
+        # Mock the handler and usb_serial_manager returned by MessageHandler
+        mock_handler = AsyncMock()
+        mock_usb_manager = AsyncMock()
+
+        # Let's mock MessageHandler constructor by patching it
+        with patch("yaroc.sources.si.MessageHandler") as mock_mh:
+            mock_mh.return_value = (mock_handler, mock_usb_manager)
+
+            queue = Queue()
+            status_queue = Queue()
+
+            t = datetime.now().astimezone()
+            punch = SiPunch.new(1715004, 47, t, 2)
+
+            host_info = HostInfo.new("test_host", "001122334455")
+            punch_log = SiPunchLog.new(punch, host_info, t)
+
+            # In our mock next_event, we return a sequence of events, then raise a CancelledError to break the infinite loop
+            mock_handler.next_event.side_effect = [
+                Event.SiPunch(punch),
+                Event.SiPunchLogs([punch_log]),
+                Event.DeviceEvnt(True, "test_device"),
+                asyncio.CancelledError(),
+            ]
+
+            # Since loop gathers both next_event loop and usb_serial_manager.loop(),
+            # usb_serial_manager.loop() is also AsyncMock, so it will return immediately.
+            # We catch CancelledError to end the worker.loop cleanly.
+            try:
+                await worker.loop(queue, status_queue)
+            except asyncio.CancelledError:
+                pass
+
+            self.assertEqual(queue.qsize(), 2)
+            p1 = await queue.get()
+            p2 = await queue.get()
+            self.assertEqual(p1.card, 1715004)
+            self.assertEqual(p2.card, 1715004)
+
+            self.assertEqual(status_queue.qsize(), 1)
+            dev_ev = await status_queue.get()
+            self.assertEqual(dev_ev.device, "test_device")
+            self.assertTrue(dev_ev.added)

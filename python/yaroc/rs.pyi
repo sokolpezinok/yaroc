@@ -97,8 +97,8 @@ class MessageHandler(object):
         self,
         dns: List[Tuple[str, str]],
         config: MqttConfig | None = None,
-        enable_meshtastic: bool = True,
-        enable_sportident: bool = True,
+        enable_meshtastic: bool = False,
+        enable_sportident: bool = False,
     ): ...
     async def next_event(self) -> Event: ...
 

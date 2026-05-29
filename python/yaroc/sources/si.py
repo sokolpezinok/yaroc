@@ -40,13 +40,16 @@ class SiWorker:
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self) -> None:
+    def __init__(self, enable_meshtastic: bool = False) -> None:
         super().__init__()
+        self.enable_meshtastic = enable_meshtastic
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self.handler, self.usb_serial_manager = cast(
             tuple[MessageHandler, UsbSerialManager],
-            MessageHandler([], None, enable_meshtastic=False, enable_sportident=True),
+            MessageHandler(
+                [], None, enable_meshtastic=self.enable_meshtastic, enable_sportident=True
+            ),
         )
         await asyncio.gather(
             self.usb_serial_manager.loop(),
@@ -60,6 +63,9 @@ class UdevSiFactory(SiWorker):
                 match ev:
                     case Event.SiPunch():  # type: ignore
                         await self.process_punch(ev[0], queue)
+                    case Event.SiPunchLogs():  # type: ignore
+                        for punch_log in ev[0]:
+                            await self.process_punch(punch_log.punch, queue)
                     case Event.DeviceEvnt():  # type: ignore
                         await status_queue.put(DeviceEvent(ev.added, ev.device))
             except Exception as e:
