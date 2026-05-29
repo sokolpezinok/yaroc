@@ -58,7 +58,7 @@ class UdevSiFactory(SiWorker):
                 match ev:
                     case Event.SiPunch():  # type: ignore
                         await self.process_punch(ev[0], queue)
-                    case Event.DeviceEvent():  # type: ignore
+                    case Event.DeviceEvnt():  # type: ignore
                         await status_queue.put(DeviceEvent(ev.added, ev.device))
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")

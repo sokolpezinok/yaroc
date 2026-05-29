@@ -2,7 +2,6 @@ use futures::StreamExt;
 use log::{error, info};
 use meshtastic::protobufs::MeshPacket;
 use nusb::hotplug::HotplugEvent;
-use serialport::SerialPortType;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
@@ -21,6 +20,11 @@ pub trait UsbSerialTrait {
 
     /// An inner loop that reads messages from the serial device and sends them to a channel.
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
+
+    /// Detects if a USB device matches this serial reader type.
+    fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool
+    where
+        Self: Sized;
 
     /// Spawns a task to read messages from a serial connection.
     fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> CancellationToken
@@ -72,8 +76,6 @@ pub struct UsbSerialManager {
     enable_meshtastic: bool,
     enable_sportident: bool,
 }
-
-const SI_LABS: u16 = 0x10c4;
 
 impl UsbSerialManager {
     /// Creates a new `SerialDeviceManager`.
@@ -226,40 +228,25 @@ impl UsbSerialManager {
             return;
         };
         for port in ports {
-            if let SerialPortType::UsbPort(usb_info) = &port.port_type
-                && usb_info.vid == dev.vendor_id()
-            {
-                let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
-                    (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
-                    (None, None) => true,
-                    _ => false,
-                };
-                if !sn_matches {
-                    return;
-                }
-                if usb_info.vid == SI_LABS && self.enable_sportident {
-                    let _ = self
-                        .add_sportident_device(&port.port_name, &format!("{:?}", dev.id()))
-                        .inspect_err(|err| {
-                            error!(
-                                "Failed to connect to SI UART device at {}: {err}",
-                                port.port_name
-                            )
-                        });
-                } else if port.port_name.contains("ACM") || port.port_name.contains("COM") {
-                    if !self.enable_meshtastic {
-                        return;
-                    }
-                    let _ = self
-                        .add_meshtastic_device(&port.port_name, &format!("{:?}", dev.id()))
-                        .await
-                        .inspect_err(|err| {
-                            error!(
-                                "Failed to connect to Meshtastic device at {}: {err}",
-                                port.port_name
-                            )
-                        });
-                }
+            if self.enable_sportident && SiUart::<TokioSerial>::detect_device(dev, &port) {
+                let _ = self
+                    .add_sportident_device(&port.port_name, &format!("{:?}", dev.id()))
+                    .inspect_err(|err| {
+                        error!(
+                            "Failed to connect to SI UART device at {}: {err}",
+                            port.port_name
+                        )
+                    });
+            } else if self.enable_meshtastic && MeshtasticSerial::detect_device(dev, &port) {
+                let _ = self
+                    .add_meshtastic_device(&port.port_name, &format!("{:?}", dev.id()))
+                    .await
+                    .inspect_err(|err| {
+                        error!(
+                            "Failed to connect to Meshtastic device at {}: {err}",
+                            port.port_name
+                        )
+                    });
             }
         }
     }
@@ -299,6 +286,10 @@ mod tests {
 
     impl UsbSerialTrait for FakeMeshtasticSerial {
         type Output = (MeshPacket, MacAddress);
+
+        fn detect_device(_dev: &nusb::DeviceInfo, _port: &serialport::SerialPortInfo) -> bool {
+            false
+        }
 
         /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
         async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {

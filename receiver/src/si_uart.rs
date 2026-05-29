@@ -52,6 +52,19 @@ impl RxWithIdle for TokioSerial {
 impl UsbSerialTrait for SiUart<TokioSerial> {
     type Output = SportIdentMessage;
 
+    fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
+            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
+                (None, None) => true,
+                _ => false,
+            };
+            sn_matches && usb_info.vid == 0x10c4
+        } else {
+            false
+        }
+    }
+
     async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
         loop {
             let punch = self.read().await;
