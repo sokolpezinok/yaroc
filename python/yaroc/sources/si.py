@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator
 
-from ..rs import SiPunch, SiUartHandler
+from ..rs import Event, MessageHandler, SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -44,20 +44,20 @@ class UdevSiFactory(SiWorker):
         super().__init__()
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self.handler = SiUartHandler()
-        self.receiver = self.handler.punch_receiver()
+        self.handler = MessageHandler([], None)
+        self.usb_serial_manager = self.handler.usb_serial_manager(False, True)
         await asyncio.gather(
-            self.handler.loop(),
+            self.usb_serial_manager.loop(),
             self.get_punches(queue),
         )
 
     async def get_punches(self, queue: Queue[SiPunch]):
         while True:
             try:
-                raw_punch = await self.receiver.next_punch()
-                punch = SiPunch.from_raw(raw_punch, datetime.now().astimezone())
-                if punch is not None:
-                    await self.process_punch(punch, queue)
+                ev = await self.handler.next_event()
+                match ev:
+                    case Event.SiPunch():  # type: ignore
+                        await self.process_punch(ev[0], queue)
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")
 
