@@ -32,7 +32,4 @@ env_logger = { workspace = true }
 name = "mqtt"
 
 [[example]]
-name = "meshtastic_serial"
-
-[[example]]
-name = "si_uart"
+name = "usb_serial"

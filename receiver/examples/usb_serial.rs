@@ -1,3 +1,5 @@
+//! An example that monitors and listens to both Meshtastic and SportIdent serial devices.
+
 use clap::Parser;
 use log::{error, info};
 use std::time::Duration;
@@ -31,7 +33,7 @@ async fn main() {
     }
 
     let mut msg_handler = MessageHandler::new(dns, Vec::new(), Duration::from_secs(60));
-    let mut serial_device_manager = msg_handler.usb_serial_manager(true, false);
+    let mut serial_device_manager = msg_handler.usb_serial_manager(true, true);
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = serial_device_manager.monitor_usb_devices().await {
@@ -39,34 +41,34 @@ async fn main() {
         }
     });
 
-    info!("Everything initialized, starting the loop");
+    info!("Everything initialized, listening for any connected Meshtastic or SportIdent devices...");
     loop {
         tokio::select! {
             event = msg_handler.next_event() => {
                 match event {
                     Ok(event) => match event {
                         Event::CellularLog(cellular_log_message) => {
-                            info!("{cellular_log_message}");
+                            info!("Cellular: {cellular_log_message}");
                         }
                         Event::SiPunches(si_punch_logs) => {
                             for punch in si_punch_logs {
-                                info!("{punch}");
+                                info!("Punches: {punch}");
                             }
                         }
                         Event::SiPunch(punch) => {
-                            info!("Local punch: {punch:?}");
+                            info!("SI Punch: {punch:?}");
                         }
                         Event::MeshtasticLog(log) => {
-                            info!("{log}");
+                            info!("Meshtastic: {log}");
                         }
                         Event::NodeInfos(node_infos) => {
-                            info!("{node_infos:?}");
+                            info!("Node Infos: {node_infos:?}");
                         }
                         Event::DeviceEvent { added, device } => {
-                            info!("Device event: added={added}, device={device}");
+                            info!("Device Event: added={added}, device={device}");
                         }
                     },
-                    Err(err) => error!("{err}"),
+                    Err(err) => error!("Error: {err}"),
                 }
             }
             _ = tokio::signal::ctrl_c() => {
