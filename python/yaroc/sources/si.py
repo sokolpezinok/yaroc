@@ -48,11 +48,11 @@ class UdevSiFactory(SiWorker):
         self.dns = dns if dns is not None else []
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self.handler, usb_serial_manager = MessageHandler(
+        self.handler, self.usb_serial_manager = MessageHandler.new(
             self.dns, None, enable_meshtastic=self.enable_meshtastic, enable_sportident=True
         )
         await asyncio.gather(
-            usb_serial_manager.loop(),
+            self.usb_serial_manager.loop(),
             self.get_punches(queue, status_queue),
         )
 

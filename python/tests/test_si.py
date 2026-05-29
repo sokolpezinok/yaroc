@@ -54,8 +54,8 @@ class TestSiWorker(unittest.IsolatedAsyncioTestCase):
         mock_handler = AsyncMock()
         mock_usb_manager = AsyncMock()
 
-        # Let's mock MessageHandler constructor by patching it
-        with patch("yaroc.sources.si.MessageHandler") as mock_mh:
+        # Let's mock MessageHandler.new by patching it
+        with patch("yaroc.sources.si.MessageHandler.new") as mock_mh:
             mock_mh.return_value = (mock_handler, mock_usb_manager)
 
             queue = Queue()

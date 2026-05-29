@@ -37,11 +37,8 @@ class YarocDaemon:
         meshtastic_serial: bool = False,
     ):
         self.client_group = client_group
-        self.handler, usb_serial_manager = cast(
-            tuple[MessageHandler, UsbSerialManager],
-            MessageHandler(
-                dns, mqtt_config, enable_meshtastic=meshtastic_serial, enable_sportident=False
-            ),
+        self.handler, usb_serial_manager = MessageHandler.new(
+            dns, mqtt_config, enable_meshtastic=meshtastic_serial, enable_sportident=False
         )
         self.usb_serial_manager = usb_serial_manager if meshtastic_serial else None
         self.drawer = StatusDrawer(display_model)

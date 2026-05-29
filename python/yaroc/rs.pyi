@@ -93,13 +93,14 @@ class UsbSerialManager(object):
     async def loop(self): ...
 
 class MessageHandler(object):
-    def __init__(
-        self,
+    @staticmethod
+    def new(
         dns: List[Tuple[str, str]],
         config: MqttConfig | None = None,
+        node_info_interval: timedelta = ...,
         enable_meshtastic: bool = False,
         enable_sportident: bool = False,
-    ): ...
+    ) -> Tuple["MessageHandler", UsbSerialManager]: ...
     async def next_event(self) -> Event: ...
 
 def current_timestamp_millis() -> int: ...
