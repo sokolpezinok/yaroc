@@ -162,7 +162,6 @@ async def main_loop() -> None:
         mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
 
     mac_addresses = config.get("mac-addresses", {})
-
     if "client" in config:
         config["client"].pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
         config["client"].pop("sim7020", None)  # ... also for SIM7020

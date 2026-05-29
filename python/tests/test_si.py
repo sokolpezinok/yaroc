@@ -128,3 +128,25 @@ class TestContainer(unittest.TestCase):
         workers = container.workers()
         self.assertEqual(len(workers), 1)
         self.assertTrue(workers[0].enable_meshtastic)
+
+    def test_container_meshtastic_dns(self):
+        from yaroc.utils.container import Container
+
+        config = {
+            "punch_source": {
+                "usb": {"enable": True},
+            },
+            "meshtastic": {
+                "watch_usb": True,
+                "mac-addresses": {
+                    "node1": "001122334455",
+                },
+            },
+        }
+        container = Container()
+        container.config.from_dict(config)
+
+        workers = container.workers()
+        self.assertEqual(len(workers), 1)
+        self.assertTrue(workers[0].enable_meshtastic)
+        self.assertEqual(workers[0].dns, [("001122334455", "node1")])

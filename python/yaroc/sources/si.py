@@ -4,9 +4,9 @@ import time
 from asyncio import Queue
 from dataclasses import dataclass
 from datetime import datetime
-from typing import AsyncIterator, cast
+from typing import AsyncIterator
 
-from ..rs import Event, MessageHandler, SiPunch, UsbSerialManager
+from ..rs import Event, MessageHandler, SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -40,19 +40,19 @@ class SiWorker:
 
 
 class UdevSiFactory(SiWorker):
-    def __init__(self, enable_meshtastic: bool = False) -> None:
+    def __init__(
+        self, enable_meshtastic: bool = False, dns: list[tuple[str, str]] | None = None
+    ) -> None:
         super().__init__()
         self.enable_meshtastic = enable_meshtastic
+        self.dns = dns if dns is not None else []
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self.handler, self.usb_serial_manager = cast(
-            tuple[MessageHandler, UsbSerialManager],
-            MessageHandler(
-                [], None, enable_meshtastic=self.enable_meshtastic, enable_sportident=True
-            ),
+        self.handler, usb_serial_manager = MessageHandler(
+            self.dns, None, enable_meshtastic=self.enable_meshtastic, enable_sportident=True
         )
         await asyncio.gather(
-            self.usb_serial_manager.loop(),
+            usb_serial_manager.loop(),
             self.get_punches(queue, status_queue),
         )
 
@@ -63,11 +63,15 @@ class UdevSiFactory(SiWorker):
                 match ev:
                     case Event.SiPunch():  # type: ignore
                         await self.process_punch(ev[0], queue)
-                    case Event.SiPunchLogs():  # type: ignore
+                    case Event.SiPunchLogs():
                         for punch_log in ev[0]:
                             await self.process_punch(punch_log.punch, queue)
-                    case Event.DeviceEvnt():  # type: ignore
+                    case Event.DeviceEvnt():
                         await status_queue.put(DeviceEvent(ev.added, ev.device))
+                    case Event.MeshtasticLog():
+                        logging.info(ev[0])
+                    case Event.CellularLog():
+                        logging.info(ev[0])
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")
 
