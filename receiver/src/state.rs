@@ -176,6 +176,7 @@ pub enum Event {
     SiPunch(SiPunch),
     MeshtasticLog(MeshtasticLog),
     NodeInfos(Vec<NodeInfo>),
+    DeviceEvent { added: bool, device: String },
 }
 
 pub struct FleetState {

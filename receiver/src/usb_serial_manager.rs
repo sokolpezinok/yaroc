@@ -3,7 +3,7 @@ use log::{error, info};
 use meshtastic::protobufs::MeshPacket;
 use nusb::hotplug::HotplugEvent;
 use serialport::SerialPortType;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
@@ -23,13 +23,33 @@ pub trait UsbSerialTrait {
     fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
 }
 
+#[derive(Debug, Clone)]
+pub enum SportIdentMessage {
+    RawPunch(RawPunch),
+    DeviceEvent { added: bool, device: String },
+}
+
+impl From<RawPunch> for SportIdentMessage {
+    fn from(punch: RawPunch) -> Self {
+        Self::RawPunch(punch)
+    }
+}
+
+enum ManagedDevice {
+    Meshtastic(CancellationToken),
+    SportIdent {
+        cancellation_token: CancellationToken,
+        port: String,
+    },
+}
+
 /// Serial device manager
 ///
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
 pub struct UsbSerialManager {
-    cancellation_tokens: HashMap<String, CancellationToken>,
+    devices: HashMap<String, ManagedDevice>,
     mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
-    si_tx: Option<UnboundedSender<RawPunch>>,
+    si_tx: Option<UnboundedSender<SportIdentMessage>>,
     enable_meshtastic: bool,
     enable_sportident: bool,
 }
@@ -40,10 +60,10 @@ impl UsbSerialManager {
     /// Creates a new `SerialDeviceManager`.
     pub fn new(
         mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
-        si_tx: Option<UnboundedSender<RawPunch>>,
+        si_tx: Option<UnboundedSender<SportIdentMessage>>,
     ) -> Self {
         Self {
-            cancellation_tokens: HashMap::new(),
+            devices: HashMap::new(),
             enable_meshtastic: mesh_tx.is_some(),
             enable_sportident: si_tx.is_some(),
             mesh_tx,
@@ -58,7 +78,7 @@ impl UsbSerialManager {
     {
         if let Some(tx) = &self.mesh_tx {
             let token = self.spawn_serial(msh_serial, tx.clone());
-            self.cancellation_tokens.insert(device_node.to_owned(), token);
+            self.devices.insert(device_node.to_owned(), ManagedDevice::Meshtastic(token));
         }
     }
 
@@ -80,13 +100,19 @@ impl UsbSerialManager {
     }
 
     /// Connects to a SportIdent serial device.
-    pub fn add_sportident_device_inner<M>(&mut self, si_uart: M, device_node: &str)
+    pub fn add_sportident_device_inner<M>(&mut self, si_uart: M, device_node: &str, port: &str)
     where
-        M: UsbSerialTrait<Output = RawPunch> + Send + Display + 'static,
+        M: UsbSerialTrait<Output = SportIdentMessage> + Send + Display + 'static,
     {
         if let Some(tx) = &self.si_tx {
             let token = self.spawn_serial(si_uart, tx.clone());
-            self.cancellation_tokens.insert(device_node.to_owned(), token);
+            self.devices.insert(
+                device_node.to_owned(),
+                ManagedDevice::SportIdent {
+                    cancellation_token: token,
+                    port: port.to_owned(),
+                },
+            );
         }
     }
 
@@ -98,14 +124,20 @@ impl UsbSerialManager {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let serial = TokioSerial::new(port)?;
         let si_uart = SiUart::new(serial);
-        self.add_sportident_device_inner(si_uart, device_node);
+        self.add_sportident_device_inner(si_uart, device_node, port);
+        if let Some(tx) = &self.si_tx {
+            let _ = tx.send(SportIdentMessage::DeviceEvent {
+                added: true,
+                device: port.to_owned(),
+            });
+        }
         info!("Connected to SI UART device at {port}");
         Ok(())
     }
 
     /// Indicates whether the device is connected and running.
     pub fn is_running(&self, device_node: &str) -> bool {
-        self.cancellation_tokens.contains_key(device_node)
+        self.devices.contains_key(device_node)
     }
 
     /// Disconnects a serial device.
@@ -113,9 +145,24 @@ impl UsbSerialManager {
     /// This function cancels the task that handles messages from the device and returns true if
     /// the device was connected.
     pub fn remove_device(&mut self, device_node: String) -> bool {
-        if let Entry::Occupied(occupied_entry) = self.cancellation_tokens.entry(device_node) {
-            occupied_entry.get().cancel();
-            occupied_entry.remove();
+        if let Some(device) = self.devices.remove(&device_node) {
+            match device {
+                ManagedDevice::Meshtastic(token) => {
+                    token.cancel();
+                }
+                ManagedDevice::SportIdent {
+                    cancellation_token,
+                    port,
+                } => {
+                    cancellation_token.cancel();
+                    if let Some(tx) = &self.si_tx {
+                        let _ = tx.send(SportIdentMessage::DeviceEvent {
+                            added: false,
+                            device: port,
+                        });
+                    }
+                }
+            }
             true
         } else {
             false

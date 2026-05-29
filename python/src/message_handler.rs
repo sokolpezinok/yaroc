@@ -22,6 +22,7 @@ pub enum Event {
     SiPunch(SiPunch),
     MeshtasticLog(MeshtasticLog),
     NodeInfos(Vec<NodeInfo>),
+    DeviceEvent { added: bool, device: String },
 }
 
 impl From<Vec<SiPunchLogRs>> for Event {
@@ -181,6 +182,7 @@ impl MessageHandler {
                 EventRs::NodeInfos(node_infos) => Ok(Event::NodeInfos(
                     node_infos.into_iter().map(|info| info.into()).collect(),
                 )),
+                EventRs::DeviceEvent { added, device } => Ok(Event::DeviceEvent { added, device }),
             }
         })
     }

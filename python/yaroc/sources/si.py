@@ -48,16 +48,18 @@ class UdevSiFactory(SiWorker):
         self.usb_serial_manager = self.handler.usb_serial_manager(False, True)
         await asyncio.gather(
             self.usb_serial_manager.loop(),
-            self.get_punches(queue),
+            self.get_punches(queue, status_queue),
         )
 
-    async def get_punches(self, queue: Queue[SiPunch]):
+    async def get_punches(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         while True:
             try:
                 ev = await self.handler.next_event()
                 match ev:
                     case Event.SiPunch():  # type: ignore
                         await self.process_punch(ev[0], queue)
+                    case Event.DeviceEvent():  # type: ignore
+                        await status_queue.put(DeviceEvent(ev.added, ev.device))
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")
 

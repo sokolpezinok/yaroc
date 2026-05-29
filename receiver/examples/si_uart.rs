@@ -4,7 +4,7 @@ use chrono::Local;
 use log::{error, info};
 
 use yaroc_common::punch::SiPunch;
-use yaroc_receiver::usb_serial_manager::UsbSerialManager;
+use yaroc_receiver::usb_serial_manager::{SportIdentMessage, UsbSerialManager};
 
 #[tokio::main]
 async fn main() {
@@ -27,10 +27,13 @@ async fn main() {
         tokio::select! {
             res = rx.recv() => {
                 match res {
-                    Some(punch) => {
+                    Some(SportIdentMessage::RawPunch(punch)) => {
                         let now = Local::now();
                         let punch = SiPunch::from_raw(punch, now.date_naive(), now.offset());
                         info!("Received punch: {punch:?}");
+                    }
+                    Some(SportIdentMessage::DeviceEvent { added, device }) => {
+                        info!("Device event: added={added}, device={device}");
                     }
                     None => {
                         info!("Channel closed, shutting down...");

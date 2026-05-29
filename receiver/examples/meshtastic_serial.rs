@@ -62,6 +62,9 @@ async fn main() {
                         Event::NodeInfos(node_infos) => {
                             info!("{node_infos:?}");
                         }
+                        Event::DeviceEvent { added, device } => {
+                            info!("Device event: added={added}, device={device}");
+                        }
                     },
                     Err(err) => error!("{err}"),
                 }

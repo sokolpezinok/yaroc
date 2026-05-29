@@ -3,11 +3,10 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
-use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
-use crate::usb_serial_manager::UsbSerialTrait;
+use crate::usb_serial_manager::{SportIdentMessage, UsbSerialTrait};
 
 pub struct TokioSerial {
     serial: SerialStream,
@@ -51,7 +50,7 @@ impl RxWithIdle for TokioSerial {
 }
 
 impl UsbSerialTrait for SiUart<TokioSerial> {
-    type Output = RawPunch;
+    type Output = SportIdentMessage;
 
     async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
         loop {
@@ -59,7 +58,7 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
             match punch {
                 Ok(punches) => {
                     for punch in punches {
-                        tx.send(punch).expect("Channel unexpectedly closed");
+                        tx.send(punch.into()).expect("Channel unexpectedly closed");
                     }
                 }
                 Err(err) => match err {

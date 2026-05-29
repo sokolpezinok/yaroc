@@ -1,15 +1,15 @@
+use crate::usb_serial_manager::{SportIdentMessage, UsbSerialManager};
 use crate::{
     mqtt::{Message, MqttConfig, MqttReceiver},
     state::{Event, FleetState},
     system_info::MacAddress,
-    usb_serial_manager::UsbSerialManager,
 };
 use chrono::Local;
 use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
 use std::{future::pending, pin::Pin, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use yaroc_common::punch::{RawPunch, SiPunch};
+use yaroc_common::punch::SiPunch;
 
 /// Orchestrates the overall message flow.
 ///
@@ -20,8 +20,8 @@ pub struct MessageHandler {
     mqtt_receivers: Vec<MqttReceiver>,
     mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
     mesh_proto_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
-    punch_tx: UnboundedSender<RawPunch>,
-    punch_rx: UnboundedReceiver<RawPunch>,
+    punch_tx: UnboundedSender<SportIdentMessage>,
+    punch_rx: UnboundedReceiver<SportIdentMessage>,
 }
 
 impl MessageHandler {
@@ -39,7 +39,7 @@ impl MessageHandler {
             .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
         let (mesh_proto_tx, mesh_proto_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
-        let (punch_tx, punch_rx) = unbounded_channel::<RawPunch>();
+        let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
         Self {
             fleet_state: FleetState::new(dns, node_infos_interval),
             mqtt_receivers,
@@ -87,10 +87,13 @@ impl MessageHandler {
                 },
                 punch_recv = self.punch_rx.recv() => {
                     match punch_recv {
-                        Some(raw_punch) => {
+                        Some(SportIdentMessage::RawPunch(raw_punch)) => {
                             let now = Local::now().fixed_offset();
                             let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
                             return Ok(Event::SiPunch(punch));
+                        }
+                        Some(SportIdentMessage::DeviceEvent { added, device }) => {
+                            return Ok(Event::DeviceEvent { added, device });
                         }
                         None => {
                             //TODO: closed channel
