@@ -4,7 +4,10 @@ use chrono::Local;
 use log::{error, info};
 
 use yaroc_common::punch::SiPunch;
-use yaroc_receiver::usb_serial_manager::{SportIdentMessage, UsbSerialManager};
+use yaroc_receiver::{
+    si_uart::{SportIdentFactory, SportIdentMessage},
+    usb_serial_manager::UsbSerialManager,
+};
 
 #[tokio::main]
 async fn main() {
@@ -14,7 +17,8 @@ async fn main() {
         .init();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut manager = UsbSerialManager::new(None, Some(tx));
+    let factory = SportIdentFactory::new(tx);
+    let mut manager = UsbSerialManager::new(vec![Box::new(factory)]);
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = manager.monitor_usb_devices().await {

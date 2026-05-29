@@ -1,12 +1,18 @@
-use log::error;
+use std::collections::HashMap;
+
+use futures::future::BoxFuture;
+use futures::future::FutureExt as _;
+use log::{error, info, warn};
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
+use tokio_util::sync::CancellationToken;
+use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
-use crate::usb_serial_manager::{SportIdentMessage, UsbSerialTrait};
+use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};
 
 pub struct TokioSerial {
     serial: SerialStream,
@@ -85,5 +91,76 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
                 },
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum SportIdentMessage {
+    RawPunch(RawPunch),
+    DeviceEvent { added: bool, device: String },
+}
+
+impl From<RawPunch> for SportIdentMessage {
+    fn from(punch: RawPunch) -> Self {
+        Self::RawPunch(punch)
+    }
+}
+
+pub struct SportIdentFactory {
+    devices: HashMap<String, (CancellationToken, String)>,
+    si_tx: UnboundedSender<SportIdentMessage>,
+}
+
+impl SportIdentFactory {
+    pub fn new(si_tx: UnboundedSender<SportIdentMessage>) -> Self {
+        Self {
+            devices: HashMap::new(),
+            si_tx,
+        }
+    }
+}
+
+impl UsbSerialFactory for SportIdentFactory {
+    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        SiUart::detect_device(dev, port)
+    }
+
+    fn add_device<'a>(
+        &'a mut self,
+        port: &'a str,
+        device_node: &'a str,
+    ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>> {
+        async move {
+            let serial = TokioSerial::new(port)?;
+            let si_uart = SiUart::new(serial);
+            let token = si_uart.spawn_serial(self.si_tx.clone());
+
+            self.devices.insert(device_node.to_owned(), (token, port.to_owned()));
+            let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
+                added: true,
+                device: port.to_owned(),
+            });
+            info!("Connected to SI UART device at {port}");
+            Ok(())
+        }
+        .boxed()
+    }
+
+    fn remove_device(&mut self, device_node: &str) -> bool {
+        if let Some((token, port)) = self.devices.remove(device_node) {
+            token.cancel();
+            warn!("Removed SI UART device at {port}");
+            let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
+                added: false,
+                device: port,
+            });
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_running(&self, device_node: &str) -> bool {
+        self.devices.contains_key(device_node)
     }
 }

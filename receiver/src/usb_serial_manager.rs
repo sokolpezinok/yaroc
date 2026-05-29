@@ -1,19 +1,12 @@
 use futures::StreamExt;
+use futures::future::BoxFuture;
 use log::{error, info};
-use meshtastic::protobufs::MeshPacket;
 use nusb::hotplug::HotplugEvent;
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
-
-use crate::meshtastic_serial::MeshtasticSerial;
-use crate::si_uart::TokioSerial;
-use crate::system_info::MacAddress;
-use yaroc_common::punch::RawPunch;
-use yaroc_common::si_uart::SiUart;
 
 pub trait UsbSerialTrait {
     type Output;
@@ -46,119 +39,36 @@ pub trait UsbSerialTrait {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum SportIdentMessage {
-    RawPunch(RawPunch),
-    DeviceEvent { added: bool, device: String },
-}
+pub trait UsbSerialFactory: Send + Sync {
+    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool;
 
-impl From<RawPunch> for SportIdentMessage {
-    fn from(punch: RawPunch) -> Self {
-        Self::RawPunch(punch)
-    }
-}
+    fn add_device<'a>(
+        &'a mut self,
+        port: &'a str,
+        device_node: &'a str,
+    ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>>;
 
-enum ManagedDevice {
-    Meshtastic(CancellationToken),
-    SportIdent {
-        cancellation_token: CancellationToken,
-        port: String,
-    },
+    fn remove_device(&mut self, device_node: &str) -> bool;
+
+    fn is_running(&self, device_node: &str) -> bool;
 }
 
 /// Serial device manager
 ///
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
 pub struct UsbSerialManager {
-    devices: HashMap<String, ManagedDevice>,
-    mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
-    si_tx: Option<UnboundedSender<SportIdentMessage>>,
-    enable_meshtastic: bool,
-    enable_sportident: bool,
+    factories: Vec<Box<dyn UsbSerialFactory>>,
 }
 
 impl UsbSerialManager {
     /// Creates a new `SerialDeviceManager`.
-    pub fn new(
-        mesh_tx: Option<UnboundedSender<(MeshPacket, MacAddress)>>,
-        si_tx: Option<UnboundedSender<SportIdentMessage>>,
-    ) -> Self {
-        Self {
-            devices: HashMap::new(),
-            enable_meshtastic: mesh_tx.is_some(),
-            enable_sportident: si_tx.is_some(),
-            mesh_tx,
-            si_tx,
-        }
-    }
-
-    /// Connects to a Meshtastic serial device.
-    pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
-    where
-        M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + Display + 'static,
-    {
-        if let Some(tx) = &self.mesh_tx {
-            let token = msh_serial.spawn_serial(tx.clone());
-            self.devices.insert(device_node.to_owned(), ManagedDevice::Meshtastic(token));
-        }
-    }
-
-    /// Adds a new Meshtastic device to be managed.
-    pub async fn add_meshtastic_device(
-        &mut self,
-        port: &str,
-        device_node: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let msh_serial = MeshtasticSerial::new(port, device_node, Duration::from_secs(12))
-            .await
-            .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
-                err.to_string().into()
-            })?;
-        let mac_address = msh_serial.mac_address();
-        self.add_meshtastic_device_inner(msh_serial, device_node);
-        info!("Connected to Meshtastic device: {mac_address} at {port}");
-        Ok(())
-    }
-
-    /// Connects to a SportIdent serial device.
-    pub fn add_sportident_device_inner<M>(&mut self, si_uart: M, device_node: &str, port: &str)
-    where
-        M: UsbSerialTrait<Output = SportIdentMessage> + Send + Display + 'static,
-    {
-        if let Some(tx) = &self.si_tx {
-            let token = si_uart.spawn_serial(tx.clone());
-            self.devices.insert(
-                device_node.to_owned(),
-                ManagedDevice::SportIdent {
-                    cancellation_token: token,
-                    port: port.to_owned(),
-                },
-            );
-        }
-    }
-
-    /// Adds a new SI UART device to be managed.
-    pub fn add_sportident_device(
-        &mut self,
-        port: &str,
-        device_node: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let serial = TokioSerial::new(port)?;
-        let si_uart = SiUart::new(serial);
-        self.add_sportident_device_inner(si_uart, device_node, port);
-        if let Some(tx) = &self.si_tx {
-            let _ = tx.send(SportIdentMessage::DeviceEvent {
-                added: true,
-                device: port.to_owned(),
-            });
-        }
-        info!("Connected to SI UART device at {port}");
-        Ok(())
+    pub fn new(factories: Vec<Box<dyn UsbSerialFactory>>) -> Self {
+        Self { factories }
     }
 
     /// Indicates whether the device is connected and running.
     pub fn is_running(&self, device_node: &str) -> bool {
-        self.devices.contains_key(device_node)
+        self.factories.iter().any(|f| f.is_running(device_node))
     }
 
     /// Disconnects a serial device.
@@ -166,35 +76,13 @@ impl UsbSerialManager {
     /// This function cancels the task that handles messages from the device and returns true if
     /// the device was connected.
     pub fn remove_device(&mut self, device_node: String) -> bool {
-        if let Some(device) = self.devices.remove(&device_node) {
-            match device {
-                ManagedDevice::Meshtastic(token) => {
-                    token.cancel();
-                }
-                ManagedDevice::SportIdent {
-                    cancellation_token,
-                    port,
-                } => {
-                    cancellation_token.cancel();
-                    if let Some(tx) = &self.si_tx {
-                        let _ = tx.send(SportIdentMessage::DeviceEvent {
-                            added: false,
-                            device: port,
-                        });
-                    }
-                }
-            }
-            true
-        } else {
-            false
-        }
+        self.factories.iter_mut().any(|f| f.remove_device(&device_node))
     }
 
     /// Monitors USB hotplug events and manages devices dynamically.
     pub async fn monitor_usb_devices(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // TODO: print whether we are monitoring meshtastic and Sportident
         info!("Starting USB device manager");
         if let Ok(devices) = nusb::list_devices().await {
             for dev in devices {
@@ -228,25 +116,15 @@ impl UsbSerialManager {
             return;
         };
         for port in ports {
-            if self.enable_sportident && SiUart::<TokioSerial>::detect_device(dev, &port) {
-                let _ = self
-                    .add_sportident_device(&port.port_name, &format!("{:?}", dev.id()))
-                    .inspect_err(|err| {
-                        error!(
-                            "Failed to connect to SI UART device at {}: {err}",
-                            port.port_name
-                        )
-                    });
-            } else if self.enable_meshtastic && MeshtasticSerial::detect_device(dev, &port) {
-                let _ = self
-                    .add_meshtastic_device(&port.port_name, &format!("{:?}", dev.id()))
-                    .await
-                    .inspect_err(|err| {
-                        error!(
-                            "Failed to connect to Meshtastic device at {}: {err}",
-                            port.port_name
-                        )
-                    });
+            for factory in &mut self.factories {
+                if factory.detect_device(dev, &port) {
+                    let _ = factory
+                        .add_device(&port.port_name, &format!("{:?}", dev.id()))
+                        .await
+                        .inspect_err(|err| {
+                            error!("Failed to connect to device at {}: {err}", port.port_name)
+                        });
+                }
             }
         }
     }
@@ -255,7 +133,9 @@ impl UsbSerialManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{meshtastic_serial::MeshtasticEvent, system_info::MacAddress};
+    use crate::{
+        meshtastic::MeshtasticFactory, meshtastic_serial::MeshtasticEvent, system_info::MacAddress,
+    };
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc::{self, Receiver, UnboundedSender};
 
@@ -321,8 +201,9 @@ mod tests {
         };
         tx.send(packet.clone()).await.unwrap();
         let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
-        let mut handler = UsbSerialManager::new(Some(proto_tx), None);
-        handler.add_meshtastic_device_inner(fake_serial, "/some");
+        let mut factory = MeshtasticFactory::new(proto_tx);
+        factory.add_meshtastic_device_inner(fake_serial, "/some");
+        let mut handler = UsbSerialManager::new(vec![Box::new(factory)]);
 
         let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
         assert_eq!(recv_mac, Default::default());

@@ -1,14 +1,21 @@
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
+use futures::future::BoxFuture;
+use futures::future::FutureExt as _;
+use log::{info, warn};
 use meshtastic::Message as MeshtaticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{Data, ServiceEnvelope, Telemetry, telemetry};
 use meshtastic::protobufs::{MeshPacket, PortNum, Position as PositionProto};
 use std::collections::HashMap;
 use std::fmt;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
+use crate::meshtastic_serial::MeshtasticSerial;
 use crate::system_info::{HostInfo, MacAddress};
+use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};
 use yaroc_common::status::{Position, SignalStrength};
 
 /// RSSI and SNR of a received LoRa packet.
@@ -614,6 +621,69 @@ mod test_meshtastic {
             log_message.host_info.mac_address,
             MacAddress::Meshtastic(0x123456)
         );
+    }
+}
+
+pub struct MeshtasticFactory {
+    devices: HashMap<String, CancellationToken>,
+    mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+}
+
+impl MeshtasticFactory {
+    pub fn new(mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>) -> Self {
+        Self {
+            devices: HashMap::new(),
+            mesh_tx,
+        }
+    }
+
+    pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
+    where
+        M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + fmt::Display + 'static,
+    {
+        let token = msh_serial.spawn_serial(self.mesh_tx.clone());
+        self.devices.insert(device_node.to_owned(), token);
+    }
+}
+
+impl UsbSerialFactory for MeshtasticFactory {
+    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        MeshtasticSerial::detect_device(dev, port)
+    }
+
+    fn add_device<'a>(
+        &'a mut self,
+        port: &'a str,
+        device_node: &'a str,
+    ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>> {
+        async move {
+            let msh_serial =
+                MeshtasticSerial::new(port, device_node, std::time::Duration::from_secs(12))
+                    .await
+                    .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
+                        err.to_string().into()
+                    })?;
+            let mac_address = msh_serial.mac_address();
+            self.add_meshtastic_device_inner(msh_serial, device_node);
+            info!("Connected to Meshtastic device: {mac_address} at {port}");
+            Ok(())
+        }
+        .boxed()
+    }
+
+    fn remove_device(&mut self, device_node: &str) -> bool {
+        if let Some(token) = self.devices.remove(device_node) {
+            token.cancel();
+            // TODO: add more info
+            warn!("Removed meshtastic device");
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_running(&self, device_node: &str) -> bool {
+        self.devices.contains_key(device_node)
     }
 }
 

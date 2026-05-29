@@ -1,4 +1,6 @@
-use crate::usb_serial_manager::{SportIdentMessage, UsbSerialManager};
+use crate::meshtastic::MeshtasticFactory;
+use crate::si_uart::{SportIdentFactory, SportIdentMessage};
+use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
     mqtt::{Message, MqttConfig, MqttReceiver},
     state::{Event, FleetState},
@@ -113,16 +115,13 @@ impl MessageHandler {
         enable_meshtastic: bool,
         enable_sportident: bool,
     ) -> UsbSerialManager {
-        let mesh_tx = if enable_meshtastic {
-            Some(self.mesh_proto_tx.clone())
-        } else {
-            None
-        };
-        let si_tx = if enable_sportident {
-            Some(self.punch_tx.clone())
-        } else {
-            None
-        };
-        UsbSerialManager::new(mesh_tx, si_tx)
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        if enable_meshtastic {
+            factories.push(Box::new(MeshtasticFactory::new(self.mesh_proto_tx.clone())));
+        }
+        if enable_sportident {
+            factories.push(Box::new(SportIdentFactory::new(self.punch_tx.clone())));
+        }
+        UsbSerialManager::new(factories)
     }
 }
