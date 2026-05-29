@@ -134,7 +134,8 @@ impl UsbSerialManager {
 mod tests {
     use super::*;
     use crate::{
-        meshtastic::MeshtasticFactory, meshtastic_serial::MeshtasticEvent, system_info::MacAddress,
+        meshtastic_serial::{MeshtasticEvent, MeshtasticFactory},
+        system_info::MacAddress,
     };
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc::{self, Receiver, UnboundedSender};

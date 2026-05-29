@@ -1,4 +1,4 @@
-use crate::meshtastic::MeshtasticFactory;
+use crate::meshtastic_serial::MeshtasticFactory;
 use crate::si_uart::{SportIdentFactory, SportIdentMessage};
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
