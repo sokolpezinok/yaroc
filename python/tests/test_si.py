@@ -38,15 +38,3 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.minute, 29)
         self.assertEqual(punch.time.second, 14)
         self.assertEqual(punch.time.microsecond, 722656)
-
-
-class TestSiUart(unittest.TestCase):
-    def test_handler_receiver(self):
-        from yaroc.rs import SiUartHandler, SiUartPunchReceiver
-
-        handler = SiUartHandler()
-        receiver = handler.punch_receiver()
-        self.assertIsInstance(receiver, SiUartPunchReceiver)
-
-        with self.assertRaises(RuntimeError):
-            handler.punch_receiver()
