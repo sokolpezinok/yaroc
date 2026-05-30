@@ -130,10 +130,10 @@ impl MessageHandler {
     /// * `mqtt_config` - Optional MQTT configuration.
     /// * `node_info_interval` - Interval for sending node info messages.
     #[staticmethod]
-    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
+    #[pyo3(signature = (dns, mqtt_configs=Vec::new(), node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
     pub fn new(
         dns: Vec<(String, String)>,
-        mqtt_config: Option<MqttConfig>,
+        mqtt_configs: Vec<MqttConfig>,
         node_info_interval: Duration,
         enable_meshtastic: bool,
         enable_sportident: bool,
@@ -166,7 +166,7 @@ impl MessageHandler {
 
         let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerRs::new(
             dns?,
-            mqtt_config.map(|config| config.into()).into_iter().collect(),
+            mqtt_configs.into_iter().map(|config| config.into()).collect(),
             node_info_interval,
             usb_serial_config,
         );

@@ -115,7 +115,10 @@ async def main():
 
 
 if is_windows():
-    from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+    from asyncio import (  # type: ignore[attr-defined]
+        WindowsSelectorEventLoopPolicy,
+        set_event_loop_policy,
+    )
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 asyncio.run(main())

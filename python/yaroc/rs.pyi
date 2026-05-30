@@ -87,7 +87,41 @@ class MeshtasticLog(object):
     def __repr__(self) -> str: ...
 
 class Event(object):
-    pass
+    class CellularLog(Event):
+        __match_args__ = ("log",)
+        log: CellularLog
+        def __init__(self, log: CellularLog) -> None: ...
+        def __getitem__(self, index: int) -> CellularLog: ...
+
+    class SiPunchLogs(Event):
+        __match_args__ = ("logs",)
+        logs: List[SiPunchLog]
+        def __init__(self, logs: List[SiPunchLog]) -> None: ...
+        def __getitem__(self, index: int) -> List[SiPunchLog]: ...
+
+    class SiPunch(Event):
+        __match_args__ = ("punch",)
+        punch: SiPunch
+        def __init__(self, punch: SiPunch) -> None: ...
+        def __getitem__(self, index: int) -> SiPunch: ...
+
+    class MeshtasticLog(Event):
+        __match_args__ = ("log",)
+        log: MeshtasticLog
+        def __init__(self, log: MeshtasticLog) -> None: ...
+        def __getitem__(self, index: int) -> MeshtasticLog: ...
+
+    class NodeInfos(Event):
+        __match_args__ = ("node_infos",)
+        node_infos: List[NodeInfo]
+        def __init__(self, node_infos: List[NodeInfo]) -> None: ...
+        def __getitem__(self, index: int) -> List[NodeInfo]: ...
+
+    class DeviceEvnt(Event):
+        __match_args__ = ("added", "device")
+        added: bool
+        device: str
+        def __init__(self, added: bool, device: str) -> None: ...
 
 class UsbSerialManager(object):
     async def loop(self): ...
@@ -99,7 +133,7 @@ class MessageHandler(object):
     @staticmethod
     def new(
         dns: List[Tuple[str, str]],
-        config: MqttConfig | None = None,
+        mqtt_configs: List[MqttConfig] = [],
         node_info_interval: timedelta = ...,
         enable_meshtastic: bool = False,
         enable_sportident: bool = False,

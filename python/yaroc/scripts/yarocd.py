@@ -34,14 +34,14 @@ class YarocDaemon:
         dns: List[Tuple[str, str]],
         client_group: ClientGroup,
         display_model: str | None = None,
-        mqtt_config: MqttConfig | None = None,
+        mqtt_configs: List[MqttConfig] | None = None,
         meshtastic_serial: bool = False,
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
         self.handler, usb_serial_manager = MessageHandler.new(
             dns,
-            mqtt_config,
+            mqtt_configs if mqtt_configs is not None else [],
             enable_meshtastic=meshtastic_serial,
             enable_sportident=sportident_factory is not None,
             sportident_factory=sportident_factory,
@@ -161,12 +161,22 @@ async def main_loop() -> None:
     container.init_resources()
     container.wire(modules=["yaroc.utils.container"])
 
-    mqtt_toml_conf = config.get("mqtt", {})
-    mqtt_config = MqttConfig()
-    mqtt_config.url = mqtt_toml_conf.get("broker_url", BROKER_URL)
-    mqtt_config.port = mqtt_toml_conf.get("broker_port", BROKER_PORT)
-    if "password" in mqtt_toml_conf:
-        mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
+    mqtt_toml = config.get("mqtt", {})
+    if isinstance(mqtt_toml, dict):
+        mqtt_toml_confs = [mqtt_toml]
+    elif isinstance(mqtt_toml, list):
+        mqtt_toml_confs = mqtt_toml
+    else:
+        mqtt_toml_confs = []
+
+    mqtt_configs = []
+    for mqtt_toml_conf in mqtt_toml_confs:
+        mqtt_config = MqttConfig()
+        mqtt_config.url = mqtt_toml_conf.get("broker_url", BROKER_URL)
+        mqtt_config.port = mqtt_toml_conf.get("broker_port", BROKER_PORT)
+        if "password" in mqtt_toml_conf:
+            mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
+        mqtt_configs.append(mqtt_config)
 
     mac_addresses = config.get("mac-addresses", {})
     if "client" in config:
@@ -178,7 +188,8 @@ async def main_loop() -> None:
 
     dns = [(mac_address, name) for name, mac_address in mac_addresses.items()]
     meshtastic_conf = config.get("meshtastic", {})
-    mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
+    for mqtt_config in mqtt_configs:
+        mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
 
     watch_si_usb = config.get("client", {}).get("serial", {}).get("watch_si_usb", False)
     sportident_factory = None
@@ -192,7 +203,7 @@ async def main_loop() -> None:
         dns,
         client_group,
         config.get("display", None),
-        mqtt_config,
+        mqtt_configs,
         meshtastic_serial=meshtastic_conf.get("watch_usb", True),
         sportident_factory=sportident_factory,
     )
@@ -200,7 +211,10 @@ async def main_loop() -> None:
 
 
 if is_windows():
-    from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+    from asyncio import (  # type: ignore[attr-defined]
+        WindowsSelectorEventLoopPolicy,
+        set_event_loop_policy,
+    )
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 

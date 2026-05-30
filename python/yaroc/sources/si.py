@@ -49,7 +49,7 @@ class UdevSiFactory(SiWorker):
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         self.handler, self.usb_serial_manager = MessageHandler.new(
-            self.dns, None, enable_meshtastic=self.enable_meshtastic, enable_sportident=True
+            self.dns, [], enable_meshtastic=self.enable_meshtastic, enable_sportident=True
         )
         await asyncio.gather(
             self.usb_serial_manager.loop(),
