@@ -207,6 +207,23 @@ With a config file present, we are able to run the YAROC daemon called `yarocd`:
 yarocd
 ```
 
+### Advanced: Listening to multiple MQTT servers
+
+For more advanced setups or redundancy, the `yarocd` daemon can listen to multiple MQTT brokers simultaneously. Instead of a single `[mqtt]` table in `yarocd.toml`, you can define multiple brokers using the TOML array of tables syntax `[[mqtt]]`:
+
+```toml
+[[mqtt]]
+broker_url = "broker.emqx.io"
+
+[[mqtt]]
+broker_url = "another-broker.com"
+broker_port = 1883
+username = "my_user"
+password = "my_password"
+```
+
+When configured this way, `yarocd` will establish concurrent connections to all defined brokers.
+
 # Development
 
 In order to start developing, install the dependencies using `uv`:
