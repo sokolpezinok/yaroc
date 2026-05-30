@@ -34,14 +34,14 @@ class YarocDaemon:
         dns: List[Tuple[str, str]],
         client_group: ClientGroup,
         display_model: str | None = None,
-        mqtt_configs: List[MqttConfig] | None = None,
+        mqtt_configs: List[MqttConfig] = [],
         meshtastic_serial: bool = False,
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
         self.handler, usb_serial_manager = MessageHandler.new(
             dns,
-            mqtt_configs if mqtt_configs is not None else [],
+            mqtt_configs,
             enable_meshtastic=meshtastic_serial,
             enable_sportident=sportident_factory is not None,
             sportident_factory=sportident_factory,

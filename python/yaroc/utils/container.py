@@ -36,7 +36,6 @@ def get_log_level(log_level: str | None) -> int:
 
 
 def create_si_workers(
-    source_factories: providers.FactoryAggregate,
     config: Dict[str, Any] | None,
     meshtastic_config: Dict[str, Any] | None = None,
 ) -> list[SiWorker]:
@@ -50,10 +49,10 @@ def create_si_workers(
                 watch_usb = meshtastic_config.get("watch_usb", False)
                 mac_addresses = meshtastic_config.get("mac-addresses", {})
                 dns = [(mac_address, name) for name, mac_address in mac_addresses.items()]
-            workers.append(source_factories.udev(enable_meshtastic=watch_usb, dns=dns))
+            workers.append(UdevSiFactory(enable_meshtastic=watch_usb, dns=dns))
         if config.get("fake", {}).get("enable", False):
             logging.info("Enabled fake punch source")
-            workers.append(source_factories.fake())
+            workers.append(FakeSiWorker(config.get("fake", {}).get("interval")))
     return workers
 
 
@@ -82,12 +81,8 @@ class Container(containers.DeclarativeContainer):
         ),
         roc=providers.Factory(RocClient),
     )
-    source_factories: providers.FactoryAggregate[SiWorker] = providers.FactoryAggregate(
-        udev=providers.Factory(UdevSiFactory),
-        fake=providers.Factory(FakeSiWorker, config.punch_source.fake.interval),
-    )
     workers = providers.Callable(
-        create_si_workers, source_factories, config.punch_source, config.meshtastic
+        create_si_workers, config.punch_source, config.meshtastic
     )
     si_manager = providers.Factory(SiPunchManager, workers)
 
