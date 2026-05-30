@@ -7,9 +7,9 @@ use crate::{
     system_info::MacAddress,
 };
 use chrono::Local;
-use log::error;
+use futures::future::select_all;
 use meshtastic::protobufs::MeshPacket;
-use std::time::Duration;
+use std::{future::pending, pin::Pin, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use yaroc_common::punch::SiPunch;
 
@@ -19,10 +19,9 @@ use yaroc_common::punch::SiPunch;
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
+    mqtt_receivers: Vec<MqttReceiver>,
     mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     punch_rx: UnboundedReceiver<SportIdentMessage>,
-    mqtt_tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
 pub enum SportIdentConfig {
@@ -68,31 +67,11 @@ impl MessageHandler {
         let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
         let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
 
-        let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
-        let mut mqtt_tasks = Vec::new();
-        for mut receiver in mqtt_receivers {
-            let mqtt_tx = mqtt_tx.clone();
-            let task = tokio::spawn(async move {
-                loop {
-                    let msg = receiver.next_message().await;
-                    let res = msg.and_then(|msg| {
-                        mqtt_tx.send(Ok(msg)).map_err(|_| crate::error::Error::ChannelSendError)
-                    });
-                    if let Err(e) = res {
-                        // TODO: print also which receiver/server it is
-                        error!("Error while receiving and forwarding MQTT message: {e}");
-                    }
-                }
-            });
-            mqtt_tasks.push(task);
-        }
-
         let handler = Self {
             fleet_state: FleetState::new(dns, node_infos_interval),
-            mqtt_rx,
+            mqtt_receivers,
             mesh_packet_rx,
             punch_rx,
-            mqtt_tasks,
         };
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
@@ -122,17 +101,21 @@ impl MessageHandler {
     /// Returns an error if any of the underlying event parsing or state updates fail.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
         loop {
+            let mut mqtt_futures: Vec<_> = self
+                .mqtt_receivers
+                .iter_mut()
+                .map(|receiver: &mut MqttReceiver| {
+                    Box::pin(receiver.next_message())
+                        as Pin<Box<dyn Future<Output = crate::Result<Message>> + Send>>
+                })
+                .collect();
+            if mqtt_futures.is_empty() {
+                mqtt_futures.push(Box::pin(pending::<crate::Result<Message>>()));
+            }
             tokio::select! {
-                mqtt_recv = self.mqtt_rx.recv() => {
-                    match mqtt_recv {
-                        Some(mqtt_message) => {
-                            if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
-                                return Ok(message);
-                            }
-                        }
-                        None => {
-                            // All MQTT receivers closed their channels (exited)
-                        }
+                (mqtt_message, _idx, _) = select_all(mqtt_futures.into_iter()) => {
+                    if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
+                        return Ok(message);
                     }
                 }
                 mesh_recv = self.mesh_packet_rx.recv() => {
@@ -166,15 +149,6 @@ impl MessageHandler {
                     return Ok(Event::NodeInfos(node_infos));
                 }
             }
-        }
-    }
-}
-
-impl Drop for MessageHandler {
-    /// Cleans up the `MessageHandler` by aborting all spawned MQTT receiver background tasks.
-    fn drop(&mut self) {
-        for task in &self.mqtt_tasks {
-            task.abort();
         }
     }
 }
