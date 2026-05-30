@@ -91,16 +91,18 @@ class YarocDaemon:
 
     def _handle_event(self, ev: Event) -> asyncio.Task | None:
         match ev:
-            case Event.SiPunchLogs():  # type: ignore
-                return asyncio.create_task(self._handle_punches(ev[0]))
-            case Event.SiPunch():  # type: ignore
-                return asyncio.create_task(self._handle_punch(ev[0]))
-            case Event.CellularLog():  # type: ignore
-                return asyncio.create_task(self._handle_cellular_log(ev[0]))
-            case Event.MeshtasticLog():  # type: ignore
-                return asyncio.create_task(self._handle_meshtastic_log(ev[0]))
-            case Event.NodeInfos():  # type: ignore
-                return asyncio.create_task(self._draw_table(ev[0]))
+            case Event.SiPunchLogs(logs):
+                return asyncio.create_task(self._handle_punches(logs))
+            case Event.SiPunch(punch):
+                return asyncio.create_task(self._handle_punch(punch))
+            case Event.CellularLog(log):
+                return asyncio.create_task(self._handle_cellular_log(log))
+            case Event.MeshtasticLog(log):
+                return asyncio.create_task(self._handle_meshtastic_log(log))
+            case Event.NodeInfos(node_infos):
+                return asyncio.create_task(self._draw_table(node_infos))
+            case Event.DeviceEvnt(added, device):
+                logging.info(f"Device event: added={added}, device={device}")
         return None
 
     async def _draw_table(self, node_infos: list[NodeInfo]):
