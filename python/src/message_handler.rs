@@ -6,7 +6,9 @@ use tokio::sync::Mutex;
 use yaroc_receiver::usb_serial_manager::UsbSerialManager as UsbSerialManagerRs;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
-use yaroc_receiver::message_handler::MessageHandler as MessageHandlerRs;
+use yaroc_receiver::message_handler::{
+    MessageHandler as MessageHandlerRs, SportIdentConfig, UsbSerialConfig,
+};
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
 use yaroc_receiver::system_info::MacAddress;
@@ -146,12 +148,22 @@ impl MessageHandler {
                 ))
             })
             .collect();
+
+        let sportident = if enable_sportident {
+            SportIdentConfig::Passive
+        } else {
+            SportIdentConfig::None
+        };
+        let usb_serial_config = UsbSerialConfig {
+            enable_meshtastic,
+            sportident,
+        };
+
         let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerRs::new(
             dns?,
             mqtt_config.map(|config| config.into()).into_iter().collect(),
             node_info_interval,
-            enable_meshtastic,
-            enable_sportident,
+            usb_serial_config,
         );
         let inner = Arc::new(Mutex::new(message_handler_rs));
         Ok((

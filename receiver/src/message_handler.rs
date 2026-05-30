@@ -25,6 +25,17 @@ pub struct MessageHandler {
     mqtt_tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
+pub enum SportIdentConfig {
+    None,
+    Passive,
+    Active(Box<dyn UsbSerialFactory>),
+}
+
+pub struct UsbSerialConfig {
+    pub enable_meshtastic: bool,
+    pub sportident: SportIdentConfig,
+}
+
 impl MessageHandler {
     /// Creates a new `MessageHandler` along with a `UsbSerialManager`.
     ///
@@ -36,8 +47,7 @@ impl MessageHandler {
     /// * `dns` - A mapping of DNS-like host names to device MAC addresses.
     /// * `mqtt_configs` - Configs for the MQTT servers to connect to and listen for messages.
     /// * `node_infos_interval` - The interval at which node info updates are published.
-    /// * `enable_meshtastic` - If true, initializes a `MeshtasticFactory` to receive serial data.
-    /// * `enable_sportident` - If true, initializes a `SportIdentFactory` to receive raw punches.
+    /// * `config` - Configuration for connected serial devices.
     ///
     /// # Returns
     ///
@@ -48,8 +58,7 @@ impl MessageHandler {
         dns: Vec<(String, MacAddress)>,
         mqtt_configs: Vec<MqttConfig>,
         node_infos_interval: Duration,
-        enable_meshtastic: bool,
-        enable_sportident: bool,
+        config: UsbSerialConfig,
     ) -> (Self, UsbSerialManager) {
         let macs = dns.iter().map(|(_, mac)| mac);
         let mqtt_receivers: Vec<MqttReceiver> = mqtt_configs
@@ -87,11 +96,17 @@ impl MessageHandler {
         };
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
-        if enable_meshtastic {
+        if config.enable_meshtastic {
             factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx)));
         }
-        if enable_sportident {
-            factories.push(Box::new(SportIdentFactory::new(punch_tx)));
+        match config.sportident {
+            SportIdentConfig::Passive => {
+                factories.push(Box::new(SportIdentFactory::new(punch_tx)));
+            }
+            SportIdentConfig::Active(factory) => {
+                factories.push(factory);
+            }
+            SportIdentConfig::None => {}
         }
         (handler, UsbSerialManager::new(factories))
     }

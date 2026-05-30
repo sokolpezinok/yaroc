@@ -351,9 +351,21 @@ impl SerialClient {
     ) -> PyResult<Bound<'a, PyAny>> {
         future_into_py(py, future::ready(Ok(())))
     }
+
+    /// Creates an opaque factory object to be passed to MessageHandler.new()
+    pub fn usb_serial_factory(&self) -> PyUsbSerialFactory {
+        PyUsbSerialFactory {
+            mini_reader_connect_tx: self.mini_reader_connect_tx.clone(),
+        }
+    }
 }
 
-impl UsbSerialFactory for SerialClient {
+#[pyclass]
+pub struct PyUsbSerialFactory {
+    mini_reader_connect_tx: UnboundedSender<String>,
+}
+
+impl UsbSerialFactory for PyUsbSerialFactory {
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         SportIdentFactory::detect_device(dev, port)
     }

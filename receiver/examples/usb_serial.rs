@@ -3,7 +3,11 @@
 use clap::Parser;
 use log::{error, info};
 use std::time::Duration;
-use yaroc_receiver::{message_handler::MessageHandler, state::Event, system_info::MacAddress};
+use yaroc_receiver::{
+    message_handler::{MessageHandler, SportIdentConfig, UsbSerialConfig},
+    state::Event,
+    system_info::MacAddress,
+};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -32,8 +36,12 @@ async fn main() {
         }
     }
 
+    let usb_serial_config = UsbSerialConfig {
+        enable_meshtastic: true,
+        sportident: SportIdentConfig::Passive,
+    };
     let (mut msg_handler, mut usb_serial_manager) =
-        MessageHandler::new(dns, Vec::new(), Duration::from_secs(60), true, true);
+        MessageHandler::new(dns, Vec::new(), Duration::from_secs(60), usb_serial_config);
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = usb_serial_manager.monitor_usb_devices().await {
