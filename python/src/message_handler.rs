@@ -14,6 +14,7 @@ use yaroc_receiver::state::Event as EventRs;
 use yaroc_receiver::system_info::MacAddress;
 
 use crate::punch::{SiPunch, SiPunchLog};
+use crate::serial_client::PyUsbSerialFactory;
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
 /// Events that can be processed by the Python application.
@@ -129,13 +130,14 @@ impl MessageHandler {
     /// * `mqtt_config` - Optional MQTT configuration.
     /// * `node_info_interval` - Interval for sending node info messages.
     #[staticmethod]
-    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false))]
+    #[pyo3(signature = (dns, mqtt_config=None, node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
     pub fn new(
         dns: Vec<(String, String)>,
         mqtt_config: Option<MqttConfig>,
         node_info_interval: Duration,
         enable_meshtastic: bool,
         enable_sportident: bool,
+        sportident_factory: Option<Bound<'_, PyUsbSerialFactory>>,
     ) -> PyResult<(Self, UsbSerialManager)> {
         let dns: PyResult<Vec<(String, MacAddress)>> = dns
             .into_iter()
@@ -149,7 +151,10 @@ impl MessageHandler {
             })
             .collect();
 
-        let sportident = if enable_sportident {
+        let sportident = if let Some(factory_bound) = sportident_factory {
+            let factory = factory_bound.borrow().clone();
+            SportIdentConfig::Active(Box::new(factory))
+        } else if enable_sportident {
             SportIdentConfig::Passive
         } else {
             SportIdentConfig::None

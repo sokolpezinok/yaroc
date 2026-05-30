@@ -66,7 +66,7 @@ pub mod rs {
     #[pymodule_export]
     use crate::punch::{SiPunch, SiPunchLog};
     #[pymodule_export]
-    use crate::serial_client::SerialClient;
+    use crate::serial_client::{PyUsbSerialFactory, SerialClient};
     #[pymodule_export]
     use crate::status::{CellularLog, HostInfo, MeshtasticLog, NodeInfo};
     #[pymodule_export]

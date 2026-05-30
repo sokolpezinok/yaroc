@@ -18,6 +18,8 @@ from ..rs import (
     MessageHandler,
     MqttConfig,
     NodeInfo,
+    PyUsbSerialFactory,
+    SerialClient,
     SiPunch,
     SiPunchLog,
 )
@@ -34,12 +36,19 @@ class YarocDaemon:
         display_model: str | None = None,
         mqtt_config: MqttConfig | None = None,
         meshtastic_serial: bool = False,
+        sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
         self.handler, usb_serial_manager = MessageHandler.new(
-            dns, mqtt_config, enable_meshtastic=meshtastic_serial, enable_sportident=False
+            dns,
+            mqtt_config,
+            enable_meshtastic=meshtastic_serial,
+            enable_sportident=sportident_factory is not None,
+            sportident_factory=sportident_factory,
         )
-        self.usb_serial_manager = usb_serial_manager if meshtastic_serial else None
+        self.usb_serial_manager = (
+            usb_serial_manager if (meshtastic_serial or sportident_factory is not None) else None
+        )
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
         hostname = socket.gethostname()
@@ -168,13 +177,22 @@ async def main_loop() -> None:
     dns = [(mac_address, name) for name, mac_address in mac_addresses.items()]
     meshtastic_conf = config.get("meshtastic", {})
     mqtt_config.meshtastic_channel = meshtastic_conf.get("main_channel", None)
-    meshtastic_serial = meshtastic_conf.get("watch_usb", False)
+
+    watch_si_usb = config.get("client", {}).get("serial", {}).get("watch_si_usb", False)
+    sportident_factory = None
+    if watch_si_usb:
+        for client in client_group.clients:
+            if isinstance(client, SerialClient):
+                logging.info("Creating SerialClient for watch_si_usb")
+                sportident_factory = client.usb_serial_factory()
+
     yaroc_daemon = YarocDaemon(
         dns,
         client_group,
         config.get("display", None),
         mqtt_config,
-        meshtastic_serial=meshtastic_serial,
+        meshtastic_serial=meshtastic_conf.get("watch_usb", True),
+        sportident_factory=sportident_factory,
     )
     await yaroc_daemon.loop()
 

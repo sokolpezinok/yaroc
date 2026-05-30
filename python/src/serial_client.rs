@@ -360,7 +360,8 @@ impl SerialClient {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
+#[derive(Clone)]
 pub struct PyUsbSerialFactory {
     mini_reader_connect_tx: UnboundedSender<String>,
 }
