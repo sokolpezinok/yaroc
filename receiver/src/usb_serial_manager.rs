@@ -128,63 +128,20 @@ impl UsbSerialManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        meshtastic_serial::{MeshtasticEvent, MeshtasticFactory},
-        system_info::MacAddress,
-    };
+    use crate::{meshtastic_serial::MeshtasticFactory, system_info::MacAddress};
     use meshtastic::protobufs::MeshPacket;
-    use tokio::sync::mpsc::{self, Receiver, UnboundedSender};
+    use tokio::sync::mpsc;
 
-    pub struct FakeMeshtasticSerial {
-        mac_address: MacAddress,
-        rx: Receiver<MeshPacket>,
-    }
-
-    impl Display for FakeMeshtasticSerial {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "fake meshtastic serial")
-        }
-    }
-
-    impl FakeMeshtasticSerial {
-        pub fn new(mac_address: MacAddress, rx: Receiver<MeshPacket>) -> Self {
-            Self { mac_address, rx }
-        }
-
-        async fn next_message(&mut self) -> MeshtasticEvent {
-            let packet = self.rx.recv().await;
-            match packet {
-                Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
-                None => MeshtasticEvent::Disconnected("Fake".to_owned()),
-            }
-        }
-    }
-
-    impl UsbSerialTrait for FakeMeshtasticSerial {
-        type Output = (MeshPacket, MacAddress);
-
-        /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-        async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
-            loop {
-                let event = self.next_message().await;
-                match event {
-                    MeshtasticEvent::MeshPacket(mesh_packet) => {
-                        mesh_proto_tx
-                            .send((mesh_packet, self.mac_address))
-                            .expect("Channel unexpectedly closed");
-                    }
-                    MeshtasticEvent::Disconnected(_device_node) => {
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    use crate::test_utils::FakeMeshtasticSerial;
 
     #[tokio::test]
     async fn test_meshtastic_serial() {
+        let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
+        let mut factory = MeshtasticFactory::new(proto_tx);
         let (tx, rx) = mpsc::channel(1);
         let fake_serial = FakeMeshtasticSerial::new(MacAddress::default(), rx);
+        factory.add_meshtastic_device_inner(fake_serial, "/some");
+        let mut handler = UsbSerialManager::new(vec![Box::new(factory)]);
 
         let packet = MeshPacket {
             from: 0x1234,
@@ -192,11 +149,6 @@ mod tests {
             ..Default::default()
         };
         tx.send(packet.clone()).await.unwrap();
-        let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
-        let mut factory = MeshtasticFactory::new(proto_tx);
-        factory.add_meshtastic_device_inner(fake_serial, "/some");
-        let mut handler = UsbSerialManager::new(vec![Box::new(factory)]);
-
         let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
         assert_eq!(recv_mac, Default::default());
         assert_eq!(recv_packet, packet);

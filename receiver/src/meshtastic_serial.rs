@@ -226,3 +226,31 @@ impl UsbSerialFactory for MeshtasticFactory {
         self.devices.contains_key(device_node)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::FakeMeshtasticSerial;
+    use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn test_meshtastic_factory_management() {
+        let (mesh_tx, mut _mesh_rx) = mpsc::unbounded_channel();
+        let mut factory = MeshtasticFactory::new(mesh_tx);
+
+        let (_rx_tx, rx_rx) = mpsc::channel(1);
+        let fake_serial = FakeMeshtasticSerial::new(MacAddress::default(), rx_rx);
+
+        assert!(!factory.is_running("/dev/ttyUSB0"));
+
+        factory.add_meshtastic_device_inner(fake_serial, "/dev/ttyUSB0");
+        assert!(factory.is_running("/dev/ttyUSB0"));
+
+        let removed = factory.remove_device("/dev/ttyUSB0");
+        assert!(removed);
+        assert!(!factory.is_running("/dev/ttyUSB0"));
+
+        let removed_again = factory.remove_device("/dev/ttyUSB0");
+        assert!(!removed_again);
+    }
+}

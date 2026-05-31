@@ -10,3 +10,6 @@ pub mod system_info;
 pub mod usb_serial_manager;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
+
+#[cfg(test)]
+pub mod test_utils;
