@@ -89,8 +89,6 @@ impl UsbSerialManager {
         while let Some(event) = watcher.next().await {
             match event {
                 HotplugEvent::Connected(dev) => {
-                    // Give the OS TTY subsystem a brief moment to register the node
-                    tokio::time::sleep(Duration::from_secs(3)).await;
                     self.detect_device(&dev).await;
                 }
                 HotplugEvent::Disconnected(dev_id) => {
@@ -110,6 +108,8 @@ impl UsbSerialManager {
         let Ok(ports) = serialport::available_ports() else {
             return;
         };
+        // Give the OS TTY subsystem a brief moment to register the node
+        tokio::time::sleep(Duration::from_secs(3)).await;
         for port in ports {
             for factory in &mut self.factories {
                 if factory.detect_device(dev, &port) {

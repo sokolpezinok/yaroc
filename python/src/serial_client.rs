@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 use std::{future, sync::Arc};
 
@@ -356,6 +357,7 @@ impl SerialClient {
     pub fn usb_serial_factory(&self) -> PyUsbSerialFactory {
         PyUsbSerialFactory {
             mini_reader_connect_tx: self.mini_reader_connect_tx.clone(),
+            running_devices: HashSet::new(),
         }
     }
 }
@@ -364,6 +366,7 @@ impl SerialClient {
 #[derive(Clone)]
 pub struct PyUsbSerialFactory {
     mini_reader_connect_tx: UnboundedSender<String>,
+    running_devices: HashSet<String>,
 }
 
 impl UsbSerialFactory for PyUsbSerialFactory {
@@ -384,8 +387,9 @@ impl UsbSerialFactory for PyUsbSerialFactory {
     fn add_device<'a>(
         &'a mut self,
         port: &'a str,
-        _device_node: &'a str,
+        device_node: &'a str,
     ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>> {
+        self.running_devices.insert(device_node.to_owned());
         let tx = self.mini_reader_connect_tx.clone();
         future::ready(
             tx.send(port.to_owned())
@@ -397,14 +401,12 @@ impl UsbSerialFactory for PyUsbSerialFactory {
         .boxed()
     }
 
-    fn remove_device(&mut self, _device_node: &str) -> bool {
-        //TODO
-        true
+    fn remove_device(&mut self, device_node: &str) -> bool {
+        self.running_devices.remove(device_node)
     }
 
-    fn is_running(&self, _device_node: &str) -> bool {
-        //TODO
-        true
+    fn is_running(&self, device_node: &str) -> bool {
+        self.running_devices.contains(device_node)
     }
 }
 
