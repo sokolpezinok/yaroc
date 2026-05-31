@@ -100,15 +100,16 @@ pub struct UsbSerialManager {
 impl UsbSerialManager {
     /// Asynchronously runs a background loop to automatically monitor USB hotplug events
     /// and add/remove Meshtastic devices accordingly.
-    pub fn r#loop<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+    pub async fn r#loop(&self) -> PyResult<()> {
         let inner = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py::<_, ()>(py, async move {
+        crate::python::run_on_tokio(async move {
             let mut manager = inner.lock().await;
             manager
                 .monitor_usb_devices()
                 .await
                 .map_err(|err| PyRuntimeError::new_err(format!("USB monitor error: {err}")))
         })
+        .await
     }
 }
 
@@ -127,8 +128,11 @@ impl MessageHandler {
     /// # Arguments
     ///
     /// * `dns` - A list of (mac_address, name) tuples for resolving node names.
-    /// * `mqtt_config` - Optional MQTT configuration.
+    /// * `mqtt_configs` - A list of MQTT configurations.
     /// * `node_info_interval` - Interval for sending node info messages.
+    /// * `enable_meshtastic` - Whether to enable Meshtastic support.
+    /// * `enable_sportident` - Whether to enable SportIdent support.
+    /// * `sportident_factory` - Optional factory for creating SportIdent serial connections.
     #[staticmethod]
     #[pyo3(signature = (dns, mqtt_configs=Vec::new(), node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
     pub fn new(
@@ -180,10 +184,10 @@ impl MessageHandler {
     }
 
     /// Waits for the next event from the message handler.
-    pub fn next_event<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
-        let handler = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py::<_, Event>(py, async move {
-            let mut handler = handler.lock().await;
+    pub async fn next_event(&self) -> PyResult<Event> {
+        let inner = self.inner.clone();
+        crate::python::run_on_tokio(async move {
+            let mut handler = inner.lock().await;
             let message =
                 handler.next_event().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             match message {
@@ -199,5 +203,6 @@ impl MessageHandler {
                 EventRs::DeviceEvent { added, device } => Ok(Event::DeviceEvnt { added, device }),
             }
         })
+        .await
     }
 }

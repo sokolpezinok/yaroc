@@ -1,5 +1,20 @@
 use chrono::Local;
 use pyo3::prelude::*;
+use std::sync::OnceLock;
+use tokio::runtime::Runtime;
+
+pub fn get_tokio_rt() -> &'static Runtime {
+    static RT: OnceLock<Runtime> = OnceLock::new();
+    RT.get_or_init(|| tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap())
+}
+
+pub async fn run_on_tokio<F, O>(f: F) -> O
+where
+    F: std::future::Future<Output = O> + Send + 'static,
+    O: Send + 'static,
+{
+    get_tokio_rt().spawn(f).await.unwrap()
+}
 
 #[pyclass(eq, eq_int)]
 #[derive(PartialEq)]

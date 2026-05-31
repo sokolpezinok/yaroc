@@ -7,7 +7,7 @@ use futures::future::BoxFuture;
 use log::{error, info, warn};
 use pyo3::exceptions::PyConnectionError;
 use pyo3::prelude::*;
-use pyo3_async_runtimes::tokio::future_into_py;
+
 use tokio::io::{
     AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadHalf, WriteHalf, split,
 };
@@ -29,7 +29,8 @@ type MiniReaderConnectRx = Arc<Mutex<UnboundedReceiver<String>>>;
 ///
 /// This struct manages the reading from and writing to a serial port,
 /// allowing communication with SI devices and responding as a blue SRR (SportIdent Reader).
-#[pyclass]
+#[pyclass(skip_from_py_object)]
+#[derive(Clone)]
 pub struct SerialClient {
     computer_rx: ReadMutex<SerialStream>,
     computer_tx: WriteMutex<SerialStream>,
@@ -60,9 +61,9 @@ impl SerialClient {
     /// This function handles the communication protocol with orienteering software,
     /// specifically MeOS and SportIdent Reader, by sending predefined responses.
     async fn respond_as_blue_srr<R, W>(
-        computer_rx: ReadMutex<R>,
-        computer_tx: WriteMutex<W>,
-        mini_reader_connect_rx: MiniReaderConnectRx,
+        computer_rx: &ReadMutex<R>,
+        computer_tx: &WriteMutex<W>,
+        mini_reader_connect_rx: &MiniReaderConnectRx,
     ) -> Option<String>
     where
         R: AsyncRead + Unpin + Send,
@@ -124,10 +125,10 @@ impl SerialClient {
     /// * `computer_tx` - An `Arc<Mutex<WriteHalf<SerialStream>>>` for writing to the computer.
     /// * `mini_reader` - A mutable reference to the `SerialStream` connected to the mini-reader.
     async fn respond_as_mini_reader(
-        computer_rx: ReadMutex<SerialStream>,
-        computer_tx: WriteMutex<SerialStream>,
+        computer_rx: &ReadMutex<SerialStream>,
+        computer_tx: &WriteMutex<SerialStream>,
         mini_reader: &mut SerialStream,
-        mini_reader_connect_rx: MiniReaderConnectRx,
+        mini_reader_connect_rx: &MiniReaderConnectRx,
     ) -> Option<String> {
         let mut tx_guard = None;
         let mut rx = computer_rx.lock().await;
@@ -212,17 +213,12 @@ impl SerialClient {
     /// # Arguments
     /// * `computer_port` - The path to the serial port (e.g., /dev/serial0, /dev/ttyUSB0).
     /// * `retry` - If true, retries sending each punch 2 more times.
-    /// * `py` - Python interpreter instance.
     ///
     /// # Returns
-    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves to a `SerialClient` instance.
+    /// A `PyResult` containing a `SerialClient` instance.
     #[staticmethod]
-    pub fn create<'a>(
-        computer_port: String,
-        retry: Option<bool>,
-        py: Python<'a>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        future_into_py::<_, SerialClient>(py, async move {
+    pub async fn create(computer_port: String, retry: Option<bool>) -> PyResult<SerialClient> {
+        crate::python::run_on_tokio(async move {
             let builder = tokio_serial::new(&computer_port, BAUD_RATE);
             let computer_serial = builder.open_native_async().map_err(|e| {
                 PyConnectionError::new_err(format!("Error connecting to {}: {e}", computer_port))
@@ -252,6 +248,7 @@ impl SerialClient {
                 retry_times,
             })
         })
+        .await
     }
 
     /// Name of the client
@@ -264,34 +261,27 @@ impl SerialClient {
     /// This method runs an infinite loop that calls `respond_as_blue_srr` to handle
     /// incoming communication from orienteering software.
     ///
-    /// # Arguments
-    /// * `py` - Python interpreter instance.
-    ///
     /// # Returns
-    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves when the loop starts.
-    pub fn r#loop<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+    /// A `PyResult` indicating success or failure.
+    pub async fn r#loop(&self) -> PyResult<()> {
         let computer_rx = self.computer_rx.clone();
         let computer_tx = self.computer_tx.clone();
-        let mini_reader = self.mini_reader.clone();
         let mini_reader_connect_rx = self.mini_reader_connect_rx.clone();
-        future_into_py::<_, ()>(py, async move {
-            let mut mini_reader = mini_reader.lock().await;
+        let mini_reader_mutex = self.mini_reader.clone();
+        crate::python::run_on_tokio(async move {
+            let mut mini_reader = mini_reader_mutex.lock().await;
             loop {
                 let device = if let Some(mini_reader_stream) = mini_reader.as_mut() {
                     Self::respond_as_mini_reader(
-                        computer_rx.clone(),
-                        computer_tx.clone(),
+                        &computer_rx,
+                        &computer_tx,
                         mini_reader_stream,
-                        mini_reader_connect_rx.clone(),
+                        &mini_reader_connect_rx,
                     )
                     .await
                 } else {
-                    Self::respond_as_blue_srr(
-                        computer_rx.clone(),
-                        computer_tx.clone(),
-                        mini_reader_connect_rx.clone(),
-                    )
-                    .await
+                    Self::respond_as_blue_srr(&computer_rx, &computer_tx, &mini_reader_connect_rx)
+                        .await
                 };
                 let res = device.map(Self::connect_to_mini_reader).transpose();
                 match res {
@@ -300,27 +290,23 @@ impl SerialClient {
                 }
             }
         })
+        .await
     }
 
     /// Sends a SportIdent punch log via the serial port.
     ///
     /// # Arguments
-    /// * `py` - Python interpreter instance.
     /// * `punch_log` - The `SiPunchLog` containing the raw punch data to send.
     ///
     /// # Returns
-    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves when the punch is sent.
-    pub fn send_punch_noexcept<'a>(
-        &self,
-        py: Python<'a>,
-        punch_log: &SiPunchLog,
-    ) -> PyResult<Bound<'a, PyAny>> {
+    /// A `PyResult` indicating success or failure.
+    pub async fn send_punch_noexcept(&self, punch_log: SiPunchLog) -> PyResult<()> {
         let computer_tx = self.computer_tx.clone();
-        let raw_punch = punch_log.punch.raw;
-        let card = punch_log.punch.card;
         let retry_times = self.retry_times.clone();
+        crate::python::run_on_tokio(async move {
+            let raw_punch = punch_log.punch.raw;
+            let card = punch_log.punch.card;
 
-        future_into_py(py, async move {
             for (i, wait_time) in retry_times.iter().enumerate() {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
@@ -331,6 +317,7 @@ impl SerialClient {
             }
             Ok(())
         })
+        .await
     }
 
     /// Placeholder for sending status information.
@@ -338,19 +325,17 @@ impl SerialClient {
     /// This method is currently a placeholder and does not perform any action.
     ///
     /// # Arguments
-    /// * `py` - Python interpreter instance.
     /// * `_status` - Placeholder for status object.
     /// * `_mac_addr` - Placeholder for MAC address string.
     ///
     /// # Returns
-    /// A `PyResult` containing a `Bound<'a, PyAny>` which resolves immediately to `true`.
-    pub fn send_status_noexcept<'a>(
+    /// A `PyResult` indicating success or failure.
+    pub async fn send_status_noexcept(
         &self,
-        py: Python<'a>,
-        _status: &Bound<'_, PyAny>,
-        _mac_addr: &str,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        future_into_py(py, future::ready(Ok(())))
+        _status: Py<PyAny>,
+        _mac_addr: String,
+    ) -> PyResult<()> {
+        Ok(())
     }
 
     /// Creates an opaque factory object to be passed to MessageHandler.new()
@@ -428,17 +413,24 @@ mod tests {
         (computer_rx, computer_tx, test_serial)
     }
 
+    fn spawn_respond_task(
+        rx: &ReadMutex<DuplexStream>,
+        tx: &WriteMutex<DuplexStream>,
+        connect_rx: &MiniReaderConnectRx,
+    ) -> tokio::task::JoinHandle<Option<String>> {
+        let rx = rx.clone();
+        let tx = tx.clone();
+        let connect_rx = connect_rx.clone();
+        tokio::spawn(async move { SerialClient::respond_as_blue_srr(&rx, &tx, &connect_rx).await })
+    }
+
     #[tokio::test]
     async fn test_respond_as_blue_srr_meos() {
         let (computer_rx, computer_tx, mut test_serial) = init_channels();
         let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
         let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
 
-        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
-            computer_rx.clone(),
-            computer_tx.clone(),
-            mini_reader_connect_rx.clone(),
-        ));
+        let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
         // MeOS handshake
         let meos_hello = b"\xff\x02\x02\xf0\x01Mm\n\x03";
@@ -465,11 +457,7 @@ mod tests {
         let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
         let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
 
-        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
-            computer_rx.clone(),
-            computer_tx.clone(),
-            mini_reader_connect_rx.clone(),
-        ));
+        let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
         // SportIdent Reader handshake
         let sir_hello = b"\xff\x02\xf0\x01Mm\n\x03";
@@ -496,11 +484,7 @@ mod tests {
         let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
         let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
 
-        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
-            computer_rx.clone(),
-            computer_tx.clone(),
-            mini_reader_connect_rx.clone(),
-        ));
+        let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
         let unknown_hello = b"some garbage\x03";
         test_serial.write_all(unknown_hello).await.unwrap();
@@ -524,11 +508,7 @@ mod tests {
         let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
         let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
 
-        let handle = tokio::spawn(SerialClient::respond_as_blue_srr(
-            computer_rx.clone(),
-            computer_tx.clone(),
-            mini_reader_connect_rx.clone(),
-        ));
+        let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
         let device_path = "/dev/ttyUSB1".to_string();
         mini_reader_connect_tx.send(device_path.clone()).unwrap();
