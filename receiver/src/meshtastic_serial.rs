@@ -35,17 +35,18 @@ pub struct MeshtasticSerial {
 }
 
 impl MeshtasticSerial {
-    /// Creates a new Meshtastic serial connection.
-    pub async fn new(
-        port: &str,
+    /// Creates a new Meshtastic serial connection using a provided stream.
+    pub async fn connect_stream<S>(
+        stream: meshtastic::api::StreamHandle<S>,
         device_node: &str,
         timeout: Duration,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+    {
         let deadline = Instant::now() + timeout;
         let stream_api = StreamApi::new();
-        let serial_stream = utils::stream::build_serial_stream(port.to_owned(), None, None, None)?;
-        let (mut listener, stream_api) =
-            stream_api.connect(serial_stream).timeout_at(deadline).await?;
+        let (mut listener, stream_api) = stream_api.connect(stream).timeout_at(deadline).await?;
         let config_id = utils::generate_rand_id();
         let stream_api = stream_api.configure(config_id).await?;
         let packet = listener.recv().timeout_at(deadline).await?;
@@ -63,6 +64,16 @@ impl MeshtasticSerial {
             listener,
             mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
         })
+    }
+
+    /// Creates a new Meshtastic serial connection.
+    pub async fn new(
+        port: &str,
+        device_node: &str,
+        timeout: Duration,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let serial_stream = utils::stream::build_serial_stream(port.to_owned(), None, None, None)?;
+        Self::connect_stream(serial_stream, device_node, timeout).await
     }
 
     /// Waits for the next message from the device.
