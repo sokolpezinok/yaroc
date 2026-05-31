@@ -137,6 +137,21 @@ impl SportIdentFactory {
             false
         }
     }
+
+    /// Spawns the serial reading background loop for the given SportIdent serial device and
+    /// registers its cancellation token.
+    pub fn add_sportident_device_inner<S>(&mut self, si_serial: S, device_node: &str, port: &str)
+    where
+        S: UsbSerialTrait<Output = SportIdentMessage> + std::fmt::Display + Send + 'static,
+    {
+        let token = si_serial.spawn_serial(self.si_tx.clone());
+
+        self.devices.insert(device_node.to_owned(), (token, port.to_owned()));
+        let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
+            added: true,
+            device: port.to_owned(),
+        });
+    }
 }
 
 impl UsbSerialFactory for SportIdentFactory {
@@ -155,13 +170,7 @@ impl UsbSerialFactory for SportIdentFactory {
         async move {
             let serial = TokioSerial::new(port)?;
             let si_uart = SiUart::new(serial);
-            let token = si_uart.spawn_serial(self.si_tx.clone());
-
-            self.devices.insert(device_node.to_owned(), (token, port.to_owned()));
-            let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
-                added: true,
-                device: port.to_owned(),
-            });
+            self.add_sportident_device_inner(si_uart, device_node, port);
             info!("Connected to SI UART device at {port}");
             Ok(())
         }
@@ -233,5 +242,27 @@ mod tests {
             Some("12345"),
             &port
         ));
+    }
+
+    #[tokio::test]
+    async fn test_sportident_factory_management() {
+        let (si_tx, mut _si_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut factory = SportIdentFactory::new(si_tx);
+
+        let (_rx_tx, rx_rx) = tokio::sync::mpsc::channel(1);
+        let fake_serial =
+            crate::test_utils::FakeSportIdentSerial::new("/dev/ttyUSB0".to_owned(), rx_rx);
+
+        assert!(!factory.is_running("/dev/ttyUSB0"));
+
+        factory.add_sportident_device_inner(fake_serial, "/dev/ttyUSB0", "/dev/ttyUSB0");
+        assert!(factory.is_running("/dev/ttyUSB0"));
+
+        let removed = factory.remove_device("/dev/ttyUSB0");
+        assert!(removed);
+        assert!(!factory.is_running("/dev/ttyUSB0"));
+
+        let removed_again = factory.remove_device("/dev/ttyUSB0");
+        assert!(!removed_again);
     }
 }

@@ -150,7 +150,7 @@ mod tests {
         };
         tx.send(packet.clone()).await.unwrap();
         let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
-        assert_eq!(recv_mac, Default::default());
+        assert_eq!(recv_mac, MacAddress::default());
         assert_eq!(recv_packet, packet);
 
         handler.remove_device("/some".to_owned());

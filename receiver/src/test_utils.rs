@@ -51,3 +51,44 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
         }
     }
 }
+
+use crate::si_uart::SportIdentMessage;
+
+pub struct FakeSportIdentSerial {
+    port: String,
+    rx: Receiver<SportIdentMessage>,
+}
+
+impl Display for FakeSportIdentSerial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fake sportident serial at {}", self.port)
+    }
+}
+
+impl FakeSportIdentSerial {
+    pub fn new(port: String, rx: Receiver<SportIdentMessage>) -> Self {
+        Self { port, rx }
+    }
+
+    pub async fn next_message(&mut self) -> Option<SportIdentMessage> {
+        self.rx.recv().await
+    }
+}
+
+impl UsbSerialTrait for FakeSportIdentSerial {
+    type Output = SportIdentMessage;
+
+    async fn inner_loop(mut self, tx: UnboundedSender<SportIdentMessage>) {
+        loop {
+            let event = self.next_message().await;
+            match event {
+                Some(msg) => {
+                    tx.send(msg).expect("Channel unexpectedly closed");
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+    }
+}
