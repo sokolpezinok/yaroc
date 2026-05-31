@@ -72,6 +72,13 @@ interval = 8
 enable = true
 broker_url = "broker.emqx.io"
 broker_port = 1883
+
+[meshtastic]
+# You can connect a Meshtastic device via USB and use it as a punch source.
+# The meshtastic devices acts as an online gateway for its LoRa mesh.
+watch_usb = true  # Defaults to false
+# [meshtastic.mac-addresses]
+# radio01 = "9e12f8a5"
 ```
 
 With a config file present, we are able to run `send-punch`:
