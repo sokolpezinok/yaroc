@@ -88,6 +88,9 @@ impl MessageHandler {
                 factories.push(Box::new(SportIdentFactory::new(punch_tx)));
             }
             SportIdentConfig::Active(factory) => {
+                // Note: The `punch_tx` channel is intentionally not passed to the active factory here.
+                // The Active variant is used by the Python SerialClient, which handles the punches
+                // natively on the Python side, so they don't need to be routed through this MessageHandler.
                 factories.push(factory);
             }
             SportIdentConfig::None => {}
@@ -168,6 +171,102 @@ impl MessageHandler {
                     return Ok(Event::NodeInfos(node_infos));
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::time::timeout;
+    use yaroc_common::punch::RawPunch;
+
+    impl MessageHandler {
+        /// Creates a handler tailored for testing, bypassing factories and exposing senders directly.
+        pub fn new_for_test(
+            node_infos_interval: Duration,
+        ) -> (
+            Self,
+            UnboundedSender<SportIdentMessage>,
+            UnboundedSender<(MeshPacket, MacAddress)>,
+            UnboundedSender<crate::Result<Message>>,
+        ) {
+            let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel();
+            let (punch_tx, punch_rx) = unbounded_channel();
+            let (mqtt_tx, mqtt_rx) = unbounded_channel();
+            let handler = Self {
+                fleet_state: FleetState::new(vec![], node_infos_interval),
+                mesh_packet_rx,
+                punch_rx,
+                mqtt_receivers: None,
+                mqtt_tx: mqtt_tx.clone(),
+                mqtt_rx,
+            };
+            (handler, punch_tx, mesh_packet_tx, mqtt_tx)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_punch_event() {
+        let (mut handler, punch_tx, _mesh_tx, _mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_secs(60));
+
+        let mut raw_punch: RawPunch = [0; 20];
+        raw_punch[0..3].copy_from_slice(&[1, 2, 3]);
+        punch_tx.send(SportIdentMessage::RawPunch(raw_punch)).unwrap();
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::SiPunch(punch) => assert_eq!(punch.raw, raw_punch),
+            _ => panic!("Expected Event::SiPunch"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_device_event() {
+        let (mut handler, punch_tx, _mesh_tx, _mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_secs(60));
+
+        punch_tx
+            .send(SportIdentMessage::DeviceEvent {
+                added: true,
+                device: "/dev/ttyUSB0".to_owned(),
+            })
+            .unwrap();
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::DeviceEvent { added, device } => {
+                assert!(added);
+                assert_eq!(device, "/dev/ttyUSB0");
+            }
+            _ => panic!("Expected Event::DeviceEvent"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_node_infos_interval() {
+        // Use a short interval to test the timeout branch
+        let (mut handler, _punch_tx, _mesh_tx, _mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_millis(50));
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::NodeInfos(_) => {}
+            _ => panic!("Expected Event::NodeInfos"),
         }
     }
 }
