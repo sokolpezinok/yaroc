@@ -602,7 +602,44 @@ mod test_punch {
             node_infos[0].battery_percentage,
             Some(voltage_to_percent(3847))
         );
-        assert!(matches!(node_infos[0].signal_info, SignalInfo::Cell(_)));
+        std::assert_matches!(node_infos[0].signal_info, SignalInfo::Cell(_));
+    }
+
+    #[test]
+    fn test_cellular_disconnect() {
+        use yaroc_common::proto::Disconnected;
+        let status = Status {
+            msg: Some(Msg::Disconnected(Disconnected {
+                client_name: "spe01",
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut state = FleetState::new(
+            vec![("spe01".to_owned(), MacAddress::default())],
+            Duration::from_secs(1),
+        );
+        // Pretend we were connected first
+        let status_node = state.cellular_node_status(MacAddress::default());
+        status_node.state = Some(yaroc_common::status::CellSignalInfo {
+            network_type: yaroc_common::status::CellNetworkType::Lte,
+            rsrp_dbm: -90,
+            snr_cb: 110,
+            cellid: None,
+        });
+
+        let mut buffer = vec![0u8; status.encoded_len()];
+        status.encode(&mut buffer.as_mut_slice()).unwrap();
+        let tz = FixedOffset::east_opt(3600).unwrap();
+        let now = Local::now().with_timezone(&tz);
+        let log_message = state.status_update(&buffer, MacAddress::default(), now).unwrap();
+        assert!(matches!(
+            log_message,
+            CellularLogMessage::Disconnected { .. }
+        ));
+        let node_infos = state.node_infos();
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
     }
 }
 
