@@ -13,7 +13,7 @@ femtopb = { workspace = true }
 futures = "0.3.31"
 log = { workspace = true }
 meshtastic = { workspace = true }
-nusb = "0.2"
+nusb = { version = "0.2", features = ["tokio"] }
 prost = "0.14"
 rumqttc = { version = "0.24.0" }
 serialport = { version = "4", default-features = false }

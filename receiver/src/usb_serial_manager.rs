@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use futures::future::BoxFuture;
-use log::{error, info};
+use log::{debug, error, info};
 use nusb::hotplug::HotplugEvent;
 use std::fmt::Display;
 use std::time::Duration;
@@ -96,7 +96,7 @@ impl UsbSerialManager {
                 HotplugEvent::Disconnected(dev_id) => {
                     let device_node = format!("{:?}", dev_id);
                     if self.remove_device(device_node.clone()) {
-                        info!("Disconnected USB device {device_node}");
+                        debug!("Disconnected USB device {device_node}");
                     }
                 }
             }

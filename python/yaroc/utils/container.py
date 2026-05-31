@@ -81,9 +81,7 @@ class Container(containers.DeclarativeContainer):
         ),
         roc=providers.Factory(RocClient),
     )
-    workers = providers.Callable(
-        create_si_workers, config.punch_source, config.meshtastic
-    )
+    workers = providers.Callable(create_si_workers, config.punch_source, config.meshtastic)
     si_manager = providers.Factory(SiPunchManager, workers)
 
 
