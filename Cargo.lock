@@ -3591,6 +3591,7 @@ version = "0.1.19"
 dependencies = [
  "chrono",
  "clap",
+ "critical-section",
  "embassy-time",
  "env_logger",
  "femtopb",
