@@ -14,6 +14,7 @@ use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
+use crate::si_uart::SILABS_VID;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};
 
@@ -166,7 +167,10 @@ impl UsbSerialFactory for MeshtasticFactory {
                 (None, None) => true,
                 _ => false,
             };
-            sn_matches && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
+            let is_sportident = usb_info.vid == SILABS_VID;
+            sn_matches
+                && !is_sportident
+                && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
         } else {
             false
         }

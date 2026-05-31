@@ -98,6 +98,9 @@ impl From<RawPunch> for SportIdentMessage {
     }
 }
 
+/// The Vendor ID for Silicon Labs, commonly used by SportIdent USB adapters.
+pub const SILABS_VID: u16 = 0x10c4;
+
 /// A factory for creating and managing background tasks for SportIdent serial devices.
 pub struct SportIdentFactory {
     devices: HashMap<String, (CancellationToken, String)>,
@@ -114,7 +117,7 @@ impl SportIdentFactory {
     }
 
     /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
-    /// the vendor ID matches Silicon Labs (0x10c4), which is commonly used by SI USB adapters.
+    /// the vendor ID matches Silicon Labs.
     pub fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
             let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
@@ -122,7 +125,7 @@ impl SportIdentFactory {
                 (None, None) => true,
                 _ => false,
             };
-            sn_matches && usb_info.vid == 0x10c4
+            sn_matches && usb_info.vid == SILABS_VID
         } else {
             false
         }
