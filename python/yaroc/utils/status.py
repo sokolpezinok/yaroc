@@ -67,7 +67,10 @@ class StatusDrawer:
         image = Image.new("1", (width, height), 0xFF)
         draw = ImageDraw.Draw(image)
         char_height = 13
-        font = ImageFont.truetype("DejaVuSans.ttf", char_height)
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", char_height)
+        except Exception:
+            font = ImageFont.load_default()
 
         total_horiz_pad = 1 + horiz_pad * 2
         row_count, col_count = len(table), len(table[0])
