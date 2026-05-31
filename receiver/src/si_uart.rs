@@ -119,8 +119,15 @@ impl SportIdentFactory {
     /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
     /// the vendor ID matches Silicon Labs.
     pub fn detect_device(dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        Self::detect_device_inner(dev.serial_number(), port)
+    }
+
+    pub fn detect_device_inner(
+        dev_serial: Option<&str>,
+        port: &serialport::SerialPortInfo,
+    ) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+            let sn_matches = match (dev_serial, &usb_info.serial_number) {
                 (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
                 (None, None) => true,
                 _ => false,
@@ -180,5 +187,51 @@ impl UsbSerialFactory for SportIdentFactory {
     /// Checks if a connection background task is currently running for the given device node.
     fn is_running(&self, device_node: &str) -> bool {
         self.devices.contains_key(device_node)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serialport::{SerialPortInfo, SerialPortType, UsbPortInfo};
+
+    #[test]
+    fn test_detect_device_inner() {
+        let mut usb_info = UsbPortInfo {
+            vid: SILABS_VID,
+            pid: 0x5678,
+            serial_number: Some("12345".to_owned()),
+            manufacturer: None,
+            product: None,
+        };
+
+        let mut port = SerialPortInfo {
+            port_name: "/dev/ttyUSB0".to_owned(),
+            port_type: SerialPortType::UsbPort(usb_info.clone()),
+        };
+
+        // Match
+        assert!(SportIdentFactory::detect_device_inner(Some("12345"), &port));
+
+        // Mismatch serial
+        assert!(!SportIdentFactory::detect_device_inner(
+            Some("54321"),
+            &port
+        ));
+
+        // Mismatch vid
+        usb_info.vid = 0x1234;
+        port.port_type = SerialPortType::UsbPort(usb_info.clone());
+        assert!(!SportIdentFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
+
+        // Not USB
+        port.port_type = SerialPortType::PciPort;
+        assert!(!SportIdentFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
     }
 }

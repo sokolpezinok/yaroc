@@ -166,14 +166,11 @@ impl MeshtasticFactory {
         let token = msh_serial.spawn_serial(self.mesh_tx.clone());
         self.devices.insert(device_node.to_owned(), token);
     }
-}
 
-impl UsbSerialFactory for MeshtasticFactory {
-    /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
-    /// and ensuring the port name is an ACM/COM interface.
-    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+    /// Inner logic for device detection that can be unit tested without a `nusb::DeviceInfo`.
+    fn detect_device_inner(dev_serial: Option<&str>, port: &serialport::SerialPortInfo) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = match (dev.serial_number(), &usb_info.serial_number) {
+            let sn_matches = match (dev_serial, &usb_info.serial_number) {
                 (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
                 (None, None) => true,
                 _ => false,
@@ -185,6 +182,14 @@ impl UsbSerialFactory for MeshtasticFactory {
         } else {
             false
         }
+    }
+}
+
+impl UsbSerialFactory for MeshtasticFactory {
+    /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
+    /// and ensuring the port name is an ACM/COM interface.
+    fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
+        Self::detect_device_inner(dev.serial_number(), port)
     }
 
     /// Asynchronously connects to a Meshtastic serial device at the given port, creates
@@ -252,5 +257,50 @@ mod tests {
 
         let removed_again = factory.remove_device("/dev/ttyUSB0");
         assert!(!removed_again);
+    }
+
+    #[test]
+    fn test_detect_device_inner() {
+        use serialport::{SerialPortInfo, SerialPortType, UsbPortInfo};
+
+        let usb_info = UsbPortInfo {
+            vid: 0x1234,
+            pid: 0x5678,
+            serial_number: Some("12345".to_owned()),
+            manufacturer: None,
+            product: None,
+        };
+
+        let mut port = SerialPortInfo {
+            port_name: "/dev/ttyACM0".to_owned(),
+            port_type: SerialPortType::UsbPort(usb_info.clone()),
+        };
+
+        // Match
+        assert!(MeshtasticFactory::detect_device_inner(Some("12345"), &port));
+
+        // Mismatch serial
+        assert!(!MeshtasticFactory::detect_device_inner(
+            Some("54321"),
+            &port
+        ));
+
+        // Mismatch name
+        port.port_name = "/dev/ttyUSB0".to_owned();
+        assert!(!MeshtasticFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
+
+        // Match COM port
+        port.port_name = "COM3".to_owned();
+        assert!(MeshtasticFactory::detect_device_inner(Some("12345"), &port));
+
+        // Not USB
+        port.port_type = SerialPortType::PciPort;
+        assert!(!MeshtasticFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
     }
 }
