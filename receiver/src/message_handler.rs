@@ -269,4 +269,47 @@ mod tests {
             _ => panic!("Expected Event::NodeInfos"),
         }
     }
+
+    #[tokio::test]
+    async fn test_message_handler_mqtt_punch() {
+        use chrono::{DateTime, Local};
+        use femtopb::{Message as _, Repeated};
+        use yaroc_common::proto::Punches;
+        use yaroc_common::punch::SiPunch;
+
+        let (mut handler, _punch_tx, _mesh_tx, mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_secs(60));
+
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+        let punches_slice: &[&[u8]] = &[&punch];
+        let punches = Punches {
+            punches: Repeated::from_slice(punches_slice),
+            ..Default::default()
+        };
+        let mut buf = vec![0u8; punches.encoded_len()];
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
+
+        mqtt_tx
+            .send(Ok(crate::mqtt::Message::Punches(
+                MacAddress::default(),
+                Local::now(),
+                buf,
+            )))
+            .unwrap();
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::SiPunches(punch_logs) => {
+                assert_eq!(punch_logs.len(), 1);
+                assert_eq!(punch_logs[0].punch.code, 47);
+                assert_eq!(punch_logs[0].punch.card, 1715004);
+            }
+            _ => panic!("Expected Event::SiPunches"),
+        }
+    }
 }
