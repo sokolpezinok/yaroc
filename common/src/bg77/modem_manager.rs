@@ -58,7 +58,7 @@ pub enum RAT {
     LtemNbIot, // Both
 }
 
-#[derive(Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LteBands {
     /// LTE-M bands bitmask. Bit `n` corresponds to band `n+1`.
     pub ltem: u128,
@@ -96,7 +96,7 @@ impl LteBands {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModemConfig {
     /// Access point name (APN)
     pub apn: String<30>,

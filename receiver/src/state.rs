@@ -633,10 +633,7 @@ mod test_punch {
         let tz = FixedOffset::east_opt(3600).unwrap();
         let now = Local::now().with_timezone(&tz);
         let log_message = state.status_update(&buffer, MacAddress::default(), now).unwrap();
-        assert!(matches!(
-            log_message,
-            CellularLogMessage::Disconnected { .. }
-        ));
+        std::assert_matches!(log_message, CellularLogMessage::Disconnected { .. });
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);

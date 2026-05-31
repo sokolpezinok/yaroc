@@ -330,7 +330,6 @@ mod test {
 
         let mch: MiniCallHome = mch_proto_expected.clone().try_into().unwrap();
         let status_proto = mch.to_proto();
-
         let Msg::MiniCallHome(mch_proto) = status_proto.msg.unwrap() else {
             panic!("Wrong proto type");
         };

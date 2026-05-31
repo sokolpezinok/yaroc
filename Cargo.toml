@@ -6,7 +6,7 @@ members = [
   "receiver",
 ]
 default-members = ["common", "python", "receiver"]
-resolver = "2"
+resolver = "3"
 
 [workspace.dependencies]
 chrono = { version = "0.4.44", default-features = false }

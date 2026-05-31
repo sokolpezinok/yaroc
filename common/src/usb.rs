@@ -18,7 +18,7 @@ use crate::mqtt::MqttConfig;
 /// Type alias for the USB driver.
 pub type UsbDriver = Driver<'static, &'static SoftwareVbusDetect>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 /// Commands that can be sent over USB.
 pub enum UsbCommand {
     /// Configure the modem.
@@ -239,12 +239,11 @@ mod tests {
 
     #[test]
     fn test_erase_flash_serialization() {
+        use core::assert_matches;
+
         let command = UsbCommand::EraseFlash;
         let bytes = to_vec::<_, 8>(&command).unwrap();
         let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
-        match decoded {
-            UsbCommand::EraseFlash => (),
-            _ => panic!("Expected EraseFlash"),
-        }
+        assert_matches!(decoded, UsbCommand::EraseFlash);
     }
 }
