@@ -595,6 +595,14 @@ mod test_punch {
             format!("{log_message}")
                 .starts_with("spe01 11:12:11: 47.0°C, RSRP  -80 SNR 12.0   LTE-M, 3.85V")
         );
+
+        let node_infos = state.node_infos();
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(
+            node_infos[0].battery_percentage,
+            Some(voltage_to_percent(3847))
+        );
+        assert!(matches!(node_infos[0].signal_info, SignalInfo::Cell(_)));
     }
 }
 
@@ -691,6 +699,7 @@ mod test_meshtastic {
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
+        assert_eq!(node_infos[0].battery_percentage, Some(47));
         assert_eq!(
             node_infos[0].signal_info,
             SignalInfo::Meshtastic(RssiSnr {
