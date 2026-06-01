@@ -1,6 +1,7 @@
 use chrono::DateTime;
 use chrono::prelude::*;
 use femtopb::Message as _;
+use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
 use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
@@ -8,6 +9,8 @@ use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
+use tokio_util::time::DelayQueue;
+use tokio_util::time::delay_queue::Key;
 use yaroc_common::status::SignalStrength;
 use yaroc_common::status::voltage_to_percent;
 
@@ -122,14 +125,22 @@ pub struct MeshtasticNodeStatus {
     codes: HashSet<u16>,
     last_update: Option<DateTime<FixedOffset>>,
     last_punch: Option<DateTime<FixedOffset>>,
+    connected: bool,
+    pub timeout_key: Option<Key>,
 }
 
 impl MeshtasticNodeStatus {
     pub fn new(name: String) -> Self {
         Self {
             name,
+            connected: true,
+            timeout_key: None,
             ..Default::default()
         }
+    }
+
+    pub fn disconnect(&mut self) {
+        self.connected = false;
     }
 
     pub fn update_battery(&mut self, percent: u8) {
@@ -138,6 +149,7 @@ impl MeshtasticNodeStatus {
     }
 
     pub fn update_rssi_snr(&mut self, rssi_snr: RssiSnr) {
+        self.connected = true;
         self.rssi_snr = Some(rssi_snr);
         self.last_update = Some(Local::now().into());
     }
@@ -148,15 +160,19 @@ impl MeshtasticNodeStatus {
     }
 
     pub fn punch(&mut self, punch: &SiPunch) {
+        self.connected = true;
         self.last_punch = Some(punch.time);
         self.codes.insert(punch.code);
     }
 
     pub fn serialize(&self) -> NodeInfo {
-        let signal_info = match &self.rssi_snr {
-            // TODO: if RSSI info is too old, consider marking it disconnected
-            Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
-            None => SignalInfo::MeshtasticOverMqtt,
+        let signal_info = if !self.connected {
+            SignalInfo::Unknown
+        } else {
+            match &self.rssi_snr {
+                Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
+                None => SignalInfo::MeshtasticOverMqtt,
+            }
         };
         NodeInfo {
             name: self.name.clone(),
@@ -183,6 +199,7 @@ pub struct FleetState {
     dns: HashMap<MacAddress, String>,
     cellular_statuses: HashMap<MacAddress, CellularNodeStatus>,
     meshtastic_statuses: HashMap<MacAddress, MeshtasticNodeStatus>,
+    meshtastic_timeouts: DelayQueue<MacAddress>,
     node_infos_interval: Duration,
     last_node_info_push: Instant,
     new_node: Notify,
@@ -194,6 +211,7 @@ impl Default for FleetState {
             dns: HashMap::new(),
             cellular_statuses: HashMap::new(),
             meshtastic_statuses: HashMap::new(),
+            meshtastic_timeouts: DelayQueue::new(),
             node_infos_interval: Duration::from_secs(60),
             last_node_info_push: Instant::now(),
             new_node: Notify::new(),
@@ -334,10 +352,22 @@ impl FleetState {
     }
 
     fn msh_node_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticNodeStatus {
-        self.meshtastic_statuses.entry(host_info.mac_address).or_insert_with(|| {
+        let mac_addr = host_info.mac_address;
+        let mut is_new = false;
+        let status = self.meshtastic_statuses.entry(mac_addr).or_insert_with(|| {
+            is_new = true;
+            MeshtasticNodeStatus::new(host_info.name.to_string())
+        });
+        if is_new {
             self.new_node.notify_one();
-            MeshtasticNodeStatus::new(host_info.name.as_str().to_owned())
-        })
+        }
+        if let Some(key) = &status.timeout_key {
+            self.meshtastic_timeouts.reset(key, Duration::from_secs(600)); // 10 minutes
+        } else {
+            let key = self.meshtastic_timeouts.insert(mac_addr, Duration::from_secs(600));
+            status.timeout_key = Some(key);
+        }
+        status
     }
 
     /// Resolve a given MAC address into a full HostInfo, which also includes a name.
@@ -493,6 +523,13 @@ impl FleetState {
             _ = tokio::time::sleep_until(next_node_infos.into()) => {}
             _ = self.new_node.notified() => {
                 info!("New node discovered!");
+            }
+            Some(expired) = self.meshtastic_timeouts.next(), if !self.meshtastic_timeouts.is_empty() => {
+                let mac = expired.into_inner();
+                if let Some(status) = self.meshtastic_statuses.get_mut(&mac) {
+                    status.disconnect();
+                    info!("Meshtastic node {} timed out (no messages for 10 minutes)", status.name);
+                }
             }
         }
         self.last_node_info_push = Instant::now();
@@ -659,10 +696,10 @@ mod test_meshtastic {
         }
     }
 
-    #[test]
-    fn test_meshtastic_serial() {
+    #[tokio::test]
+    async fn test_meshtastic_serial() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = yaroc_common::punch::SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
         let mut env = envelope(
             0xdeadbeef,
@@ -702,8 +739,8 @@ mod test_meshtastic {
         );
     }
 
-    #[test]
-    fn test_meshtastic_status() {
+    #[tokio::test]
+    async fn test_meshtastic_status() {
         let telemetry = Telemetry {
             time: 1735157442,
             variant: Some(Variant::DeviceMetrics(DeviceMetrics {
@@ -760,10 +797,10 @@ mod test_meshtastic {
         );
     }
 
-    #[test]
-    fn test_meshtastic_serial_and_status() {
+    #[tokio::test]
+    async fn test_meshtastic_serial_and_status() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
-        let punch = yaroc_common::punch::SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
         let message = envelope(
             0xdeadbeef,
@@ -808,5 +845,35 @@ mod test_meshtastic {
             cellid: None,
         });
         assert_eq!(status.signal_strength(), SignalStrength::Excellent);
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_disconnect() {
+        let mut state = FleetState::default();
+        let host_info = HostInfo::new("msh_node", MacAddress::default());
+        let status = state.msh_node_status(&host_info);
+
+        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap());
+
+        let node_info = status.serialize();
+        assert!(matches!(node_info.signal_info, SignalInfo::Meshtastic(_)));
+        assert!(node_info.last_update.is_some());
+
+        let last_update = node_info.last_update;
+        // Disconnect and ensure connected is false and last_update does not change
+        status.disconnect();
+        let node_info_disconnected = status.serialize();
+        assert_eq!(node_info_disconnected.signal_info, SignalInfo::Unknown);
+        assert_eq!(node_info_disconnected.last_update, last_update);
+
+        // Ensure punch reconnects the node
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2);
+        status.punch(&punch);
+        let node_info_reconnected = status.serialize();
+        assert!(matches!(
+            node_info_reconnected.signal_info,
+            SignalInfo::Meshtastic(_)
+        ));
     }
 }
