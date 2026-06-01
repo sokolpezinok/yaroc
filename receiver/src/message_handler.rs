@@ -11,6 +11,7 @@ use log::error;
 use meshtastic::protobufs::MeshPacket;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::task::JoinSet;
 use yaroc_common::punch::SiPunch;
 
 /// Orchestrates the overall message flow.
@@ -24,6 +25,7 @@ pub struct MessageHandler {
     mqtt_receivers: Option<Vec<MqttReceiver>>,
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
+    tasks: JoinSet<()>,
 }
 
 pub enum SportIdentConfig {
@@ -77,6 +79,7 @@ impl MessageHandler {
             mqtt_receivers: Some(mqtt_receivers),
             mqtt_tx,
             mqtt_rx,
+            tasks: JoinSet::new(),
         };
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
@@ -112,7 +115,7 @@ impl MessageHandler {
         if let Some(receivers) = self.mqtt_receivers.take() {
             for mut receiver in receivers {
                 let mqtt_tx = self.mqtt_tx.clone();
-                tokio::spawn(async move {
+                self.tasks.spawn(async move {
                     loop {
                         let msg = receiver.next_message().await;
                         let res =
@@ -170,6 +173,11 @@ impl MessageHandler {
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
                 }
+                Some(task_res) = self.tasks.join_next(), if !self.tasks.is_empty() => {
+                    if let Err(e) = task_res {
+                        error!("Background task failed: {e}");
+                    }
+                }
             }
         }
     }
@@ -202,6 +210,7 @@ mod tests {
                 mqtt_receivers: None,
                 mqtt_tx: mqtt_tx.clone(),
                 mqtt_rx,
+                tasks: JoinSet::new(),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }
