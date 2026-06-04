@@ -5,7 +5,8 @@ edition = "2024"
 rust-version = "1.96"
 
 [features]
-default = []
+default = ["udev"]
+udev = ["yaroc-receiver/udev"]
 
 [build-dependencies]
 walkdir = "2.3.2"
@@ -34,7 +35,7 @@ futures = "0.3"
 nusb = "0.2"
 serialport = { version = "4.9", default-features = false }
 yaroc-common = { path = "../common", features = ["std"] }
-yaroc-receiver = { path = "../receiver" }
+yaroc-receiver = { path = "../receiver", default-features = false }
 
 [lib]
 name = "yaroc_rs"

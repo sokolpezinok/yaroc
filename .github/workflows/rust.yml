@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: Packages
-      run: sudo apt update && sudo apt install -y protobuf-compiler libdbus-1-dev pkg-config
+      run: sudo apt update && sudo apt install -y protobuf-compiler libdbus-1-dev libudev-dev pkg-config
     - name: Cargo format
       run: cargo fmt --check
     - name: Build

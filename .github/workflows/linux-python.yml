@@ -21,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, aarch64, armv7]
         python_version: ['3.11', '3.14']
     steps:
       - uses: actions/checkout@v5
@@ -36,13 +35,13 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
+          target: x86_64
           args: -r --out dist --find-interpreter --strip --compatibility pypi
           sccache: true
           working-directory: "python"
           manylinux: 2_28
+          before-script-linux: yum install -y systemd-devel
       - name: Test the wheel
-        if: matrix.target == 'x86_64'
         run: |
           uv venv
           uv pip install -r pyproject.toml --extra dev
@@ -50,7 +49,6 @@ jobs:
           source .venv/bin/activate
           pytest
       - name: Lint with ruff
-        if: matrix.target == 'x86_64'
         run: |
           uv tool install ruff
           ruff check . --select=E9,F63,F7,F82 --statistics
@@ -60,19 +58,38 @@ jobs:
         if: matrix.python_version == '3.11'
         uses: actions/upload-artifact@v6
         with:
-          name: wheels-linux-${{ matrix.target }}
+          name: wheels-linux-x86_64
           path: python/dist
 
-  linux-armv6:
+  linux-cross:
+    name: linux-cross (${{ matrix.target }})
     runs-on: ubuntu-latest
-    container: rust:bookworm
+    container: rust:bullseye
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+            pkg_config_path: /usr/lib/aarch64-linux-gnu/pkgconfig
+            artifact_name: wheels-linux-aarch64
+            extra_args: ""
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armhf
+            pkg_config_path: /usr/lib/arm-linux-gnueabihf/pkgconfig
+            artifact_name: wheels-linux-armv7
+            extra_args: ""
+          - target: arm-unknown-linux-gnueabihf
+            arch: armhf
+            pkg_config_path: /usr/lib/arm-linux-gnueabihf/pkgconfig
+            artifact_name: wheels-linux-armv6
+            extra_args: "--no-default-features"
     steps:
       - uses: actions/checkout@v5
-      - name: Install libudev-dev:armhf
+      - name: Install libudev-dev
         run: |
-          dpkg --add-architecture armhf
+          dpkg --add-architecture ${{ matrix.arch }}
           apt-get update
-          apt-get install -y libudev-dev:armhf
+          apt-get install -y libudev-dev:${{ matrix.arch }}
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -81,17 +98,17 @@ jobs:
         working-directory: "python"
         env:
           PKG_CONFIG_ALLOW_CROSS: 1
-          PKG_CONFIG_PATH: /usr/lib/arm-linux-gnueabihf/pkgconfig
+          PKG_CONFIG_PATH: ${{ matrix.pkg_config_path }}
         run: |
           uv venv
           uv pip install maturin ziglang
           export PATH="$PWD/.venv/bin:$PATH"
-          rustup target add arm-unknown-linux-gnueabihf
-          maturin build -r --strip --target arm-unknown-linux-gnueabihf --zig --out dist --compatibility pypi
+          rustup target add ${{ matrix.target }}
+          maturin build -r --strip --target ${{ matrix.target }} --zig --out dist --compatibility pypi ${{ matrix.extra_args }}
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
-          name: wheels-linux-armv6
+          name: ${{ matrix.artifact_name }}
           path: python/dist
 
   sdist:
@@ -114,7 +131,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     if: "startsWith(github.ref, 'refs/tags/')"
-    needs: [linux, linux-armv6, sdist]
+    needs: [linux, linux-cross, sdist]
     steps:
       - uses: actions/download-artifact@v8
         with:
