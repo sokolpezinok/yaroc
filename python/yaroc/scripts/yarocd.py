@@ -198,7 +198,7 @@ async def main_loop() -> None:
     if watch_si_usb:
         for client in client_group.clients:
             if isinstance(client, SerialClient):
-                logging.info("Creating SerialClient for watch_si_usb")
+                logging.info("Enabling tunneling of SportIdent devices connected via USB")
                 sportident_factory = client.usb_serial_factory()
 
     yaroc_daemon = YarocDaemon(
