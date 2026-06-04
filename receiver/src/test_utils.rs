@@ -26,7 +26,7 @@ impl FakeMeshtasticSerial {
         let packet = self.rx.recv().await;
         match packet {
             Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
-            None => MeshtasticEvent::Disconnected("Fake".to_owned()),
+            None => MeshtasticEvent::Disconnected,
         }
     }
 }
@@ -44,7 +44,7 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
                         .send((mesh_packet, self.mac_address))
                         .expect("Channel unexpectedly closed");
                 }
-                MeshtasticEvent::Disconnected(_device_node) => {
+                MeshtasticEvent::Disconnected => {
                     break;
                 }
             }

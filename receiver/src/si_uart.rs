@@ -71,7 +71,7 @@ impl UsbSerialTrait for SiUart<TokioSerial> {
                 }
                 Err(err) => match err {
                     Error::UartClosedError => {
-                        error!("Removed SI UART device: {}", self);
+                        warn!("Removed SI UART device: {}", self.rx.port());
                         break;
                     }
                     e => {
@@ -182,7 +182,6 @@ impl UsbSerialFactory for SportIdentFactory {
     fn remove_device(&mut self, device_node: &str) -> bool {
         if let Some((token, port)) = self.devices.remove(device_node) {
             token.cancel();
-            warn!("Removed SI UART device at {port}");
             let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
                 added: false,
                 device: port,

@@ -23,12 +23,12 @@ pub enum MeshtasticEvent {
     /// A mesh packet.
     MeshPacket(MeshPacket),
     /// The device was disconnected.
-    Disconnected(String),
+    Disconnected,
 }
 
 /// A connection to a Meshtastic device.
 pub struct MeshtasticSerial {
-    device_node: String,
+    port: String,
     stream_api: ConnectedStreamApi,
     listener: UnboundedReceiver<FromRadio>,
     mac_address: MacAddress,
@@ -38,7 +38,7 @@ impl MeshtasticSerial {
     /// Creates a new Meshtastic serial connection using a provided stream.
     pub async fn connect_stream<S>(
         stream: meshtastic::api::StreamHandle<S>,
-        device_node: &str,
+        port: &str,
         timeout: Duration,
     ) -> Result<Self, Box<dyn std::error::Error>>
     where
@@ -59,7 +59,7 @@ impl MeshtasticSerial {
         };
 
         Ok(Self {
-            device_node: device_node.to_owned(),
+            port: port.to_owned(),
             stream_api,
             listener,
             mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
@@ -67,13 +67,9 @@ impl MeshtasticSerial {
     }
 
     /// Creates a new Meshtastic serial connection.
-    pub async fn new(
-        port: &str,
-        device_node: &str,
-        timeout: Duration,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(port: &str, timeout: Duration) -> Result<Self, Box<dyn std::error::Error>> {
         let serial_stream = utils::stream::build_serial_stream(port.to_owned(), None, None, None)?;
-        Self::connect_stream(serial_stream, device_node, timeout).await
+        Self::connect_stream(serial_stream, port, timeout).await
     }
 
     /// Waits for the next message from the device.
@@ -87,16 +83,11 @@ impl MeshtasticSerial {
                     return MeshtasticEvent::MeshPacket(packet);
                 }
                 None => {
-                    return MeshtasticEvent::Disconnected(self.device_node.clone());
+                    return MeshtasticEvent::Disconnected;
                 }
                 _ => {}
             }
         }
-    }
-
-    /// Returns the device node.
-    pub fn device_node(&self) -> &str {
-        &self.device_node
     }
 
     /// Returns the MAC address of the device.
@@ -124,8 +115,8 @@ impl UsbSerialTrait for MeshtasticSerial {
                         .send((mesh_packet, self.mac_address))
                         .expect("Channel unexpectedly closed");
                 }
-                MeshtasticEvent::Disconnected(_device_node) => {
-                    warn!("Removed meshtastic device: {}", self.mac_address);
+                MeshtasticEvent::Disconnected => {
+                    warn!("Removed meshtastic device: {}", self.port);
                     // Disconnect can return an error if the connection was already lost (e.g. EOF)
                     // We ignore it here as we are already handling the disconnection.
                     let _ = self.stream_api.disconnect().await;
@@ -201,11 +192,9 @@ impl UsbSerialFactory for MeshtasticFactory {
     ) -> BoxFuture<'a, Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         async move {
             let msh_serial =
-                MeshtasticSerial::new(port, device_node, std::time::Duration::from_secs(12))
-                    .await
-                    .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
-                        err.to_string().into()
-                    })?;
+                MeshtasticSerial::new(port, std::time::Duration::from_secs(12)).await.map_err(
+                    |err| -> Box<dyn std::error::Error + Send + Sync> { err.to_string().into() },
+                )?;
             let mac_address = msh_serial.mac_address();
             self.add_meshtastic_device_inner(msh_serial, device_node);
             info!("Connected to Meshtastic device: {mac_address} at {port}");
@@ -218,8 +207,6 @@ impl UsbSerialFactory for MeshtasticFactory {
     fn remove_device(&mut self, device_node: &str) -> bool {
         if let Some(token) = self.devices.remove(device_node) {
             token.cancel();
-            // TODO: add more info
-            warn!("Removed meshtastic device");
             true
         } else {
             false
