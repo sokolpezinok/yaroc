@@ -528,6 +528,7 @@ impl FleetState {
                 let mac = expired.into_inner();
                 if let Some(status) = self.meshtastic_statuses.get_mut(&mac) {
                     status.disconnect();
+                    status.timeout_key = None;
                     info!("Meshtastic node {} timed out (no messages for 10 minutes)", status.name);
                 }
             }
