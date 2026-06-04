@@ -36,12 +36,14 @@ class YarocDaemon:
         display_model: str | None = None,
         mqtt_configs: List[MqttConfig] = [],
         meshtastic_serial: bool = False,
+        meshtastic_timeout: int = 600,
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
         self.handler, usb_serial_manager = MessageHandler.new(
             dns,
             mqtt_configs,
+            meshtastic_timeout=datetime.timedelta(seconds=meshtastic_timeout),
             enable_meshtastic=meshtastic_serial,
             enable_sportident=sportident_factory is not None,
             sportident_factory=sportident_factory,
@@ -205,6 +207,7 @@ async def main_loop() -> None:
         config.get("display", None),
         mqtt_configs,
         meshtastic_serial=meshtastic_conf.get("watch_usb", True),
+        meshtastic_timeout=meshtastic_conf.get("timeout", 600),
         sportident_factory=sportident_factory,
     )
     await yaroc_daemon.loop()

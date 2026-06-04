@@ -201,6 +201,7 @@ pub struct FleetState {
     meshtastic_statuses: HashMap<MacAddress, MeshtasticNodeStatus>,
     meshtastic_timeouts: DelayQueue<MacAddress>,
     node_infos_interval: Duration,
+    meshtastic_timeout: Duration,
     last_node_info_push: Instant,
     new_node: Notify,
 }
@@ -213,6 +214,7 @@ impl Default for FleetState {
             meshtastic_statuses: HashMap::new(),
             meshtastic_timeouts: DelayQueue::new(),
             node_infos_interval: Duration::from_secs(60),
+            meshtastic_timeout: Duration::from_secs(600),
             last_node_info_push: Instant::now(),
             new_node: Notify::new(),
         }
@@ -220,10 +222,15 @@ impl Default for FleetState {
 }
 
 impl FleetState {
-    pub fn new(dns: Vec<(String, MacAddress)>, node_infos_interval: Duration) -> Self {
+    pub fn new(
+        dns: Vec<(String, MacAddress)>,
+        node_infos_interval: Duration,
+        meshtastic_timeout: Duration,
+    ) -> Self {
         Self {
             dns: dns.into_iter().map(|(name, mac)| (mac, name)).collect(),
             node_infos_interval,
+            meshtastic_timeout,
             ..Default::default()
         }
     }
@@ -362,9 +369,9 @@ impl FleetState {
             self.new_node.notify_one();
         }
         if let Some(key) = &status.timeout_key {
-            self.meshtastic_timeouts.reset(key, Duration::from_secs(600)); // 10 minutes
+            self.meshtastic_timeouts.reset(key, self.meshtastic_timeout);
         } else {
-            let key = self.meshtastic_timeouts.insert(mac_addr, Duration::from_secs(600));
+            let key = self.meshtastic_timeouts.insert(mac_addr, self.meshtastic_timeout);
             status.timeout_key = Some(key);
         }
         status
@@ -529,7 +536,7 @@ impl FleetState {
                 if let Some(status) = self.meshtastic_statuses.get_mut(&mac) {
                     status.disconnect();
                     status.timeout_key = None;
-                    info!("Meshtastic node {} timed out (no messages for 10 minutes)", status.name);
+                    info!("Meshtastic node {} timed out", status.name);
                 }
             }
         }
@@ -623,6 +630,7 @@ mod test_punch {
         let mut state = FleetState::new(
             vec![("spe01".to_owned(), MacAddress::default())],
             Duration::from_secs(1),
+            Duration::from_secs(600),
         );
         let mut buffer = vec![0u8; status.encoded_len()];
         status.encode(&mut buffer.as_mut_slice()).unwrap();
@@ -656,6 +664,7 @@ mod test_punch {
         let mut state = FleetState::new(
             vec![("spe01".to_owned(), MacAddress::default())],
             Duration::from_secs(1),
+            Duration::from_secs(600),
         );
         // Pretend we were connected first
         let status_node = state.cellular_node_status(MacAddress::default());
@@ -876,5 +885,33 @@ mod test_meshtastic {
             node_info_reconnected.signal_info,
             SignalInfo::Meshtastic(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_timeout() {
+        let mut state = FleetState {
+            meshtastic_timeout: Duration::from_millis(100),
+            ..Default::default()
+        };
+        let host_info = HostInfo::new("msh_node", MacAddress::default());
+
+        // This will insert the node and set the timeout key
+        let status = state.msh_node_status(&host_info);
+        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap());
+
+        let node_info = status.serialize();
+        assert!(matches!(node_info.signal_info, SignalInfo::Meshtastic(_)));
+
+        // Consume the new_node notification
+        state.publish_node_infos().await;
+
+        // Wait for the timeout to expire
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // publish_node_infos will process the timeout
+        let node_infos = state.publish_node_infos().await;
+
+        assert_eq!(node_infos.len(), 1);
+        assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
     }
 }

@@ -50,6 +50,7 @@ impl MessageHandler {
     /// * `dns` - A mapping of DNS-like host names to device MAC addresses.
     /// * `mqtt_configs` - Configs for the MQTT servers to connect to and listen for messages.
     /// * `node_infos_interval` - The interval at which node info updates are published.
+    /// * `meshtastic_timeout` - Timeout for Meshtastic nodes.
     /// * `config` - Configuration for connected serial devices.
     ///
     /// # Returns
@@ -61,6 +62,7 @@ impl MessageHandler {
         dns: Vec<(String, MacAddress)>,
         mqtt_configs: Vec<MqttConfig>,
         node_infos_interval: Duration,
+        meshtastic_timeout: Duration,
         config: UsbSerialConfig,
     ) -> (Self, UsbSerialManager) {
         let macs = dns.iter().map(|(_, mac)| mac);
@@ -73,7 +75,7 @@ impl MessageHandler {
         let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
 
         let handler = Self {
-            fleet_state: FleetState::new(dns, node_infos_interval),
+            fleet_state: FleetState::new(dns, node_infos_interval, meshtastic_timeout),
             mesh_packet_rx,
             punch_rx,
             mqtt_receivers: Some(mqtt_receivers),
@@ -204,7 +206,7 @@ mod tests {
             let (punch_tx, punch_rx) = unbounded_channel();
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
             let handler = Self {
-                fleet_state: FleetState::new(vec![], node_infos_interval),
+                fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_packet_rx,
                 punch_rx,
                 mqtt_receivers: None,

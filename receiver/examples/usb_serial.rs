@@ -40,8 +40,13 @@ async fn main() {
         enable_meshtastic: true,
         sportident: SportIdentConfig::Passive,
     };
-    let (mut msg_handler, mut usb_serial_manager) =
-        MessageHandler::new(dns, Vec::new(), Duration::from_secs(60), usb_serial_config);
+    let (mut msg_handler, mut usb_serial_manager) = MessageHandler::new(
+        dns,
+        Vec::new(),
+        Duration::from_secs(60),
+        Duration::from_secs(600),
+        usb_serial_config,
+    );
 
     let monitor_task = tokio::spawn(async move {
         if let Err(e) = usb_serial_manager.monitor_usb_devices().await {

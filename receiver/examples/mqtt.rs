@@ -58,6 +58,7 @@ async fn main() {
         dns,
         vec![mqtt_config, mqtt_config2],
         Duration::from_secs(60),
+        Duration::from_secs(600),
         usb_serial_config,
     );
 

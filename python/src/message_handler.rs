@@ -130,15 +130,17 @@ impl MessageHandler {
     /// * `dns` - A list of (mac_address, name) tuples for resolving node names.
     /// * `mqtt_configs` - A list of MQTT configurations.
     /// * `node_info_interval` - Interval for sending node info messages.
+    /// * `meshtastic_timeout` - Timeout for Meshtastic nodes.
     /// * `enable_meshtastic` - Whether to enable Meshtastic support.
     /// * `enable_sportident` - Whether to enable SportIdent support.
     /// * `sportident_factory` - Optional factory for creating SportIdent serial connections.
     #[staticmethod]
-    #[pyo3(signature = (dns, mqtt_configs=Vec::new(), node_info_interval = Duration::from_secs(60), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
+    #[pyo3(signature = (dns, mqtt_configs=Vec::new(), node_info_interval = Duration::from_secs(60), meshtastic_timeout = Duration::from_secs(600), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
     pub fn new(
         dns: Vec<(String, String)>,
         mqtt_configs: Vec<MqttConfig>,
         node_info_interval: Duration,
+        meshtastic_timeout: Duration,
         enable_meshtastic: bool,
         enable_sportident: bool,
         sportident_factory: Option<Bound<'_, PyUsbSerialFactory>>,
@@ -172,6 +174,7 @@ impl MessageHandler {
             dns?,
             mqtt_configs.into_iter().map(|config| config.into()).collect(),
             node_info_interval,
+            meshtastic_timeout,
             usb_serial_config,
         );
         let inner = Arc::new(Mutex::new(message_handler_rs));
