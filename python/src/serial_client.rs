@@ -56,6 +56,21 @@ const FINAL_RESPONSE: &[u8] = &[
 const ETX: u8 = 0x03;
 
 impl SerialClient {
+    fn parse_si_packet(mut bytes: &[u8]) -> (&[u8], bool) {
+        while let Some((&0xff, tail)) = bytes.split_first() {
+            bytes = tail;
+        }
+        let is_meos = bytes.starts_with(&[0x02, 0x02]);
+        let cleaned = if is_meos {
+            &bytes[2..]
+        } else if bytes.starts_with(&[0x02]) {
+            &bytes[1..]
+        } else {
+            bytes
+        };
+        (cleaned, is_meos)
+    }
+
     /// Responds to orienteering software as a blue SportIdent SRR dongle.
     ///
     /// This function handles the communication protocol with orienteering software,
@@ -75,12 +90,14 @@ impl SerialClient {
 
         tokio::select! {
             _len = rx.read_until(ETX, &mut query) => {
-                match query.as_slice() {
-                    b"\xff\x02\x02\xf0\x01Mm\n\x03" => {
-                        info!("Responding to orienteering software - MeOS");
-                    }
-                    b"\xff\x02\xf0\x01Mm\n\x03" => {
-                        info!("Responding to orienteering software - SportIdent Reader");
+                let (cleaned, is_meos) = Self::parse_si_packet(query.as_slice());
+                match cleaned {
+                    b"\xf0\x01Mm\n\x03" => {
+                        if is_meos {
+                            info!("Responding to orienteering software - MeOS");
+                        } else {
+                            info!("Responding to orienteering software - SportIdent Reader");
+                        }
                     }
                     _ => {
                         error!("Contacted by unknown orienteering software");
@@ -96,12 +113,10 @@ impl SerialClient {
                 let mut data = Vec::new();
                 let _len = rx.read_until(ETX, &mut data).await.unwrap();
 
-                match data.as_slice() {
-                    b"\x02\x83\x02\x00\x80\xbf\x17\x03" | b"\xff\x02\x83\x02\x00\x80\xbf\x17\x03" => {} // SportIdent Reader ACK or MeOS ACK
-                    _ => {
-                        error!("Communicating with software failed");
-                        return None;
-                    }
+                let (cleaned, _) = Self::parse_si_packet(data.as_slice());
+                if cleaned != b"\x83\x02\x00\x80\xbf\x17\x03" { // SportIdent Reader ACK or MeOS ACK
+                    error!("Communicating with software failed");
+                    return None;
                 }
                 let _ = tx
                     .write_all(FINAL_RESPONSE)
@@ -476,6 +491,47 @@ mod tests {
 
         let result = handle.await.unwrap();
         assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_blue_srr_variations() {
+        let cases = vec![
+            (
+                b"\x02\x02\xf0\x01Mm\n\x03".as_slice(),
+                b"\x02\x02\x83\x02\x00\x80\xbf\x17\x03".as_slice(),
+            ),
+            (
+                b"\x02\xf0\x01Mm\n\x03".as_slice(),
+                b"\xff\x02\x02\x83\x02\x00\x80\xbf\x17\x03".as_slice(),
+            ),
+            (
+                b"\xff\xff\x02\xf0\x01Mm\n\x03".as_slice(),
+                b"\xff\xff\xff\x02\x83\x02\x00\x80\xbf\x17\x03".as_slice(),
+            ),
+        ];
+
+        for (hello, ack) in cases {
+            let (computer_rx, computer_tx, mut test_serial) = init_channels();
+            let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+            let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+            let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
+
+            test_serial.write_all(hello).await.unwrap();
+
+            let mut buf = vec![0; FIRST_RESPONSE.len()];
+            test_serial.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, FIRST_RESPONSE);
+
+            test_serial.write_all(ack).await.unwrap();
+
+            let mut buf = vec![0; FINAL_RESPONSE.len()];
+            test_serial.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, FINAL_RESPONSE);
+
+            let result = handle.await.unwrap();
+            assert_eq!(result, None);
+        }
     }
 
     #[tokio::test]
