@@ -65,15 +65,27 @@ jobs:
 
   linux-armv6:
     runs-on: ubuntu-latest
+    container: rust:bookworm
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Install libudev-dev:armhf
+        run: |
+          dpkg --add-architecture armhf
+          apt-get update
+          apt-get install -y libudev-dev:armhf
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.11'
+          version: '0.10.12'
       - name: Build wheel
         working-directory: "python"
+        env:
+          PKG_CONFIG_ALLOW_CROSS: 1
+          PKG_CONFIG_PATH: /usr/lib/arm-linux-gnueabihf/pkgconfig
         run: |
-          pip install maturin ziglang
+          uv venv
+          uv pip install maturin ziglang
+          export PATH="$PWD/.venv/bin:$PATH"
           rustup target add arm-unknown-linux-gnueabihf
           maturin build -r --strip --target arm-unknown-linux-gnueabihf --zig --out dist --compatibility pypi
       - name: Upload wheels
