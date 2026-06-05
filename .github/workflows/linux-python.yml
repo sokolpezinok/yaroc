@@ -40,7 +40,6 @@ jobs:
           args: -r --out dist --find-interpreter --strip --compatibility pypi
           sccache: true
           working-directory: "python"
-          before-script-linux: yum install -y dbus-devel pkgconfig && yum -y clean all
           manylinux: 2_28
       - name: Test the wheel
         if: matrix.target == 'x86_64'
