@@ -4,7 +4,7 @@ use std::{future, sync::Arc};
 
 use futures::FutureExt as _;
 use futures::future::BoxFuture;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use pyo3::exceptions::PyConnectionError;
 use pyo3::prelude::*;
 
@@ -172,6 +172,7 @@ impl SerialClient {
                                     computer_tx.lock().await
                                 }
                             };
+                            debug!("Read {} bytes from mini-reader", reader_buffer.len());
                             let _ = tx
                                 .write_all(reader_buffer.as_slice())
                                 .await
@@ -184,7 +185,8 @@ impl SerialClient {
                 }
                 len = rx.read_buf(&mut buffer) => {
                     match len {
-                        Ok(_) => {
+                        Ok(len) => {
+                            debug!("Writing {} bytes to mini-reader", len);
                             let _ = mini_reader
                                 .write_all(buffer.as_slice())
                                 .await
