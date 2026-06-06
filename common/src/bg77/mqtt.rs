@@ -209,6 +209,18 @@ impl<M: ModemHw> MqttClient<M> {
         bg77: &mut M,
         modem_manager: &ModemManager<M>,
     ) -> crate::Result<()> {
+        let res = self.connect_inner(bg77, modem_manager).await;
+        if res.is_err() {
+            MQTT_CONNECTION_STATUS.sender().send(false);
+        }
+        res
+    }
+
+    async fn connect_inner(
+        &mut self,
+        bg77: &mut M,
+        modem_manager: &ModemManager<M>,
+    ) -> crate::Result<()> {
         let cid = self.client_id;
         if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[cid as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
@@ -239,6 +251,7 @@ impl<M: ModemHw> MqttClient<M> {
             }
             MQTT_DISCONNECTING | MQTT_CONNECTING => {
                 info!("Connecting or disconnecting from MQTT in progress");
+                MQTT_CONNECTION_STATUS.sender().send(false);
                 Ok(())
             }
             MQTT_INITIALIZING => {
@@ -274,6 +287,7 @@ impl<M: ModemHw> MqttClient<M> {
         let cid = self.client_id;
         let cmd = format!(50; "+QMTCLOSE={cid}")?;
         bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
+        MQTT_CONNECTION_STATUS.sender().send(false);
         Ok(())
     }
 
