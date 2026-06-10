@@ -3,11 +3,15 @@ use futures::future::BoxFuture;
 use log::{debug, error, info};
 use nusb::hotplug::HotplugEvent;
 use std::fmt::Display;
-use std::time::Duration;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::pin::Pin;
+#[cfg(target_os = "linux")]
+use std::task::{Context, Poll};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
-
 pub trait UsbSerialTrait {
     type Output;
 
@@ -53,12 +57,64 @@ pub trait UsbSerialFactory: Send + Sync {
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
 pub struct UsbSerialManager {
     factories: Vec<Box<dyn UsbSerialFactory>>,
+    pending_connections: Vec<nusb::DeviceInfo>,
+}
+
+#[cfg(target_os = "linux")]
+struct SendAsyncMonitorSocket(tokio_udev::AsyncMonitorSocket);
+#[cfg(target_os = "linux")]
+// SAFETY: tokio_udev::AsyncMonitorSocket wraps a raw file descriptor (netlink socket)
+// which can be safely transferred to another thread. The underlying tokio async registration
+// and standard system calls are thread-safe.
+unsafe impl Send for SendAsyncMonitorSocket {}
+#[cfg(target_os = "linux")]
+// SAFETY: Access to the socket is synchronized via standard mut references and async polling
+// in tokio, making concurrent access thread-safe.
+unsafe impl Sync for SendAsyncMonitorSocket {}
+
+#[cfg(target_os = "linux")]
+impl futures::Stream for SendAsyncMonitorSocket {
+    type Item = std::io::Result<tokio_udev::Event>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.0).poll_next(cx)
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct UdevEvent {
+    devnode: PathBuf,
+    usb_sysfs_path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+fn extract_add_event(event: tokio_udev::Event) -> Option<UdevEvent> {
+    if event.event_type() != tokio_udev::EventType::Add {
+        return None;
+    }
+    let devnode = event.devnode()?;
+    let mut parent = event.parent();
+    while let Some(p) = parent {
+        if p.subsystem().is_some_and(|s| s == "usb")
+            && p.devtype().is_some_and(|s| s == "usb_device")
+        {
+            return Some(UdevEvent {
+                devnode: devnode.to_path_buf(),
+                usb_sysfs_path: p.syspath().to_path_buf(),
+            });
+        }
+        parent = p.parent();
+    }
+    None
 }
 
 impl UsbSerialManager {
     /// Creates a new `SerialDeviceManager`.
     pub fn new(factories: Vec<Box<dyn UsbSerialFactory>>) -> Self {
-        Self { factories }
+        Self {
+            factories,
+            pending_connections: Vec::new(),
+        }
     }
 
     /// Indicates whether the device is connected and running.
@@ -74,6 +130,90 @@ impl UsbSerialManager {
         self.factories.iter_mut().any(|f| f.remove_device(&device_node))
     }
 
+    #[cfg(target_os = "linux")]
+    fn handle_hotplug_event(&mut self, event: HotplugEvent) {
+        match event {
+            HotplugEvent::Connected(dev) => {
+                debug!(
+                    "USB device connected (pending TTY subsystem): {:?}",
+                    dev.sysfs_path()
+                );
+                let dev_id_str = format!("{:?}", dev.id());
+                if !self.is_running(&dev_id_str) {
+                    self.pending_connections.push(dev);
+                }
+            }
+            HotplugEvent::Disconnected(dev_id) => {
+                let device_node = format!("{:?}", dev_id);
+                if self.remove_device(device_node.clone()) {
+                    debug!("Disconnected USB device {device_node}");
+                }
+                self.pending_connections.retain(|d| d.id() != dev_id);
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    /// Monitors USB hotplug events and manages devices dynamically using udev.
+    pub async fn monitor_usb_devices(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Starting USB device manager (Linux udev version)");
+        if let Ok(devices) = nusb::list_devices().await {
+            for dev in devices {
+                self.detect_device(&dev).await;
+            }
+        }
+
+        let udev_monitor = tokio_udev::MonitorBuilder::new()?.match_subsystem("tty")?.listen()?;
+        let udev_stream =
+            SendAsyncMonitorSocket(tokio_udev::AsyncMonitorSocket::new(udev_monitor)?);
+
+        let mut udev_stream = udev_stream.filter_map(|res| {
+            futures::future::ready(match res {
+                Ok(event) => extract_add_event(event).map(Ok),
+                Err(err) => Some(Err(err)),
+            })
+        });
+
+        let mut watcher = nusb::watch_devices()?;
+        loop {
+            tokio::select! {
+                event = watcher.next() => {
+                    match event {
+                        Some(event) => self.handle_hotplug_event(event),
+                        None => {
+                            error!("USB watcher stream ended unexpectedly");
+                            break;
+                        }
+                    }
+                }
+                res = udev_stream.next() => {
+                    match res {
+                        Some(Ok(udev_event)) => {
+                            let devnode = &udev_event.devnode;
+                            debug!("TTY subsystem device added: {:?}", devnode);
+                            let usb_path = &udev_event.usb_sysfs_path;
+                            if let Some(idx) = self.pending_connections.iter().position(|dev| dev.sysfs_path() == usb_path) {
+                                let dev = self.pending_connections.remove(idx);
+                                self.detect_device(&dev).await;
+                            }
+                        }
+                        Some(Err(err)) => {
+                            error!("Udev stream error: {:?}", err);
+                        }
+                        None => {
+                            error!("Udev monitor stream ended unexpectedly");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
     /// Monitors USB hotplug events and manages devices dynamically.
     pub async fn monitor_usb_devices(
         &mut self,
@@ -90,7 +230,7 @@ impl UsbSerialManager {
             match event {
                 HotplugEvent::Connected(dev) => {
                     // Give the OS TTY subsystem a brief moment to register the node
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     self.detect_device(&dev).await;
                 }
                 HotplugEvent::Disconnected(dev_id) => {
