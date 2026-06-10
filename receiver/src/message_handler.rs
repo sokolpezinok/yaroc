@@ -21,7 +21,9 @@ use yaroc_common::punch::SiPunch;
 pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
+    _mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>, // Kept to prevent channel from closing
     punch_rx: UnboundedReceiver<SportIdentMessage>,
+    _punch_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     mqtt_receivers: Option<Vec<MqttReceiver>>,
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
@@ -77,7 +79,9 @@ impl MessageHandler {
         let handler = Self {
             fleet_state: FleetState::new(dns, node_infos_interval, meshtastic_timeout),
             mesh_packet_rx,
+            _mesh_packet_tx: mesh_packet_tx.clone(),
             punch_rx,
+            _punch_tx: punch_tx.clone(),
             mqtt_receivers: Some(mqtt_receivers),
             mqtt_tx,
             mqtt_rx,
@@ -141,7 +145,7 @@ impl MessageHandler {
                             }
                         }
                         None => {
-                            //TODO: closed channel
+                            // Can't happen since self holds a copy of mqtt_tx
                         }
                     }
                 }
@@ -153,7 +157,7 @@ impl MessageHandler {
                             }
                         }
                         None => {
-                            //TODO: closed channel
+                            // Can't happen since self holds a copy of _mesh_packet_tx
                         }
                     }
                 },
@@ -168,7 +172,7 @@ impl MessageHandler {
                             return Ok(Event::DeviceEvent { added, device });
                         }
                         None => {
-                            //TODO: closed channel
+                            // Can't happen since self holds a copy of _punch_tx
                         }
                     }
                 }
@@ -208,7 +212,9 @@ mod tests {
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_packet_rx,
+                _mesh_packet_tx: mesh_packet_tx.clone(),
                 punch_rx,
+                _punch_tx: punch_tx.clone(),
                 mqtt_receivers: None,
                 mqtt_tx: mqtt_tx.clone(),
                 mqtt_rx,
