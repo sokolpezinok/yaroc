@@ -185,6 +185,11 @@ impl SerialClient {
                 }
                 len = rx.read_buf(&mut buffer) => {
                     match len {
+                        Ok(0) => {
+                            warn!("Serial port to computer disconnected");
+                            let _ = mini_reader.shutdown().await;
+                            return None;
+                        }
                         Ok(len) => {
                             debug!("Writing {} bytes to mini-reader", len);
                             let _ = mini_reader
