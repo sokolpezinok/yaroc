@@ -11,15 +11,22 @@ use yaroc_common::{
     proto::{Disconnected, Status, status::Msg},
 };
 
+/// Configuration options for connecting to an MQTT broker.
 pub struct MqttConfig {
+    /// The URL/host of the MQTT broker.
     pub url: String,
+    /// The port to connect to on the MQTT broker.
     pub port: u16,
+    /// Optional username and password credentials.
     pub credentials: Option<(String, String)>,
+    /// Keep-alive duration for the MQTT connection.
     pub keep_alive: Duration,
+    /// Optional Meshtastic channel name to subscribe to.
     pub meshtastic_channel: Option<String>,
 }
 
 impl Default for MqttConfig {
+    /// Returns the default MQTT configuration pointing to the EMQX public broker.
     fn default() -> Self {
         Self {
             url: "broker.emqx.io".to_owned(),
@@ -32,11 +39,13 @@ impl Default for MqttConfig {
 }
 
 impl MqttConfig {
+    /// Sets the username and password credentials for the connection.
     pub fn set_credentials(&mut self, username: &str, password: &str) {
         self.credentials = Some((username.to_owned(), password.to_owned()));
     }
 }
 
+/// An MQTT receiver that handles subscriptions and listens for incoming messages.
 pub struct MqttReceiver {
     client: AsyncClient,
     topics: Vec<String>,
@@ -44,15 +53,22 @@ pub struct MqttReceiver {
     url: String,
 }
 
+/// Represents messages received from MQTT topics.
 #[derive(Debug)]
 pub enum Message {
+    /// Cellular status update containing the sender MAC, arrival timestamp, and raw payload.
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
+    /// Punches data containing the sender MAC, arrival timestamp, and raw payload.
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
+    /// Meshtastic raw serial message with arrival timestamp and raw payload.
     MeshtasticSerial(DateTime<Local>, Vec<u8>),
+    /// Meshtastic status update containing the sender MAC, arrival timestamp, and raw payload.
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
+    /// Creates a new `MqttReceiver` instance by connecting to the broker specified in `config`
+    /// and subscribing to topics corresponding to the provided MAC addresses.
     pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(config: MqttConfig, macs: I) -> Self {
         let client_id = format!("yaroc-{}", Uuid::new_v4());
         let mut mqttoptions = MqttOptions::new(client_id, &config.url, config.port);
@@ -84,6 +100,7 @@ impl MqttReceiver {
         }
     }
 
+    /// Extracts the cellular MAC address from the topic name.
     fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
         if topic.len() < 16 {
             return Err(Error::ParseError.into());
@@ -91,6 +108,7 @@ impl MqttReceiver {
         MacAddress::try_from(&topic[4..16])
     }
 
+    /// Extracts the Meshtastic node MAC address from the topic name.
     fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
         if topic.len() <= 10 {
             // 8 for MAC, 2 for '/!'
@@ -99,6 +117,7 @@ impl MqttReceiver {
         MacAddress::try_from(&topic[topic.len() - 8..])
     }
 
+    /// Processes an incoming MQTT message payload and topic, converting it into a structured `Message`.
     fn process_incoming(
         now: DateTime<Local>,
         topic: &str,
@@ -139,6 +158,8 @@ impl MqttReceiver {
         }
     }
 
+    /// Retrieves the next incoming MQTT message by polling the event loop.
+    /// Reconnects and resubscribes automatically upon connection errors.
     pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
             let Ok(notification) = self.event_loop.poll().await else {
@@ -165,6 +186,11 @@ impl MqttReceiver {
                 _ => {} // ignored
             }
         }
+    }
+
+    /// Returns the URL of the MQTT broker this receiver is connected to.
+    pub fn url(&self) -> &str {
+        &self.url
     }
 }
 

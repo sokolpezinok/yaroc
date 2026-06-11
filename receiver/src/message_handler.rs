@@ -127,8 +127,10 @@ impl MessageHandler {
                         let res =
                             mqtt_tx.send(msg).map_err(|_| crate::error::Error::ChannelSendError);
                         if let Err(e) = res {
-                            // TODO: print also which receiver/server it is
-                            error!("Error while receiving and forwarding MQTT message: {e}");
+                            error!(
+                                "Error while receiving and forwarding MQTT message from {}: {e}",
+                                receiver.url()
+                            );
                         }
                     }
                 });
@@ -195,9 +197,7 @@ mod tests {
 
     impl MessageHandler {
         /// Creates a handler tailored for testing, bypassing factories and exposing senders directly.
-        pub fn new_for_test(
-            node_infos_interval: Duration,
-        ) -> TestChannels {
+        pub fn new_for_test(node_infos_interval: Duration) -> TestChannels {
             let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel();
             let (punch_tx, punch_rx) = unbounded_channel();
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
