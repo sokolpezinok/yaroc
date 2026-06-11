@@ -87,6 +87,7 @@ impl SerialClient {
         let mut rx = computer_rx.lock().await;
         let mut query = Vec::new();
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
+        let mini_reader_connect_rx_closed = mini_reader_connect_rx.is_closed();
 
         tokio::select! {
             _len = rx.read_until(ETX, &mut query) => {
@@ -124,8 +125,16 @@ impl SerialClient {
                     .inspect_err(|e| error!("Communication with software failed: {e}"));
                 None
             }
-            device = mini_reader_connect_rx.recv() => {
-                device
+            device = mini_reader_connect_rx.recv(), if !mini_reader_connect_rx_closed => {
+                match device {
+                    Some(device) => Some(device),
+                    None => {
+                        error!(
+                            "Notification stream unexpectedly ended. UsbSerialFactory must have crashed."
+                        );
+                        None
+                    }
+                }
             }
         }
     }
@@ -148,6 +157,7 @@ impl SerialClient {
         let mut tx_guard = None;
         let mut rx = computer_rx.lock().await;
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
+        let mut mini_reader_connect_rx_closed = mini_reader_connect_rx.is_closed();
         loop {
             //TODO: Consider using the `bytes` crate.
             let mut reader_buffer = Vec::with_capacity(280);
@@ -202,8 +212,14 @@ impl SerialClient {
                         }
                     }
                 }
-                device = mini_reader_connect_rx.recv() => {
-                    return device;
+                device = mini_reader_connect_rx.recv(), if !mini_reader_connect_rx_closed => {
+                    match device {
+                        Some(device) => return Some(device),
+                        None => {
+                            error!("Notification stream unexpectedly ended. UsbSerialFactory must have crashed.");
+                            mini_reader_connect_rx_closed = true;
+                        }
+                    }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(800)), if tx_guard.is_some() => {
                     // Release lock on computer_tx if enough time has passed.
