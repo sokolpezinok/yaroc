@@ -51,6 +51,9 @@ pub struct MqttReceiver {
     topics: Vec<String>,
     event_loop: EventLoop,
     url: String,
+    #[cfg(test)]
+    /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
+    test_now: Option<DateTime<Local>>,
 }
 
 /// Represents messages received from MQTT topics.
@@ -97,6 +100,8 @@ impl MqttReceiver {
             client,
             event_loop,
             topics,
+            #[cfg(test)]
+            test_now: None,
         }
     }
 
@@ -169,7 +174,16 @@ impl MqttReceiver {
                 continue;
             };
 
-            let now = Local::now();
+            let now = {
+                #[cfg(test)]
+                {
+                    self.test_now.unwrap_or_else(Local::now)
+                }
+                #[cfg(not(test))]
+                {
+                    Local::now()
+                }
+            };
             match notification {
                 Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
                     return Self::process_incoming(now, &topic, &payload);
@@ -197,6 +211,8 @@ impl MqttReceiver {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     #[test]
     fn test_new() {
@@ -288,5 +304,92 @@ mod test {
                 "hello meshtastic".into()
             )
         );
+    }
+
+    /// Encodes an MQTT v3.1.1 (v3) QoS 0 PUBLISH packet with the given topic and payload.
+    /// Used by the mock broker to send simulated messages to the client.
+    fn encode_publish(topic: &str, payload: &[u8]) -> Vec<u8> {
+        let topic_bytes = topic.as_bytes();
+        let topic_len = topic_bytes.len();
+
+        let var_header_len = 2 + topic_len;
+        let remaining_len = var_header_len + payload.len();
+
+        let mut packet = Vec::new();
+        packet.push(0x30); // Control packet type PUBLISH, QoS 0
+
+        // Encode remaining length (variable length byte representation)
+        let mut val = remaining_len;
+        loop {
+            let mut byte = (val & 127) as u8;
+            val /= 128;
+            if val > 0 {
+                byte |= 128;
+            }
+            packet.push(byte);
+            if val == 0 {
+                break;
+            }
+        }
+
+        packet.push((topic_len >> 8) as u8);
+        packet.push((topic_len & 0xFF) as u8);
+        packet.extend_from_slice(topic_bytes);
+        packet.extend_from_slice(payload);
+        packet
+    }
+
+    #[tokio::test]
+    async fn test_next_message_success() {
+        // Bind TcpListener to a random port
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // Spawn a background task representing the mock MQTT broker
+        let broker_handle = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+
+            // 1. Read CONNECT packet
+            let mut buf = [0u8; 1024];
+            let _n = socket.read(&mut buf).await.unwrap();
+
+            // 2. Write CONNACK packet
+            socket.write_all(&[0x20, 0x02, 0x00, 0x00]).await.unwrap();
+
+            // 3. Read SUBSCRIBE packet
+            let _n = socket.read(&mut buf).await.unwrap();
+
+            // 4. Write PUBLISH packet
+            // Topic: yar/deadbeef9876/status
+            // Payload: cellular status payload
+            let topic = "yar/deadbeef9876/status";
+            let payload = b"cellular status payload";
+            let publish_packet = encode_publish(topic, payload);
+            socket.write_all(&publish_packet).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        });
+
+        // Setup MqttReceiver pointing to our mock broker
+        let macs = [MacAddress::Full(0xdeadbeef9876)];
+        let config = MqttConfig {
+            url: "127.0.0.1".to_string(),
+            port,
+            ..Default::default()
+        };
+
+        let mut receiver = MqttReceiver::new(config, macs.iter());
+        let exact_time = Local::now();
+        receiver.test_now = Some(exact_time);
+
+        // Get the next message with a timeout to prevent hanging
+        let result = tokio::time::timeout(Duration::from_secs(1), receiver.next_message())
+            .await
+            .expect("MQTT next_message() test timed out");
+        assert_eq!(
+            result.unwrap(),
+            Message::CellularStatus(macs[0], exact_time, b"cellular status payload".into())
+        );
+
+        broker_handle.await.unwrap();
     }
 }
