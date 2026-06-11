@@ -54,7 +54,7 @@ pub struct MqttReceiver {
 }
 
 /// Represents messages received from MQTT topics.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Message {
     /// Cellular status update containing the sender MAC, arrival timestamp, and raw payload.
     CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
@@ -242,5 +242,51 @@ mod test {
         assert_eq!("12345678", format!("{mac_address}"));
         assert!(MqttReceiver::extract_cell_mac("cha/!1234567").is_err());
         assert!(MqttReceiver::extract_cell_mac("!12345678").is_err());
+    }
+
+    #[test]
+    fn test_process_incoming() {
+        let now = Local::now();
+
+        let msg =
+            MqttReceiver::process_incoming(now, "yar/deadbeef9876/status", b"hello cell").unwrap();
+        assert_eq!(
+            msg,
+            Message::CellularStatus(
+                MacAddress::try_from("deadbeef9876").unwrap(),
+                now,
+                "hello cell".into()
+            )
+        );
+
+        let msg =
+            MqttReceiver::process_incoming(now, "yar/deadbeef9876/p", b"hello punch").unwrap();
+        assert_eq!(
+            msg,
+            Message::Punches(
+                MacAddress::try_from("deadbeef9876").unwrap(),
+                now,
+                "hello punch".into()
+            )
+        );
+
+        let msg = MqttReceiver::process_incoming(now, "yar/2/e/serial/!12345678", b"hello serial")
+            .unwrap();
+        assert_eq!(msg, Message::MeshtasticSerial(now, "hello serial".into()));
+
+        let msg = MqttReceiver::process_incoming(
+            now,
+            "yar/2/e/some_channel/!12345678",
+            b"hello meshtastic",
+        )
+        .unwrap();
+        assert_eq!(
+            msg,
+            Message::MeshtasticStatus(
+                MacAddress::try_from("12345678").unwrap(),
+                now,
+                "hello meshtastic".into()
+            )
+        );
     }
 }
