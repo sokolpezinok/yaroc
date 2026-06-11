@@ -112,7 +112,7 @@ impl SerialClient {
                     .await
                     .inspect_err(|e| error!("Communication with software failed: {e}"));
                 let mut data = Vec::new();
-                let _len = rx.read_until(ETX, &mut data).await.unwrap();
+                let _len = rx.read_until(ETX, &mut data).await;
 
                 let (cleaned, _) = Self::parse_si_packet(data.as_slice());
                 if cleaned != b"\x83\x02\x00\x80\xbf\x17\x03" { // SportIdent Reader ACK or MeOS ACK
@@ -145,15 +145,21 @@ impl SerialClient {
     /// forwarding data between them. It acts as a bridge for communication.
     ///
     /// # Arguments
-    /// * `computer_rx` - An `Arc<Mutex<BufReader<ReadHalf<SerialStream>>>>` for reading from the computer.
-    /// * `computer_tx` - An `Arc<Mutex<WriteHalf<SerialStream>>>` for writing to the computer.
-    /// * `mini_reader` - A mutable reference to the `SerialStream` connected to the mini-reader.
-    async fn respond_as_mini_reader(
-        computer_rx: &ReadMutex<SerialStream>,
-        computer_tx: &WriteMutex<SerialStream>,
-        mini_reader: &mut SerialStream,
+    /// * `computer_rx` - RX part of the channel for the computer.
+    /// * `computer_tx` - TX part of the channel for the computer.
+    /// * `mini_reader` - A mutable reference to the generic stream connected to the mini-reader.
+    /// * `mini_reader_connect_rx` - Receiver channel for notifying new mini-reader connections.
+    async fn respond_as_mini_reader<R, W, M>(
+        computer_rx: &ReadMutex<R>,
+        computer_tx: &WriteMutex<W>,
+        mini_reader: &mut M,
         mini_reader_connect_rx: &MiniReaderConnectRx,
-    ) -> Option<String> {
+    ) -> Option<String>
+    where
+        R: AsyncRead + Unpin + Send,
+        W: AsyncWrite + Unpin + Send,
+        M: AsyncRead + AsyncWrite + Unpin + Send,
+    {
         let mut tx_guard = None;
         let mut rx = computer_rx.lock().await;
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
@@ -173,6 +179,7 @@ impl SerialClient {
                         }
                         Err(e) => {
                             error!("Error while reading from mini reader: {e}");
+                            return None;
                         }
                         Ok(_) => {
                             let mut tx = match tx_guard.take() {
@@ -209,6 +216,7 @@ impl SerialClient {
                         }
                         Err(e) => {
                             error!("Error while reading from computer: {e}");
+                            return None;
                         }
                     }
                 }
@@ -324,7 +332,10 @@ impl SerialClient {
                 let res = device.map(Self::connect_to_mini_reader).transpose();
                 match res {
                     Ok(mini_reader_stream) => *mini_reader = mini_reader_stream,
-                    Err(e) => error!("{e}"),
+                    Err(e) => {
+                        error!("{e}");
+                        *mini_reader = None;
+                    }
                 }
             }
         })
@@ -437,6 +448,7 @@ impl UsbSerialFactory for PyUsbSerialFactory {
 mod tests {
     use super::*;
 
+    use std::io;
     use tokio::io::{DuplexStream, duplex, split};
 
     fn init_channels() -> (
@@ -594,5 +606,29 @@ mod tests {
 
         let result = handle.await.unwrap();
         assert_eq!(result, Some(device_path));
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_mini_reader_fatal_read_error() {
+        let (computer_rx, computer_tx, _test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let stream = futures::stream::iter(vec![Err::<&[u8], io::Error>(io::Error::new(
+            io::ErrorKind::Other,
+            "mock error",
+        ))]);
+        let reader = tokio_util::io::StreamReader::new(stream);
+        let mut error_reader = tokio::io::join(reader, tokio::io::sink());
+
+        let result = SerialClient::respond_as_mini_reader(
+            &computer_rx,
+            &computer_tx,
+            &mut error_reader,
+            &mini_reader_connect_rx,
+        )
+        .await;
+        // Should immediately return None instead of looping forever
+        assert_eq!(result, None);
     }
 }

@@ -35,6 +35,7 @@ static_cell = "^2.1.1" #unified
 thiserror = { version = "2.0.0", default-features = false }
 tokio = { version = "1.52" }
 tokio-serial = "5.4.5"
+tokio-util = { version = "0.7" }
 
 [workspace.package]
 rust-version = "1.93.0"
