@@ -612,7 +612,7 @@ mod test_punch {
     #[test]
     fn test_cellular_status() {
         let timestamp = Timestamp {
-            millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+            millis_epoch: 1_706_523_131_124, // 2024-01-29T11:12:11.124+01:00
             ..Default::default()
         };
         let status = Status {

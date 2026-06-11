@@ -16,7 +16,7 @@ use yaroc_common::punch::SiPunch;
 
 /// Orchestrates the overall message flow.
 ///
-/// This struct is responsible for receiving messages from MQTT and Meshtastic devices,
+/// This struct is responsible for receiving messages from MQTT, SportIdent and Meshtastic devices,
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
@@ -97,9 +97,9 @@ impl MessageHandler {
                 factories.push(Box::new(SportIdentFactory::new(punch_tx)));
             }
             SportIdentConfig::Active(factory) => {
-                // Note: The `punch_tx` channel is intentionally not passed to the active factory here.
-                // The Active variant is used by the Python SerialClient, which handles the punches
-                // natively on the Python side, so they don't need to be routed through this MessageHandler.
+                // Note: The `punch_tx` channel is intentionally not passed to the active factory
+                // here. The Active variant is used by the Python SerialClient, which handles the
+                // punches in its own loop, so they don't need to be handled by this MessageHandler.
                 factories.push(factory);
             }
             SportIdentConfig::None => {}
@@ -117,7 +117,7 @@ impl MessageHandler {
     ///
     /// Returns an error if any of the underlying event parsing or state updates fail.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
-        // Spawn MQTT tasks when next_event is run for the first time.
+        // Spawn MQTT tasks when `next_event()` is run for the first time.
         if let Some(receivers) = self.mqtt_receivers.take() {
             for mut receiver in receivers {
                 let mqtt_tx = self.mqtt_tx.clone();
@@ -138,27 +138,19 @@ impl MessageHandler {
         loop {
             tokio::select! {
                 mqtt_msg = self.mqtt_rx.recv() => {
-                    match mqtt_msg {
-                        Some(mqtt_message) => {
-                            if let Some(message) = self.fleet_state.process_message(mqtt_message?)? {
-                                return Ok(message);
-                            }
-                        }
-                        None => {
-                            // Can't happen since self holds a copy of mqtt_tx
-                        }
+                    // None can't happen since self holds a copy of mqtt_tx
+                    if let Some(mqtt_message) = mqtt_msg
+                        && let Some(message) = self.fleet_state.process_message(mqtt_message?)?
+                    {
+                        return Ok(message);
                     }
                 }
                 mesh_recv = self.mesh_packet_rx.recv() => {
-                    match mesh_recv {
-                        Some((mesh_packet, mac_address)) => {
-                            if let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)? {
-                                return Ok(message);
-                            }
-                        }
-                        None => {
-                            // Can't happen since self holds a copy of _mesh_packet_tx
-                        }
+                    // None can't happen since self holds a copy of _mesh_packet_tx
+                    if let Some((mesh_packet, mac_address)) = mesh_recv
+                        && let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)?
+                    {
+                        return Ok(message);
                     }
                 },
                 punch_recv = self.punch_rx.recv() => {
@@ -171,9 +163,7 @@ impl MessageHandler {
                         Some(SportIdentMessage::DeviceEvent { added, device }) => {
                             return Ok(Event::DeviceEvent { added, device });
                         }
-                        None => {
-                            // Can't happen since self holds a copy of _punch_tx
-                        }
+                        None => {} // Can't happen since self holds a copy of _punch_tx
                     }
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
@@ -196,16 +186,18 @@ mod tests {
     use tokio::time::timeout;
     use yaroc_common::punch::RawPunch;
 
+    type TestChannels = (
+        MessageHandler,
+        UnboundedSender<SportIdentMessage>,
+        UnboundedSender<(MeshPacket, MacAddress)>,
+        UnboundedSender<crate::Result<Message>>,
+    );
+
     impl MessageHandler {
         /// Creates a handler tailored for testing, bypassing factories and exposing senders directly.
         pub fn new_for_test(
             node_infos_interval: Duration,
-        ) -> (
-            Self,
-            UnboundedSender<SportIdentMessage>,
-            UnboundedSender<(MeshPacket, MacAddress)>,
-            UnboundedSender<crate::Result<Message>>,
-        ) {
+        ) -> TestChannels {
             let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel();
             let (punch_tx, punch_rx) = unbounded_channel();
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
