@@ -36,11 +36,12 @@ class YarocDaemon:
         display_model: str | None = None,
         mqtt_configs: List[MqttConfig] = [],
         meshtastic_serial: bool = False,
+        meshtastic_tcp: str | None = None,
         meshtastic_timeout: int = 600,
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
-        self.handler, usb_serial_manager = (
+        builder = (
             MessageHandlerBuilder()
             .with_dns(dns)
             .with_mqtt_configs(mqtt_configs)
@@ -48,11 +49,10 @@ class YarocDaemon:
             .with_meshtastic(meshtastic_serial)
             .with_sportident(sportident_factory is not None)
             .with_sportident_factory(sportident_factory)
-            .build()
         )
-        self.usb_serial_manager = (
-            usb_serial_manager if (meshtastic_serial or sportident_factory is not None) else None
-        )
+        if meshtastic_tcp is not None:
+            builder = builder.with_tcp(meshtastic_tcp)
+        self.handler, self.usb_serial_manager = builder.build()
         self.drawer = StatusDrawer(display_model)
         self.executor = ThreadPoolExecutor(max_workers=1)
         hostname = socket.gethostname()
@@ -138,9 +138,8 @@ class YarocDaemon:
         tasks = [
             asyncio.create_task(self.client_group.loop()),
             asyncio.create_task(self.handle_messages()),
+            asyncio.ensure_future(self.usb_serial_manager.loop()),
         ]
-        if self.usb_serial_manager is not None:
-            tasks.append(asyncio.ensure_future(self.usb_serial_manager.loop()))
 
         try:
             await shutdown_event.wait()
@@ -209,6 +208,7 @@ async def main_loop() -> None:
         config.get("display", None),
         mqtt_configs,
         meshtastic_serial=meshtastic_conf.get("watch_usb", True),
+        meshtastic_tcp=meshtastic_conf.get("tcp", None),
         meshtastic_timeout=meshtastic_conf.get("timeout", 600),
         sportident_factory=sportident_factory,
     )

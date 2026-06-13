@@ -44,12 +44,16 @@ def create_si_workers(
         if config.get("usb", {}).get("enable", True):
             logging.info("Enabled USB punch source")
             watch_usb = False
-            dns: list[tuple[str, str]] = []
-            if meshtastic_config is not None:
-                watch_usb = meshtastic_config.get("watch_usb", False)
-                mac_addresses = meshtastic_config.get("mac-addresses", {})
-                dns = [(mac_address, name) for name, mac_address in mac_addresses.items()]
-            workers.append(UdevSiFactory(enable_meshtastic=watch_usb, dns=dns))
+            meshtastic_config = meshtastic_config or {}
+            watch_usb = meshtastic_config.get("watch_usb", False)
+            meshtastic_tcp = meshtastic_config.get("tcp", None)
+            mac_addresses = meshtastic_config.get("mac-addresses", {})
+            dns: list[tuple[str, str]] = [
+                (mac_address, name) for name, mac_address in mac_addresses.items()
+            ]
+            workers.append(
+                UdevSiFactory(enable_meshtastic=watch_usb, meshtastic_tcp=meshtastic_tcp, dns=dns)
+            )
         if config.get("fake", {}).get("enable", False):
             logging.info("Enabled fake punch source")
             workers.append(FakeSiWorker(config.get("fake", {}).get("interval")))

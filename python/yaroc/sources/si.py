@@ -40,10 +40,14 @@ class SiWorker:
 
 class UdevSiFactory(SiWorker):
     def __init__(
-        self, enable_meshtastic: bool = False, dns: list[tuple[str, str]] | None = None
+        self,
+        enable_meshtastic: bool = False,
+        meshtastic_tcp: str | None = None,
+        dns: list[tuple[str, str]] | None = None,
     ) -> None:
         super().__init__()
         self.enable_meshtastic = enable_meshtastic
+        self.meshtastic_tcp = meshtastic_tcp
         self.dns = dns if dns is not None else []
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
@@ -53,6 +57,8 @@ class UdevSiFactory(SiWorker):
             .with_meshtastic(self.enable_meshtastic)
             .with_sportident(True)
         )
+        if self.meshtastic_tcp is not None:
+            builder = builder.with_tcp(self.meshtastic_tcp)
         self.handler, self.usb_serial_manager = builder.build()
         await asyncio.gather(
             self.usb_serial_manager.loop(),

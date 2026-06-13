@@ -158,6 +158,7 @@ pub struct MessageHandlerBuilder {
     enable_meshtastic: bool,
     enable_sportident: bool,
     sportident_factory: Option<Py<PyUsbSerialFactory>>,
+    meshtastic_tcp: Option<String>,
 }
 
 #[pymethods]
@@ -172,6 +173,7 @@ impl MessageHandlerBuilder {
             enable_meshtastic: false,
             enable_sportident: false,
             sportident_factory: None,
+            meshtastic_tcp: None,
         }
     }
 
@@ -241,6 +243,11 @@ impl MessageHandlerBuilder {
         self_
     }
 
+    pub fn with_tcp<'py>(mut self_: PyRefMut<'py, Self>, host: String) -> PyRefMut<'py, Self> {
+        self_.meshtastic_tcp = Some(host);
+        self_
+    }
+
     pub fn build(&self, py: Python<'_>) -> PyResult<(MessageHandler, UsbSerialManager)> {
         let sportident = if let Some(ref factory_py) = self.sportident_factory {
             let factory_bound = factory_py.bind(py);
@@ -256,15 +263,20 @@ impl MessageHandlerBuilder {
             sportident,
         };
 
-        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerBuilderRs::new()
+        let mut builder = MessageHandlerBuilderRs::new()
             .with_dns(self.dns.clone())
             .with_mqtt_configs(
                 self.mqtt_configs.iter().map(|config| config.clone().into()).collect(),
             )
             .with_node_infos_interval(self.node_info_interval)
             .with_meshtastic_timeout(self.meshtastic_timeout)
-            .with_usb_serial_config(usb_serial_config)
-            .build();
+            .with_usb_serial_config(usb_serial_config);
+
+        if let Some(ref host) = self.meshtastic_tcp {
+            builder = builder.with_tcp(host.clone());
+        }
+
+        let (message_handler_rs, usb_serial_manager_rs) = builder.build();
         let inner = Arc::new(Mutex::new(message_handler_rs));
         Ok((
             MessageHandler { inner },

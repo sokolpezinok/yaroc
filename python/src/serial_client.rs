@@ -151,9 +151,7 @@ impl SerialClient {
                 match device {
                     Some(device) => Some(device),
                     None => {
-                        error!(
-                            "Notification stream unexpectedly ended. UsbSerialFactory must have crashed."
-                        );
+                        error!("Notification stream unexpectedly ended.");
                         None
                     }
                 }
