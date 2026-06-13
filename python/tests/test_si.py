@@ -50,13 +50,17 @@ class TestSiWorker(unittest.IsolatedAsyncioTestCase):
         worker = UdevSiFactory(enable_meshtastic=True)
         self.assertTrue(worker.enable_meshtastic)
 
-        # Mock the handler and usb_serial_manager returned by MessageHandler
+        # Mock the handler and usb_serial_manager returned by MessageHandlerBuilder
         mock_handler = AsyncMock()
         mock_usb_manager = AsyncMock()
 
-        # Let's mock MessageHandler.new by patching it
-        with patch("yaroc.sources.si.MessageHandler.new") as mock_mh:
-            mock_mh.return_value = (mock_handler, mock_usb_manager)
+        # Let's mock MessageHandlerBuilder by patching it
+        with patch("yaroc.sources.si.MessageHandlerBuilder") as mock_builder_cls:
+            mock_builder = mock_builder_cls.return_value
+            mock_builder.with_dns.return_value = mock_builder
+            mock_builder.with_meshtastic.return_value = mock_builder
+            mock_builder.with_sportident.return_value = mock_builder
+            mock_builder.build.return_value = (mock_handler, mock_usb_manager)
 
             queue = Queue()
             status_queue = Queue()

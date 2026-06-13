@@ -7,7 +7,8 @@ use yaroc_receiver::usb_serial_manager::UsbSerialManager as UsbSerialManagerRs;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::message_handler::{
-    MessageHandler as MessageHandlerRs, MessageHandlerBuilder, SportIdentConfig, UsbSerialConfig,
+    MessageHandler as MessageHandlerRs, MessageHandlerBuilder as MessageHandlerBuilderRs,
+    SportIdentConfig, UsbSerialConfig,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -123,69 +124,6 @@ pub struct MessageHandler {
 
 #[pymethods]
 impl MessageHandler {
-    /// Creates a new MessageHandler.
-    ///
-    /// # Arguments
-    ///
-    /// * `dns` - A list of (mac_address, name) tuples for resolving node names.
-    /// * `mqtt_configs` - A list of MQTT configurations.
-    /// * `node_info_interval` - Interval for sending node info messages.
-    /// * `meshtastic_timeout` - Timeout for Meshtastic nodes.
-    /// * `enable_meshtastic` - Whether to enable Meshtastic support.
-    /// * `enable_sportident` - Whether to enable SportIdent support.
-    /// * `sportident_factory` - Optional factory for creating SportIdent serial connections.
-    #[staticmethod]
-    #[pyo3(signature = (dns, mqtt_configs=Vec::new(), node_info_interval = Duration::from_secs(60), meshtastic_timeout = Duration::from_secs(600), enable_meshtastic=false, enable_sportident=false, sportident_factory=None))]
-    pub fn new(
-        dns: Vec<(String, String)>,
-        mqtt_configs: Vec<MqttConfig>,
-        node_info_interval: Duration,
-        meshtastic_timeout: Duration,
-        enable_meshtastic: bool,
-        enable_sportident: bool,
-        sportident_factory: Option<Bound<'_, PyUsbSerialFactory>>,
-    ) -> PyResult<(Self, UsbSerialManager)> {
-        let dns: PyResult<Vec<(String, MacAddress)>> = dns
-            .into_iter()
-            .map(|(mac, name)| {
-                Ok((
-                    name,
-                    MacAddress::try_from(mac.as_str()).map_err(|_| {
-                        PyValueError::new_err(format!("Wrong MAC address format: {mac}"))
-                    })?,
-                ))
-            })
-            .collect();
-
-        let sportident = if let Some(factory_bound) = sportident_factory {
-            let factory = factory_bound.borrow().clone();
-            SportIdentConfig::Active(Box::new(factory))
-        } else if enable_sportident {
-            SportIdentConfig::Passive
-        } else {
-            SportIdentConfig::None
-        };
-        let usb_serial_config = UsbSerialConfig {
-            enable_meshtastic,
-            sportident,
-        };
-
-        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerBuilder::new()
-            .with_dns(dns?)
-            .with_mqtt_configs(mqtt_configs.into_iter().map(|config| config.into()).collect())
-            .with_node_infos_interval(node_info_interval)
-            .with_meshtastic_timeout(meshtastic_timeout)
-            .with_usb_serial_config(usb_serial_config)
-            .build();
-        let inner = Arc::new(Mutex::new(message_handler_rs));
-        Ok((
-            Self { inner },
-            UsbSerialManager {
-                inner: Arc::new(Mutex::new(usb_serial_manager_rs)),
-            },
-        ))
-    }
-
     /// Waits for the next event from the message handler.
     pub async fn next_event(&self) -> PyResult<Event> {
         let inner = self.inner.clone();
@@ -207,5 +145,132 @@ impl MessageHandler {
             }
         })
         .await
+    }
+}
+
+/// A builder to construct `MessageHandler` and `UsbSerialManager`.
+#[pyclass]
+pub struct MessageHandlerBuilder {
+    dns: Vec<(String, MacAddress)>,
+    mqtt_configs: Vec<MqttConfig>,
+    node_info_interval: Duration,
+    meshtastic_timeout: Duration,
+    enable_meshtastic: bool,
+    enable_sportident: bool,
+    sportident_factory: Option<Py<PyUsbSerialFactory>>,
+}
+
+#[pymethods]
+impl MessageHandlerBuilder {
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            dns: Vec::new(),
+            mqtt_configs: Vec::new(),
+            node_info_interval: Duration::from_secs(60),
+            meshtastic_timeout: Duration::from_secs(600),
+            enable_meshtastic: false,
+            enable_sportident: false,
+            sportident_factory: None,
+        }
+    }
+
+    pub fn with_dns<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        dns: Vec<(String, String)>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        self_.dns = dns
+            .into_iter()
+            .map(|(mac, name)| -> PyResult<(String, MacAddress)> {
+                Ok((
+                    name,
+                    MacAddress::try_from(mac.as_str()).map_err(|_| {
+                        PyValueError::new_err(format!("Wrong MAC address format: {mac}"))
+                    })?,
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(self_)
+    }
+
+    pub fn with_mqtt_configs<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        mqtt_configs: Vec<MqttConfig>,
+    ) -> PyRefMut<'py, Self> {
+        self_.mqtt_configs = mqtt_configs;
+        self_
+    }
+
+    pub fn with_node_info_interval<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        interval: Duration,
+    ) -> PyRefMut<'py, Self> {
+        self_.node_info_interval = interval;
+        self_
+    }
+
+    pub fn with_meshtastic_timeout<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        timeout: Duration,
+    ) -> PyRefMut<'py, Self> {
+        self_.meshtastic_timeout = timeout;
+        self_
+    }
+
+    pub fn with_meshtastic<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        enable: bool,
+    ) -> PyRefMut<'py, Self> {
+        self_.enable_meshtastic = enable;
+        self_
+    }
+
+    pub fn with_sportident<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        enable: bool,
+    ) -> PyRefMut<'py, Self> {
+        self_.enable_sportident = enable;
+        self_
+    }
+
+    pub fn with_sportident_factory<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        factory: Option<Bound<'py, PyUsbSerialFactory>>,
+    ) -> PyRefMut<'py, Self> {
+        self_.sportident_factory = factory.map(|f| f.unbind());
+        self_
+    }
+
+    pub fn build(&self, py: Python<'_>) -> PyResult<(MessageHandler, UsbSerialManager)> {
+        let sportident = if let Some(ref factory_py) = self.sportident_factory {
+            let factory_bound = factory_py.bind(py);
+            let factory = factory_bound.borrow().clone();
+            SportIdentConfig::Active(Box::new(factory))
+        } else if self.enable_sportident {
+            SportIdentConfig::Passive
+        } else {
+            SportIdentConfig::None
+        };
+        let usb_serial_config = UsbSerialConfig {
+            enable_meshtastic: self.enable_meshtastic,
+            sportident,
+        };
+
+        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerBuilderRs::new()
+            .with_dns(self.dns.clone())
+            .with_mqtt_configs(
+                self.mqtt_configs.iter().map(|config| config.clone().into()).collect(),
+            )
+            .with_node_infos_interval(self.node_info_interval)
+            .with_meshtastic_timeout(self.meshtastic_timeout)
+            .with_usb_serial_config(usb_serial_config)
+            .build();
+        let inner = Arc::new(Mutex::new(message_handler_rs));
+        Ok((
+            MessageHandler { inner },
+            UsbSerialManager {
+                inner: Arc::new(Mutex::new(usb_serial_manager_rs)),
+            },
+        ))
     }
 }

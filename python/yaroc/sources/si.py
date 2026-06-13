@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator
 
-from ..rs import Event, MessageHandler, SiPunch
+from ..rs import Event, MessageHandlerBuilder, SiPunch
 
 DEFAULT_TIMEOUT_MS = 3.0
 START_MODE = 3
@@ -47,9 +47,13 @@ class UdevSiFactory(SiWorker):
         self.dns = dns if dns is not None else []
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
-        self.handler, self.usb_serial_manager = MessageHandler.new(
-            self.dns, [], enable_meshtastic=self.enable_meshtastic, enable_sportident=True
+        builder = (
+            MessageHandlerBuilder()
+            .with_dns(self.dns)
+            .with_meshtastic(self.enable_meshtastic)
+            .with_sportident(True)
         )
+        self.handler, self.usb_serial_manager = builder.build()
         await asyncio.gather(
             self.usb_serial_manager.loop(),
             self.get_punches(queue, status_queue),
@@ -60,7 +64,7 @@ class UdevSiFactory(SiWorker):
             try:
                 ev = await self.handler.next_event()
                 match ev:
-                    case Event.SiPunch():  # type: ignore
+                    case Event.SiPunch():
                         await self.process_punch(ev[0], queue)
                     case Event.SiPunchLogs():
                         for punch_log in ev[0]:

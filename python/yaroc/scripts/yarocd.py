@@ -15,7 +15,7 @@ from ..rs import (
     Event,
     HostInfo,
     MeshtasticLog,
-    MessageHandler,
+    MessageHandlerBuilder,
     MqttConfig,
     NodeInfo,
     PyUsbSerialFactory,
@@ -40,13 +40,15 @@ class YarocDaemon:
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
         self.client_group = client_group
-        self.handler, usb_serial_manager = MessageHandler.new(
-            dns,
-            mqtt_configs,
-            meshtastic_timeout=datetime.timedelta(seconds=meshtastic_timeout),
-            enable_meshtastic=meshtastic_serial,
-            enable_sportident=sportident_factory is not None,
-            sportident_factory=sportident_factory,
+        self.handler, usb_serial_manager = (
+            MessageHandlerBuilder()
+            .with_dns(dns)
+            .with_mqtt_configs(mqtt_configs)
+            .with_meshtastic_timeout(datetime.timedelta(seconds=meshtastic_timeout))
+            .with_meshtastic(meshtastic_serial)
+            .with_sportident(sportident_factory is not None)
+            .with_sportident_factory(sportident_factory)
+            .build()
         )
         self.usb_serial_manager = (
             usb_serial_manager if (meshtastic_serial or sportident_factory is not None) else None
