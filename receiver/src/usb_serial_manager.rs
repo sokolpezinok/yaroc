@@ -12,6 +12,7 @@ use std::task::{Context, Poll};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::CancellationToken;
+
 pub trait UsbSerialTrait {
     type Output;
 
