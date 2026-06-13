@@ -25,7 +25,7 @@ from ..rs import (
 )
 from ..utils.container import Container, create_clients
 from ..utils.status import StatusDrawer
-from ..utils.sys_info import eth_mac_addr, is_windows
+from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
 
 
 class YarocDaemon:
@@ -156,7 +156,8 @@ class YarocDaemon:
 
 
 async def main_loop() -> None:
-    with open("yarocd.toml", "rb") as f:
+    config_path = find_config_file("yarocd.toml")
+    with open(config_path, "rb") as f:
         config = tomllib.load(f)
 
     container = Container()

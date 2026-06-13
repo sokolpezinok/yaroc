@@ -61,6 +61,41 @@ def is_windows() -> bool:
     return sys.platform.lower() == "win32" or os.name.lower() == "nt"
 
 
+def find_config_file(filename: str) -> str:
+    """Find a configuration file.
+    First checks the local directory (pwd).
+    If not found, looks in:
+      - Linux: $XDG_CONFIG_HOME/yaroc/filename or ~/.config/yaroc/filename
+      - Windows: %APPDATA%/yaroc/filename or fallback to ~/.config/yaroc/filename
+    """
+    if os.path.exists(filename):
+        return filename
+
+    basename = os.path.basename(filename)
+
+    if is_windows():
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            windows_path = os.path.join(appdata, "yaroc", basename)
+            if os.path.exists(windows_path):
+                return windows_path
+        home = os.path.expanduser("~")
+        windows_path_fallback = os.path.join(home, ".config", "yaroc", basename)
+        if os.path.exists(windows_path_fallback):
+            return windows_path_fallback
+    else:
+        xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+        if xdg_config_home:
+            linux_path = os.path.join(xdg_config_home, "yaroc", basename)
+        else:
+            home = os.path.expanduser("~")
+            linux_path = os.path.join(home, ".config", "yaroc", basename)
+        if os.path.exists(linux_path):
+            return linux_path
+
+    return filename
+
+
 def create_sys_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.millis_epoch = current_timestamp_millis()

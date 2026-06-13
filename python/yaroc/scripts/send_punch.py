@@ -12,7 +12,7 @@ from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
 from ..rs import HostInfo, SiPunchLog, current_timestamp_millis
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
-from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr, is_windows
+from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr, find_config_file, is_windows
 
 
 class PunchSender:
@@ -90,7 +90,8 @@ class PunchSender:
 
 
 async def main():
-    with open("send-punch.toml", "rb") as f:
+    config_path = find_config_file("send-punch.toml")
+    with open(config_path, "rb") as f:
         config = tomllib.load(f)
 
     if "mac_addr" not in config:

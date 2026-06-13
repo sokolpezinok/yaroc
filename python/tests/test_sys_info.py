@@ -1,9 +1,16 @@
+import os
 import socket
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
 from yaroc.rs import RaspberryModel
-from yaroc.utils.sys_info import eth_mac_addr, is_windows, local_ip, raspberrypi_model
+from yaroc.utils.sys_info import (
+    eth_mac_addr,
+    find_config_file,
+    is_windows,
+    local_ip,
+    raspberrypi_model,
+)
 
 
 class TestSysInfo(unittest.TestCase):
@@ -56,3 +63,42 @@ class TestSysInfo(unittest.TestCase):
     def test_raspberrypi_model_not_found(self, mock_file):
         model = raspberrypi_model()
         self.assertEqual(model, RaspberryModel.Unknown)
+
+    @patch("yaroc.utils.sys_info.os.path.exists")
+    def test_find_config_file_local(self, mock_exists):
+        mock_exists.return_value = True
+        self.assertEqual(find_config_file("config.toml"), "config.toml")
+
+    @patch("yaroc.utils.sys_info.is_windows")
+    @patch("yaroc.utils.sys_info.os.path.exists")
+    @patch.dict("os.environ", {"XDG_CONFIG_HOME": "/custom/config"})
+    def test_find_config_file_linux_xdg(self, mock_exists, mock_is_windows):
+        mock_is_windows.return_value = False
+        # First check (local) returns False, second check (XDG) returns True
+        mock_exists.side_effect = [False, True]
+        self.assertEqual(
+            find_config_file("config.toml"),
+            os.path.join("/custom/config", "yaroc", "config.toml"),
+        )
+
+    @patch("yaroc.utils.sys_info.is_windows")
+    @patch("yaroc.utils.sys_info.os.path.exists")
+    @patch("yaroc.utils.sys_info.os.path.expanduser")
+    @patch.dict("os.environ", {}, clear=True)
+    def test_find_config_file_linux_default(self, mock_expanduser, mock_exists, mock_is_windows):
+        mock_is_windows.return_value = False
+        mock_expanduser.return_value = "/home/user"
+        mock_exists.side_effect = [False, True]
+        self.assertEqual(
+            find_config_file("config.toml"),
+            os.path.join("/home/user", ".config", "yaroc", "config.toml"),
+        )
+
+    @patch("yaroc.utils.sys_info.is_windows")
+    @patch("yaroc.utils.sys_info.os.path.exists")
+    @patch.dict("os.environ", {"APPDATA": "C:\\Users\\user\\AppData\\Roaming"})
+    def test_find_config_file_windows_appdata(self, mock_exists, mock_is_windows):
+        mock_is_windows.return_value = True
+        mock_exists.side_effect = [False, True]
+        expected = os.path.join("C:\\Users\\user\\AppData\\Roaming", "yaroc", "config.toml")
+        self.assertEqual(find_config_file("config.toml"), expected)
