@@ -90,7 +90,18 @@ impl SerialClient {
         let mini_reader_connect_rx_closed = mini_reader_connect_rx.is_closed();
 
         tokio::select! {
-            _len = rx.read_until(ETX, &mut query) => {
+            res = rx.read_until(ETX, &mut query) => {
+                match res {
+                    Ok(0) => {
+                        warn!("Serial port to computer disconnected");
+                        return None;
+                    }
+                    Err(e) => {
+                        error!("Error reading from computer: {e}");
+                        return None;
+                    }
+                    Ok(_) => {}
+                }
                 let (cleaned, is_meos) = Self::parse_si_packet(query.as_slice());
                 match cleaned {
                     b"\xf0\x01Mm\n\x03" => {
@@ -112,7 +123,18 @@ impl SerialClient {
                     .await
                     .inspect_err(|e| error!("Communication with software failed: {e}"));
                 let mut data = Vec::new();
-                let _len = rx.read_until(ETX, &mut data).await;
+                let res = rx.read_until(ETX, &mut data).await;
+                match res {
+                    Ok(0) => {
+                        warn!("Serial port to computer disconnected");
+                        return None;
+                    }
+                    Err(e) => {
+                        error!("Error reading from computer: {e}");
+                        return None;
+                    }
+                    Ok(_) => {}
+                }
 
                 let (cleaned, _) = Self::parse_si_packet(data.as_slice());
                 if cleaned != b"\x83\x02\x00\x80\xbf\x17\x03" { // SportIdent Reader ACK or MeOS ACK
@@ -609,6 +631,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_respond_as_blue_srr_disconnected() {
+        let (computer_rx, computer_tx, test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        // Drop the other end immediately to simulate disconnected serial port (EOF / Ok(0))
+        drop(test_serial);
+
+        let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
+        let result = handle.await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
     async fn test_respond_as_mini_reader_fatal_read_error() {
         let (computer_rx, computer_tx, _test_serial) = init_channels();
         let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
@@ -629,6 +665,26 @@ mod tests {
         )
         .await;
         // Should immediately return None instead of looping forever
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_respond_as_mini_reader_disconnected() {
+        let (computer_rx, computer_tx, _test_serial) = init_channels();
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
+        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+
+        let (mut mini_reader, peer) = duplex(4096);
+        // Drop the other end immediately to simulate disconnected mini-reader (EOF / Ok(0))
+        drop(peer);
+
+        let result = SerialClient::respond_as_mini_reader(
+            &computer_rx,
+            &computer_tx,
+            &mut mini_reader,
+            &mini_reader_connect_rx,
+        )
+        .await;
         assert_eq!(result, None);
     }
 }
