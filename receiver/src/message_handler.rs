@@ -150,7 +150,7 @@ impl MessageHandler {
                         Some(SportIdentMessage::DeviceEvent { added, device }) => {
                             return Ok(Event::DeviceEvent { added, device });
                         }
-                        None => {} // Can't happen since self holds a copy of _punch_tx
+                        None => {} // Can't happen since self holds a copy of _si_tx
                     }
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {

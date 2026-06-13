@@ -34,8 +34,6 @@ class PunchSender:
         self._mch_interval = mch_interval
 
     async def periodic_mini_call_home(self):
-        # TODO: get rid of the following sleep
-        await asyncio.sleep(5.0)
         while True:
             time_start = time.time()
             mini_call_home = create_sys_minicallhome()

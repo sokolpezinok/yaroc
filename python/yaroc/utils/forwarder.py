@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 import signal
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from ..clients.client import ClientGroup
@@ -16,7 +17,7 @@ from ..rs import (
     SiPunchLog,
 )
 from .status import StatusDrawer
-from .sys_info import is_windows
+from .sys_info import create_sys_minicallhome, is_windows
 
 
 class Forwarder:
@@ -25,7 +26,8 @@ class Forwarder:
         host_info: HostInfo,
         client_group: ClientGroup,
         builder: MessageHandlerBuilder,
-        drawer: StatusDrawer,
+        drawer: StatusDrawer = StatusDrawer(None),
+        mch_interval: int | None = None,
     ):
         self.host_info = host_info
         self.client_group = client_group
@@ -34,6 +36,7 @@ class Forwarder:
         self.handler, self.usb_serial_manager = builder.build()
         self._codes: set[int] = set()
         self._tasks: set[asyncio.Task] = set()
+        self._mch_interval = mch_interval
 
     @property
     def codes(self) -> set[int]:
@@ -55,8 +58,6 @@ class Forwarder:
             f"{latency:3.2f}s"
         )
         self._codes.add(punch.code)
-        # TODO: these can be punches coming from meshtastic mesh, using self.host_info here makes
-        # the origin of the punch incorrect.
         await self.client_group.send_punch(SiPunchLog.new(punch, self.host_info, now))
 
     async def _handle_cellular_log(self, log: CellularLog):
@@ -76,6 +77,17 @@ class Forwarder:
         status = Status()
         status.dev_event.CopyFrom(device_event)
         await self.client_group.send_status(status, self.host_info.mac_address)
+
+    async def periodic_mini_call_home(self):
+        while self._mch_interval is not None:
+            time_start = time.time()
+            mini_call_home = create_sys_minicallhome()
+            for code in self.codes:
+                mini_call_home.codes.append(code)
+            status = Status()
+            status.mini_call_home.CopyFrom(mini_call_home)
+            await self.client_group.send_status(status, self.host_info.mac_address)
+            await asyncio.sleep(self._mch_interval - (time.time() - time_start))
 
     async def _draw_table(self, node_infos: list[NodeInfo]):
         self.executor.submit(self.drawer.draw_status, node_infos)
@@ -135,6 +147,7 @@ class Forwarder:
         tasks = [
             asyncio.create_task(self.client_group.loop()),
             asyncio.create_task(self.handle_messages()),
+            asyncio.create_task(self.periodic_mini_call_home()),
             asyncio.ensure_future(self.usb_serial_manager.loop()),
         ]
 
