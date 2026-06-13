@@ -38,3 +38,6 @@ name = "mqtt"
 
 [[example]]
 name = "usb_serial"
+
+[[example]]
+name = "meshtastic_tcp"

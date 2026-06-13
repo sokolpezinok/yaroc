@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use log::{error, info};
-use yaroc_receiver::message_handler::{MessageHandler, SportIdentConfig, UsbSerialConfig};
+use yaroc_receiver::message_handler::{MessageHandler, UsbSerialConfig};
 use yaroc_receiver::mqtt::MqttConfig;
 use yaroc_receiver::state::Event;
 use yaroc_receiver::system_info::MacAddress;
@@ -50,10 +50,7 @@ async fn main() {
         url: "broker.hivemq.com".to_owned(),
         ..Default::default()
     };
-    let usb_serial_config = UsbSerialConfig {
-        enable_meshtastic: false,
-        sportident: SportIdentConfig::None,
-    };
+    let usb_serial_config = UsbSerialConfig::default();
     let (mut handler, _serial_manager) = MessageHandler::new(
         dns,
         vec![mqtt_config, mqtt_config2],

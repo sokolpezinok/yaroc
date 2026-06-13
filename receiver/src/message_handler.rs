@@ -32,12 +32,15 @@ pub struct MessageHandler {
     tasks: JoinSet<()>,
 }
 
+#[derive(Default)]
 pub enum SportIdentConfig {
+    #[default]
     None,
     Passive,
     Active(Box<dyn UsbSerialFactory>),
 }
 
+#[derive(Default)]
 pub struct UsbSerialConfig {
     pub enable_meshtastic: bool,
     pub sportident: SportIdentConfig,
@@ -108,6 +111,12 @@ impl MessageHandler {
             SportIdentConfig::None => {}
         }
         (handler, UsbSerialManager::new(factories))
+    }
+
+    /// Sets the Meshtastic TCP connection host.
+    pub fn with_tcp(mut self, host: String) -> Self {
+        self.meshtastic_tcp = Some(host);
+        self
     }
 
     /// Returns the next processed event from the active event sources.
