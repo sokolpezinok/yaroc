@@ -13,7 +13,6 @@ from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
 from ..rs import SerialClient
 from ..sources.si import (
-    FakeSiWorker,
     SiPunchManager,
     SiWorker,
     UdevSiFactory,
@@ -48,10 +47,16 @@ def create_si_workers(
     enable_meshtastic = watch_usb or (meshtastic_tcp is not None)
     enable_sportident = config.get("usb", {}).get("enable", True)
 
-    if enable_sportident or enable_meshtastic:
-        logging.info(
-            f"Enabled punch source: USB={enable_sportident}, Meshtastic={enable_meshtastic}"
-        )
+    fake_punch_interval = None
+    if config.get("fake", {}).get("enable", False):
+        fake_punch_interval = config.get("fake", {}).get("interval")
+        logging.info(f"Enabled fake punch source with interval {fake_punch_interval}")
+
+    if enable_sportident or enable_meshtastic or fake_punch_interval is not None:
+        if enable_sportident or enable_meshtastic:
+            logging.info(
+                f"Enabled punch source: USB={enable_sportident}, Meshtastic={enable_meshtastic}"
+            )
         mac_addresses = meshtastic_config.get("mac-addresses", {})
         dns: list[tuple[str, str]] = [
             (mac_address, name) for name, mac_address in mac_addresses.items()
@@ -62,11 +67,9 @@ def create_si_workers(
                 enable_meshtastic=enable_meshtastic,
                 meshtastic_tcp=meshtastic_tcp,
                 dns=dns,
+                fake_punch_interval=fake_punch_interval,
             )
         )
-    if config.get("fake", {}).get("enable", False):
-        logging.info("Enabled fake punch source")
-        workers.append(FakeSiWorker(config.get("fake", {}).get("interval")))
     return workers
 
 

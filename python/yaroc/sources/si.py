@@ -1,9 +1,8 @@
 import asyncio
 import logging
-import time
 from asyncio import Queue
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import AsyncIterator
 
 from ..rs import Event, MessageHandlerBuilder, SiPunch
@@ -45,12 +44,14 @@ class UdevSiFactory(SiWorker):
         enable_meshtastic: bool = False,
         meshtastic_tcp: str | None = None,
         dns: list[tuple[str, str]] | None = None,
+        fake_punch_interval: float | None = None,
     ) -> None:
         super().__init__()
         self.enable_sportident = enable_sportident
         self.enable_meshtastic = enable_meshtastic
         self.meshtastic_tcp = meshtastic_tcp
         self.dns = dns if dns is not None else []
+        self.fake_punch_interval = fake_punch_interval
 
     async def loop(self, queue: Queue[SiPunch], status_queue: Queue[DeviceEvent]):
         builder = (
@@ -61,6 +62,8 @@ class UdevSiFactory(SiWorker):
         )
         if self.meshtastic_tcp is not None:
             builder = builder.with_tcp(self.meshtastic_tcp)
+        if self.fake_punch_interval is not None:
+            builder = builder.with_fake_punch(timedelta(seconds=self.fake_punch_interval))
         self.handler, self.usb_serial_manager = builder.build()
         await asyncio.gather(
             self.usb_serial_manager.loop(),
@@ -85,31 +88,6 @@ class UdevSiFactory(SiWorker):
                         logging.info(ev[0])
             except Exception as e:
                 logging.error(f"Error while getting punches: {e}")
-
-
-class FakeSiWorker(SiWorker):
-    """Creates fake SportIdent events, useful for benchmarks and tests."""
-
-    def __init__(self, punch_interval_secs: float | None = None):
-        super().__init__()
-        self.name = "fake"
-        self._punch_interval = punch_interval_secs if punch_interval_secs is not None else 12.0
-        logging.info(
-            "Starting a fake SportIdent worker, sending a punch every "
-            f"{self._punch_interval} seconds"
-        )
-
-    def __hash__(self):
-        return "fake".__hash__()
-
-    async def loop(self, queue: Queue, _status_queue):
-        del _status_queue
-        while True:
-            time_start = time.time()
-            now = datetime.now().astimezone()
-            punch = SiPunch.new(46283, 47, now, 18)
-            await self.process_punch(punch, queue)
-            await asyncio.sleep(self._punch_interval - (time.time() - time_start))
 
 
 class SiPunchManager:

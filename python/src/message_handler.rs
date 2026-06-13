@@ -159,6 +159,7 @@ pub struct MessageHandlerBuilder {
     enable_sportident: bool,
     sportident_factory: Option<Py<PyUsbSerialFactory>>,
     meshtastic_tcp: Option<String>,
+    fake_punch_interval: Option<Duration>,
 }
 
 #[pymethods]
@@ -174,6 +175,7 @@ impl MessageHandlerBuilder {
             enable_sportident: false,
             sportident_factory: None,
             meshtastic_tcp: None,
+            fake_punch_interval: None,
         }
     }
 
@@ -248,6 +250,14 @@ impl MessageHandlerBuilder {
         self_
     }
 
+    pub fn with_fake_punch<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        interval: Duration,
+    ) -> PyRefMut<'py, Self> {
+        self_.fake_punch_interval = Some(interval);
+        self_
+    }
+
     pub fn build(&self, py: Python<'_>) -> PyResult<(MessageHandler, UsbSerialManager)> {
         let sportident = if let Some(ref factory_py) = self.sportident_factory {
             let factory_bound = factory_py.bind(py);
@@ -274,6 +284,10 @@ impl MessageHandlerBuilder {
 
         if let Some(ref host) = self.meshtastic_tcp {
             builder = builder.with_tcp(host.clone());
+        }
+
+        if let Some(interval) = self.fake_punch_interval {
+            builder = builder.with_fake_punch(interval);
         }
 
         let (message_handler_rs, usb_serial_manager_rs) = builder.build();

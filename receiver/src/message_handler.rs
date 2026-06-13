@@ -30,6 +30,7 @@ pub struct MessageHandler {
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
     tasks: JoinSet<()>,
+    fake_punch_interval: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -74,6 +75,24 @@ impl MessageHandler {
                     );
                 }
             }
+        }
+
+        if let Some(interval) = self.fake_punch_interval.take() {
+            let punch_tx = self._punch_tx.clone();
+            info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
+            self.tasks.spawn(async move {
+                let mut interval_timer = tokio::time::interval(interval);
+                // The first tick of tokio::time::interval completes immediately.
+                loop {
+                    interval_timer.tick().await;
+                    let now = Local::now().fixed_offset();
+                    let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
+                    if let Err(e) = punch_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
+                        error!("Failed to send fake punch: {e}");
+                        break;
+                    }
+                }
+            });
         }
 
         // Spawn MQTT tasks when `next_event()` is run for the first time.
@@ -148,6 +167,7 @@ pub struct MessageHandlerBuilder {
     meshtastic_timeout: Duration,
     config: UsbSerialConfig,
     meshtastic_tcp: Option<String>,
+    fake_punch_interval: Option<Duration>,
 }
 
 impl Default for MessageHandlerBuilder {
@@ -159,6 +179,7 @@ impl Default for MessageHandlerBuilder {
             meshtastic_timeout: Duration::from_secs(600),
             config: UsbSerialConfig::default(),
             meshtastic_tcp: None,
+            fake_punch_interval: None,
         }
     }
 }
@@ -205,6 +226,12 @@ impl MessageHandlerBuilder {
         self
     }
 
+    /// Sets the interval for sending fake punches (optional).
+    pub fn with_fake_punch(mut self, interval: Duration) -> Self {
+        self.fake_punch_interval = Some(interval);
+        self
+    }
+
     /// Builds the `MessageHandler` and the associated `UsbSerialManager`.
     pub fn build(self) -> (MessageHandler, UsbSerialManager) {
         let macs = self.dns.iter().map(|(_, mac)| mac);
@@ -232,6 +259,7 @@ impl MessageHandlerBuilder {
             mqtt_rx,
             tasks: JoinSet::new(),
             meshtastic_tcp: self.meshtastic_tcp,
+            fake_punch_interval: self.fake_punch_interval,
         };
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
@@ -282,6 +310,7 @@ mod tests {
                 mqtt_rx,
                 tasks: JoinSet::new(),
                 meshtastic_tcp: None,
+                fake_punch_interval: None,
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }
@@ -303,6 +332,26 @@ mod tests {
 
         match event {
             Event::SiPunch(punch) => assert_eq!(punch.raw, raw_punch),
+            _ => panic!("Expected Event::SiPunch"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_fake_punch() {
+        let (handler, _usb) =
+            MessageHandlerBuilder::new().with_fake_punch(Duration::from_millis(10)).build();
+        let mut handler = handler;
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::SiPunch(punch) => {
+                assert_eq!(punch.card, 46283);
+                assert_eq!(punch.code, 47);
+            }
             _ => panic!("Expected Event::SiPunch"),
         }
     }
