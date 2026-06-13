@@ -1,31 +1,16 @@
 import asyncio
 import datetime
 import logging
-import signal
-import socket
 import tomllib
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
-from ..pb.status_pb2 import Status
-from ..rs import (
-    CellularLog,
-    Event,
-    HostInfo,
-    MeshtasticLog,
-    MessageHandlerBuilder,
-    MqttConfig,
-    NodeInfo,
-    PyUsbSerialFactory,
-    SerialClient,
-    SiPunch,
-    SiPunchLog,
-)
+from ..rs import MessageHandlerBuilder, MqttConfig, PyUsbSerialFactory, SerialClient
 from ..utils.container import Container, create_clients
+from ..utils.forwarder import Forwarder
 from ..utils.status import StatusDrawer
-from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
+from ..utils.sys_info import find_config_file, is_windows
 
 
 class YarocDaemon:
@@ -40,7 +25,6 @@ class YarocDaemon:
         meshtastic_timeout: int = 600,
         sportident_factory: PyUsbSerialFactory | None = None,
     ):
-        self.client_group = client_group
         builder = (
             MessageHandlerBuilder()
             .with_dns(dns)
@@ -52,107 +36,10 @@ class YarocDaemon:
         )
         if meshtastic_tcp is not None:
             builder = builder.with_tcp(meshtastic_tcp)
-        self.handler, self.usb_serial_manager = builder.build()
-        self.drawer = StatusDrawer(display_model)
-        self.executor = ThreadPoolExecutor(max_workers=1)
-        hostname = socket.gethostname()
-        mac_addr = eth_mac_addr() or "000000000000"
-        self.host_info = HostInfo.new(hostname, mac_addr)
-
-    async def _handle_punches(self, punches: list[SiPunchLog]):
-        tasks = []
-        for punch in punches:
-            logging.info(punch)
-            tasks.append(self.client_group.send_punch(punch))
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _handle_punch(self, punch: SiPunch):
-        logging.info(f"Local punch: {punch.card} punched {punch.code}")
-        await self.client_group.send_punch(
-            SiPunchLog.new(punch, self.host_info, datetime.datetime.now().astimezone())
-        )
-
-    async def _handle_cellular_log(self, log: CellularLog):
-        logging.info(log)
-        proto_bytes = log.to_proto()
-        if proto_bytes is not None:
-            try:
-                status = Status.FromString(proto_bytes)
-                await self.client_group.send_status(status, log.mac_address())
-            except Exception as err:
-                logging.error(f"Failed to forward status: {err}")
-
-    async def _handle_meshtastic_log(self, log: MeshtasticLog):
-        logging.info(log)
-
-    async def handle_messages(self):
-        while True:
-            try:
-                ev = await self.handler.next_event()
-                self._handle_event(ev)
-            except Exception as e:
-                logging.error(f"Error while getting next message: {e}")
-
-    def _handle_event(self, ev: Event) -> asyncio.Task | None:
-        match ev:
-            case Event.SiPunchLogs(logs):
-                return asyncio.create_task(self._handle_punches(logs))
-            case Event.SiPunch(punch):
-                return asyncio.create_task(self._handle_punch(punch))
-            case Event.CellularLog(log):
-                return asyncio.create_task(self._handle_cellular_log(log))
-            case Event.MeshtasticLog(log):
-                return asyncio.create_task(self._handle_meshtastic_log(log))
-            case Event.NodeInfos(node_infos):
-                return asyncio.create_task(self._draw_table(node_infos))
-            case Event.DeviceEvnt(added, device):
-                logging.info(f"Device event: added={added}, device={device}")
-        return None
-
-    async def _draw_table(self, node_infos: list[NodeInfo]):
-        self.executor.submit(self.drawer.draw_status, node_infos)
+        self.forwarder = Forwarder(client_group, builder, StatusDrawer(display_model))
 
     async def loop(self):
-        def handle_exception(loop, context):
-            msg = context.get("exception", context["message"])
-            logging.error(f"Caught exception: {msg}")
-
-        def shutdown(signum=None, frame=None):
-            if signum is not None:
-                signal_name = signal.Signals(signum).name
-                logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
-            shutdown_event.set()
-
-        asyncio.get_event_loop().set_exception_handler(handle_exception)
-
-        shutdown_event = asyncio.Event()
-
-        if is_windows():
-            signal.signal(signal.SIGTERM, shutdown)
-            signal.signal(signal.SIGINT, shutdown)
-        else:
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGTERM, signal.SIGINT):
-                loop.add_signal_handler(sig, shutdown)
-
-        tasks = [
-            asyncio.create_task(self.client_group.loop()),
-            asyncio.create_task(self.handle_messages()),
-            asyncio.ensure_future(self.usb_serial_manager.loop()),
-        ]
-
-        try:
-            await shutdown_event.wait()
-        except asyncio.exceptions.CancelledError:
-            logging.info("Interrupted, exiting ...")
-
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        self.executor.shutdown(wait=True)
-        self.drawer.clear()
-        logging.info("Main loop shutting down")
+        await self.forwarder.loop()
 
 
 async def main_loop() -> None:
