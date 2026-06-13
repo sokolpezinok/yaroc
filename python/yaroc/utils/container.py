@@ -40,23 +40,33 @@ def create_si_workers(
     meshtastic_config: Dict[str, Any] | None = None,
 ) -> list[SiWorker]:
     workers: list[SiWorker] = []
-    if config is not None:
-        if config.get("usb", {}).get("enable", True):
-            logging.info("Enabled USB punch source")
-            watch_usb = False
-            meshtastic_config = meshtastic_config or {}
-            watch_usb = meshtastic_config.get("watch_usb", False)
-            meshtastic_tcp = meshtastic_config.get("tcp", None)
-            mac_addresses = meshtastic_config.get("mac-addresses", {})
-            dns: list[tuple[str, str]] = [
-                (mac_address, name) for name, mac_address in mac_addresses.items()
-            ]
-            workers.append(
-                UdevSiFactory(enable_meshtastic=watch_usb, meshtastic_tcp=meshtastic_tcp, dns=dns)
+    config = config or {}
+    meshtastic_config = meshtastic_config or {}
+
+    watch_usb = meshtastic_config.get("watch_usb", False)
+    meshtastic_tcp = meshtastic_config.get("tcp", None)
+    enable_meshtastic = watch_usb or (meshtastic_tcp is not None)
+    enable_sportident = config.get("usb", {}).get("enable", True)
+
+    if enable_sportident or enable_meshtastic:
+        logging.info(
+            f"Enabled punch source: USB={enable_sportident}, Meshtastic={enable_meshtastic}"
+        )
+        mac_addresses = meshtastic_config.get("mac-addresses", {})
+        dns: list[tuple[str, str]] = [
+            (mac_address, name) for name, mac_address in mac_addresses.items()
+        ]
+        workers.append(
+            UdevSiFactory(
+                enable_sportident=enable_sportident,
+                enable_meshtastic=enable_meshtastic,
+                meshtastic_tcp=meshtastic_tcp,
+                dns=dns,
             )
-        if config.get("fake", {}).get("enable", False):
-            logging.info("Enabled fake punch source")
-            workers.append(FakeSiWorker(config.get("fake", {}).get("interval")))
+        )
+    if config.get("fake", {}).get("enable", False):
+        logging.info("Enabled fake punch source")
+        workers.append(FakeSiWorker(config.get("fake", {}).get("interval")))
     return workers
 
 
