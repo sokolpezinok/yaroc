@@ -55,6 +55,15 @@ pip install --pre yaroc
 
 # Usage
 
+## Configuration Files Location
+
+By default, YAROC commands (`send-punch` and `yarocd`) search for their respective configuration files (`send-punch.toml` and `yarocd.toml`) in the following locations, in order:
+
+1. **Current Working Directory (pwd)**: The local folder where the command is executed.
+2. **Platform Configuration Directory**:
+   - **Linux/macOS**: Checks `$XDG_CONFIG_HOME/yaroc/` if the environment variable is set, falling back to `~/.config/yaroc/`.
+   - **Windows**: Checks `%APPDATA%\yaroc\` (Roaming Application Data), falling back to `%USERPROFILE%\.config\yaroc\`.
+
 ## Send punches from an online control
 
 First, create a `send-punch.toml` file where you configure punch sources and clients for sending the punches.
