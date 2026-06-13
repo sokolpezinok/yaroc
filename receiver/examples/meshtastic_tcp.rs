@@ -1,10 +1,7 @@
 use clap::Parser;
 use log::{error, info, warn};
-use std::time::Duration;
 use yaroc_receiver::{
-    message_handler::{MessageHandler, UsbSerialConfig},
-    state::Event,
-    system_info::MacAddress,
+    message_handler::MessageHandlerBuilder, state::Event, system_info::MacAddress,
 };
 
 #[derive(Parser, Debug)]
@@ -37,15 +34,8 @@ async fn main() {
         }
     }
 
-    let usb_serial_config = UsbSerialConfig::default();
-    let (mut msg_handler, _usb_serial_manager) = MessageHandler::new(
-        dns,
-        Vec::new(),
-        Duration::from_secs(60),
-        Duration::from_secs(600),
-        usb_serial_config,
-    );
-    msg_handler = msg_handler.with_tcp(args.host);
+    let (mut msg_handler, _usb_serial_manager) =
+        MessageHandlerBuilder::new().with_dns(dns).with_tcp(args.host).build();
 
     info!("Everything initialized, listening for Meshtastic TCP events...");
     loop {
@@ -59,7 +49,7 @@ async fn main() {
                         Event::MeshtasticLog(log) => {
                             info!("Meshtastic: {log}");
                         }
-                        ev => {
+                        _ev => {
                             warn!("A non-meshtastic event, this shouldn't happen");
                         }
                     },

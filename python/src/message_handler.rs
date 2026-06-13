@@ -7,7 +7,7 @@ use yaroc_receiver::usb_serial_manager::UsbSerialManager as UsbSerialManagerRs;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::message_handler::{
-    MessageHandler as MessageHandlerRs, SportIdentConfig, UsbSerialConfig,
+    MessageHandler as MessageHandlerRs, MessageHandlerBuilder, SportIdentConfig, UsbSerialConfig,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -170,13 +170,13 @@ impl MessageHandler {
             sportident,
         };
 
-        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerRs::new(
-            dns?,
-            mqtt_configs.into_iter().map(|config| config.into()).collect(),
-            node_info_interval,
-            meshtastic_timeout,
-            usb_serial_config,
-        );
+        let (message_handler_rs, usb_serial_manager_rs) = MessageHandlerBuilder::new()
+            .with_dns(dns?)
+            .with_mqtt_configs(mqtt_configs.into_iter().map(|config| config.into()).collect())
+            .with_node_infos_interval(node_info_interval)
+            .with_meshtastic_timeout(meshtastic_timeout)
+            .with_usb_serial_config(usb_serial_config)
+            .build();
         let inner = Arc::new(Mutex::new(message_handler_rs));
         Ok((
             Self { inner },

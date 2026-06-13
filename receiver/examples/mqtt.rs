@@ -1,10 +1,8 @@
 extern crate yaroc_common;
 
-use std::time::Duration;
-
 use clap::Parser;
 use log::{error, info};
-use yaroc_receiver::message_handler::{MessageHandler, UsbSerialConfig};
+use yaroc_receiver::message_handler::MessageHandlerBuilder;
 use yaroc_receiver::mqtt::MqttConfig;
 use yaroc_receiver::state::Event;
 use yaroc_receiver::system_info::MacAddress;
@@ -50,14 +48,10 @@ async fn main() {
         url: "broker.hivemq.com".to_owned(),
         ..Default::default()
     };
-    let usb_serial_config = UsbSerialConfig::default();
-    let (mut handler, _serial_manager) = MessageHandler::new(
-        dns,
-        vec![mqtt_config, mqtt_config2],
-        Duration::from_secs(60),
-        Duration::from_secs(600),
-        usb_serial_config,
-    );
+    let (mut handler, _serial_manager) = MessageHandlerBuilder::new()
+        .with_dns(dns)
+        .with_mqtt_configs(vec![mqtt_config, mqtt_config2])
+        .build();
 
     info!("Everything initialized, starting the loop");
     loop {

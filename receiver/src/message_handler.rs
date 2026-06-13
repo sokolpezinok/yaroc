@@ -47,78 +47,6 @@ pub struct UsbSerialConfig {
 }
 
 impl MessageHandler {
-    /// Creates a new `MessageHandler` along with a `UsbSerialManager`.
-    ///
-    /// This function initializes the `FleetState`, sets up background tasks for the optional
-    /// `MqttReceiver`s, and prepares the `UsbSerialManager` with appropriate factory instances.
-    ///
-    /// # Arguments
-    ///
-    /// * `dns` - A mapping of DNS-like host names to device MAC addresses.
-    /// * `mqtt_configs` - Configs for the MQTT servers to connect to and listen for messages.
-    /// * `node_infos_interval` - The interval at which node info updates are published.
-    /// * `meshtastic_timeout` - Timeout for Meshtastic nodes.
-    /// * `config` - Configuration for connected serial devices.
-    ///
-    /// # Returns
-    ///
-    /// A tuple containing:
-    /// 1. The initialized `MessageHandler`.
-    /// 2. The `UsbSerialManager` that oversees the USB serial devices.
-    pub fn new(
-        dns: Vec<(String, MacAddress)>,
-        mqtt_configs: Vec<MqttConfig>,
-        node_infos_interval: Duration,
-        meshtastic_timeout: Duration,
-        config: UsbSerialConfig,
-    ) -> (Self, UsbSerialManager) {
-        let macs = dns.iter().map(|(_, mac)| mac);
-        let mqtt_receivers: Vec<MqttReceiver> = mqtt_configs
-            .into_iter()
-            .map(|config| MqttReceiver::new(config, macs.clone()))
-            .collect();
-        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
-        let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
-        let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
-
-        let handler = Self {
-            fleet_state: FleetState::new(dns, node_infos_interval, meshtastic_timeout),
-            meshtastic_tcp: None,
-            mesh_packet_rx,
-            _mesh_packet_tx: mesh_packet_tx.clone(),
-            punch_rx,
-            _punch_tx: punch_tx.clone(),
-            mqtt_receivers: Some(mqtt_receivers),
-            mqtt_tx,
-            mqtt_rx,
-            tasks: JoinSet::new(),
-        };
-
-        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
-        if config.enable_meshtastic {
-            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx)));
-        }
-        match config.sportident {
-            SportIdentConfig::Passive => {
-                factories.push(Box::new(SportIdentFactory::new(punch_tx)));
-            }
-            SportIdentConfig::Active(factory) => {
-                // Note: The `punch_tx` channel is intentionally not passed to the active factory
-                // here. The Active variant is used by the Python SerialClient, which handles the
-                // punches in its own loop, so they don't need to be handled by this MessageHandler.
-                factories.push(factory);
-            }
-            SportIdentConfig::None => {}
-        }
-        (handler, UsbSerialManager::new(factories))
-    }
-
-    /// Sets the Meshtastic TCP connection host.
-    pub fn with_tcp(mut self, host: String) -> Self {
-        self.meshtastic_tcp = Some(host);
-        self
-    }
-
     /// Returns the next processed event from the active event sources.
     ///
     /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
@@ -209,6 +137,117 @@ impl MessageHandler {
                 }
             }
         }
+    }
+}
+
+/// A builder to construct `MessageHandler` and `UsbSerialManager` using the builder pattern.
+pub struct MessageHandlerBuilder {
+    dns: Vec<(String, MacAddress)>,
+    mqtt_configs: Vec<MqttConfig>,
+    node_infos_interval: Duration,
+    meshtastic_timeout: Duration,
+    config: UsbSerialConfig,
+    meshtastic_tcp: Option<String>,
+}
+
+impl Default for MessageHandlerBuilder {
+    fn default() -> Self {
+        Self {
+            dns: Vec::new(),
+            mqtt_configs: Vec::new(),
+            node_infos_interval: Duration::from_secs(60),
+            meshtastic_timeout: Duration::from_secs(600),
+            config: UsbSerialConfig::default(),
+            meshtastic_tcp: None,
+        }
+    }
+}
+
+impl MessageHandlerBuilder {
+    /// Creates a new `MessageHandlerBuilder` with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the DNS records for node name resolution.
+    pub fn with_dns(mut self, dns: Vec<(String, MacAddress)>) -> Self {
+        self.dns = dns;
+        self
+    }
+
+    /// Sets the MQTT configs to subscribe to.
+    pub fn with_mqtt_configs(mut self, configs: Vec<MqttConfig>) -> Self {
+        self.mqtt_configs = configs;
+        self
+    }
+
+    /// Sets the node info publication interval.
+    pub fn with_node_infos_interval(mut self, interval: Duration) -> Self {
+        self.node_infos_interval = interval;
+        self
+    }
+
+    /// Sets the Meshtastic node timeout.
+    pub fn with_meshtastic_timeout(mut self, timeout: Duration) -> Self {
+        self.meshtastic_timeout = timeout;
+        self
+    }
+
+    /// Sets the USB serial configuration.
+    pub fn with_usb_serial_config(mut self, config: UsbSerialConfig) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// Sets the Meshtastic TCP connection host.
+    pub fn with_tcp(mut self, host: String) -> Self {
+        self.meshtastic_tcp = Some(host);
+        self
+    }
+
+    /// Builds the `MessageHandler` and the associated `UsbSerialManager`.
+    pub fn build(self) -> (MessageHandler, UsbSerialManager) {
+        let macs = self.dns.iter().map(|(_, mac)| mac);
+        let mqtt_receivers: Vec<MqttReceiver> = self
+            .mqtt_configs
+            .into_iter()
+            .map(|config| MqttReceiver::new(config, macs.clone()))
+            .collect();
+        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
+        let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
+        let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
+
+        let handler = MessageHandler {
+            fleet_state: FleetState::new(
+                self.dns,
+                self.node_infos_interval,
+                self.meshtastic_timeout,
+            ),
+            mesh_packet_rx,
+            _mesh_packet_tx: mesh_packet_tx.clone(),
+            punch_rx,
+            _punch_tx: punch_tx.clone(),
+            mqtt_receivers: Some(mqtt_receivers),
+            mqtt_tx,
+            mqtt_rx,
+            tasks: JoinSet::new(),
+            meshtastic_tcp: self.meshtastic_tcp,
+        };
+
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        if self.config.enable_meshtastic {
+            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx)));
+        }
+        match self.config.sportident {
+            SportIdentConfig::Passive => {
+                factories.push(Box::new(SportIdentFactory::new(punch_tx)));
+            }
+            SportIdentConfig::Active(factory) => {
+                factories.push(factory);
+            }
+            SportIdentConfig::None => {}
+        }
+        (handler, UsbSerialManager::new(factories))
     }
 }
 
