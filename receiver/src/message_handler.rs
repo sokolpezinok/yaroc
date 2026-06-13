@@ -15,22 +15,26 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinSet;
 use yaroc_common::punch::SiPunch;
 
+pub struct MessageHandlerInitializer {
+    pub meshtastic_tcp: Option<String>,
+    pub mqtt_receivers: Vec<MqttReceiver>,
+    pub fake_punch_interval: Option<Duration>,
+}
+
 /// Orchestrates the overall message flow.
 ///
 /// This struct is responsible for receiving messages from MQTT, SportIdent and Meshtastic devices,
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    meshtastic_tcp: Option<String>,
     mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     _mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>, // Kept to prevent channel from closing
     punch_rx: UnboundedReceiver<SportIdentMessage>,
     _punch_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
-    mqtt_receivers: Option<Vec<MqttReceiver>>,
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
     tasks: JoinSet<()>,
-    fake_punch_interval: Option<Duration>,
+    initializer: Option<MessageHandlerInitializer>,
 }
 
 #[derive(Default)]
@@ -48,56 +52,47 @@ pub struct UsbSerialConfig {
 }
 
 impl MessageHandler {
-    /// Returns the next processed event from the active event sources.
-    ///
-    /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
-    /// packet receiver channel, SportIdent punch receiver channel, and node info publication interval)
-    /// using `tokio::select!`. It returns the first successfully decoded and processed `Event`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any of the underlying event parsing or state updates fail.
-    pub async fn next_event(&mut self) -> crate::Result<Event> {
-        // Initialize Meshtastic TCP connection if configured and when run for the first time.
-        if let Some(host) = self.meshtastic_tcp.take() {
-            info!("Connecting to Meshtastic TCP device at {host}...");
-            match MeshtasticTcp::connect(&host, Duration::from_secs(12)).await {
-                Ok(meshtastic_tcp) => {
-                    let mesh_packet_tx = self._mesh_packet_tx.clone();
-                    self.tasks.spawn(async move {
-                        meshtastic_tcp.inner_loop(mesh_packet_tx).await;
-                    });
-                }
-                Err(err) => {
-                    // TODO: add retries
-                    error!(
-                        "Failed to connect to Meshtastic TCP device at {host}: {err}. Will not retry."
-                    );
-                }
-            }
-        }
-
-        if let Some(interval) = self.fake_punch_interval.take() {
-            let punch_tx = self._punch_tx.clone();
-            info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
-            self.tasks.spawn(async move {
-                let mut interval_timer = tokio::time::interval(interval);
-                // The first tick of tokio::time::interval completes immediately.
-                loop {
-                    interval_timer.tick().await;
-                    let now = Local::now().fixed_offset();
-                    let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
-                    if let Err(e) = punch_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
-                        error!("Failed to send fake punch: {e}");
-                        break;
+    pub async fn init(&mut self) {
+        if let Some(init) = self.initializer.take() {
+            // Initialize Meshtastic TCP connection if configured and when run for the first time.
+            if let Some(host) = init.meshtastic_tcp {
+                info!("Connecting to Meshtastic TCP device at {host}...");
+                match MeshtasticTcp::connect(&host, Duration::from_secs(12)).await {
+                    Ok(meshtastic_tcp) => {
+                        let mesh_packet_tx = self._mesh_packet_tx.clone();
+                        self.tasks.spawn(async move {
+                            meshtastic_tcp.inner_loop(mesh_packet_tx).await;
+                        });
+                    }
+                    Err(err) => {
+                        // TODO: add retries
+                        error!(
+                            "Failed to connect to Meshtastic TCP device at {host}: {err}. Will not retry."
+                        );
                     }
                 }
-            });
-        }
+            }
 
-        // Spawn MQTT tasks when `next_event()` is run for the first time.
-        if let Some(receivers) = self.mqtt_receivers.take() {
-            for mut receiver in receivers {
+            if let Some(interval) = init.fake_punch_interval {
+                let punch_tx = self._punch_tx.clone();
+                info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
+                self.tasks.spawn(async move {
+                    let mut interval_timer = tokio::time::interval(interval);
+                    // The first tick of tokio::time::interval completes immediately.
+                    loop {
+                        interval_timer.tick().await;
+                        let now = Local::now().fixed_offset();
+                        let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
+                        if let Err(e) = punch_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
+                            error!("Failed to send fake punch: {e}");
+                            break;
+                        }
+                    }
+                });
+            }
+
+            // Spawn MQTT tasks when `next_event()` is run for the first time.
+            for mut receiver in init.mqtt_receivers {
                 let mqtt_tx = self.mqtt_tx.clone();
                 self.tasks.spawn(async move {
                     loop {
@@ -114,7 +109,19 @@ impl MessageHandler {
                 });
             }
         }
+    }
 
+    /// Returns the next processed event from the active event sources.
+    ///
+    /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
+    /// packet receiver channel, SportIdent punch receiver channel, and node info publication interval)
+    /// using `tokio::select!`. It returns the first successfully decoded and processed `Event`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the underlying event parsing or state updates fail.
+    pub async fn next_event(&mut self) -> crate::Result<Event> {
+        self.init().await;
         loop {
             tokio::select! {
                 mqtt_msg = self.mqtt_rx.recv() => {
@@ -254,12 +261,14 @@ impl MessageHandlerBuilder {
             _mesh_packet_tx: mesh_packet_tx.clone(),
             punch_rx,
             _punch_tx: punch_tx.clone(),
-            mqtt_receivers: Some(mqtt_receivers),
             mqtt_tx,
             mqtt_rx,
             tasks: JoinSet::new(),
-            meshtastic_tcp: self.meshtastic_tcp,
-            fake_punch_interval: self.fake_punch_interval,
+            initializer: Some(MessageHandlerInitializer {
+                meshtastic_tcp: self.meshtastic_tcp,
+                mqtt_receivers,
+                fake_punch_interval: self.fake_punch_interval,
+            }),
         };
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
@@ -305,12 +314,14 @@ mod tests {
                 _mesh_packet_tx: mesh_packet_tx.clone(),
                 punch_rx,
                 _punch_tx: punch_tx.clone(),
-                mqtt_receivers: None,
                 mqtt_tx: mqtt_tx.clone(),
                 mqtt_rx,
                 tasks: JoinSet::new(),
-                meshtastic_tcp: None,
-                fake_punch_interval: None,
+                initializer: Some(MessageHandlerInitializer {
+                    meshtastic_tcp: None,
+                    mqtt_receivers: Vec::new(),
+                    fake_punch_interval: None,
+                }),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }
