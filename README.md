@@ -74,9 +74,11 @@ broker_url = "broker.emqx.io"
 broker_port = 1883
 
 [meshtastic]
-# You can connect a Meshtastic device via USB and use it as a punch source.
+# You can connect a Meshtastic device via USB or TCP and use it as a punch source.
 # The meshtastic devices acts as an online gateway for its LoRa mesh.
 watch_usb = true  # Defaults to false
+# Or connect to meshtasticd over TCP:
+# tcp = "127.0.0.1:4403"
 # [meshtastic.mac-addresses]
 # radio01 = "9e12f8a5"
 ```
@@ -182,8 +184,10 @@ spr02 = "7bfaf584"
 [meshtastic]
 main_channel = "spe"
 # Meshtastic packets are automatically received via MQTT. You can also connect a Meshtastic
-# device via USB. Disable `watch_usb` to turn off USB device monitoring.
+# device via USB or TCP. Disable `watch_usb` to turn off USB device monitoring.
 # watch_usb = false
+# Or connect to meshtasticd over TCP:
+# tcp = "127.0.0.1:4403"
 
 [client.roc]
 enable = true
