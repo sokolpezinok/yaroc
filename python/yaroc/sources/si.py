@@ -115,10 +115,6 @@ class SiPunchManager:
         while True:
             yield await self._queue.get()
 
-    async def device_events(self) -> AsyncIterator[DeviceEvent]:
-        while True:
-            yield await self._status_queue.get()
-
     @property
     def codes(self) -> set[int]:
         worker_codes = [worker.codes for worker in self._si_workers]

@@ -8,8 +8,8 @@ import tomllib
 from dependency_injector.wiring import Provide, inject
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import DeviceEvent, EventType, MiniCallHome, Status
-from ..rs import HostInfo, SiPunchLog, current_timestamp_millis
+from ..pb.status_pb2 import Status
+from ..rs import HostInfo, SiPunchLog
 from ..sources.si import SiPunchManager
 from ..utils.container import Container, create_clients
 from ..utils.sys_info import create_sys_minicallhome, eth_mac_addr, find_config_file, is_windows
@@ -54,19 +54,6 @@ class PunchSender:
                 )
             )
 
-    async def udev_events(self):
-        # TODO: get rid of the following sleep
-        await asyncio.sleep(3.0)  # sleep to allow for connecting
-        async for dev_event in self.si_manager.device_events():
-            mch = MiniCallHome()
-            mch.time.millis_epoch = current_timestamp_millis()
-            device_event = DeviceEvent()
-            device_event.port = dev_event.device
-            device_event.type = EventType.Added if dev_event.added else EventType.Removed
-            status = Status()
-            status.dev_event.CopyFrom(device_event)
-            await self.client_group.send_status(status, self.host_info.mac_address)
-
     async def loop(self):
         def handle_exception(loop, context):
             msg = context.get("exception", context["message"])
@@ -79,7 +66,6 @@ class PunchSender:
                 self.si_manager.loop(),
                 self.periodic_mini_call_home(),
                 self.send_punches(),
-                self.udev_events(),
                 self.client_group.loop(),
             )
         except asyncio.exceptions.CancelledError:

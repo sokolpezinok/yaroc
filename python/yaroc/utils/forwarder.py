@@ -5,7 +5,7 @@ import signal
 from concurrent.futures import ThreadPoolExecutor
 
 from ..clients.client import ClientGroup
-from ..pb.status_pb2 import Status
+from ..pb.status_pb2 import DeviceEvent, EventType, Status
 from ..rs import (
     CellularLog,
     Event,
@@ -69,6 +69,14 @@ class Forwarder:
             except Exception as err:
                 logging.error(f"Failed to forward status: {err}")
 
+    async def _handle_device_event(self, added: bool, device: str):
+        device_event = DeviceEvent()
+        device_event.port = device
+        device_event.type = EventType.Added if added else EventType.Removed  # type: ignore
+        status = Status()
+        status.dev_event.CopyFrom(device_event)
+        await self.client_group.send_status(status, self.host_info.mac_address)
+
     async def _draw_table(self, node_infos: list[NodeInfo]):
         self.executor.submit(self.drawer.draw_status, node_infos)
 
@@ -83,7 +91,9 @@ class Forwarder:
             case Event.MeshtasticLog(log):
                 logging.info(log)
             case Event.DeviceEvnt(added, device):
+                # TODO: branch on added being true and false
                 logging.info(f"Device event: added={added}, device={device}")
+                return asyncio.create_task(self._handle_device_event(added, device))
             case Event.NodeInfos(node_infos):
                 return asyncio.create_task(self._draw_table(node_infos))
         return None

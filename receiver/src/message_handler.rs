@@ -29,8 +29,8 @@ pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     _mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>, // Kept to prevent channel from closing
-    punch_rx: UnboundedReceiver<SportIdentMessage>,
-    _punch_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
+    si_rx: UnboundedReceiver<SportIdentMessage>,
+    si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
     tasks: JoinSet<()>,
@@ -74,7 +74,7 @@ impl MessageHandler {
             }
 
             if let Some(interval) = init.fake_punch_interval {
-                let punch_tx = self._punch_tx.clone();
+                let si_tx = self.si_tx.clone();
                 info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
                 self.tasks.spawn(async move {
                     let mut interval_timer = tokio::time::interval(interval);
@@ -83,7 +83,7 @@ impl MessageHandler {
                         interval_timer.tick().await;
                         let now = Local::now().fixed_offset();
                         let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
-                        if let Err(e) = punch_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
+                        if let Err(e) = si_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
                             error!("Failed to send fake punch: {e}");
                             break;
                         }
@@ -140,7 +140,7 @@ impl MessageHandler {
                         return Ok(message);
                     }
                 },
-                punch_recv = self.punch_rx.recv() => {
+                punch_recv = self.si_rx.recv() => {
                     match punch_recv {
                         Some(SportIdentMessage::RawPunch(raw_punch)) => {
                             let now = Local::now().fixed_offset();
@@ -248,7 +248,7 @@ impl MessageHandlerBuilder {
             .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
         let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
-        let (punch_tx, punch_rx) = unbounded_channel::<SportIdentMessage>();
+        let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
         let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
 
         let handler = MessageHandler {
@@ -259,8 +259,8 @@ impl MessageHandlerBuilder {
             ),
             mesh_packet_rx,
             _mesh_packet_tx: mesh_packet_tx.clone(),
-            punch_rx,
-            _punch_tx: punch_tx.clone(),
+            si_rx,
+            si_tx: si_tx.clone(),
             mqtt_tx,
             mqtt_rx,
             tasks: JoinSet::new(),
@@ -277,7 +277,7 @@ impl MessageHandlerBuilder {
         }
         match self.config.sportident {
             SportIdentConfig::Passive => {
-                factories.push(Box::new(SportIdentFactory::new(punch_tx)));
+                factories.push(Box::new(SportIdentFactory::new(si_tx)));
             }
             SportIdentConfig::Active(factory) => {
                 factories.push(factory);
@@ -312,8 +312,8 @@ mod tests {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_packet_rx,
                 _mesh_packet_tx: mesh_packet_tx.clone(),
-                punch_rx,
-                _punch_tx: punch_tx.clone(),
+                si_rx: punch_rx,
+                si_tx: punch_tx.clone(),
                 mqtt_tx: mqtt_tx.clone(),
                 mqtt_rx,
                 tasks: JoinSet::new(),
