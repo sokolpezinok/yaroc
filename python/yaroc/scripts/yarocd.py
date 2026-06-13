@@ -3,48 +3,13 @@ import datetime
 import logging
 import socket
 import tomllib
-from typing import List, Tuple
 
-from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
-from ..rs import HostInfo, MessageHandlerBuilder, MqttConfig, PyUsbSerialFactory, SerialClient
+from ..rs import HostInfo, MessageHandlerBuilder, MqttConfig, SerialClient
 from ..utils.container import Container, create_clients
 from ..utils.forwarder import Forwarder
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
-
-
-class YarocDaemon:
-    def __init__(
-        self,
-        dns: List[Tuple[str, str]],
-        client_group: ClientGroup,
-        display_model: str | None = None,
-        mqtt_configs: List[MqttConfig] = [],
-        meshtastic_serial: bool = False,
-        meshtastic_tcp: str | None = None,
-        meshtastic_timeout: int = 600,
-        sportident_factory: PyUsbSerialFactory | None = None,
-    ):
-        builder = (
-            MessageHandlerBuilder()
-            .with_dns(dns)
-            .with_mqtt_configs(mqtt_configs)
-            .with_meshtastic_timeout(datetime.timedelta(seconds=meshtastic_timeout))
-            .with_meshtastic(meshtastic_serial)
-            .with_sportident(sportident_factory is not None)
-            .with_sportident_factory(sportident_factory)
-        )
-        if meshtastic_tcp is not None:
-            builder = builder.with_tcp(meshtastic_tcp)
-
-        hostname = socket.gethostname()
-        mac_addr = eth_mac_addr() or "000000000000"
-        host_info = HostInfo.new(hostname, mac_addr)
-        self.forwarder = Forwarder(host_info, client_group, builder, StatusDrawer(display_model))
-
-    async def loop(self):
-        await self.forwarder.loop()
 
 
 async def main_loop() -> None:
@@ -95,17 +60,29 @@ async def main_loop() -> None:
                 logging.info("Enabling tunneling of SportIdent devices connected via USB")
                 sportident_factory = client.usb_serial_factory()
 
-    yaroc_daemon = YarocDaemon(
-        dns,
-        client_group,
-        config.get("display", None),
-        mqtt_configs,
-        meshtastic_serial=meshtastic_conf.get("watch_usb", True),
-        meshtastic_tcp=meshtastic_conf.get("tcp", None),
-        meshtastic_timeout=meshtastic_conf.get("timeout", 600),
-        sportident_factory=sportident_factory,
+    meshtastic_serial = meshtastic_conf.get("watch_usb", True)
+    meshtastic_tcp = meshtastic_conf.get("tcp", None)
+    meshtastic_timeout = meshtastic_conf.get("timeout", 600)
+    builder = (
+        MessageHandlerBuilder()
+        .with_dns(dns)
+        .with_mqtt_configs(mqtt_configs)
+        .with_meshtastic_timeout(datetime.timedelta(seconds=meshtastic_timeout))
+        .with_meshtastic(meshtastic_serial)
+        .with_sportident(sportident_factory is not None)
+        .with_sportident_factory(sportident_factory)
     )
-    await yaroc_daemon.loop()
+
+    if meshtastic_tcp is not None:
+        builder = builder.with_tcp(meshtastic_tcp)
+
+    hostname = socket.gethostname()
+    mac_addr = eth_mac_addr() or "000000000000"
+    host_info = HostInfo.new(hostname, mac_addr)
+    forwarder = Forwarder(
+        host_info, client_group, builder, StatusDrawer(config.get("display", None))
+    )
+    await forwarder.loop()
 
 
 if is_windows():
