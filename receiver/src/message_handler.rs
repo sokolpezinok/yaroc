@@ -1,4 +1,5 @@
 use crate::meshtastic_serial::MeshtasticFactory;
+use crate::meshtastic_tcp::MeshtasticTcp;
 use crate::si_uart::{SportIdentFactory, SportIdentMessage};
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
     system_info::MacAddress,
 };
 use chrono::Local;
-use log::error;
+use log::{error, info};
 use meshtastic::protobufs::MeshPacket;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -20,6 +21,7 @@ use yaroc_common::punch::SiPunch;
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
+    meshtastic_tcp: Option<String>,
     mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
     _mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>, // Kept to prevent channel from closing
     punch_rx: UnboundedReceiver<SportIdentMessage>,
@@ -78,6 +80,7 @@ impl MessageHandler {
 
         let handler = Self {
             fleet_state: FleetState::new(dns, node_infos_interval, meshtastic_timeout),
+            meshtastic_tcp: None,
             mesh_packet_rx,
             _mesh_packet_tx: mesh_packet_tx.clone(),
             punch_rx,
@@ -117,6 +120,25 @@ impl MessageHandler {
     ///
     /// Returns an error if any of the underlying event parsing or state updates fail.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
+        // Initialize Meshtastic TCP connection if configured and when run for the first time.
+        if let Some(host) = self.meshtastic_tcp.take() {
+            info!("Connecting to Meshtastic TCP device at {host}...");
+            match MeshtasticTcp::connect(&host, Duration::from_secs(12)).await {
+                Ok(meshtastic_tcp) => {
+                    let mesh_packet_tx = self._mesh_packet_tx.clone();
+                    self.tasks.spawn(async move {
+                        meshtastic_tcp.inner_loop(mesh_packet_tx).await;
+                    });
+                }
+                Err(err) => {
+                    // TODO: add retries
+                    error!(
+                        "Failed to connect to Meshtastic TCP device at {host}: {err}. Will not retry."
+                    );
+                }
+            }
+        }
+
         // Spawn MQTT tasks when `next_event()` is run for the first time.
         if let Some(receivers) = self.mqtt_receivers.take() {
             for mut receiver in receivers {
@@ -211,6 +233,7 @@ mod tests {
                 mqtt_tx: mqtt_tx.clone(),
                 mqtt_rx,
                 tasks: JoinSet::new(),
+                meshtastic_tcp: None,
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }

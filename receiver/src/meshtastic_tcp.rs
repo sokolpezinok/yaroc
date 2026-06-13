@@ -88,3 +88,73 @@ impl MeshtasticTcp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use meshtastic::protobufs::MyNodeInfo;
+    use prost::Message;
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
+    use tokio::sync::mpsc;
+
+    fn encode_from_radio(msg: FromRadio) -> Vec<u8> {
+        let mut protobuf_bytes = Vec::new();
+        msg.encode(&mut protobuf_bytes).unwrap();
+        let size = protobuf_bytes.len() as u16;
+        let size_bytes = size.to_be_bytes();
+        let mut header = vec![0x94, 0xc3, size_bytes[0], size_bytes[1]];
+        header.extend_from_slice(&protobuf_bytes);
+        header
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_tcp_connection() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+
+            // 1. Send MyInfo packet first
+            let my_info = MyNodeInfo {
+                my_node_num: 42,
+                ..Default::default()
+            };
+            let from_radio_info = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_info)),
+                ..Default::default()
+            };
+            let buf = encode_from_radio(from_radio_info);
+            socket.write_all(&buf).await.unwrap();
+
+            // 2. Send a MeshPacket
+            let mesh_packet = MeshPacket {
+                from: 43,
+                to: 42,
+                ..Default::default()
+            };
+            let from_radio_packet = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::Packet(mesh_packet)),
+                ..Default::default()
+            };
+            let buf2 = encode_from_radio(from_radio_packet);
+            socket.write_all(&buf2).await.unwrap();
+        });
+
+        // Connect client
+        let client =
+            MeshtasticTcp::connect(&addr.to_string(), Duration::from_secs(2)).await.unwrap();
+        assert_eq!(client.mac_address(), MacAddress::Meshtastic(42));
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            client.inner_loop(tx).await;
+        });
+
+        let (received_packet, mac) = rx.recv().await.unwrap();
+        assert_eq!(received_packet.from, 43);
+        assert_eq!(received_packet.to, 42);
+        assert_eq!(mac, MacAddress::Meshtastic(42));
+    }
+}
