@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import logging
 import signal
-import socket
 from concurrent.futures import ThreadPoolExecutor
 
 from ..clients.client import ClientGroup
@@ -17,33 +16,48 @@ from ..rs import (
     SiPunchLog,
 )
 from .status import StatusDrawer
-from .sys_info import eth_mac_addr, is_windows
+from .sys_info import is_windows
 
 
 class Forwarder:
     def __init__(
-        self, client_group: ClientGroup, builder: MessageHandlerBuilder, drawer: StatusDrawer
+        self,
+        host_info: HostInfo,
+        client_group: ClientGroup,
+        builder: MessageHandlerBuilder,
+        drawer: StatusDrawer,
     ):
-        hostname = socket.gethostname()
-        mac_addr = eth_mac_addr() or "000000000000"
-        self.host_info = HostInfo.new(hostname, mac_addr)
+        self.host_info = host_info
         self.client_group = client_group
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.drawer = drawer
         self.handler, self.usb_serial_manager = builder.build()
+        self._codes: set[int] = set()
+        self._tasks: set[asyncio.Task] = set()
+
+    @property
+    def codes(self) -> set[int]:
+        return self._codes
 
     async def _handle_punches(self, punches: list[SiPunchLog]):
         tasks = []
-        for punch in punches:
-            logging.info(punch)
-            tasks.append(self.client_group.send_punch(punch))
+        for punch_log in punches:
+            logging.info(punch_log)
+            self._codes.add(punch_log.punch.code)
+            tasks.append(self.client_group.send_punch(punch_log))
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_punch(self, punch: SiPunch):
-        logging.info(f"Local punch: {punch.card} punched {punch.code}")
-        await self.client_group.send_punch(
-            SiPunchLog.new(punch, self.host_info, datetime.datetime.now().astimezone())
+        now = datetime.datetime.now().astimezone()
+        latency = (now - punch.time).total_seconds()
+        logging.info(
+            f"{punch.card} punched {punch.code} at {punch.time:%H:%M:%S.%f}, latency "
+            f"{latency:3.2f}s"
         )
+        self._codes.add(punch.code)
+        # TODO: these can be punches coming from meshtastic mesh, using self.host_info here makes
+        # the origin of the punch incorrect.
+        await self.client_group.send_punch(SiPunchLog.new(punch, self.host_info, now))
 
     async def _handle_cellular_log(self, log: CellularLog):
         logging.info(log)
@@ -78,12 +92,12 @@ class Forwarder:
         while True:
             try:
                 ev = await self.handler.next_event()
-                self.handle_event(ev)
+                task = self.handle_event(ev)
+                if task is not None:
+                    self._tasks.add(task)
+                    task.add_done_callback(self._tasks.discard)
             except Exception as e:
                 logging.error(f"Error while getting next message: {e}")
-
-    def shutdown(self):
-        self.executor.shutdown(wait=True)
 
     async def loop(self):
         def handle_exception(loop, context):

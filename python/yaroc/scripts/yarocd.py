@@ -1,16 +1,17 @@
 import asyncio
 import datetime
 import logging
+import socket
 import tomllib
 from typing import List, Tuple
 
 from ..clients.client import ClientGroup
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
-from ..rs import MessageHandlerBuilder, MqttConfig, PyUsbSerialFactory, SerialClient
+from ..rs import HostInfo, MessageHandlerBuilder, MqttConfig, PyUsbSerialFactory, SerialClient
 from ..utils.container import Container, create_clients
 from ..utils.forwarder import Forwarder
 from ..utils.status import StatusDrawer
-from ..utils.sys_info import find_config_file, is_windows
+from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
 
 
 class YarocDaemon:
@@ -36,7 +37,11 @@ class YarocDaemon:
         )
         if meshtastic_tcp is not None:
             builder = builder.with_tcp(meshtastic_tcp)
-        self.forwarder = Forwarder(client_group, builder, StatusDrawer(display_model))
+
+        hostname = socket.gethostname()
+        mac_addr = eth_mac_addr() or "000000000000"
+        host_info = HostInfo.new(hostname, mac_addr)
+        self.forwarder = Forwarder(host_info, client_group, builder, StatusDrawer(display_model))
 
     async def loop(self):
         await self.forwarder.loop()

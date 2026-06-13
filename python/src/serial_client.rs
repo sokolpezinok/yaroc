@@ -462,6 +462,11 @@ impl UsbSerialFactory for PyUsbSerialFactory {
     fn is_running(&self, device_node: &str) -> bool {
         self.running_devices.contains(device_node)
     }
+
+    /// Name
+    fn name(&self) -> &'static str {
+        "SportIdent"
+    }
 }
 
 #[cfg(test)]

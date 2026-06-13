@@ -51,6 +51,8 @@ pub trait UsbSerialFactory: Send + Sync {
     fn remove_device(&mut self, device_node: &str) -> bool;
 
     fn is_running(&self, device_node: &str) -> bool;
+
+    fn name(&self) -> &'static str;
 }
 
 /// Serial device manager
@@ -258,7 +260,11 @@ impl UsbSerialManager {
                         .add_device(&port.port_name, &format!("{:?}", dev.id()))
                         .await
                         .inspect_err(|err| {
-                            error!("Failed to connect to device at {}: {err}", port.port_name)
+                            error!(
+                                "Failed to connect to {} device at {}: {err}",
+                                factory.name(),
+                                port.port_name
+                            )
                         });
                 }
             }

@@ -196,6 +196,11 @@ impl UsbSerialFactory for SportIdentFactory {
     fn is_running(&self, device_node: &str) -> bool {
         self.devices.contains_key(device_node)
     }
+
+    /// Name
+    fn name(&self) -> &'static str {
+        "SportIdent"
+    }
 }
 
 #[cfg(test)]

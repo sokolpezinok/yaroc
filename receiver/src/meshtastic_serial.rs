@@ -217,6 +217,11 @@ impl UsbSerialFactory for MeshtasticFactory {
     fn is_running(&self, device_node: &str) -> bool {
         self.devices.contains_key(device_node)
     }
+
+    /// Name
+    fn name(&self) -> &'static str {
+        "Meshtastic"
+    }
 }
 
 #[cfg(test)]
