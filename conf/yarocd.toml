@@ -1,0 +1,44 @@
+log_level = "info"
+# You can use a Waveshare e-ink display to show a status table of all YAROC units.
+# display = "epd2in66"
+
+[mqtt]
+broker_url = "broker.emqx.io"
+# broker_port = 1883
+# username = joe
+# password = mynameisjoe
+
+[mac-addresses]
+sim01 = "b827eb2f912e" # YAROC unit with a SIM card
+radio01 = "9e12f8a5"
+
+[meshtastic]
+# watch_usb = true     # Watch for Meshtastic device connected via USB. Defaults to true.
+# timeout = 600        # Time in seconds without messages before assuming a node is disconnected. Defaults to 600.
+# main_channel = "ch1" # Meshtastic channel to monitor. Defaults to None (Primary).
+# tcp = "192.168.1.50:4403" # Connect to Meshtastic over TCP instead of USB. Defaults to None.
+
+[client.serial]
+# Connect a "UART to USB" board to your Raspberry Pi and resend punches directly into
+# orienteering software (MeOS, etc.) over USB.
+enable = false
+port = "/dev/ttyACM0"       # Or "/dev/serial0" on Raspberry Pi
+watch_si_usb = true        # Enable tunneling of SportIdent devices connected via USB. Defaults to false.
+
+[client.roc]
+enable = false
+# [client.roc.override]
+# If you don't have a device registered for ROC, you can remap the device MAC address to
+# another one. Useful for meshtastic devices, which can't be registered to ROC directly.
+# radio01 = "b827eba22867"
+
+[client.sirap]
+# Note: SIRAP is not well tested, use with caution
+enable = false
+ip = "192.168.1.10"
+port = 10000
+
+[client.mop]
+enable = false
+api_key = "e8TCiC0nKvNX"
+mop_xml = "/home/lukas/sp.xml"

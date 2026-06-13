@@ -1,0 +1,21 @@
+log_level = "info"
+# USB sources are enabled by default: SRR dongle, mini-reader or BSM7-USB
+# You can disable that using `punch_source.usb.enable = false`
+
+[client.mqtt]
+enable = true
+broker_url = "broker.emqx.io"
+# broker_port = 1883
+
+[client.roc]
+enable = false
+
+[meshtastic]
+# You can connect a Meshtastic device via USB and use it as a punch source.
+# The meshtastic devices acts as an online gateway for its LoRa mesh.
+# watch_usb = true  # Defaults to false
+# main_channel = "ch1" # Meshtastic channel to monitor. Defaults to None (Primary).
+# tcp = "192.168.1.50:4403" # Connect to Meshtastic over TCP instead of USB. Defaults to None.
+
+# [meshtastic.mac-addresses]
+# radio01 = "9e12f8a5"

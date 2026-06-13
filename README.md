@@ -164,9 +164,6 @@ meshtastic --set serial.rxd 13 --set serial.txd 14
 First, create a `yarocd.toml` file where you configure the MAC addresses to receive the punches from, as well as all the clients that should send the punches: ROC, SIRAP, serial, etc.
 
 ```toml
-# "SPE" is the shortcut for "Sokol Pezinok", our club name. We use it to name things,
-# so our YAROC units are prefixed "SPE-".
-
 log_level = "info"
 # You can use a Waveshare e-ink display to show a status table of all YAROC units.
 display = "epd2in66"
@@ -177,12 +174,13 @@ broker_url = "broker.emqx.io"
 # password = mynameisjoe
 
 [mac-addresses]
-spe01 = "b827eb78912e" # YAROC unit with a SIM card
-spr01 = "4e18f7a5"     # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
-spr02 = "7bfaf584"
+sim01 = "b827eb78912e"  # YAROC unit with a SIM card
+radio1 = "4e18f7a5"     # Meshtastic node (uses a 32-bit ID, which is 8 hex characters)
+radio2 = "7bfaf584"
 
 [meshtastic]
-main_channel = "spe"
+main_channel = "spe" # "SPE" is the shortcut for "Sokol Pezinok", our club name. We use it to name things.
+
 # Meshtastic packets are automatically received via MQTT. You can also connect a Meshtastic
 # device via USB or TCP. Disable `watch_usb` to turn off USB device monitoring.
 # watch_usb = false
@@ -195,8 +193,8 @@ enable = true
 [client.roc.override]
 # If you don't have a device registered for ROC, you can remap the device MAC address to
 # another one. Useful for meshtastic devices, which can't be registered to ROC directly.
-spr01 = "b827eba22867"
-spr02 = "b827eba22867"
+radio1 = "b827eba22867"
+radio2 = "b827eba22867"
 
 [client.serial]
 # Connect a "UART to USB" board to your Raspberry Pi and receive punches directly into

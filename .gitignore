@@ -7,7 +7,3 @@ __pycache__/
 
 # neovim config
 .nvim.lua
-
-# YAROC TOML configs
-yarocd.toml
-send-punch.toml
