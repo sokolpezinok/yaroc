@@ -56,6 +56,15 @@ const FINAL_RESPONSE: &[u8] = &[
 const ETX: u8 = 0x03;
 
 impl SerialClient {
+    /// Parses a SportIdent packet, cleaning up start bytes and identifying the source protocol.
+    ///
+    /// # Arguments
+    /// * `bytes` - The raw packet bytes to parse.
+    ///
+    /// # Returns
+    /// A tuple containing:
+    /// * The cleaned packet slice (stripped of leading start bytes).
+    /// * A boolean indicating if the protocol is MeOS.
     fn parse_si_packet(mut bytes: &[u8]) -> (&[u8], bool) {
         while let Some((&0xff, tail)) = bytes.split_first() {
             bytes = tail;
@@ -214,8 +223,8 @@ impl SerialClient {
                                 .write_all(reader_buffer.as_slice())
                                 .await
                                 .inspect_err(|e| error!("Error writing into serial port: {e}"));
-                            // We store the guard on computer_tx for some time, so that the longer
-                            // "transaction" can complete and not be interrupted.
+                            // We store the guard on computer_tx for some time, so that a longer
+                            // transaction can complete and not be interrupted.
                             tx_guard = Some(tx);
                         }
                     };
@@ -258,6 +267,13 @@ impl SerialClient {
         }
     }
 
+    /// Establishes an asynchronous serial connection to a SportIdent mini-reader device.
+    ///
+    /// # Arguments
+    /// * `port` - The path to the serial port (e.g., "/dev/ttyUSB1").
+    ///
+    /// # Returns
+    /// A `PyResult` containing the open `SerialStream` on success.
     fn connect_to_mini_reader(port: String) -> PyResult<SerialStream> {
         let builder = tokio_serial::new(&port, BAUD_RATE);
         builder
@@ -317,7 +333,7 @@ impl SerialClient {
         .await
     }
 
-    /// Name of the client
+    /// Returns the unique name of this client, formatted with its serial port path.
     fn name(&self) -> String {
         format!("serial-{}", self.port)
     }
@@ -380,7 +396,11 @@ impl SerialClient {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
                 match tx.write_all(&raw_punch).await {
-                    Ok(()) => info!("Punch {} sent via serial port, try #{}", card, i + 1),
+                    Ok(()) => info!(
+                        "Punch of card {} sent via serial port, try #{}",
+                        card,
+                        i + 1
+                    ),
                     Err(e) => error!("serial failed to send punch {card}, try {}: {e}", i + 1),
                 }
             }
@@ -416,6 +436,10 @@ impl SerialClient {
     }
 }
 
+/// A factory for detecting and managing USB serial devices representing SportIdent readers.
+///
+/// This factory is passed to Python to listen for connection/disconnection events
+/// of USB serial devices.
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyUsbSerialFactory {
@@ -424,6 +448,14 @@ pub struct PyUsbSerialFactory {
 }
 
 impl UsbSerialFactory for PyUsbSerialFactory {
+    /// Detects whether a given USB device matches a SportIdent reader profile.
+    ///
+    /// # Arguments
+    /// * `dev` - USB device info.
+    /// * `port` - Serial port info.
+    ///
+    /// # Returns
+    /// `true` if the device is a SportIdent reader, `false` otherwise.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         SportIdentFactory::detect_device(dev, port)
     }
@@ -455,15 +487,29 @@ impl UsbSerialFactory for PyUsbSerialFactory {
         .boxed()
     }
 
+    /// Removes a mini-reader device node from the set of active running devices.
+    ///
+    /// # Arguments
+    /// * `device_node` - The identifier of the device node to remove.
+    ///
+    /// # Returns
+    /// `true` if the device was present and successfully removed, `false` otherwise.
     fn remove_device(&mut self, device_node: &str) -> bool {
         self.running_devices.remove(device_node)
     }
 
+    /// Checks if a mini-reader device node is currently registered as running.
+    ///
+    /// # Arguments
+    /// * `device_node` - The identifier of the device node to check.
+    ///
+    /// # Returns
+    /// `true` if the device is currently running, `false` otherwise.
     fn is_running(&self, device_node: &str) -> bool {
         self.running_devices.contains(device_node)
     }
 
-    /// Name
+    /// Returns the name of the factory.
     fn name(&self) -> &'static str {
         "SportIdent"
     }

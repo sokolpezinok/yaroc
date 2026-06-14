@@ -56,7 +56,6 @@ impl MessageHandler {
         if let Some(init) = self.initializer.take() {
             // Initialize Meshtastic TCP connection if configured and when run for the first time.
             if let Some(host) = init.meshtastic_tcp {
-                info!("Connecting to Meshtastic TCP device at {host}...");
                 match MeshtasticTcp::connect(&host, Duration::from_secs(12)).await {
                     Ok(meshtastic_tcp) => {
                         let mesh_packet_tx = self._mesh_packet_tx.clone();
@@ -284,6 +283,8 @@ impl MessageHandlerBuilder {
             }
             SportIdentConfig::None => {}
         }
+        // TODO: consider also spawning a new USB task in the background, without returning
+        // anything to the callers.
         (handler, UsbSerialManager::new(factories))
     }
 }

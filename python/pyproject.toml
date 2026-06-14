@@ -76,7 +76,7 @@ fixable = ["ALL"]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [[tool.mypy.overrides]]
-module = "epaper.*,gpiozero.*,RPi.*,serial.*,serial_asyncio.*,pyudev.*"
+module = "epaper.*,gpiozero.*,RPi.*,serial.*,serial_asyncio.*"
 ignore_missing_imports = true
 
 [tool.ty.src]
