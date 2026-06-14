@@ -1,11 +1,8 @@
-import asyncio
 import unittest
-from asyncio import Queue
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-from yaroc.rs import Event, HostInfo, SiPunch, SiPunchLog
-from yaroc.sources.si import UdevSiFactory
+from yaroc.rs import SiPunch
 
 
 class TestSportident(unittest.TestCase):
@@ -44,64 +41,15 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.microsecond, 722656)
 
 
-class TestSiWorker(unittest.IsolatedAsyncioTestCase):
-    async def test_udev_si_factory_punches(self):
-        # Create UdevSiFactory
-        worker = UdevSiFactory(enable_meshtastic=True)
-        self.assertTrue(worker.enable_meshtastic)
-
-        # Mock the handler and usb_serial_manager returned by MessageHandlerBuilder
-        mock_handler = AsyncMock()
-        mock_usb_manager = AsyncMock()
-
-        # Let's mock MessageHandlerBuilder by patching it
-        with patch("yaroc.sources.si.MessageHandlerBuilder") as mock_builder_cls:
-            mock_builder = mock_builder_cls.return_value
-            mock_builder.with_dns.return_value = mock_builder
-            mock_builder.with_meshtastic.return_value = mock_builder
-            mock_builder.with_sportident.return_value = mock_builder
-            mock_builder.build.return_value = (mock_handler, mock_usb_manager)
-
-            queue = Queue()
-            status_queue = Queue()
-
-            t = datetime.now().astimezone()
-            punch = SiPunch.new(1715004, 47, t, 2)
-
-            host_info = HostInfo.new("test_host", "001122334455")
-            punch_log = SiPunchLog.new(punch, host_info, t)
-
-            # In our mock next_event, we return a sequence of events, then raise a CancelledError to break the infinite loop
-            mock_handler.next_event.side_effect = [
-                Event.SiPunch(punch),
-                Event.SiPunchLogs([punch_log]),
-                Event.DeviceEvnt(True, "test_device"),
-                asyncio.CancelledError(),
-            ]
-
-            # Since loop gathers both next_event loop and usb_serial_manager.loop(),
-            # usb_serial_manager.loop() is also AsyncMock, so it will return immediately.
-            # We catch CancelledError to end the worker.loop cleanly.
-            try:
-                await worker.loop(queue, status_queue)
-            except asyncio.CancelledError:
-                pass
-
-            self.assertEqual(queue.qsize(), 2)
-            p1 = await queue.get()
-            p2 = await queue.get()
-            self.assertEqual(p1.card, 1715004)
-            self.assertEqual(p2.card, 1715004)
-
-            self.assertEqual(status_queue.qsize(), 1)
-            dev_ev = await status_queue.get()
-            self.assertEqual(dev_ev.device, "test_device")
-            self.assertTrue(dev_ev.added)
-
-
 class TestContainer(unittest.TestCase):
-    def test_container_meshtastic_disabled(self):
+    @patch("yaroc.utils.container.MessageHandlerBuilder")
+    def test_container_meshtastic_disabled(self, mock_builder_cls):
         from yaroc.utils.container import Container
+
+        mock_builder = mock_builder_cls.return_value
+        mock_builder.with_dns.return_value = mock_builder
+        mock_builder.with_meshtastic.return_value = mock_builder
+        mock_builder.with_sportident.return_value = mock_builder
 
         config = {
             "punch_source": {
@@ -111,12 +59,19 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        workers = container.workers()
-        self.assertEqual(len(workers), 1)
-        self.assertFalse(workers[0].enable_meshtastic)
+        builder = container.message_handler()
+        self.assertEqual(builder, mock_builder)
+        mock_builder.with_meshtastic.assert_called_with(False)
+        mock_builder.with_sportident.assert_called_with(True)
 
-    def test_container_meshtastic_enabled(self):
+    @patch("yaroc.utils.container.MessageHandlerBuilder")
+    def test_container_meshtastic_enabled(self, mock_builder_cls):
         from yaroc.utils.container import Container
+
+        mock_builder = mock_builder_cls.return_value
+        mock_builder.with_dns.return_value = mock_builder
+        mock_builder.with_meshtastic.return_value = mock_builder
+        mock_builder.with_sportident.return_value = mock_builder
 
         config = {
             "punch_source": {
@@ -129,12 +84,19 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        workers = container.workers()
-        self.assertEqual(len(workers), 1)
-        self.assertTrue(workers[0].enable_meshtastic)
+        builder = container.message_handler()
+        self.assertEqual(builder, mock_builder)
+        mock_builder.with_meshtastic.assert_called_with(True)
+        mock_builder.with_sportident.assert_called_with(True)
 
-    def test_container_meshtastic_dns(self):
+    @patch("yaroc.utils.container.MessageHandlerBuilder")
+    def test_container_meshtastic_dns(self, mock_builder_cls):
         from yaroc.utils.container import Container
+
+        mock_builder = mock_builder_cls.return_value
+        mock_builder.with_dns.return_value = mock_builder
+        mock_builder.with_meshtastic.return_value = mock_builder
+        mock_builder.with_sportident.return_value = mock_builder
 
         config = {
             "punch_source": {
@@ -150,7 +112,8 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        workers = container.workers()
-        self.assertEqual(len(workers), 1)
-        self.assertTrue(workers[0].enable_meshtastic)
-        self.assertEqual(workers[0].dns, [("001122334455", "node1")])
+        builder = container.message_handler()
+        self.assertEqual(builder, mock_builder)
+        mock_builder.with_dns.assert_called_with([("001122334455", "node1")])
+        mock_builder.with_meshtastic.assert_called_with(True)
+        mock_builder.with_sportident.assert_called_with(True)

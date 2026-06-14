@@ -1,6 +1,7 @@
 import logging
 import sys
 from asyncio import Task
+from datetime import timedelta
 from typing import Any, Dict
 
 from dependency_injector import containers, providers
@@ -11,12 +12,7 @@ from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
-from ..rs import SerialClient
-from ..sources.si import (
-    SiPunchManager,
-    SiWorker,
-    UdevSiFactory,
-)
+from ..rs import MessageHandlerBuilder, SerialClient
 from ..utils.async_serial import AsyncATCom
 
 
@@ -34,11 +30,10 @@ def get_log_level(log_level: str | None) -> int:
         sys.exit(1)
 
 
-def create_si_workers(
+def create_message_handler(
     config: Dict[str, Any] | None,
     meshtastic_config: Dict[str, Any] | None = None,
-) -> list[SiWorker]:
-    workers: list[SiWorker] = []
+) -> MessageHandlerBuilder:
     config = config or {}
     meshtastic_config = meshtastic_config or {}
 
@@ -52,25 +47,22 @@ def create_si_workers(
         fake_punch_interval = config.get("fake", {}).get("interval")
         logging.info(f"Enabled fake punch source with interval {fake_punch_interval}")
 
-    if enable_sportident or enable_meshtastic or fake_punch_interval is not None:
-        if enable_sportident or enable_meshtastic:
-            logging.info(
-                f"Enabled punch source: USB={enable_sportident}, Meshtastic={enable_meshtastic}"
-            )
-        mac_addresses = meshtastic_config.get("mac-addresses", {})
-        dns: list[tuple[str, str]] = [
-            (mac_address, name) for name, mac_address in mac_addresses.items()
-        ]
-        workers.append(
-            UdevSiFactory(
-                enable_sportident=enable_sportident,
-                enable_meshtastic=enable_meshtastic,
-                meshtastic_tcp=meshtastic_tcp,
-                dns=dns,
-                fake_punch_interval=fake_punch_interval,
-            )
-        )
-    return workers
+    mac_addresses = meshtastic_config.get("mac-addresses", {})
+    dns: list[tuple[str, str]] = [
+        (mac_address, name) for name, mac_address in mac_addresses.items()
+    ]
+
+    builder = (
+        MessageHandlerBuilder()
+        .with_dns(dns)
+        .with_meshtastic(enable_meshtastic)
+        .with_sportident(enable_sportident)
+    )
+    if meshtastic_tcp is not None:
+        builder = builder.with_tcp(meshtastic_tcp)
+    if fake_punch_interval is not None:
+        builder = builder.with_fake_punch(timedelta(seconds=fake_punch_interval))
+    return builder
 
 
 class Container(containers.DeclarativeContainer):
@@ -98,8 +90,9 @@ class Container(containers.DeclarativeContainer):
         ),
         roc=providers.Factory(RocClient),
     )
-    workers = providers.Callable(create_si_workers, config.punch_source, config.meshtastic)
-    si_manager = providers.Factory(SiPunchManager, workers)
+    message_handler = providers.Callable(
+        create_message_handler, config.punch_source, config.meshtastic
+    )
 
 
 @inject

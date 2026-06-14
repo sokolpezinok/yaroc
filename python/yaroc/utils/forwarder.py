@@ -27,7 +27,7 @@ class Forwarder:
         client_group: ClientGroup,
         builder: MessageHandlerBuilder,
         drawer: StatusDrawer = StatusDrawer(None),
-        mch_interval: int | None = None,
+        mch_interval: int | float | None = None,
     ):
         self.host_info = host_info
         self.client_group = client_group
@@ -79,15 +79,17 @@ class Forwarder:
         await self.client_group.send_status(status, self.host_info.mac_address)
 
     async def periodic_mini_call_home(self):
-        while self._mch_interval is not None:
-            time_start = time.time()
-            mini_call_home = create_sys_minicallhome()
-            for code in self.codes:
-                mini_call_home.codes.append(code)
-            status = Status()
-            status.mini_call_home.CopyFrom(mini_call_home)
-            await self.client_group.send_status(status, self.host_info.mac_address)
-            await asyncio.sleep(self._mch_interval - (time.time() - time_start))
+        if self._mch_interval is not None:
+            await asyncio.sleep(self._mch_interval)
+            while True:
+                time_start = time.time()
+                mini_call_home = create_sys_minicallhome()
+                for code in self.codes:
+                    mini_call_home.codes.append(code)
+                status = Status()
+                status.mini_call_home.CopyFrom(mini_call_home)
+                await self.client_group.send_status(status, self.host_info.mac_address)
+                await asyncio.sleep(max(0.0, self._mch_interval - (time.time() - time_start)))
 
     async def _draw_table(self, node_infos: list[NodeInfo]):
         self.executor.submit(self.drawer.draw_status, node_infos)
