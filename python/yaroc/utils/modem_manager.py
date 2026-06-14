@@ -1,4 +1,5 @@
 import logging
+import random
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -7,6 +8,7 @@ from dbus_next import Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 
+from ..pb.status_pb2 import CellNetworkType, Status
 from .sys_info import NetworkType
 
 MODEM_MANAGER = "org.freedesktop.ModemManager1"
@@ -160,3 +162,30 @@ class ModemManager:
             return int(cellid, 16)
         except Exception:
             return None
+
+    async def enrich_status(self, status: Status):
+        """Enrich a status message with signal strength and cell ID info."""
+        try:
+            modems = await self.get_modems()
+            if len(modems) > 0:
+                network_state = await self.get_signal(modems[0])
+                logging.debug(f"Network state: {network_state}")
+                if network_state.rsrp is not None:
+                    status.mini_call_home.rsrp_dbm = round(network_state.rsrp)
+                if network_state.snr is not None:
+                    status.mini_call_home.signal_snr_cb = round(network_state.snr * 10)
+
+                if network_state.type == NetworkType.Gsm:
+                    status.mini_call_home.network_type = CellNetworkType.UnknownNetworkType  # type: ignore
+                elif network_state.type == NetworkType.Umts:
+                    status.mini_call_home.network_type = CellNetworkType.Umts  # type: ignore
+                elif network_state.type == NetworkType.Lte:
+                    status.mini_call_home.network_type = CellNetworkType.Lte  # type: ignore
+
+                cellid = await self.get_cellid(modems[0])
+                if cellid is not None:
+                    status.mini_call_home.cellid = cellid
+                if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
+                    await self.signal_setup(modems[0], 20)
+        except Exception as e:
+            logging.error(f"Error while getting signal strength: {e}")

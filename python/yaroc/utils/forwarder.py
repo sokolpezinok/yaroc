@@ -5,6 +5,9 @@ import signal
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from yaroc.clients.mqtt import MqttClient
+from yaroc.clients.roc import RocClient
+
 from ..clients.client import ClientGroup
 from ..pb.status_pb2 import DeviceEvent, EventType, Status
 from ..rs import (
@@ -80,6 +83,21 @@ class Forwarder:
 
     async def periodic_mini_call_home(self):
         if self._mch_interval is not None:
+            enrich_status = None
+            import sys
+
+            if sys.platform == "linux" and any(
+                isinstance(client, (MqttClient, RocClient)) for client in self.client_group.clients
+            ):
+                try:
+                    from yaroc.utils.modem_manager import ModemManager
+
+                    mm = await ModemManager.new()
+                    logging.info("ModemManager initialized")
+                    enrich_status = mm.enrich_status
+                except Exception as err:
+                    logging.error(f"Error while setting up modem manager: {err}")
+
             await asyncio.sleep(self._mch_interval)
             while True:
                 time_start = time.time()
@@ -88,6 +106,8 @@ class Forwarder:
                     mini_call_home.codes.append(code)
                 status = Status()
                 status.mini_call_home.CopyFrom(mini_call_home)
+                if enrich_status is not None:
+                    await enrich_status(status)
                 await self.client_group.send_status(status, self.host_info.mac_address)
                 await asyncio.sleep(max(0.0, self._mch_interval - (time.time() - time_start)))
 
@@ -135,7 +155,6 @@ class Forwarder:
             shutdown_event.set()
 
         asyncio.get_event_loop().set_exception_handler(handle_exception)
-
         shutdown_event = asyncio.Event()
 
         if is_windows():

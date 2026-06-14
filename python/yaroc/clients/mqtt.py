@@ -1,7 +1,5 @@
 import logging
 import math
-import random
-import sys
 from asyncio import Lock, get_running_loop, sleep
 from dataclasses import dataclass
 from datetime import timedelta
@@ -17,7 +15,6 @@ from ..rs import SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
-from ..utils.sys_info import NetworkType
 from .client import Client
 
 BROKER_URL = "broker.emqx.io"
@@ -49,7 +46,6 @@ class MqttClient(Client):
         self.mac_addr = mac_addr
         self.broker_url = config.get("broker_url", BROKER_URL)
         self.broker_port = config.get("broker_port", BROKER_PORT)
-        self.mm = None
 
         disconnected = Disconnected()
         disconnected.client_name = self._name
@@ -93,32 +89,6 @@ class MqttClient(Client):
         await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
 
     async def send_status(self, status: Status, mac_addr: str):
-        try:
-            if status.WhichOneof("msg") == "mini_call_home" and self.mm is not None:
-                modems = await self.mm.get_modems()
-                if len(modems) > 0:
-                    network_state = await self.mm.get_signal(modems[0])
-                    logging.debug(f"Network state: {network_state}")
-                    if network_state.rsrp is not None:
-                        status.mini_call_home.rsrp_dbm = round(network_state.rsrp)  # TODO
-                    if network_state.snr is not None:
-                        status.mini_call_home.signal_snr_cb = round(network_state.snr * 10)
-
-                    if network_state.type == NetworkType.Gsm:
-                        status.mini_call_home.network_type = CellNetworkType.Gsm
-                    if network_state.type == NetworkType.Umts:
-                        status.mini_call_home.network_type = CellNetworkType.Umts
-                    if network_state.type == NetworkType.Lte:
-                        status.mini_call_home.network_type = CellNetworkType.Lte
-
-                    cellid = await self.mm.get_cellid(modems[0])
-                    if cellid is not None:
-                        status.mini_call_home.cellid = cellid
-                    if network_state.type == NetworkType.Unknown and random.randint(0, 4) == 2:
-                        await self.mm.signal_setup(modems[0], 20)
-        except Exception as e:
-            logging.error(f"Error while getting signal strength: {e}")
-
         topics = self.get_topics(mac_addr)
         await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
 
@@ -130,14 +100,6 @@ class MqttClient(Client):
             raise ConnectionError(f"{message_type} not sent: {e}")
 
     async def loop(self):
-        try:
-            if sys.platform == "linux":
-                from yaroc.utils.modem_manager import ModemManager
-
-                self.mm = await ModemManager.new()
-        except Exception as err:
-            logging.error(f"Error while setting up modem manager: {err}")
-
         while True:
             try:
                 async with self.client:
