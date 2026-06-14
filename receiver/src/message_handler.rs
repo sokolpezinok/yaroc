@@ -1,5 +1,5 @@
 use crate::meshtastic_serial::MeshtasticFactory;
-use crate::meshtastic_tcp::MeshtasticTcp;
+use crate::meshtastic_tcp::connect_and_loop;
 use crate::si_uart::{SportIdentFactory, SportIdentMessage};
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
@@ -56,20 +56,10 @@ impl MessageHandler {
         if let Some(init) = self.initializer.take() {
             // Initialize Meshtastic TCP connection if configured and when run for the first time.
             if let Some(host) = init.meshtastic_tcp {
-                match MeshtasticTcp::connect(&host, Duration::from_secs(12)).await {
-                    Ok(meshtastic_tcp) => {
-                        let mesh_packet_tx = self._mesh_packet_tx.clone();
-                        self.tasks.spawn(async move {
-                            meshtastic_tcp.inner_loop(mesh_packet_tx).await;
-                        });
-                    }
-                    Err(err) => {
-                        // TODO: add retries
-                        error!(
-                            "Failed to connect to Meshtastic TCP device at {host}: {err}. Will not retry."
-                        );
-                    }
-                }
+                let mesh_packet_tx = self._mesh_packet_tx.clone();
+                self.tasks.spawn(async move {
+                    connect_and_loop(host, mesh_packet_tx).await;
+                });
             }
 
             if let Some(interval) = init.fake_punch_interval {

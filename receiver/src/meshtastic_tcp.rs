@@ -89,6 +89,30 @@ impl MeshtasticTcp {
     }
 }
 
+/// Connects to a Meshtastic device over TCP and handles automatic reconnection if disconnected or failed.
+pub async fn connect_and_loop(
+    host: String,
+    mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+) {
+    let connect_timeout = Duration::from_secs(5);
+    loop {
+        match MeshtasticTcp::connect(&host, connect_timeout).await {
+            Ok(meshtastic_tcp) => {
+                meshtastic_tcp.inner_loop(mesh_proto_tx.clone()).await;
+                warn!(
+                    "Disconnected from Meshtastic TCP device at {host}. Retrying in 5 seconds..."
+                );
+            }
+            Err(err) => {
+                error!(
+                    "Failed to connect to Meshtastic TCP device at {host}: {err}. Retrying in 5 seconds..."
+                );
+            }
+        }
+        tokio::time::sleep(connect_timeout).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
