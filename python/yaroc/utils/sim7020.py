@@ -122,8 +122,9 @@ class SIM7020Interface:
                 )
                 if response.query is not None:
                     self._mqtt_id = int(response.query[0])
-        finally:
-            return self._mqtt_id
+        except Exception:
+            pass
+        return self._mqtt_id
 
     async def mqtt_connect_callback(self, s: str):
         await self.mqtt_connect()

@@ -53,8 +53,9 @@ def raspberrypi_model() -> RaspberryModel:
     try:
         with io.open("/sys/firmware/devicetree/base/model", "r") as m:
             model = RaspberryModel.from_string(m.read())
-    finally:
-        return model
+    except Exception:
+        pass
+    return model
 
 
 def is_windows() -> bool:
