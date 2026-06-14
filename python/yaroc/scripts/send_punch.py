@@ -9,7 +9,7 @@ from ..utils.forwarder import Forwarder
 from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
 
 
-async def main():
+async def main_loop():
     config_path = find_config_file("send-punch.toml")
     with open(config_path, "rb") as f:
         config = tomllib.load(f)
@@ -44,4 +44,7 @@ if is_windows():
     )
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
-asyncio.run(main())
+
+
+def main():
+    asyncio.run(main_loop())
