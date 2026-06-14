@@ -19,6 +19,7 @@ pub struct MessageHandlerInitializer {
     pub meshtastic_tcp: Option<String>,
     pub mqtt_receivers: Vec<MqttReceiver>,
     pub fake_punch_interval: Option<Duration>,
+    pub usb_serial_manager: Option<UsbSerialManager>,
 }
 
 /// Orchestrates the overall message flow.
@@ -97,6 +98,14 @@ impl MessageHandler {
                     }
                 });
             }
+
+            if let Some(mut usb_manager) = init.usb_serial_manager {
+                self.tasks.spawn(async move {
+                    if let Err(e) = usb_manager.monitor_usb_devices().await {
+                        error!("USB device manager failed: {e}");
+                    }
+                });
+            }
         }
     }
 
@@ -155,7 +164,7 @@ impl MessageHandler {
     }
 }
 
-/// A builder to construct `MessageHandler` and `UsbSerialManager` using the builder pattern.
+/// A builder to construct `MessageHandler` using the builder pattern.
 pub struct MessageHandlerBuilder {
     dns: Vec<(String, MacAddress)>,
     mqtt_configs: Vec<MqttConfig>,
@@ -228,8 +237,8 @@ impl MessageHandlerBuilder {
         self
     }
 
-    /// Builds the `MessageHandler` and the associated `UsbSerialManager`.
-    pub fn build(self) -> (MessageHandler, UsbSerialManager) {
+    /// Builds the `MessageHandler`.
+    pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
         let mqtt_receivers: Vec<MqttReceiver> = self
             .mqtt_configs
@@ -240,16 +249,36 @@ impl MessageHandlerBuilder {
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
         let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
 
-        let handler = MessageHandler {
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        if self.config.enable_meshtastic {
+            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx.clone())));
+        }
+        match self.config.sportident {
+            SportIdentConfig::Passive => {
+                factories.push(Box::new(SportIdentFactory::new(si_tx.clone())));
+            }
+            SportIdentConfig::Active(factory) => {
+                factories.push(factory);
+            }
+            SportIdentConfig::None => {}
+        }
+
+        let usb_serial_manager = if factories.is_empty() {
+            None
+        } else {
+            Some(UsbSerialManager::new(factories))
+        };
+
+        MessageHandler {
             fleet_state: FleetState::new(
                 self.dns,
                 self.node_infos_interval,
                 self.meshtastic_timeout,
             ),
             mesh_packet_rx,
-            _mesh_packet_tx: mesh_packet_tx.clone(),
+            _mesh_packet_tx: mesh_packet_tx,
             si_rx,
-            si_tx: si_tx.clone(),
+            si_tx,
             mqtt_tx,
             mqtt_rx,
             tasks: JoinSet::new(),
@@ -257,25 +286,9 @@ impl MessageHandlerBuilder {
                 meshtastic_tcp: self.meshtastic_tcp,
                 mqtt_receivers,
                 fake_punch_interval: self.fake_punch_interval,
+                usb_serial_manager,
             }),
-        };
-
-        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
-        if self.config.enable_meshtastic {
-            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx)));
         }
-        match self.config.sportident {
-            SportIdentConfig::Passive => {
-                factories.push(Box::new(SportIdentFactory::new(si_tx)));
-            }
-            SportIdentConfig::Active(factory) => {
-                factories.push(factory);
-            }
-            SportIdentConfig::None => {}
-        }
-        // TODO: consider also spawning a new USB task in the background, without returning
-        // anything to the callers.
-        (handler, UsbSerialManager::new(factories))
     }
 }
 
@@ -312,6 +325,7 @@ mod tests {
                     meshtastic_tcp: None,
                     mqtt_receivers: Vec::new(),
                     fake_punch_interval: None,
+                    usb_serial_manager: None,
                 }),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
@@ -340,9 +354,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_handler_fake_punch() {
-        let (handler, _usb) =
+        let mut handler =
             MessageHandlerBuilder::new().with_fake_punch(Duration::from_millis(10)).build();
-        let mut handler = handler;
 
         let event = timeout(Duration::from_secs(1), handler.next_event())
             .await

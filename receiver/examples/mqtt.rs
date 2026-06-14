@@ -48,7 +48,7 @@ async fn main() {
         url: "broker.hivemq.com".to_owned(),
         ..Default::default()
     };
-    let (mut handler, _serial_manager) = MessageHandlerBuilder::new()
+    let mut handler = MessageHandlerBuilder::new()
         .with_dns(dns)
         .with_mqtt_configs(vec![mqtt_config, mqtt_config2])
         .build();

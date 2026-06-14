@@ -39,16 +39,10 @@ async fn main() {
         enable_meshtastic: true,
         sportident: SportIdentConfig::Passive,
     };
-    let (mut msg_handler, mut usb_serial_manager) = MessageHandlerBuilder::new()
+    let mut msg_handler = MessageHandlerBuilder::new()
         .with_dns(dns)
         .with_usb_serial_config(usb_serial_config)
         .build();
-
-    let monitor_task = tokio::spawn(async move {
-        if let Err(e) = usb_serial_manager.monitor_usb_devices().await {
-            error!("Error in USB monitoring: {e}");
-        }
-    });
 
     info!(
         "Everything initialized, listening for any connected Meshtastic or SportIdent devices..."
@@ -84,7 +78,6 @@ async fn main() {
             }
             _ = tokio::signal::ctrl_c() => {
                 info!("Ctrl-C received, shutting down...");
-                monitor_task.abort();
                 break;
             }
         }

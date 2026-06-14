@@ -33,7 +33,7 @@ class Forwarder:
         self.client_group = client_group
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.drawer = drawer
-        self.handler, self.usb_serial_manager = builder.build()
+        self.handler = builder.build()
         self._codes: set[int] = set()
         self._tasks: set[asyncio.Task] = set()
         self._mch_interval = mch_interval
@@ -150,7 +150,6 @@ class Forwarder:
             asyncio.create_task(self.client_group.loop()),
             asyncio.create_task(self.handle_messages()),
             asyncio.create_task(self.periodic_mini_call_home()),
-            asyncio.ensure_future(self.usb_serial_manager.loop()),
         ]
 
         try:

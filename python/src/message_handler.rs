@@ -3,7 +3,6 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use yaroc_receiver::usb_serial_manager::UsbSerialManager as UsbSerialManagerRs;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::message_handler::{
@@ -88,29 +87,6 @@ impl From<MqttConfig> for MqttConfigRs {
             keep_alive: config.keep_alive,
             meshtastic_channel: config.meshtastic_channel,
         }
-    }
-}
-
-/// Manages Meshtastic devices connected via serial ports.
-#[pyclass]
-pub struct UsbSerialManager {
-    inner: Arc<Mutex<UsbSerialManagerRs>>,
-}
-
-#[pymethods]
-impl UsbSerialManager {
-    /// Asynchronously runs a background loop to automatically monitor USB hotplug events
-    /// and add/remove Meshtastic devices accordingly.
-    pub async fn r#loop(&self) -> PyResult<()> {
-        let inner = self.inner.clone();
-        crate::python::run_on_tokio(async move {
-            let mut manager = inner.lock().await;
-            manager
-                .monitor_usb_devices()
-                .await
-                .map_err(|err| PyRuntimeError::new_err(format!("USB monitor error: {err}")))
-        })
-        .await
     }
 }
 
@@ -258,7 +234,7 @@ impl MessageHandlerBuilder {
         self_
     }
 
-    pub fn build(&self, py: Python<'_>) -> PyResult<(MessageHandler, UsbSerialManager)> {
+    pub fn build(&self, py: Python<'_>) -> PyResult<MessageHandler> {
         let sportident = if let Some(ref factory_py) = self.sportident_factory {
             let factory_bound = factory_py.bind(py);
             let factory = factory_bound.borrow().clone();
@@ -290,13 +266,8 @@ impl MessageHandlerBuilder {
             builder = builder.with_fake_punch(interval);
         }
 
-        let (message_handler_rs, usb_serial_manager_rs) = builder.build();
+        let message_handler_rs = builder.build();
         let inner = Arc::new(Mutex::new(message_handler_rs));
-        Ok((
-            MessageHandler { inner },
-            UsbSerialManager {
-                inner: Arc::new(Mutex::new(usb_serial_manager_rs)),
-            },
-        ))
+        Ok(MessageHandler { inner })
     }
 }
