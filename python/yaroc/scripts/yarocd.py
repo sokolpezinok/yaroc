@@ -76,11 +76,12 @@ async def main_loop() -> None:
     if meshtastic_tcp is not None:
         builder = builder.with_tcp(meshtastic_tcp)
 
+    handler = builder.build()
     hostname = socket.gethostname()
     mac_addr = eth_mac_addr() or "000000000000"
     host_info = HostInfo.new(hostname, mac_addr)
     forwarder = Forwarder(
-        host_info, client_group, builder, StatusDrawer(config.get("display", None))
+        host_info, client_group, handler, StatusDrawer(config.get("display", None))
     )
     await forwarder.loop()
 

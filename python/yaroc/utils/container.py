@@ -12,7 +12,7 @@ from ..clients.mop import MopClient
 from ..clients.mqtt import MqttClient, SIM7020MqttClient
 from ..clients.roc import RocClient
 from ..clients.sirap import SirapClient
-from ..rs import MessageHandlerBuilder, SerialClient
+from ..rs import MessageHandler, MessageHandlerBuilder, SerialClient
 from ..utils.async_serial import AsyncATCom
 
 
@@ -33,7 +33,7 @@ def get_log_level(log_level: str | None) -> int:
 def create_message_handler(
     config: Dict[str, Any] | None,
     meshtastic_config: Dict[str, Any] | None = None,
-) -> MessageHandlerBuilder:
+) -> MessageHandler:
     config = config or {}
     meshtastic_config = meshtastic_config or {}
 
@@ -62,7 +62,7 @@ def create_message_handler(
         builder = builder.with_tcp(meshtastic_tcp)
     if fake_punch_interval is not None:
         builder = builder.with_fake_punch(timedelta(seconds=fake_punch_interval))
-    return builder
+    return builder.build()
 
 
 class Container(containers.DeclarativeContainer):

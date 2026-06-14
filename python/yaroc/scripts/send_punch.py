@@ -31,9 +31,9 @@ async def main_loop():
         logging.warning("No clients enabled, will listen to punches but nothing will be sent")
     host_info = HostInfo.new(hostname, config["mac_addr"])
     mch_interval = config.get("call_home_interval", 30)
-    builder = container.message_handler()
+    handler = container.message_handler()
 
-    forwarder = Forwarder(host_info, client_group, builder, mch_interval=mch_interval)
+    forwarder = Forwarder(host_info, client_group, handler, mch_interval=mch_interval)
     await forwarder.loop()
 
 

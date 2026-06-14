@@ -11,7 +11,7 @@ from ..rs import (
     CellularLog,
     Event,
     HostInfo,
-    MessageHandlerBuilder,
+    MessageHandler,
     NodeInfo,
     SiPunch,
     SiPunchLog,
@@ -25,7 +25,7 @@ class Forwarder:
         self,
         host_info: HostInfo,
         client_group: ClientGroup,
-        builder: MessageHandlerBuilder,
+        handler: MessageHandler,
         drawer: StatusDrawer = StatusDrawer(None),
         mch_interval: int | float | None = None,
     ):
@@ -33,7 +33,7 @@ class Forwarder:
         self.client_group = client_group
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.drawer = drawer
-        self.handler = builder.build()
+        self.handler = handler
         self._codes: set[int] = set()
         self._tasks: set[asyncio.Task] = set()
         self._mch_interval = mch_interval

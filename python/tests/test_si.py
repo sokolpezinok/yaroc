@@ -59,8 +59,8 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        builder = container.message_handler()
-        self.assertEqual(builder, mock_builder)
+        handler = container.message_handler()
+        self.assertEqual(handler, mock_builder.build.return_value)
         mock_builder.with_meshtastic.assert_called_with(False)
         mock_builder.with_sportident.assert_called_with(True)
 
@@ -84,8 +84,8 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        builder = container.message_handler()
-        self.assertEqual(builder, mock_builder)
+        handler = container.message_handler()
+        self.assertEqual(handler, mock_builder.build.return_value)
         mock_builder.with_meshtastic.assert_called_with(True)
         mock_builder.with_sportident.assert_called_with(True)
 
@@ -112,8 +112,8 @@ class TestContainer(unittest.TestCase):
         container = Container()
         container.config.from_dict(config)
 
-        builder = container.message_handler()
-        self.assertEqual(builder, mock_builder)
+        handler = container.message_handler()
+        self.assertEqual(handler, mock_builder.build.return_value)
         mock_builder.with_dns.assert_called_with([("001122334455", "node1")])
         mock_builder.with_meshtastic.assert_called_with(True)
         mock_builder.with_sportident.assert_called_with(True)
