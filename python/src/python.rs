@@ -91,6 +91,10 @@ pub mod rs {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         pyo3_log::Logger::new(m.py(), pyo3_log::Caching::LoggersAndLevels)?
             .filter(log::LevelFilter::Trace)
+            .filter_target(
+                "meshtastic::connections::stream_buffer".to_owned(),
+                log::LevelFilter::Info,
+            )
             .install()
             .expect("Someone installed a logger before us");
         Ok(())
