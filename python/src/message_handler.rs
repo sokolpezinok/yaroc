@@ -111,8 +111,13 @@ impl MessageHandler {
                 EventRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 EventRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
                 EventRs::SiPunch(si_punch) => Ok(Event::SiPunch(si_punch.into())),
-                EventRs::MeshtasticLog(meshtastic_log, _) => {
-                    Ok(Event::MeshtasticLog(meshtastic_log.into()))
+                EventRs::MeshtasticLog(meshtastic_log, service_envelope) => {
+                    use meshtastic::Message as _;
+                    let service_envelope_bytes = service_envelope.encode_to_vec();
+                    Ok(Event::MeshtasticLog(MeshtasticLog::new(
+                        meshtastic_log,
+                        service_envelope_bytes,
+                    )))
                 }
                 EventRs::NodeInfos(node_infos) => Ok(Event::NodeInfos(
                     node_infos.into_iter().map(|info| info.into()).collect(),

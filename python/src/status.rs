@@ -81,6 +81,7 @@ impl CellularLog {
 #[derive(Clone)]
 pub struct MeshtasticLog {
     inner: MeshtasticLogRs,
+    pub service_envelope: Vec<u8>,
 }
 
 #[pymethods]
@@ -88,11 +89,24 @@ impl MeshtasticLog {
     pub fn __repr__(&self) -> String {
         format!("{}", self.inner)
     }
+
+    #[getter]
+    pub fn service_envelope(&self) -> &[u8] {
+        &self.service_envelope
+    }
+
+    #[getter]
+    pub fn mac_address(&self) -> String {
+        self.inner.host_info.mac_address.to_string()
+    }
 }
 
-impl From<MeshtasticLogRs> for MeshtasticLog {
-    fn from(value: MeshtasticLogRs) -> Self {
-        Self { inner: value }
+impl MeshtasticLog {
+    pub fn new(inner: MeshtasticLogRs, service_envelope: Vec<u8>) -> Self {
+        Self {
+            inner,
+            service_envelope,
+        }
     }
 }
 

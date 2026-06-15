@@ -3694,6 +3694,7 @@ dependencies = [
  "futures",
  "heapless 0.9.3",
  "log",
+ "meshtastic",
  "nusb",
  "postcard",
  "pyo3",

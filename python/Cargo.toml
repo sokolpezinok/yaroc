@@ -26,6 +26,7 @@ pyo3 = { version = "0.28", features = ["extension-module", "chrono", "abi3-py311
 
 pyo3-log = "0.13.0"
 regex = "1.11"
+meshtastic = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
