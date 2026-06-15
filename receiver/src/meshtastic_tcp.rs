@@ -1,20 +1,15 @@
 use log::{error, info, warn};
-use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
-use meshtastic::utils;
+use meshtastic::protobufs::MeshPacket;
+use meshtastic::utils::stream;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::time::Instant;
-use tokio_util::future::FutureExt as _;
 
-use crate::error::Error;
+use crate::meshtastic_connection::MeshtasticConnection;
 use crate::system_info::MacAddress;
 
 pub struct MeshtasticTcp {
     host: String,
-    stream_api: ConnectedStreamApi,
-    listener: tokio::sync::mpsc::UnboundedReceiver<FromRadio>,
-    mac_address: MacAddress,
+    connection: MeshtasticConnection,
 }
 
 impl MeshtasticTcp {
@@ -23,69 +18,29 @@ impl MeshtasticTcp {
         host: &str,
         timeout: Duration,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let tcp_stream = utils::stream::build_tcp_stream(host.to_owned()).await.map_err(
+        let tcp_stream = stream::build_tcp_stream(host.to_owned()).await.map_err(
             |err| -> Box<dyn std::error::Error + Send + Sync> { err.to_string().into() },
         )?;
-
-        let deadline = Instant::now() + timeout;
-        let stream_api = StreamApi::new();
-        let (mut listener, stream_api) =
-            stream_api.connect(tcp_stream).timeout_at(deadline).await?;
-
-        let config_id = utils::generate_rand_id();
-        let stream_api = stream_api.configure(config_id).await?;
-
-        let packet = listener.recv().timeout_at(deadline).await?.ok_or_else(
-            || -> Box<dyn std::error::Error + Send + Sync> {
-                "Stream closed before configuration".into()
-            },
-        )?;
-        let FromRadio {
-            payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
-            ..
-        } = packet
-        else {
-            return Err(Box::new(Error::ConnectionError));
-        };
+        let connection = MeshtasticConnection::connect_stream(tcp_stream, timeout).await?;
+        info!(
+            "Connected to Meshtastic TCP device: {} at {}",
+            connection.mac_address, host
+        );
 
         Ok(Self {
             host: host.to_owned(),
-            stream_api,
-            listener,
-            mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
+            connection,
         })
     }
 
     /// Returns the MAC address of the device.
     pub fn mac_address(&self) -> MacAddress {
-        self.mac_address
+        self.connection.mac_address
     }
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(mut self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
-        info!(
-            "Connected to Meshtastic TCP device: {} at {}",
-            self.mac_address, self.host
-        );
-        loop {
-            match self.listener.recv().await {
-                Some(FromRadio {
-                    payload_variant: Some(from_radio::PayloadVariant::Packet(packet)),
-                    ..
-                }) => {
-                    if let Err(err) = mesh_packet_tx.send((packet, self.mac_address)) {
-                        error!("Failed to forward packet: {err}");
-                        break;
-                    }
-                }
-                None => {
-                    warn!("Disconnected from Meshtastic TCP device: {}", self.host);
-                    let _ = self.stream_api.disconnect().await;
-                    break;
-                }
-                _ => {}
-            }
-        }
+    pub async fn inner_loop(self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+        self.connection.inner_loop(mesh_packet_tx, &self.host).await;
     }
 }
 
@@ -116,11 +71,11 @@ pub async fn connect_and_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use meshtastic::protobufs::MyNodeInfo;
+    use crate::meshtastic_connection::MeshtasticEvent;
+    use meshtastic::protobufs::{FromRadio, MyNodeInfo, from_radio};
     use prost::Message;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
-    use tokio::sync::mpsc;
 
     fn encode_from_radio(msg: FromRadio) -> Vec<u8> {
         let mut protobuf_bytes = Vec::new();
@@ -164,21 +119,45 @@ mod tests {
             };
             let buf2 = encode_from_radio(from_radio_packet);
             socket.write_all(&buf2).await.unwrap();
+
+            // 3. Send a Channel settings packet
+            let channel_settings = meshtastic::protobufs::ChannelSettings {
+                name: "test_channel".to_owned(),
+                ..Default::default()
+            };
+            let channel_info = meshtastic::protobufs::Channel {
+                role: meshtastic::protobufs::channel::Role::Primary.into(),
+                settings: Some(channel_settings),
+                ..Default::default()
+            };
+            let from_radio_channel = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::Channel(channel_info)),
+                ..Default::default()
+            };
+            let buf3 = encode_from_radio(from_radio_channel);
+            socket.write_all(&buf3).await.unwrap();
         });
 
         // Connect client
-        let client =
+        let mut client =
             MeshtasticTcp::connect(&addr.to_string(), Duration::from_secs(2)).await.unwrap();
         assert_eq!(client.mac_address(), MacAddress::Meshtastic(42));
+        assert!(client.connection.channels.is_empty());
 
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            client.inner_loop(tx).await;
-        });
+        let event = client.connection.next_message().await;
+        let MeshtasticEvent::MeshPacket(packet) = event else {
+            panic!("Expected MeshPacket");
+        };
+        assert_eq!(packet.from, 43);
+        assert_eq!(packet.to, 42);
 
-        let (received_packet, mac) = rx.recv().await.unwrap();
-        assert_eq!(received_packet.from, 43);
-        assert_eq!(received_packet.to, 42);
-        assert_eq!(mac, MacAddress::Meshtastic(42));
+        // Next message should process the channel packet, push it to channels, and then wait for next.
+        // Since the mock server closes the socket after sending the channel packet, this next_message()
+        // call will return MeshtasticEvent::Disconnected.
+        let event = client.connection.next_message().await;
+        assert_eq!(event, MeshtasticEvent::Disconnected);
+
+        // Verify that the channel name was indeed stored
+        assert_eq!(client.connection.channels, vec!["test_channel".to_string()]);
     }
 }
