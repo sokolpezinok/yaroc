@@ -31,8 +31,8 @@ pub enum SignalInfo {
     Cell(CellSignalInfo),
     /// Connected via Meshtastic network.
     Meshtastic(RssiSnr),
-    /// Connected via Meshtastic network tunnelled over MQTT.
-    MeshtasticOverMqtt,
+    /// Connected via a USB cable or over MQTT. No LoRa transmission involved.
+    MeshtasticOverWire,
 }
 
 impl SignalInfo {
@@ -41,7 +41,7 @@ impl SignalInfo {
         match self {
             SignalInfo::Cell(cell_signal_info) => cell_signal_info.signal_strength(),
             SignalInfo::Meshtastic(rssi_snr) => rssi_snr.signal_strength(),
-            SignalInfo::MeshtasticOverMqtt => SignalStrength::Excellent,
+            SignalInfo::MeshtasticOverWire => SignalStrength::Excellent,
             SignalInfo::Unknown => SignalStrength::Disconnected,
         }
     }
@@ -212,7 +212,7 @@ impl MeshtasticNodeStatus {
         } else {
             match &self.rssi_snr {
                 Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
-                None => SignalInfo::MeshtasticOverMqtt,
+                None => SignalInfo::MeshtasticOverWire,
             }
         };
         NodeInfo {
@@ -835,7 +835,7 @@ mod test_meshtastic {
             .unwrap();
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
-        assert_eq!(node_infos[0].signal_info, SignalInfo::MeshtasticOverMqtt);
+        assert_eq!(node_infos[0].signal_info, SignalInfo::MeshtasticOverWire);
         assert_eq!(
             node_infos[0].signal_info.signal_strength(),
             SignalStrength::Excellent
