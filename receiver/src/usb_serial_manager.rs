@@ -296,9 +296,12 @@ mod tests {
             ..Default::default()
         };
         tx.send(packet.clone()).await.unwrap();
-        let (recv_packet, recv_mac) = proto_rx.recv().await.unwrap();
+        let recv_envelope = proto_rx.recv().await.unwrap();
+        let gateway_id =
+            recv_envelope.gateway_id.strip_prefix('!').unwrap_or(&recv_envelope.gateway_id);
+        let recv_mac = MacAddress::try_from(gateway_id).unwrap();
         assert_eq!(recv_mac, MacAddress::default());
-        assert_eq!(recv_packet, packet);
+        assert_eq!(recv_envelope.packet.unwrap(), packet);
 
         handler.remove_device("/some".to_owned());
         assert!(!handler.is_running("/some"));

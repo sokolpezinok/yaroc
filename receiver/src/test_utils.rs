@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use crate::meshtastic_serial::MeshtasticEvent;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::UsbSerialTrait;
-use meshtastic::protobufs::MeshPacket;
+use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 
 pub struct FakeMeshtasticSerial {
     mac_address: MacAddress,
@@ -32,17 +32,20 @@ impl FakeMeshtasticSerial {
 }
 
 impl UsbSerialTrait for FakeMeshtasticSerial {
-    type Output = (MeshPacket, MacAddress);
+    type Output = ServiceEnvelope;
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+    async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<ServiceEnvelope>) {
         loop {
             let event = self.next_message().await;
             match event {
                 MeshtasticEvent::MeshPacket(mesh_packet) => {
-                    mesh_proto_tx
-                        .send((mesh_packet, self.mac_address))
-                        .expect("Channel unexpectedly closed");
+                    let service_envelope = ServiceEnvelope {
+                        packet: Some(mesh_packet),
+                        channel_id: String::new(),
+                        gateway_id: format!("!{}", self.mac_address),
+                    };
+                    mesh_proto_tx.send(service_envelope).expect("Channel unexpectedly closed");
                 }
                 MeshtasticEvent::Disconnected => {
                     break;

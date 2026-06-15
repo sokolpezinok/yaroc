@@ -1,5 +1,5 @@
 use log::{error, info, warn};
-use meshtastic::protobufs::MeshPacket;
+use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
@@ -39,16 +39,13 @@ impl MeshtasticTcp {
     }
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+    pub async fn inner_loop(self, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
         self.connection.inner_loop(mesh_packet_tx, &self.host).await;
     }
 }
 
 /// Connects to a Meshtastic device over TCP and handles automatic reconnection if disconnected or failed.
-pub async fn connect_and_loop(
-    host: String,
-    mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>,
-) {
+pub async fn connect_and_loop(host: String, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
     let connect_timeout = Duration::from_secs(5);
     loop {
         match MeshtasticTcp::connect(&host, connect_timeout).await {
@@ -72,7 +69,7 @@ pub async fn connect_and_loop(
 mod tests {
     use super::*;
     use crate::meshtastic_connection::MeshtasticEvent;
-    use meshtastic::protobufs::{FromRadio, MyNodeInfo, from_radio};
+    use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
     use prost::Message;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;

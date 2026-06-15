@@ -9,7 +9,7 @@ use crate::{
 };
 use chrono::Local;
 use log::{error, info};
-use meshtastic::protobufs::MeshPacket;
+use meshtastic::protobufs::ServiceEnvelope;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinSet;
@@ -28,8 +28,8 @@ pub struct MessageHandlerInitializer {
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    mesh_packet_rx: UnboundedReceiver<(MeshPacket, MacAddress)>,
-    _mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>, // Kept to prevent channel from closing
+    mesh_packet_rx: UnboundedReceiver<ServiceEnvelope>,
+    _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_rx: UnboundedReceiver<SportIdentMessage>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     mqtt_tx: UnboundedSender<crate::Result<Message>>,
@@ -132,10 +132,14 @@ impl MessageHandler {
                 }
                 mesh_recv = self.mesh_packet_rx.recv() => {
                     // None can't happen since self holds a copy of _mesh_packet_tx
-                    if let Some((mesh_packet, mac_address)) = mesh_recv
-                        && let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)?
+                    if let Some(service_envelope) = mesh_recv
+                        && let Some(mesh_packet) = service_envelope.packet
                     {
-                        return Ok(message);
+                        let gateway_id = service_envelope.gateway_id.strip_prefix('!').unwrap_or(&service_envelope.gateway_id);
+                        let mac_address = MacAddress::try_from(gateway_id)?;
+                        if let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)? {
+                            return Ok(message);
+                        }
                     }
                 },
                 punch_recv = self.si_rx.recv() => {
@@ -245,7 +249,7 @@ impl MessageHandlerBuilder {
             .into_iter()
             .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
-        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<(MeshPacket, MacAddress)>();
+        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<ServiceEnvelope>();
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
         let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
 
@@ -302,7 +306,7 @@ mod tests {
     type TestChannels = (
         MessageHandler,
         UnboundedSender<SportIdentMessage>,
-        UnboundedSender<(MeshPacket, MacAddress)>,
+        UnboundedSender<ServiceEnvelope>,
         UnboundedSender<crate::Result<Message>>,
     );
 

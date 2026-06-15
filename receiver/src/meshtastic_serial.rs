@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures::FutureExt as _;
 use futures::future::BoxFuture;
 use log::info;
-use meshtastic::protobufs::MeshPacket;
+use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -48,10 +48,10 @@ impl MeshtasticSerial {
 }
 
 impl UsbSerialTrait for MeshtasticSerial {
-    type Output = (MeshPacket, MacAddress);
+    type Output = ServiceEnvelope;
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+    async fn inner_loop(self, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
         self.connection.inner_loop(mesh_packet_tx, &self.port).await;
     }
 }
@@ -65,12 +65,12 @@ impl Display for MeshtasticSerial {
 /// A factory for creating and managing background tasks for Meshtastic serial devices.
 pub struct MeshtasticFactory {
     devices: HashMap<String, CancellationToken>,
-    mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+    mesh_tx: UnboundedSender<ServiceEnvelope>,
 }
 
 impl MeshtasticFactory {
     /// Creates a new `MeshtasticFactory` that forwards mesh packets through the given sender.
-    pub fn new(mesh_tx: UnboundedSender<(MeshPacket, MacAddress)>) -> Self {
+    pub fn new(mesh_tx: UnboundedSender<ServiceEnvelope>) -> Self {
         Self {
             devices: HashMap::new(),
             mesh_tx,
@@ -81,7 +81,7 @@ impl MeshtasticFactory {
     /// registers its cancellation token.
     pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
     where
-        M: UsbSerialTrait<Output = (MeshPacket, MacAddress)> + Send + Display + 'static,
+        M: UsbSerialTrait<Output = ServiceEnvelope> + Send + Display + 'static,
     {
         let token = msh_serial.spawn_serial(self.mesh_tx.clone());
         self.devices.insert(device_node.to_owned(), token);

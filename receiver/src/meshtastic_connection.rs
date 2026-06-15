@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use log::{error, warn};
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, channel, from_radio};
+use meshtastic::protobufs::{FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::Instant;
@@ -97,14 +97,19 @@ impl MeshtasticConnection {
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
     pub async fn inner_loop(
         mut self,
-        mesh_packet_tx: tokio::sync::mpsc::UnboundedSender<(MeshPacket, MacAddress)>,
+        mesh_packet_tx: tokio::sync::mpsc::UnboundedSender<ServiceEnvelope>,
         device_name: &str,
     ) {
         loop {
             let event = self.next_message().await;
             match event {
                 MeshtasticEvent::MeshPacket(mesh_packet) => {
-                    if let Err(err) = mesh_packet_tx.send((mesh_packet, self.mac_address)) {
+                    let service_envelope = ServiceEnvelope {
+                        packet: Some(mesh_packet),
+                        channel_id: self.channels.first().cloned().unwrap_or_default(),
+                        gateway_id: format!("!{}", self.mac_address),
+                    };
+                    if let Err(err) = mesh_packet_tx.send(service_envelope) {
                         error!("Failed to forward packet: {err}");
                         break;
                     }
