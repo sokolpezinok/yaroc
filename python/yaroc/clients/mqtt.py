@@ -26,14 +26,12 @@ CONNECT_TIMEOUT = 35
 class Topics:
     punch: str
     status: str
-    command: str
 
     @staticmethod
     def from_mac(mac_address: str):
         return Topics(
             f"yar/{mac_address}/p",
             f"yar/{mac_address}/status",
-            f"yar/{mac_address}/cmd",
         )
 
 
@@ -104,10 +102,8 @@ class MqttClient(Client):
             try:
                 async with self.client:
                     logging.info(f"Connected to mqtt://{self.broker_url}")
-                    topics = self.get_topics(self.mac_addr)
-                    await self.client.subscribe(topics.command)
-                    async for message in self.client.messages:
-                        logging.info("Got a command message, processing is not implemented")
+                    # Sleep forever
+                    await get_running_loop().create_future()
 
             except MqttError:
                 logging.error(f"Connection lost to mqtt://{self.broker_url}")

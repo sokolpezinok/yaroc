@@ -125,8 +125,6 @@ class Forwarder:
             case Event.MeshtasticLog(log):
                 logging.info(log)
             case Event.DeviceEvnt(added, device):
-                # TODO: branch on added being true and false
-                logging.info(f"Device event: added={added}, device={device}")
                 return asyncio.create_task(self._handle_device_event(added, device))
             case Event.NodeInfos(node_infos):
                 return asyncio.create_task(self._draw_table(node_infos))
