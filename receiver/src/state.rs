@@ -22,15 +22,21 @@ use yaroc_common::proto::{Punches, Status};
 use yaroc_common::punch::SiPunch;
 use yaroc_common::status::{CellSignalInfo, SignalStrength, voltage_to_percent};
 
+/// Connection type and signal details of a fleet node.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SignalInfo {
+    /// The connection state or signal strength is unknown.
     Unknown,
+    /// Connected via cellular network.
     Cell(CellSignalInfo),
+    /// Connected via Meshtastic network.
     Meshtastic(RssiSnr),
+    /// Connected via Meshtastic network tunnelled over MQTT.
     MeshtasticOverMqtt,
 }
 
 impl SignalInfo {
+    /// Returns the [`SignalStrength`] corresponding to this connection type.
     pub fn signal_strength(&self) -> SignalStrength {
         match self {
             SignalInfo::Cell(cell_signal_info) => cell_signal_info.signal_strength(),
@@ -41,27 +47,42 @@ impl SignalInfo {
     }
 }
 
+/// A representation of a node's current status and diagnostic state.
 #[derive(Clone, Debug)]
 pub struct NodeInfo {
+    /// The name of the node.
     pub name: String,
+    /// The signal strength and connection type.
     pub signal_info: SignalInfo,
+    /// Battery level in percent, if available.
     pub battery_percentage: Option<u8>,
+    /// List of punch codes (station IDs) collected by this node.
     pub codes: Vec<u16>,
+    /// The timestamp of the last received status update.
     pub last_update: Option<DateTime<FixedOffset>>,
+    /// The timestamp of the last recorded punch.
     pub last_punch: Option<DateTime<FixedOffset>>,
 }
 
+/// Tracks the diagnostic status and accumulated station codes of a cellular node.
 #[derive(Default, Clone)]
 pub struct CellularNodeStatus {
+    /// Information about the host device (MAC, name).
     host_info: HostInfo,
+    /// Detailed cellular signal information, or `None` if disconnected.
     state: Option<CellSignalInfo>,
+    /// Current battery level of the node in percent.
     battery_percentage: Option<u8>,
+    /// Set of station codes that have been punched through this node.
     codes: HashSet<u16>,
+    /// Timestamp of the last received status update.
     last_update: Option<DateTime<FixedOffset>>,
+    /// Timestamp of the last recorded punch.
     last_punch: Option<DateTime<FixedOffset>>,
 }
 
 impl CellularNodeStatus {
+    /// Creates a new, default status tracker for the given cellular host.
     pub fn new(host_info: HostInfo) -> Self {
         Self {
             host_info,
@@ -69,26 +90,31 @@ impl CellularNodeStatus {
         }
     }
 
+    /// Simulates or updates a disconnection event by clearing signal state.
     pub fn disconnect(&mut self) {
         self.state = None;
         self.last_update = Some(Local::now().into());
     }
 
+    /// Translates raw battery voltage into a percentage and stores it.
     pub fn update_voltage(&mut self, mv: u16) {
         let percent = voltage_to_percent(mv);
         self.battery_percentage = Some(percent);
     }
 
+    /// Updates the signal state and update timestamp upon a connection event.
     pub fn mqtt_connect_update(&mut self, signal_info: CellSignalInfo) {
         self.state = Some(signal_info);
         self.last_update = Some(Local::now().into());
     }
 
+    /// Updates punch-related metrics, storing the punch time and recording the code.
     pub fn punch(&mut self, punch: &SiPunch) {
         self.last_punch = Some(punch.time);
         self.codes.insert(punch.code);
     }
 
+    /// Converts the cellular node status into a standard, serializable [`NodeInfo`].
     pub fn serialize(&self) -> NodeInfo {
         let signal_info = match self.state {
             Some(signal_info) => SignalInfo::Cell(signal_info),
@@ -105,7 +131,7 @@ impl CellularNodeStatus {
         }
     }
 
-    /// Returns the signal strength of the cellular connection
+    /// Returns the signal strength of the cellular connection.
     pub fn signal_strength(&self) -> SignalStrength {
         match self.state {
             Some(cell_signal_info) => cell_signal_info.signal_strength(),
@@ -114,20 +140,31 @@ impl CellularNodeStatus {
     }
 }
 
+/// Tracks the diagnostic status and accumulated station codes of a Meshtastic node.
 #[derive(Default, Clone)]
 pub struct MeshtasticNodeStatus {
+    /// The hostname or identity of the Meshtastic device.
     pub name: String,
+    /// Battery level in percent, if available.
     battery_percentage: Option<u8>,
+    /// The RSSI and SNR connection metrics of the last transmission.
     pub rssi_snr: Option<RssiSnr>,
+    /// Geographical coordinates and altitude of the node.
     pub position: Option<yaroc_common::status::Position>,
+    /// Station codes that have been transmitted through this node.
     codes: HashSet<u16>,
+    /// The timestamp of the last status update received.
     last_update: Option<DateTime<FixedOffset>>,
+    /// The timestamp of the last punch recorded on this node.
     last_punch: Option<DateTime<FixedOffset>>,
+    /// Indicates whether the node is currently considered active.
     connected: bool,
+    /// Internal tracking key for handling network timeouts.
     pub timeout_key: Option<Key>,
 }
 
 impl MeshtasticNodeStatus {
+    /// Creates a new status tracker for a Meshtastic node.
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -137,32 +174,38 @@ impl MeshtasticNodeStatus {
         }
     }
 
+    /// Marks the node as disconnected.
     pub fn disconnect(&mut self) {
         self.connected = false;
     }
 
+    /// Updates the node's battery percentage and updates the last status timestamp.
     pub fn update_battery(&mut self, percent: u8) {
         self.battery_percentage = Some(percent);
         self.last_update = Some(Local::now().into());
     }
 
+    /// Updates the RSSI and SNR details, marking the node as connected.
     pub fn update_rssi_snr(&mut self, rssi_snr: RssiSnr) {
         self.connected = true;
         self.rssi_snr = Some(rssi_snr);
         self.last_update = Some(Local::now().into());
     }
 
+    /// Clears the RSSI and SNR state, for instance, on link degradation.
     pub fn clear_rssi_snr(&mut self) {
         self.rssi_snr = None;
         self.last_update = Some(Local::now().into());
     }
 
+    /// Registers a punch event, updating the last punch timestamp and adding the station code.
     pub fn punch(&mut self, punch: &SiPunch) {
         self.connected = true;
         self.last_punch = Some(punch.time);
         self.codes.insert(punch.code);
     }
 
+    /// Serializes this Meshtastic node status into a standard [`NodeInfo`].
     pub fn serialize(&self) -> NodeInfo {
         let signal_info = if !self.connected {
             SignalInfo::Unknown
@@ -183,28 +226,53 @@ impl MeshtasticNodeStatus {
     }
 }
 
+/// Events produced by the receiver's state machine for routing and reporting.
 #[derive(Debug)]
 pub enum Event {
+    /// A log or status message from a cellular node.
     CellularLog(CellularLogMessage),
+    /// A collection of processed SportIdent punch logs.
     SiPunches(Vec<SiPunchLog>),
+    /// A single SportIdent punch event.
     SiPunch(SiPunch),
+    /// A telemetry or status update from a Meshtastic node.
     MeshtasticLog(MeshtasticLog),
+    /// A collective update of the statuses of all nodes.
     NodeInfos(Vec<NodeInfo>),
-    DeviceEvent { added: bool, device: String },
+    /// A local serial or USB device change event.
+    DeviceEvent {
+        /// True if the device was connected; false if disconnected.
+        added: bool,
+        /// The serial or identifier string of the device.
+        device: String,
+    },
 }
 
+/// Tracks the statuses, connection states, and data collections of the whole node fleet.
+///
+/// It coordinates processing of messages from both cellular and Meshtastic nodes,
+/// handles timeouts, and schedules periodic node information updates.
 pub struct FleetState {
+    /// A simple DNS-like map associating node MAC addresses with user-friendly names.
     dns: HashMap<MacAddress, String>,
+    /// State of all cellular nodes.
     cellular_statuses: HashMap<MacAddress, CellularNodeStatus>,
+    /// State of all Meshtastic nodes.
     meshtastic_statuses: HashMap<MacAddress, MeshtasticNodeStatus>,
+    /// Tracks timeouts of Meshtastic nodes to detect offline status.
     meshtastic_timeouts: DelayQueue<MacAddress>,
+    /// The minimum interval between node info broadcasts.
     node_infos_interval: Duration,
+    /// The duration since the last activity before a Meshtastic node is considered offline.
     meshtastic_timeout: Duration,
+    /// Timestamp when the node information list was last generated/sent.
     last_node_info_push: Instant,
+    /// Signal notifier triggered when a previously unseen node joins the network.
     new_node: Notify,
 }
 
 impl Default for FleetState {
+    /// Creates a default empty [`FleetState`] tracker.
     fn default() -> Self {
         Self {
             dns: HashMap::new(),
@@ -220,6 +288,13 @@ impl Default for FleetState {
 }
 
 impl FleetState {
+    /// Creates a new [`FleetState`] tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `dns` - Mapping of device friendly names to MAC addresses.
+    /// * `node_infos_interval` - Time interval for periodic status updates.
+    /// * `meshtastic_timeout` - Inactivity timeout limit for Meshtastic nodes.
     pub fn new(
         dns: Vec<(String, MacAddress)>,
         node_infos_interval: Duration,
@@ -233,11 +308,11 @@ impl FleetState {
         }
     }
 
-    /// Process a MQTT message.
+    /// Processes an incoming MQTT message and returns a parsed system event, if applicable.
     ///
-    /// # Aguments
+    /// # Arguments
     ///
-    /// * `mqtt_message` - The MQTT message.
+    /// * `mqtt_message` - The MQTT message wrapper.
     pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Option<Event>> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, now, payload) => self
@@ -255,12 +330,12 @@ impl FleetState {
         }
     }
 
-    /// Process a MeshPacket from a meshtastic mesh.
+    /// Processes a `MeshPacket` received from a Meshtastic mesh node.
     ///
-    /// # Aguments
+    /// # Arguments
     ///
-    /// * `mesh_packet` - The MeshPacket parsed proto.
-    /// * `recv_mac_address` - Optional receiver MAC address (if known).
+    /// * `mesh_packet` - The raw protobuf packet from the mesh network.
+    /// * `recv_mac_address` - The local receiver node's MAC address.
     pub fn process_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
@@ -286,13 +361,13 @@ impl FleetState {
         }
     }
 
-    /// Parse the Status proto.
+    /// Parses cellular Status messages, updating target connection and power levels.
     ///
-    /// # Aguments
+    /// # Arguments
     ///
-    /// * `payload` - The serialized proto.
-    /// * `mac_address` - The MAC address of the device the Status belongs to.
-    /// * `now` - The timestamp when this proto was received.
+    /// * `payload` - Raw protobuf payload of the Status.
+    /// * `mac_address` - MAC address of the source device.
+    /// * `now` - Server receive time.
     fn status_update(
         &mut self,
         payload: &[u8],
@@ -322,13 +397,13 @@ impl FleetState {
         Ok(log_message)
     }
 
-    /// Parse the Punches proto
+    /// Parses cellular Punches messages, updating local punch caches and status.
     ///
-    /// # Aguments
+    /// # Arguments
     ///
-    /// * `payload` - The serialized proto.
-    /// * `mac_address` - The MAC address of the device the Punches proto belongs to.
-    /// * `now` - The timestamp when this proto was received.
+    /// * `payload` - Raw protobuf payload of the punches.
+    /// * `mac_address` - MAC address of the source device.
+    /// * `now` - Current system time when processed.
     fn punches(
         &mut self,
         payload: &[u8],
@@ -356,6 +431,7 @@ impl FleetState {
         Ok(result)
     }
 
+    /// Retrieves or creates a status tracker for a given Meshtastic host, resetting its timeout.
     fn msh_node_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticNodeStatus {
         let mac_addr = host_info.mac_address;
         let mut is_new = false;
@@ -375,13 +451,13 @@ impl FleetState {
         status
     }
 
-    /// Resolve a given MAC address into a full HostInfo, which also includes a name.
+    /// Resolves a given MAC address into a full [`HostInfo`] structure containing its name.
     fn resolve(&self, mac_address: MacAddress) -> HostInfo {
         let name = self.dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
         HostInfo::new(name, mac_address)
     }
 
-    /// Process Meshtastic status message given as MeshPacket.
+    /// Processes a Meshtastic status update given as a `MeshPacket`.
     fn msh_status_mesh_packet(
         &mut self,
         mesh_packet: MeshPacket,
@@ -395,7 +471,7 @@ impl FleetState {
         Ok(meshtastic_log)
     }
 
-    /// Process Meshtastic status message given as ServiceEnvelope.
+    /// Processes a Meshtastic status update given as a `ServiceEnvelope`.
     fn msh_status_service_envelope(
         &mut self,
         payload: &[u8],
@@ -409,6 +485,7 @@ impl FleetState {
         Ok(meshtastic_log)
     }
 
+    /// Updates internal metrics for a Meshtastic node from a parsed log message.
     fn msh_status_update(&mut self, log_message: &Option<MeshtasticLog>) {
         match log_message {
             Some(log_message) => {
@@ -433,7 +510,7 @@ impl FleetState {
         }
     }
 
-    /// Process Meshtastic message of the serial module wrapped in ServiceEnvelope.
+    /// Processes a serial module message from Meshtastic wrapped in a `ServiceEnvelope`.
     fn msh_serial_service_envelope(
         &mut self,
         payload: &[u8],
@@ -443,7 +520,7 @@ impl FleetState {
         self.msh_serial_mesh_packet(packet, now)
     }
 
-    /// Process Meshtastic message of the serial module given as MeshPacket.
+    /// Processes a serial module message from Meshtastic given as a `MeshPacket`.
     pub fn msh_serial_mesh_packet(
         &mut self,
         packet: MeshPacket,
@@ -464,7 +541,7 @@ impl FleetState {
         Ok(punches)
     }
 
-    /// Generate NodeInfo for all nodes.
+    /// Generates and sorts the `NodeInfo` summaries for all registered nodes.
     fn node_infos(&self) -> Vec<NodeInfo> {
         let mut res: Vec<_> = self
             .meshtastic_statuses
@@ -476,6 +553,8 @@ impl FleetState {
         res
     }
 
+    /// Async loop selection that publishes node info reports when the interval expires,
+    /// a new node joins, or a Meshtastic node times out.
     pub async fn publish_node_infos(&mut self) -> Vec<NodeInfo> {
         let next_node_infos = self.last_node_info_push + self.node_infos_interval;
         tokio::select! {
@@ -496,6 +575,7 @@ impl FleetState {
         self.node_infos()
     }
 
+    /// Resolves the name of a given MAC address's position name, if tracking GPS.
     fn get_position_name(&self, mac_address: MacAddress) -> Option<PositionName> {
         let status = self.meshtastic_statuses.get(&mac_address)?;
         status
@@ -504,6 +584,7 @@ impl FleetState {
             .map(|position| PositionName::new(position, &status.name))
     }
 
+    /// Retrieves or inserts a cellular status tracker for the given MAC address.
     fn cellular_node_status(&mut self, mac_addr: MacAddress) -> &mut CellularNodeStatus {
         let host_info = self.resolve(mac_addr);
         self.cellular_statuses.entry(mac_addr).or_insert_with(|| {
