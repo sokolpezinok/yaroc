@@ -25,19 +25,32 @@ pub struct RssiSnr {
 }
 
 impl RssiSnr {
-    /// Creates a new `RssiSnr` if the RSSI is not zero.
+    /// Creates a new `RssiSnr` if the RSSI value is non-zero.
     ///
     /// Meshtastic devices report 0 RSSI for packets that they originate.
-    pub fn new(rssi_dbm: i32, snr: f32, hop_count: u16) -> Option<RssiSnr> {
+    pub fn new(rssi_dbm: i32, snr: f32, hop_count: u16) -> Option<Self> {
         match rssi_dbm {
             0 => None,
-            rx_rssi => Some(RssiSnr {
+            rx_rssi => Some(Self {
                 rssi_dbm: rx_rssi as i16,
                 snr,
                 hop_count,
                 distance: None,
             }),
         }
+    }
+
+    /// Creates a new `RssiSnr` from `MeshPacket` if the RSSI value is non-zero.
+    pub fn from_mesh_packet(packet: &MeshPacket) -> Option<Self> {
+        let MeshPacket {
+            rx_rssi,
+            rx_snr,
+            hop_limit,
+            hop_start,
+            ..
+        } = packet;
+        let hop_count = hop_start.saturating_sub(*hop_limit) as u16;
+        RssiSnr::new(*rx_rssi, *rx_snr, hop_count)
     }
 
     /// Adds distance information to the `RssiSnr`.
@@ -134,19 +147,15 @@ impl MeshtasticLog {
         dns: &HashMap<MacAddress, String>,
         recv_position: Option<PositionName>,
     ) -> crate::Result<Option<Self>> {
+        let rssi_snr = RssiSnr::from_mesh_packet(&packet);
         match packet {
             MeshPacket {
                 payload_variant: Some(PayloadVariant::Decoded(data)),
                 from,
-                rx_rssi,
-                rx_snr,
-                hop_limit,
-                hop_start,
                 ..
             } => {
                 let mac_address = MacAddress::Meshtastic(from);
                 let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
-                let hop_count = hop_start.saturating_sub(hop_limit) as u16;
                 Self::parse_data(
                     data,
                     HostInfo {
@@ -154,7 +163,7 @@ impl MeshtasticLog {
                         mac_address,
                     },
                     now,
-                    RssiSnr::new(rx_rssi, rx_snr, hop_count),
+                    rssi_snr,
                     recv_position,
                 )
             }

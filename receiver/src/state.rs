@@ -452,12 +452,9 @@ impl FleetState {
         packet: MeshPacket,
         now: DateTime<Local>,
     ) -> crate::Result<Vec<SiPunchLog>> {
+        let rssi_snr = RssiSnr::from_mesh_packet(&packet);
         let MeshPacket {
             from,
-            rx_rssi,
-            rx_snr,
-            hop_limit,
-            hop_start,
             payload_variant,
             channel,
             ..
@@ -487,7 +484,6 @@ impl FleetState {
             now.date_naive(),
             now.offset(),
         );
-        let rssi_snr = RssiSnr::new(rx_rssi, rx_snr, hop_start.saturating_sub(hop_limit) as u16);
         for punch in punches.into_iter() {
             match punch {
                 Ok(punch) => {
