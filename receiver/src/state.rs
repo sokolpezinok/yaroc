@@ -3,27 +3,24 @@ use chrono::prelude::*;
 use femtopb::Message as _;
 use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
-use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::{Data, MeshPacket, PortNum};
+use meshtastic::protobufs::MeshPacket;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tokio_util::time::DelayQueue;
 use tokio_util::time::delay_queue::Key;
-use yaroc_common::status::SignalStrength;
-use yaroc_common::status::voltage_to_percent;
 
 use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
-use crate::meshtastic::unpack_envelope;
 use crate::meshtastic::{
     MeshtasticLog, MshMetrics, POSITION_APP, PositionName, RssiSnr, SERIAL_APP, TELEMETRY_APP,
+    punches_from_mesh_packet, unpack_envelope,
 };
 use crate::mqtt::Message as MqttMessage;
 use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::proto::{Punches, Status};
 use yaroc_common::punch::SiPunch;
-use yaroc_common::status::CellSignalInfo;
+use yaroc_common::status::{CellSignalInfo, SignalStrength, voltage_to_percent};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SignalInfo {
@@ -452,60 +449,19 @@ impl FleetState {
         packet: MeshPacket,
         now: DateTime<Local>,
     ) -> crate::Result<Vec<SiPunchLog>> {
+        let mac_address = MacAddress::Meshtastic(packet.from);
         let rssi_snr = RssiSnr::from_mesh_packet(&packet);
-        let MeshPacket {
-            from,
-            payload_variant,
-            channel,
-            ..
-        } = packet;
-        let mac_address = MacAddress::Meshtastic(from);
-        const SERIAL_APP: i32 = PortNum::SerialApp as i32;
+        let punches = punches_from_mesh_packet(packet, now.into(), &self.dns)?;
+
         let host_info = self.resolve(mac_address);
-        let Some(PayloadVariant::Decoded(Data {
-            portnum: SERIAL_APP,
-            payload,
-            ..
-        })) = payload_variant
-        else {
-            // Encrypted message or wrong portnum (but wrong portnum should be filtered away)
-            return Err(Error::EncryptionError {
-                node_id: from,
-                channel_id: channel,
-            });
-        };
-
         let status = self.msh_node_status(&host_info);
-        let mut result = Vec::with_capacity(payload.len() / 20);
-
-        let now = now.fixed_offset();
-        let punches = yaroc_common::punch::SiPunch::punches_from_payload::<100>(
-            &payload,
-            now.date_naive(),
-            now.offset(),
-        );
-        for punch in punches.into_iter() {
-            match punch {
-                Ok(punch) => {
-                    status.punch(&punch);
-                    result.push(SiPunchLog {
-                        latency: now - punch.time,
-                        punch,
-                        host_info: host_info.clone(),
-                        rssi_snr: rssi_snr.clone(),
-                    });
-                }
-                Err(err) => {
-                    error!("Error decoding punch from {}: {}", host_info.name, err);
-                }
-            }
+        for punch_log in &punches {
+            status.punch(&punch_log.punch);
         }
-
         if let Some(rssi_snr) = rssi_snr {
             status.update_rssi_snr(rssi_snr);
         }
-
-        Ok(result)
+        Ok(punches)
     }
 
     /// Generate NodeInfo for all nodes.
@@ -689,8 +645,9 @@ mod test_meshtastic {
 
     use crate::meshtastic::RssiSnr;
     use meshtastic::Message;
+    use meshtastic::protobufs::mesh_packet::PayloadVariant;
     use meshtastic::protobufs::telemetry::Variant;
-    use meshtastic::protobufs::{DeviceMetrics, ServiceEnvelope, Telemetry};
+    use meshtastic::protobufs::{Data, DeviceMetrics, PortNum, ServiceEnvelope, Telemetry};
 
     fn envelope(from: u32, data: Data) -> ServiceEnvelope {
         ServiceEnvelope {

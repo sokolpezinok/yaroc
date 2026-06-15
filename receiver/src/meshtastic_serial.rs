@@ -106,12 +106,12 @@ impl UsbSerialTrait for MeshtasticSerial {
     type Output = (MeshPacket, MacAddress);
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+    async fn inner_loop(mut self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
         loop {
             let event = self.next_message().await;
             match event {
                 MeshtasticEvent::MeshPacket(mesh_packet) => {
-                    mesh_proto_tx
+                    mesh_packet_tx
                         .send((mesh_packet, self.mac_address))
                         .expect("Channel unexpectedly closed");
                 }

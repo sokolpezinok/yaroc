@@ -62,7 +62,7 @@ impl MeshtasticTcp {
     }
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
+    pub async fn inner_loop(mut self, mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>) {
         info!(
             "Connected to Meshtastic TCP device: {} at {}",
             self.mac_address, self.host
@@ -73,7 +73,7 @@ impl MeshtasticTcp {
                     payload_variant: Some(from_radio::PayloadVariant::Packet(packet)),
                     ..
                 }) => {
-                    if let Err(err) = mesh_proto_tx.send((packet, self.mac_address)) {
+                    if let Err(err) = mesh_packet_tx.send((packet, self.mac_address)) {
                         error!("Failed to forward packet: {err}");
                         break;
                     }
@@ -92,13 +92,13 @@ impl MeshtasticTcp {
 /// Connects to a Meshtastic device over TCP and handles automatic reconnection if disconnected or failed.
 pub async fn connect_and_loop(
     host: String,
-    mesh_proto_tx: UnboundedSender<(MeshPacket, MacAddress)>,
+    mesh_packet_tx: UnboundedSender<(MeshPacket, MacAddress)>,
 ) {
     let connect_timeout = Duration::from_secs(5);
     loop {
         match MeshtasticTcp::connect(&host, connect_timeout).await {
             Ok(meshtastic_tcp) => {
-                meshtastic_tcp.inner_loop(mesh_proto_tx.clone()).await;
+                meshtastic_tcp.inner_loop(mesh_packet_tx.clone()).await;
                 warn!(
                     "Disconnected from Meshtastic TCP device at {host}. Retrying in 5 seconds..."
                 );

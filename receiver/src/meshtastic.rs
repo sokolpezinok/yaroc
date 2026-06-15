@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::error::Error;
+use crate::logs::SiPunchLog;
 use crate::system_info::{HostInfo, MacAddress};
+use log::error;
+use yaroc_common::punch::SiPunch;
 use yaroc_common::status::{Position, SignalStrength};
 
 /// RSSI and SNR of a received LoRa packet.
@@ -308,6 +311,65 @@ impl MeshtasticLog {
 pub fn unpack_envelope(payload: &[u8]) -> crate::Result<MeshPacket> {
     let service_envelope = ServiceEnvelope::decode(payload)?;
     service_envelope.packet.ok_or(crate::error::Error::ValueError)
+}
+
+/// Parse SiPunchLog from a MeshPacket proto.
+///
+/// # Arguments
+/// * `packet` - The MeshPacket.
+/// * `now` - The timestamp when this proto was received.
+/// * `dns` - DNS records, mapping MAC addresses to strings
+pub fn punches_from_mesh_packet(
+    packet: MeshPacket,
+    now: DateTime<FixedOffset>,
+    dns: &HashMap<MacAddress, String>,
+) -> crate::Result<Vec<SiPunchLog>> {
+    let rssi_snr = RssiSnr::from_mesh_packet(&packet);
+    let MeshPacket {
+        from,
+        payload_variant,
+        channel,
+        ..
+    } = packet;
+    let mac_address = MacAddress::Meshtastic(from);
+    let Some(PayloadVariant::Decoded(Data {
+        portnum: SERIAL_APP,
+        payload,
+        ..
+    })) = payload_variant
+    else {
+        // Encrypted message or wrong portnum
+        return Err(Error::EncryptionError {
+            node_id: from,
+            channel_id: channel,
+        });
+    };
+
+    let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
+    let host_info = HostInfo {
+        name: name.to_owned(),
+        mac_address,
+    };
+
+    let mut result = Vec::with_capacity(payload.len() / 20);
+    let punches = SiPunch::punches_from_payload::<100>(&payload, now.date_naive(), now.offset());
+    for punch in punches.into_iter() {
+        match punch {
+            Ok(punch) => {
+                result.push(SiPunchLog {
+                    latency: now - punch.time,
+                    punch,
+                    host_info: host_info.clone(),
+                    rssi_snr: rssi_snr.clone(),
+                });
+            }
+            Err(err) => {
+                error!("Error decoding punch from {}: {}", host_info.name, err);
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 /// Port number for the telemetry app.
@@ -629,6 +691,43 @@ mod test_meshtastic {
             log_message.host_info.mac_address,
             MacAddress::Meshtastic(0x123456)
         );
+    }
+
+    #[test]
+    fn test_punches_from_mesh_packet() {
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00")
+            .unwrap()
+            .fixed_offset();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+
+        let data = Data {
+            portnum: PortNum::SerialApp as i32,
+            payload: punch.to_vec(),
+            ..Default::default()
+        };
+        let packet = MeshPacket {
+            from: 0x123456,
+            payload_variant: Some(PayloadVariant::Decoded(data)),
+            rx_rssi: -90,
+            rx_snr: 4.5,
+            hop_start: 3,
+            hop_limit: 2,
+            ..Default::default()
+        };
+
+        let now = DateTime::parse_from_rfc3339("2023-11-23T10:00:05+01:00")
+            .unwrap()
+            .fixed_offset();
+        let dns = HashMap::from([(MacAddress::Meshtastic(0x123456), "yaroc1".to_owned())]);
+        let punches = punches_from_mesh_packet(packet, now, &dns).unwrap();
+
+        assert_eq!(punches.len(), 1);
+        assert_eq!(punches[0].punch.code, 47);
+        assert_eq!(punches[0].punch.card, 1715004);
+        let rssi_snr = punches[0].rssi_snr.clone().unwrap();
+        assert_eq!(rssi_snr.rssi_dbm, -90);
+        assert_eq!(rssi_snr.snr, 4.5);
+        assert_eq!(rssi_snr.hop_count, 1);
     }
 }
 
