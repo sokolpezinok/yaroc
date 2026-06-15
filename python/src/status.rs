@@ -1,4 +1,6 @@
 use chrono::prelude::*;
+use meshtastic::Message as _;
+use meshtastic::protobufs::ServiceEnvelope;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use yaroc_common::status::SignalStrength;
@@ -81,7 +83,7 @@ impl CellularLog {
 #[derive(Clone)]
 pub struct MeshtasticLog {
     inner: MeshtasticLogRs,
-    pub service_envelope: Vec<u8>,
+    service_envelope: Box<ServiceEnvelope>,
 }
 
 #[pymethods]
@@ -91,18 +93,23 @@ impl MeshtasticLog {
     }
 
     #[getter]
-    pub fn service_envelope(&self) -> &[u8] {
-        &self.service_envelope
+    pub fn service_envelope(&self) -> Vec<u8> {
+        self.service_envelope.encode_to_vec()
     }
 
     #[getter]
-    pub fn mac_address(&self) -> String {
-        self.inner.host_info.mac_address.to_string()
+    pub fn channel(&self) -> &str {
+        &self.service_envelope.channel_id
+    }
+
+    #[getter]
+    pub fn gateway_id(&self) -> &str {
+        &self.service_envelope.gateway_id
     }
 }
 
 impl MeshtasticLog {
-    pub fn new(inner: MeshtasticLogRs, service_envelope: Vec<u8>) -> Self {
+    pub fn new(inner: MeshtasticLogRs, service_envelope: Box<ServiceEnvelope>) -> Self {
         Self {
             inner,
             service_envelope,

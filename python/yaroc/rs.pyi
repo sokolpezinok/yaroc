@@ -84,8 +84,9 @@ class CellularLog(object):
     def mac_address(self) -> str: ...
 
 class MeshtasticLog(object):
-    mac_address: str
     service_envelope: bytes
+    channel: str
+    gateway_id: str
     def __repr__(self) -> str: ...
 
 class Event(object):
