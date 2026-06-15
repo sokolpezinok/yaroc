@@ -132,12 +132,11 @@ impl MessageHandler {
                 }
                 mesh_recv = self.mesh_packet_rx.recv() => {
                     // None can't happen since self holds a copy of _mesh_packet_tx
-                    if let Some(service_envelope) = mesh_recv
-                        && let Some(mesh_packet) = service_envelope.packet
-                    {
-                        let gateway_id = service_envelope.gateway_id.strip_prefix('!').unwrap_or(&service_envelope.gateway_id);
+                    if let Some(service_envelope) = mesh_recv {
+                        let gateway_id = service_envelope.gateway_id.strip_prefix('!')
+                            .unwrap_or(&service_envelope.gateway_id);
                         let mac_address = MacAddress::try_from(gateway_id)?;
-                        if let Some(message) = self.fleet_state.process_mesh_packet(mesh_packet, mac_address)? {
+                        if let Some(message) = self.fleet_state.process_mesh_packet(service_envelope, mac_address)? {
                             return Ok(message);
                         }
                     }

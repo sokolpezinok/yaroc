@@ -69,7 +69,7 @@ async fn main() {
                 Event::SiPunch(punch) => {
                     info!("Local punch: {punch:?}");
                 }
-                Event::MeshtasticLog(log) => {
+                Event::MeshtasticLog(log, _) => {
                     info!("{log}");
                 }
                 Event::NodeInfos(node_infos) => {

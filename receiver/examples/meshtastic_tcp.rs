@@ -45,7 +45,7 @@ async fn main() {
                         Event::SiPunch(punch) => {
                             info!("SI Punch: {punch:?}");
                         }
-                        Event::MeshtasticLog(log) => {
+                        Event::MeshtasticLog(log, _) => {
                             info!("Meshtastic: {log}");
                         }
                         _ev => {

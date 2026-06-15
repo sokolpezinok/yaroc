@@ -3,7 +3,8 @@ use chrono::prelude::*;
 use femtopb::Message as _;
 use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
-use meshtastic::protobufs::MeshPacket;
+use meshtastic::Message as _;
+use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -236,7 +237,7 @@ pub enum Event {
     /// A single SportIdent punch event.
     SiPunch(SiPunch),
     /// A telemetry or status update from a Meshtastic node.
-    MeshtasticLog(MeshtasticLog),
+    MeshtasticLog(MeshtasticLog, Box<ServiceEnvelope>),
     /// A collective update of the statuses of all nodes.
     NodeInfos(Vec<NodeInfo>),
     /// A local serial or USB device change event.
@@ -324,24 +325,29 @@ impl FleetState {
             MqttMessage::MeshtasticSerial(now, payload) => self
                 .msh_serial_service_envelope(&payload, now)
                 .map(|msg| Some(Event::SiPunches(msg))),
-            MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => self
-                .msh_status_service_envelope(&payload, now, recv_mac_address)
-                .map(|msg| msg.map(Event::MeshtasticLog)),
+            MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
+                self.msh_status_service_envelope(&payload, now, recv_mac_address).map(|msg| {
+                    msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope)))
+                })
+            }
         }
     }
 
-    /// Processes a `MeshPacket` received from a Meshtastic mesh node.
+    /// Processes a `ServiceEnvelope` received from a Meshtastic mesh node.
     ///
     /// # Arguments
     ///
-    /// * `mesh_packet` - The raw protobuf packet from the mesh network.
+    /// * `service_envelope` - The service envelope wrapper around the mesh packet.
     /// * `recv_mac_address` - The local receiver node's MAC address.
     pub fn process_mesh_packet(
         &mut self,
-        mesh_packet: MeshPacket,
+        service_envelope: ServiceEnvelope,
         recv_mac_address: MacAddress,
     ) -> crate::Result<Option<Event>> {
         let now = Local::now();
+        let Some(mesh_packet) = service_envelope.packet.clone() else {
+            return Ok(None);
+        };
         let portnum = MeshtasticLog::get_mesh_packet_portnum(&mesh_packet);
         if let Err(Error::EncryptionError { node_id, .. }) = portnum {
             debug!(
@@ -353,7 +359,7 @@ impl FleetState {
         match portnum {
             TELEMETRY_APP | POSITION_APP => self
                 .msh_status_mesh_packet(mesh_packet, now, recv_mac_address)
-                .map(|log| log.map(Event::MeshtasticLog)),
+                .map(|log| log.map(|log| Event::MeshtasticLog(log, Box::new(service_envelope)))),
             SERIAL_APP => self
                 .msh_serial_mesh_packet(mesh_packet, now)
                 .map(|punches| Some(Event::SiPunches(punches))),
@@ -477,12 +483,16 @@ impl FleetState {
         payload: &[u8],
         now: DateTime<Local>,
         recv_mac_address: MacAddress,
-    ) -> crate::Result<Option<MeshtasticLog>> {
+    ) -> crate::Result<Option<(MeshtasticLog, ServiceEnvelope)>> {
         let recv_position = self.get_position_name(recv_mac_address);
-        let meshtastic_log =
-            MeshtasticLog::from_service_envelope(payload, now.into(), &self.dns, recv_position)?;
+        let service_envelope = ServiceEnvelope::decode(payload)?;
+        let meshtastic_log = if let Some(packet) = service_envelope.packet.clone() {
+            MeshtasticLog::from_mesh_packet(packet, now.into(), &self.dns, recv_position)?
+        } else {
+            None
+        };
         self.msh_status_update(&meshtastic_log);
-        Ok(meshtastic_log)
+        Ok(meshtastic_log.map(|log| (log, service_envelope)))
     }
 
     /// Updates internal metrics for a Meshtastic node from a parsed log message.

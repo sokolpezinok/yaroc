@@ -111,7 +111,7 @@ impl MessageHandler {
                 EventRs::CellularLog(cellular_log) => Ok(cellular_log.into()),
                 EventRs::SiPunches(si_punch_logs) => Ok(si_punch_logs.into()),
                 EventRs::SiPunch(si_punch) => Ok(Event::SiPunch(si_punch.into())),
-                EventRs::MeshtasticLog(meshtastic_log) => {
+                EventRs::MeshtasticLog(meshtastic_log, _) => {
                     Ok(Event::MeshtasticLog(meshtastic_log.into()))
                 }
                 EventRs::NodeInfos(node_infos) => Ok(Event::NodeInfos(
