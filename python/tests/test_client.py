@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from yaroc.clients.client import Client, ClientGroup
 from yaroc.pb.status_pb2 import Status
-from yaroc.rs import SiPunchLog
+from yaroc.rs import MeshtasticLog, SiPunchLog
 
 
 class MockClient(Client):
@@ -11,6 +11,7 @@ class MockClient(Client):
         self._name = name
         self.send_punch = AsyncMock()
         self.send_status = AsyncMock()
+        self.send_meshtastic = AsyncMock()
         self.loop = AsyncMock()
 
     def name(self) -> str:
@@ -24,6 +25,9 @@ class MockClient(Client):
 
     async def send_status(self, status: Status, mac_addr: str):
         await self.send_status(status, mac_addr)
+
+    async def send_meshtastic(self, log: MeshtasticLog):
+        await self.send_meshtastic(log)
 
 
 class TestClient(unittest.IsolatedAsyncioTestCase):
@@ -40,6 +44,13 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
 
         assert await client.send_status_noexcept(status, mac_addr)
         client.send_status.assert_awaited_once_with(status, mac_addr)
+
+    async def test_send_meshtastic_noexcept_awaits(self):
+        client = MockClient()
+        meshtastic_log = MagicMock(spec=MeshtasticLog)
+
+        assert await client.send_meshtastic_noexcept(meshtastic_log)
+        client.send_meshtastic.assert_awaited_once_with(meshtastic_log)
 
     async def test_send_punch_noexcept_exception(self):
         client = MockClient()
@@ -59,3 +70,13 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
         assert len(results) == 2
         client1.send_punch.assert_awaited_once_with(punch_log)
         client2.send_punch.assert_awaited_once_with(punch_log)
+
+    async def test_client_group_send_meshtastic(self):
+        client1 = MockClient("Client1")
+        client2 = MockClient("Client2")
+        group = ClientGroup([client1, client2], [])
+        meshtastic_log = MagicMock(spec=MeshtasticLog)
+        results = await group.send_meshtastic(meshtastic_log)
+        assert len(results) == 2
+        client1.send_meshtastic.assert_awaited_once_with(meshtastic_log)
+        client2.send_meshtastic.assert_awaited_once_with(meshtastic_log)

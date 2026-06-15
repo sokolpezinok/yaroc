@@ -5,7 +5,7 @@ from asyncio import Task
 from typing import Sequence
 
 from ..pb.status_pb2 import Status
-from ..rs import SiPunchLog
+from ..rs import MeshtasticLog, SiPunchLog
 
 
 class Client(ABC):
@@ -48,6 +48,19 @@ class Client(ABC):
         """Send a status update."""
         pass
 
+    async def send_meshtastic_noexcept(self, log: MeshtasticLog) -> bool:
+        """Send a Meshtastic message/envelope, catching any exceptions."""
+        try:
+            await self.send_meshtastic(log)
+            return True
+        except Exception as e:
+            logging.error(f"{self.name()} failed: {e}")
+            return False
+
+    async def send_meshtastic(self, log: MeshtasticLog):
+        """Send a Meshtastic message/envelope."""
+        pass
+
     @abstractmethod
     def name(self) -> str:
         """Get the name of the client."""
@@ -83,4 +96,9 @@ class ClientGroup:
     async def send_punch(self, punch: SiPunchLog) -> Sequence[bool]:
         """Send a punch log entry to all clients in the group."""
         handles = [client.send_punch_noexcept(punch) for client in self.clients]
+        return await asyncio.gather(*handles)
+
+    async def send_meshtastic(self, log: MeshtasticLog) -> Sequence[bool]:
+        """Send a Meshtastic message/envelope to all clients in the group."""
+        handles = [client.send_meshtastic_noexcept(log) for client in self.clients]
         return await asyncio.gather(*handles)

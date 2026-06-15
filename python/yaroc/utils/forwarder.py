@@ -124,6 +124,7 @@ class Forwarder:
                 return asyncio.create_task(self._handle_cellular_log(log))
             case Event.MeshtasticLog(log):
                 logging.info(log)
+                return asyncio.create_task(self.client_group.send_meshtastic(log))
             case Event.DeviceEvnt(added, device):
                 return asyncio.create_task(self._handle_device_event(added, device))
             case Event.NodeInfos(node_infos):

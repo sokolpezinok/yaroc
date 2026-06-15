@@ -11,7 +11,7 @@ from aiomqtt.client import Will
 
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import CellNetworkType, Disconnected, Status
-from ..rs import SiPunchLog, current_timestamp_millis
+from ..rs import MeshtasticLog, SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
@@ -89,6 +89,10 @@ class MqttClient(Client):
     async def send_status(self, status: Status, mac_addr: str):
         topics = self.get_topics(mac_addr)
         await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
+
+    async def send_meshtastic(self, log: MeshtasticLog):
+        topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
+        await self._send(topic, log.service_envelope, 1, "MeshtasticLog")
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
@@ -185,6 +189,10 @@ class SIM7020MqttClient(Client):
                         mch.network_type = CellNetworkType.NbIotEcl2  # type: ignore
 
         await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
+
+    async def send_meshtastic(self, log: MeshtasticLog):
+        topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
+        await self._send(topic, log.service_envelope, "MeshtasticLog")
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
         async with self._lock:
