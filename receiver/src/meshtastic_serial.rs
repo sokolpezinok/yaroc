@@ -6,7 +6,7 @@ use futures::FutureExt as _;
 use futures::future::BoxFuture;
 use log::{info, warn};
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, from_radio};
+use meshtastic::protobufs::{FromRadio, MeshPacket, channel, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::Instant;
@@ -32,6 +32,7 @@ pub struct MeshtasticSerial {
     stream_api: ConnectedStreamApi,
     listener: UnboundedReceiver<FromRadio>,
     mac_address: MacAddress,
+    channels: Vec<String>,
 }
 
 impl MeshtasticSerial {
@@ -63,6 +64,7 @@ impl MeshtasticSerial {
             stream_api,
             listener,
             mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
+            channels: Vec::new(),
         })
     }
 
@@ -84,6 +86,16 @@ impl MeshtasticSerial {
                 }
                 None => {
                     return MeshtasticEvent::Disconnected;
+                }
+                Some(FromRadio {
+                    payload_variant: Some(from_radio::PayloadVariant::Channel(channel)),
+                    ..
+                }) => {
+                    if channel.role != channel::Role::Disabled.into()
+                        && let Some(settings) = channel.settings
+                    {
+                        self.channels.push(settings.name);
+                    }
                 }
                 _ => {}
             }
