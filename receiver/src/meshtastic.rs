@@ -304,6 +304,12 @@ impl MeshtasticLog {
     }
 }
 
+/// Unpacks `ServiceEnvelope` into a `MeshPacket`, if possible.
+pub fn unpack_envelope(payload: &[u8]) -> crate::Result<MeshPacket> {
+    let service_envelope = ServiceEnvelope::decode(payload)?;
+    service_envelope.packet.ok_or(crate::error::Error::ValueError)
+}
+
 /// Port number for the telemetry app.
 pub(crate) const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
 /// Port number for the position app.

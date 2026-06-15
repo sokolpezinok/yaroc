@@ -3,9 +3,8 @@ use chrono::prelude::*;
 use femtopb::Message as _;
 use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
-use meshtastic::Message as MeshtasticMessage;
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::{Data, MeshPacket, PortNum, ServiceEnvelope};
+use meshtastic::protobufs::{Data, MeshPacket, PortNum};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -16,8 +15,10 @@ use yaroc_common::status::voltage_to_percent;
 
 use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
-use crate::meshtastic::{MeshtasticLog, MshMetrics, PositionName, RssiSnr};
-use crate::meshtastic::{POSITION_APP, SERIAL_APP, TELEMETRY_APP};
+use crate::meshtastic::unpack_envelope;
+use crate::meshtastic::{
+    MeshtasticLog, MshMetrics, POSITION_APP, PositionName, RssiSnr, SERIAL_APP, TELEMETRY_APP,
+};
 use crate::mqtt::Message as MqttMessage;
 use crate::system_info::{HostInfo, MacAddress};
 use yaroc_common::proto::{Punches, Status};
@@ -283,7 +284,7 @@ impl FleetState {
                 .map(|log| log.map(Event::MeshtasticLog)),
             SERIAL_APP => self
                 .msh_serial_mesh_packet(mesh_packet, now)
-                .map(|log| Some(Event::SiPunches(log))),
+                .map(|punches| Some(Event::SiPunches(punches))),
             _ => Ok(None),
         }
     }
@@ -441,8 +442,7 @@ impl FleetState {
         payload: &[u8],
         now: DateTime<Local>,
     ) -> crate::Result<Vec<SiPunchLog>> {
-        let service_envelope = ServiceEnvelope::decode(payload)?;
-        let packet = service_envelope.packet.ok_or(yaroc_common::error::Error::ValueError)?;
+        let packet = unpack_envelope(payload)?;
         self.msh_serial_mesh_packet(packet, now)
     }
 
@@ -688,6 +688,7 @@ mod test_meshtastic {
     use super::*;
 
     use crate::meshtastic::RssiSnr;
+    use meshtastic::Message;
     use meshtastic::protobufs::telemetry::Variant;
     use meshtastic::protobufs::{DeviceMetrics, ServiceEnvelope, Telemetry};
 
