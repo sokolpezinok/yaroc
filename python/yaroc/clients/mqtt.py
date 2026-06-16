@@ -194,7 +194,6 @@ class SIM7020MqttClient(Client):
     async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
         topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
         typ = type(log).__name__
-        logging.info(f"{topic} + {typ}")
         await self._send(topic, log.service_envelope, typ)
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:

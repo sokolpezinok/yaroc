@@ -30,6 +30,26 @@ class MockClient(Client):
         await self.send_meshtastic(log)
 
 
+class MockClientMinimal(Client):
+    def __init__(self, name="MockClientMinimal"):
+        self._name = name
+        self.send_punch = AsyncMock()
+        self.send_status = AsyncMock()
+        self.loop = AsyncMock()
+
+    def name(self) -> str:
+        return self._name
+
+    async def loop(self):
+        await self.loop()
+
+    async def send_punch(self, punch_log: SiPunchLog):
+        await self.send_punch(punch_log)
+
+    async def send_status(self, status: Status, mac_addr: str):
+        await self.send_status(status, mac_addr)
+
+
 class TestClient(unittest.IsolatedAsyncioTestCase):
     async def test_send_punch_noexcept_awaits(self):
         client = MockClient()
@@ -80,3 +100,15 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
         assert len(results) == 2
         client1.send_meshtastic.assert_awaited_once_with(meshtastic_log)
         client2.send_meshtastic.assert_awaited_once_with(meshtastic_log)
+
+    async def test_send_meshtastic_punches_noexcept(self):
+        client = MockClientMinimal()
+        punch_log1 = MagicMock(spec=SiPunchLog)
+        punch_log2 = MagicMock(spec=SiPunchLog)
+        punches = MagicMock(spec=MeshtasticPunches)
+        punches.punch_logs = [punch_log1, punch_log2]
+
+        assert await client.send_meshtastic_noexcept(punches)
+        assert client.send_punch.call_count == 2
+        client.send_punch.assert_any_await(punch_log1)
+        client.send_punch.assert_any_await(punch_log2)

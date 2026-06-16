@@ -5,7 +5,7 @@ from asyncio import Task
 from typing import Sequence
 
 from ..pb.status_pb2 import Status
-from ..rs import MeshtasticLog, SiPunchLog, MeshtasticPunches
+from ..rs import MeshtasticLog, MeshtasticPunches, SiPunchLog
 
 
 class Client(ABC):
@@ -59,7 +59,9 @@ class Client(ABC):
 
     async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
         """Send a Meshtastic message/envelope."""
-        pass
+        if isinstance(log, MeshtasticPunches):
+            for punch_log in log.punch_logs:
+                await self.send_punch(punch_log)
 
     @abstractmethod
     def name(self) -> str:
