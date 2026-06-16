@@ -14,6 +14,7 @@ from ..rs import (
     CellularLog,
     Event,
     HostInfo,
+    MeshtasticLog,
     MessageHandler,
     NodeInfo,
     SiPunch,
@@ -73,6 +74,13 @@ class Forwarder:
             except Exception as err:
                 logging.error(f"Failed to forward status: {err}")
 
+    async def _handle_meshtastic_log(self, log: MeshtasticLog):
+        logging.info(log)
+        try:
+            await self.client_group.send_meshtastic(log)
+        except Exception as err:
+            logging.error(f"Failed to forward Meshtastic log: {err}")
+
     async def _handle_device_event(self, added: bool, device: str):
         device_event = DeviceEvent()
         device_event.port = device
@@ -123,8 +131,7 @@ class Forwarder:
             case Event.CellularLog(log):
                 return asyncio.create_task(self._handle_cellular_log(log))
             case Event.MeshtasticLog(log):
-                logging.info(log)
-                return asyncio.create_task(self.client_group.send_meshtastic(log))
+                return asyncio.create_task(self._handle_meshtastic_log(log))
             case Event.DeviceEvnt(added, device):
                 return asyncio.create_task(self._handle_device_event(added, device))
             case Event.NodeInfos(node_infos):
