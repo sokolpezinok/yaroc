@@ -427,6 +427,19 @@ impl SerialClient {
         Ok(())
     }
 
+    /// Placeholder for sending Meshtastic messages.
+    ///
+    /// This method is currently a placeholder and does not perform any action.
+    ///
+    /// # Arguments
+    /// * `_log` - Placeholder for Meshtastic log/punches object.
+    ///
+    /// # Returns
+    /// A `PyResult` indicating success or failure.
+    pub async fn send_meshtastic_noexcept(&self, _log: Py<PyAny>) -> PyResult<bool> {
+        Ok(true)
+    }
+
     /// Creates an opaque factory object to be passed to MessageHandler.new()
     pub fn usb_serial_factory(&self) -> PyUsbSerialFactory {
         PyUsbSerialFactory {
