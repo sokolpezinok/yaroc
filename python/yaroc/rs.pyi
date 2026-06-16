@@ -115,7 +115,7 @@ class Event(object):
         service_envelope: bytes
 
     class MeshtasticPunches(Event):
-        __match_args__ = ("log",)
+        __match_args__ = ("punches",)
         punches: MeshtasticPunches
 
     class NodeInfos(Event):

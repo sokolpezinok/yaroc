@@ -82,6 +82,15 @@ class Forwarder:
         except Exception as err:
             logging.error(f"Failed to forward Meshtastic log: {err}")
 
+    async def _handle_meshtastic_punches(self, punches: MeshtasticPunches):
+        try:
+            for punch_log in punches.punch_logs:
+                logging.info(punch_log)
+                self._codes.add(punch_log.punch.code)
+            await self.client_group.send_meshtastic(punches)
+        except Exception as err:
+            logging.error(f"Failed to forward Meshtastic punches: {err}")
+
     async def _handle_device_event(self, added: bool, device: str):
         device_event = DeviceEvent()
         device_event.port = device
@@ -132,7 +141,7 @@ class Forwarder:
             case Event.CellularLog(log):
                 return asyncio.create_task(self._handle_cellular_log(log))
             case Event.MeshtasticPunches(msh_punches):
-                return asyncio.create_task(self._handle_punches(msh_punches.punch_logs))
+                return asyncio.create_task(self._handle_meshtastic_punches(msh_punches))
             case Event.MeshtasticLog(log):
                 return asyncio.create_task(self._handle_meshtastic_log(log))
             case Event.DeviceEvnt(added, device):

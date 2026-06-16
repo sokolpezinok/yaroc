@@ -36,7 +36,7 @@ impl MeshtasticPunches {
 
     #[getter]
     pub fn channel(&self) -> &str {
-        &self.service_envelope.channel_id
+        "serial"
     }
 
     #[getter]

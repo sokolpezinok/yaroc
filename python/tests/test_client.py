@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from yaroc.clients.client import Client, ClientGroup
 from yaroc.pb.status_pb2 import Status
-from yaroc.rs import MeshtasticLog, SiPunchLog
+from yaroc.rs import MeshtasticLog, MeshtasticPunches, SiPunchLog
 
 
 class MockClient(Client):
@@ -26,7 +26,7 @@ class MockClient(Client):
     async def send_status(self, status: Status, mac_addr: str):
         await self.send_status(status, mac_addr)
 
-    async def send_meshtastic(self, log: MeshtasticLog):
+    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
         await self.send_meshtastic(log)
 
 

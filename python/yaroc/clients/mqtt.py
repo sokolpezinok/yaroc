@@ -11,7 +11,7 @@ from aiomqtt.client import Will
 
 from ..pb.punches_pb2 import Punches
 from ..pb.status_pb2 import CellNetworkType, Disconnected, Status
-from ..rs import MeshtasticLog, SiPunchLog, current_timestamp_millis
+from ..rs import MeshtasticLog, MeshtasticPunches, SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
@@ -90,9 +90,10 @@ class MqttClient(Client):
         topics = self.get_topics(mac_addr)
         await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
 
-    async def send_meshtastic(self, log: MeshtasticLog):
+    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
         topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
-        await self._send(topic, log.service_envelope, 1, "MeshtasticLog")
+        typ = type(log).__name__
+        await self._send(topic, log.service_envelope, 1, typ)
 
     async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
         try:
@@ -190,9 +191,11 @@ class SIM7020MqttClient(Client):
 
         await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
-    async def send_meshtastic(self, log: MeshtasticLog):
+    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
         topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
-        await self._send(topic, log.service_envelope, "MeshtasticLog")
+        typ = type(log).__name__
+        logging.info(f"{topic} + {typ}")
+        await self._send(topic, log.service_envelope, typ)
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
         async with self._lock:
