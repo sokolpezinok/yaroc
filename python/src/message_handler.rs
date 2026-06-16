@@ -23,7 +23,7 @@ use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 #[derive(Clone)]
 pub struct MeshtasticPunches {
     #[pyo3(get)]
-    punch_logs: Vec<SiPunchLog>,
+    pub punch_logs: Vec<SiPunchLog>,
     service_envelope: ServiceEnvelope,
 }
 

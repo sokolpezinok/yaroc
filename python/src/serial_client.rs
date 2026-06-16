@@ -286,6 +286,22 @@ impl SerialClient {
                 ))
             })
     }
+
+    async fn send_punch_raw(
+        punch_log: &SiPunchLog,
+        computer_tx: &mut WriteHalf<SerialStream>,
+        try_no: usize,
+    ) {
+        let raw_punch = punch_log.punch.raw;
+        let card = punch_log.punch.card;
+        match computer_tx.write_all(&raw_punch).await {
+            Ok(()) => info!(
+                "Punch of card {} sent via serial port, try #{}",
+                card, try_no
+            ),
+            Err(e) => error!("serial failed to send punch {card}, try {}: {e}", try_no),
+        }
+    }
 }
 
 #[pymethods]
@@ -389,24 +405,47 @@ impl SerialClient {
         let computer_tx = self.computer_tx.clone();
         let retry_times = self.retry_times.clone();
         crate::python::run_on_tokio(async move {
-            let raw_punch = punch_log.punch.raw;
-            let card = punch_log.punch.card;
-
             for (i, wait_time) in retry_times.iter().enumerate() {
                 tokio::time::sleep(*wait_time).await;
                 let mut tx = computer_tx.lock().await;
-                match tx.write_all(&raw_punch).await {
-                    Ok(()) => info!(
-                        "Punch of card {} sent via serial port, try #{}",
-                        card,
-                        i + 1
-                    ),
-                    Err(e) => error!("serial failed to send punch {card}, try {}: {e}", i + 1),
-                }
+                Self::send_punch_raw(&punch_log, &mut tx, i + 1).await;
             }
             Ok(())
         })
         .await
+    }
+
+    /// Sends Meshtastic punches via the serial port if the log contains punches.
+    ///
+    /// # Arguments
+    /// * `log` - The Meshtastic log/punches object.
+    ///
+    /// # Returns
+    /// A `PyResult` indicating success or failure.
+    pub async fn send_meshtastic_noexcept(&self, log: Py<PyAny>) -> PyResult<bool> {
+        let punch_logs = pyo3::Python::attach(|py| {
+            if let Ok(punches) = log.extract::<crate::message_handler::MeshtasticPunches>(py) {
+                Some(punches.punch_logs.clone())
+            } else {
+                None
+            }
+        });
+
+        if let Some(punch_logs) = punch_logs {
+            let computer_tx = self.computer_tx.clone();
+            let retry_times = self.retry_times.clone();
+            crate::python::run_on_tokio(async move {
+                for (i, wait_time) in retry_times.iter().enumerate() {
+                    tokio::time::sleep(*wait_time).await;
+                    let mut tx = computer_tx.lock().await;
+                    for punch_log in &punch_logs {
+                        Self::send_punch_raw(punch_log, &mut tx, i + 1).await;
+                    }
+                }
+            })
+            .await;
+        }
+        Ok(true)
     }
 
     /// Placeholder for sending status information.
@@ -425,19 +464,6 @@ impl SerialClient {
         _mac_addr: String,
     ) -> PyResult<()> {
         Ok(())
-    }
-
-    /// Placeholder for sending Meshtastic messages.
-    ///
-    /// This method is currently a placeholder and does not perform any action.
-    ///
-    /// # Arguments
-    /// * `_log` - Placeholder for Meshtastic log/punches object.
-    ///
-    /// # Returns
-    /// A `PyResult` indicating success or failure.
-    pub async fn send_meshtastic_noexcept(&self, _log: Py<PyAny>) -> PyResult<bool> {
-        Ok(true)
     }
 
     /// Creates an opaque factory object to be passed to MessageHandler.new()
