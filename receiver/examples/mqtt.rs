@@ -66,6 +66,11 @@ async fn main() {
                         info!("{punch}");
                     }
                 }
+                Event::SiPunchesMeshtastic(si_punch_logs, _) => {
+                    for punch in si_punch_logs {
+                        info!("Meshtastic punch: {punch}");
+                    }
+                }
                 Event::SiPunch(punch) => {
                     info!("Local punch: {punch:?}");
                 }

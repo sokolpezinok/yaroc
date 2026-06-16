@@ -77,7 +77,9 @@ pub mod rs {
     #[pymodule_export]
     use super::{RaspberryModel, current_timestamp_millis};
     #[pymodule_export]
-    use crate::message_handler::{Event, MessageHandler, MessageHandlerBuilder, MqttConfig};
+    use crate::message_handler::{
+        Event, MeshtasticPunches, MessageHandler, MessageHandlerBuilder, MqttConfig,
+    };
     #[pymodule_export]
     use crate::punch::{SiPunch, SiPunchLog};
     #[pymodule_export]

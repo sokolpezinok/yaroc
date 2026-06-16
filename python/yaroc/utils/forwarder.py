@@ -15,6 +15,7 @@ from ..rs import (
     Event,
     HostInfo,
     MeshtasticLog,
+    MeshtasticPunches,
     MessageHandler,
     NodeInfo,
     SiPunch,
@@ -130,6 +131,8 @@ class Forwarder:
                 return asyncio.create_task(self._handle_punch(punch))
             case Event.CellularLog(log):
                 return asyncio.create_task(self._handle_cellular_log(log))
+            case Event.MeshtasticPunches(msh_punches):
+                return asyncio.create_task(self._handle_punches(msh_punches.punch_logs))
             case Event.MeshtasticLog(log):
                 return asyncio.create_task(self._handle_meshtastic_log(log))
             case Event.DeviceEvnt(added, device):

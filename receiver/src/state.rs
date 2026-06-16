@@ -234,6 +234,8 @@ pub enum Event {
     CellularLog(CellularLogMessage),
     /// A collection of processed SportIdent punch logs.
     SiPunches(Vec<SiPunchLog>),
+    /// A collection of processed SportIdent punch logs received via Meshtastic.
+    SiPunchesMeshtastic(Vec<SiPunchLog>, ServiceEnvelope),
     /// A single SportIdent punch event.
     SiPunch(SiPunch),
     /// A telemetry or status update from a Meshtastic node.
@@ -322,9 +324,12 @@ impl FleetState {
             MqttMessage::Punches(mac_address, now, payload) => {
                 self.punches(&payload, mac_address, now).map(|msg| Some(Event::SiPunches(msg)))
             }
-            MqttMessage::MeshtasticSerial(now, payload) => self
-                .msh_serial_service_envelope(&payload, now)
-                .map(|msg| Some(Event::SiPunches(msg))),
+            MqttMessage::MeshtasticSerial(now, payload) => {
+                self.msh_serial_service_envelope(&payload, now).and_then(|msg| {
+                    let envelope = ServiceEnvelope::decode(payload.as_slice())?;
+                    Ok(Some(Event::SiPunchesMeshtastic(msg, envelope)))
+                })
+            }
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
                 self.msh_status_service_envelope(&payload, now, recv_mac_address).map(|msg| {
                     msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope)))
@@ -362,7 +367,7 @@ impl FleetState {
                 .map(|log| log.map(|log| Event::MeshtasticLog(log, Box::new(service_envelope)))),
             SERIAL_APP => self
                 .msh_serial_mesh_packet(mesh_packet, now)
-                .map(|punches| Some(Event::SiPunches(punches))),
+                .map(|punches| Some(Event::SiPunchesMeshtastic(punches, service_envelope))),
             _ => Ok(None),
         }
     }

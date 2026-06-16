@@ -89,42 +89,43 @@ class MeshtasticLog(object):
     gateway_id: str
     def __repr__(self) -> str: ...
 
+class MeshtasticPunches(object):
+    punch_logs: List[SiPunchLog]
+    service_envelope: bytes
+    channel: str
+    gateway_id: str
+    def __repr__(self) -> str: ...
+
 class Event(object):
     class CellularLog(Event):
         __match_args__ = ("log",)
         log: CellularLog
-        def __init__(self, log: CellularLog) -> None: ...
-        def __getitem__(self, index: int) -> CellularLog: ...
 
     class SiPunchLogs(Event):
         __match_args__ = ("logs",)
         logs: List[SiPunchLog]
-        def __init__(self, logs: List[SiPunchLog]) -> None: ...
-        def __getitem__(self, index: int) -> List[SiPunchLog]: ...
 
     class SiPunch(Event):
         __match_args__ = ("punch",)
         punch: SiPunch
-        def __init__(self, punch: SiPunch) -> None: ...
-        def __getitem__(self, index: int) -> SiPunch: ...
 
     class MeshtasticLog(Event):
         __match_args__ = ("log",)
         log: MeshtasticLog
-        def __init__(self, log: MeshtasticLog) -> None: ...
-        def __getitem__(self, index: int) -> MeshtasticLog: ...
+        service_envelope: bytes
+
+    class MeshtasticPunches(Event):
+        __match_args__ = ("log",)
+        punches: MeshtasticPunches
 
     class NodeInfos(Event):
         __match_args__ = ("node_infos",)
         node_infos: List[NodeInfo]
-        def __init__(self, node_infos: List[NodeInfo]) -> None: ...
-        def __getitem__(self, index: int) -> List[NodeInfo]: ...
 
     class DeviceEvnt(Event):
         __match_args__ = ("added", "device")
         added: bool
         device: str
-        def __init__(self, added: bool, device: str) -> None: ...
 
 class PyUsbSerialFactory(object):
     pass
