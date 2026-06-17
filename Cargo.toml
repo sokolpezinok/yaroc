@@ -12,11 +12,11 @@ resolver = "3"
 chrono = { version = "0.4.44", default-features = false }
 clap = { version = "4.6", features = ["derive"] }
 defmt = "1.0"
-embassy-boot-nrf = { version = "0.11.0" }
+embassy-boot-nrf = { version = "0.12.0" }
 embassy-embedded-hal = "0.6.0"
 embassy-executor = { version = "0.10.0", features = ["executor-thread"] }
 embassy-futures = "0.1.2"
-embassy-nrf = { version = "0.10.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
+embassy-nrf = { version = "0.11.0", features = ["defmt", "nrf52840", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
 embassy-sync = "0.8.0"
 embassy-time = { version = "0.5.1" }
 embassy-usb = "0.6.0"
