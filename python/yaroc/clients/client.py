@@ -48,19 +48,19 @@ class Client(ABC):
         """Send a status update."""
         pass
 
-    async def send_meshtastic_noexcept(self, log: MeshtasticLog | MeshtasticPunches) -> bool:
+    async def send_meshtastic_noexcept(self, msg: MeshtasticLog | MeshtasticPunches) -> bool:
         """Send a Meshtastic message/envelope, catching any exceptions."""
         try:
-            await self.send_meshtastic(log)
+            await self.send_meshtastic(msg)
             return True
         except Exception as e:
             logging.error(f"{self.name()} failed: {e}")
             return False
 
-    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
+    async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches):
         """Send a Meshtastic message/envelope."""
-        if isinstance(log, MeshtasticPunches):
-            for punch_log in log.punch_logs:
+        if isinstance(msg, MeshtasticPunches):
+            for punch_log in msg.punch_logs:
                 await self.send_punch(punch_log)
 
     @abstractmethod
@@ -100,7 +100,7 @@ class ClientGroup:
         handles = [client.send_punch_noexcept(punch) for client in self.clients]
         return await asyncio.gather(*handles)
 
-    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches) -> Sequence[bool]:
+    async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches) -> Sequence[bool]:
         """Send a Meshtastic message/envelope to all clients in the group."""
-        handles = [client.send_meshtastic_noexcept(log) for client in self.clients]
+        handles = [client.send_meshtastic_noexcept(msg) for client in self.clients]
         return await asyncio.gather(*handles)

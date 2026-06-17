@@ -26,8 +26,8 @@ class MockClient(Client):
     async def send_status(self, status: Status, mac_addr: str):
         await self.send_status(status, mac_addr)
 
-    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
-        await self.send_meshtastic(log)
+    async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches):
+        await self.send_meshtastic(msg)
 
 
 class MockClientMinimal(Client):

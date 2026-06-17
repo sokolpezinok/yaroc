@@ -84,18 +84,20 @@ class MqttClient(Client):
             logging.error(f"Creation of Punch proto failed: {err}")
         punches.sending_timestamp.millis_epoch = current_timestamp_millis()
         topics = self.get_topics(punch_log.host_info.mac_address)
-        await self._send(topics.punch, punches.SerializeToString(), 1, "Punch")
+        await self._send(topics.punch, punches.SerializeToString(), "Punch", 1)
 
     async def send_status(self, status: Status, mac_addr: str):
         topics = self.get_topics(mac_addr)
-        await self._send(topics.status, status.SerializeToString(), 0, "MiniCallHome")
+        await self._send(topics.status, status.SerializeToString(), "MiniCallHome")
 
-    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
-        topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
-        typ = type(log).__name__
-        await self._send(topic, log.service_envelope, 1, typ)
+    async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches):
+        topic = f"yar/2/e/{msg.channel}/{msg.gateway_id}"
+        if isinstance(msg, MeshtasticLog):
+            await self._send(topic, msg.service_envelope, "MeshtasticLog")
+        elif isinstance(msg, MeshtasticPunches):
+            await self._send(topic, msg.service_envelope, "MeshtasticPunches", 1)
 
-    async def _send(self, topic: str, msg: bytes, qos: int, message_type: str):
+    async def _send(self, topic: str, msg: bytes, message_type: str, qos: int = 0):
         try:
             await self.client.publish(topic, payload=msg, qos=qos)
             logging.info(f"{message_type} sent via MQTT")
@@ -191,10 +193,12 @@ class SIM7020MqttClient(Client):
 
         await self._send(self.topics.status, status.SerializeToString(), "MiniCallHome")
 
-    async def send_meshtastic(self, log: MeshtasticLog | MeshtasticPunches):
-        topic = f"yar/2/e/{log.channel}/{log.gateway_id}"
-        typ = type(log).__name__
-        await self._send(topic, log.service_envelope, typ)
+    async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches):
+        topic = f"yar/2/e/{msg.channel}/{msg.gateway_id}"
+        if isinstance(msg, MeshtasticLog):
+            await self._send(topic, msg.service_envelope, "MeshtasticLog")
+        elif isinstance(msg, MeshtasticPunches):
+            await self._send(topic, msg.service_envelope, "MeshtasticPunches", 1)
 
     async def _send(self, topic: str, message: bytes, message_type: str, qos: int = 0) -> bool:
         async with self._lock:
