@@ -1,11 +1,12 @@
 [workspace]
 members = [
   "common",
+  "napi",
   "nrf52840",
   "python",
   "receiver",
 ]
-default-members = ["common", "python", "receiver"]
+default-members = ["common", "napi", "python", "receiver"]
 resolver = "3"
 
 [workspace.dependencies]
