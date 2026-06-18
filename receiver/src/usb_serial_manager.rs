@@ -3,11 +3,11 @@ use futures::future::BoxFuture;
 use log::{debug, error, info};
 use nusb::hotplug::HotplugEvent;
 use std::fmt::Display;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 use std::path::PathBuf;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 use std::pin::Pin;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
@@ -60,22 +60,23 @@ pub trait UsbSerialFactory: Send + Sync {
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
 pub struct UsbSerialManager {
     factories: Vec<Box<dyn UsbSerialFactory>>,
+    #[cfg(all(target_os = "linux", feature = "udev"))]
     pending_connections: Vec<nusb::DeviceInfo>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 struct SendAsyncMonitorSocket(tokio_udev::AsyncMonitorSocket);
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 // SAFETY: tokio_udev::AsyncMonitorSocket wraps a raw file descriptor (netlink socket)
 // which can be safely transferred to another thread. The underlying tokio async registration
 // and standard system calls are thread-safe.
 unsafe impl Send for SendAsyncMonitorSocket {}
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 // SAFETY: Access to the socket is synchronized via standard mut references and async polling
 // in tokio, making concurrent access thread-safe.
 unsafe impl Sync for SendAsyncMonitorSocket {}
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 impl futures::Stream for SendAsyncMonitorSocket {
     type Item = std::io::Result<tokio_udev::Event>;
 
@@ -84,13 +85,13 @@ impl futures::Stream for SendAsyncMonitorSocket {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 struct UdevEvent {
     devnode: PathBuf,
     usb_sysfs_path: PathBuf,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "udev"))]
 fn extract_add_event(event: tokio_udev::Event) -> Option<UdevEvent> {
     if event.event_type() != tokio_udev::EventType::Add {
         return None;
@@ -116,6 +117,7 @@ impl UsbSerialManager {
     pub fn new(factories: Vec<Box<dyn UsbSerialFactory>>) -> Self {
         Self {
             factories,
+            #[cfg(all(target_os = "linux", feature = "udev"))]
             pending_connections: Vec::new(),
         }
     }
@@ -133,7 +135,7 @@ impl UsbSerialManager {
         self.factories.iter_mut().any(|f| f.remove_device(&device_node))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "udev"))]
     fn handle_hotplug_event(&mut self, event: HotplugEvent) {
         match event {
             HotplugEvent::Connected(dev) => {
@@ -156,7 +158,7 @@ impl UsbSerialManager {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "udev"))]
     /// Monitors USB hotplug events and manages devices dynamically using udev.
     pub async fn monitor_usb_devices(
         &mut self,
@@ -216,7 +218,7 @@ impl UsbSerialManager {
         Ok(())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", feature = "udev")))]
     /// Monitors USB hotplug events and manages devices dynamically.
     pub async fn monitor_usb_devices(
         &mut self,
