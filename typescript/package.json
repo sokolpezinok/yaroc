@@ -1,0 +1,16 @@
+{
+  "name": "yaroc-client",
+  "version": "0.1.0",
+  "main": "client.js",
+  "types": "client.d.ts",
+  "scripts": {
+    "build": "napi build --platform --release --cargo-cwd ../napi --js index.js --dts index.d.ts",
+    "build:debug": "napi build --platform --cargo-cwd ../napi --js index.js --dts index.d.ts",
+    "emulate": "tsx emulate_mqtt_native.ts"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.2"
+  }
+}
