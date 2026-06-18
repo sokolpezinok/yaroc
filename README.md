@@ -7,6 +7,7 @@ Yet Another [ROC](https://roc.olresultat.se). Radio Online Control for orienteer
 [![Python (Linux)](https://github.com/sokolpezinok/yaroc/actions/workflows/linux-python.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/linux-python.yml)
 [![Python (Windows)](https://github.com/sokolpezinok/yaroc/actions/workflows/windows-python.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/windows-python.yml)
 [![Rust](https://github.com/sokolpezinok/yaroc/actions/workflows/rust.yml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/rust.yml)
+[![TypeScript](https://github.com/sokolpezinok/yaroc/actions/workflows/typescript.yaml/badge.svg)](https://github.com/sokolpezinok/yaroc/actions/workflows/typescript.yaml)
 
 It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de) had a baby.
 

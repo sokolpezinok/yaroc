@@ -16,4 +16,5 @@ __pycache__/
 node_modules
 index.d.ts
 index.js
+index*.node
 package-lock.json
