@@ -5,7 +5,7 @@ on:
     branches:
       - master
     tags:
-      - '*'
+      - 'py-v*'
   pull_request:
   workflow_dispatch:
 
@@ -127,7 +127,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: "startsWith(github.ref, 'refs/tags/')"
+    if: "startsWith(github.ref, 'refs/tags/py-v')"
     needs: [linux, linux-cross, sdist]
     steps:
       - uses: actions/download-artifact@v8
