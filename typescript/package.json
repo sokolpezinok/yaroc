@@ -1,8 +1,8 @@
 {
   "name": "yaroc-client",
   "version": "0.1.0",
-  "main": "client.js",
-  "types": "client.d.ts",
+  "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "build": "napi build --platform --release --cargo-cwd ../napi --js index.js --dts index.d.ts",
     "build:debug": "napi build --platform --cargo-cwd ../napi --js index.js --dts index.d.ts",
