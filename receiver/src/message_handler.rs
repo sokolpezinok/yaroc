@@ -7,7 +7,7 @@ use crate::{
     state::{Event, FleetState},
     system_info::MacAddress,
 };
-use chrono::Local;
+use chrono::{FixedOffset, Local};
 use log::{error, info};
 use meshtastic::protobufs::ServiceEnvelope;
 use std::time::Duration;
@@ -36,6 +36,7 @@ pub struct MessageHandler {
     mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
     tasks: JoinSet<()>,
     initializer: Option<MessageHandlerInitializer>,
+    timezone: FixedOffset,
 }
 
 #[derive(Default)]
@@ -133,10 +134,11 @@ impl MessageHandler {
                 mesh_recv = self.mesh_packet_rx.recv() => {
                     // None can't happen since self holds a copy of _mesh_packet_tx
                     if let Some(service_envelope) = mesh_recv {
+                        let now = Local::now().with_timezone(&self.timezone);
                         let gateway_id = service_envelope.gateway_id.strip_prefix('!')
                             .unwrap_or(&service_envelope.gateway_id);
                         let mac_address = MacAddress::try_from(gateway_id)?;
-                        if let Some(message) = self.fleet_state.process_mesh_packet(service_envelope, mac_address)? {
+                        if let Some(message) = self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)? {
                             return Ok(message);
                         }
                     }
@@ -144,14 +146,14 @@ impl MessageHandler {
                 punch_recv = self.si_rx.recv() => {
                     match punch_recv {
                         Some(SportIdentMessage::RawPunch(raw_punch)) => {
-                            let now = Local::now().fixed_offset();
+                            let now = Local::now().with_timezone(&self.timezone);
                             let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
                             return Ok(Event::SiPunch(punch));
                         }
                         Some(SportIdentMessage::DeviceEvent { added, device }) => {
                             return Ok(Event::DeviceEvent { added, device });
                         }
-                        None => {} // Can't happen since self holds a copy of _si_tx
+                        None => {} // Can't happen since self has self._si_tx
                     }
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
@@ -176,6 +178,7 @@ pub struct MessageHandlerBuilder {
     config: UsbSerialConfig,
     meshtastic_tcp: Option<String>,
     fake_punch_interval: Option<Duration>,
+    timezone: FixedOffset,
 }
 
 impl Default for MessageHandlerBuilder {
@@ -188,6 +191,7 @@ impl Default for MessageHandlerBuilder {
             config: UsbSerialConfig::default(),
             meshtastic_tcp: None,
             fake_punch_interval: None,
+            timezone: *Local::now().fixed_offset().offset(),
         }
     }
 }
@@ -291,6 +295,7 @@ impl MessageHandlerBuilder {
                 fake_punch_interval: self.fake_punch_interval,
                 usb_serial_manager,
             }),
+            timezone: self.timezone,
         }
     }
 }
@@ -298,8 +303,11 @@ impl MessageHandlerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc::unbounded_channel;
+
+    use chrono::{DateTime, Local};
+    use femtopb::{Message as _, Repeated};
     use tokio::time::timeout;
+    use yaroc_common::proto::Punches;
     use yaroc_common::punch::RawPunch;
 
     type TestChannels = (
@@ -330,6 +338,7 @@ mod tests {
                     fake_punch_interval: None,
                     usb_serial_manager: None,
                 }),
+                timezone: *Local::now().fixed_offset().offset(),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }
@@ -419,11 +428,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_handler_mqtt_punch() {
-        use chrono::{DateTime, Local};
-        use femtopb::{Message as _, Repeated};
-        use yaroc_common::proto::Punches;
-        use yaroc_common::punch::SiPunch;
-
         let (mut handler, _punch_tx, _mesh_tx, mqtt_tx) =
             MessageHandler::new_for_test(Duration::from_secs(60));
 

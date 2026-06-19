@@ -351,8 +351,8 @@ impl FleetState {
         &mut self,
         service_envelope: ServiceEnvelope,
         recv_mac_address: MacAddress,
+        now: DateTime<FixedOffset>,
     ) -> crate::Result<Option<Event>> {
-        let now = Local::now().into();
         let Some(mesh_packet) = service_envelope.packet.clone() else {
             return Ok(None);
         };
@@ -661,6 +661,37 @@ mod test_punch {
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
+    }
+
+    #[test]
+    fn test_punch_different_timezone() {
+        // Punched at 11:24 Finnish time (UTC+3)
+        let fin_tz = FixedOffset::east_opt(3 * 3600).unwrap();
+        let punch_time = DateTime::parse_from_rfc3339("2026-06-19T11:24:00+03:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, punch_time, 2).raw;
+        let punches_slice: &[&[u8]] = &[&punch];
+        let punches = Punches {
+            punches: Repeated::from_slice(&punches_slice),
+            ..Default::default()
+        };
+        let mut buf = vec![0u8; punches.encoded_len()];
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
+        let mut state = FleetState::default();
+
+        // Swedish server time (UTC+2) at which we parse it
+        let server_now = DateTime::parse_from_rfc3339("2026-06-19T10:24:03+02:00").unwrap();
+        // Competition is configured with Finnish timezone (fin_tz), so we convert
+        // server_now to the competition timezone before passing it as now.
+        let now = server_now.with_timezone(&fin_tz);
+
+        let punch_logs = state.punches(&buf, MacAddress::default(), now).unwrap();
+        assert_eq!(punch_logs.len(), 1);
+        let parsed_punch = &punch_logs[0].punch;
+        // The parsed punch should be 11:24 Finnish time
+        assert_eq!(parsed_punch.time, punch_time);
+        assert_eq!(parsed_punch.time.offset(), &fin_tz);
+        assert_eq!(parsed_punch.code, 47);
+        assert_eq!(parsed_punch.card, 1715004);
     }
 
     #[test]
