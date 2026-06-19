@@ -1,4 +1,4 @@
-import { MqttClient, StartConfig, DnsEntry, MqttConfig } from '../index';
+import { MqttClient, DnsEntry, MqttConfig } from '../index';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -50,14 +50,8 @@ async function main() {
     keep_alive_secs: 15,
     meshtastic_channel: mshChannel ?? undefined,
   };
-
-  const config: StartConfig = {
-    dns: parsedDns,
-    mqtt_configs: [mqttConfig1, mqttConfig2],
-  };
-
   console.log('Starting Yaroc Native TypeScript client...');
-  const client = new MqttClient(config);
+  const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2]);
 
   client.start((err, event) => {
     if (err) {

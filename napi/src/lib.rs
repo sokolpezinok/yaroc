@@ -33,26 +33,20 @@ pub struct MqttConfig {
     pub meshtastic_channel: Option<String>,
 }
 
-#[napi(object)]
-#[derive(Serialize, Deserialize, Clone)]
-pub struct StartConfig {
-    pub dns: Vec<DnsEntry>,
-    #[napi(js_name = "mqtt_configs")]
-    pub mqtt_configs: Vec<MqttConfig>,
-}
-
 #[napi]
 pub struct MqttClient {
-    config: StartConfig,
+    dns: Vec<DnsEntry>,
+    mqtt_configs: Vec<MqttConfig>,
     cancel_token: CancellationToken,
 }
 
 #[napi]
 impl MqttClient {
     #[napi(constructor)]
-    pub fn new(config: StartConfig) -> Self {
+    pub fn new(dns: Vec<DnsEntry>, mqtt_configs: Vec<MqttConfig>) -> Self {
         MqttClient {
-            config,
+            dns,
+            mqtt_configs,
             cancel_token: CancellationToken::new(),
         }
     }
@@ -120,12 +114,12 @@ impl MqttClient {
             .format_timestamp_millis()
             .try_init();
 
-        let config = self.config.clone();
+        let dns = self.dns.clone();
+        let mqtt_configs = self.mqtt_configs.clone();
         let cancel_token = self.cancel_token.clone();
 
         napi::tokio::spawn(async move {
-            let dns = config
-                .dns
+            let dns = dns
                 .into_iter()
                 .map(|entry| {
                     let mac_address =
@@ -134,8 +128,7 @@ impl MqttClient {
                 })
                 .collect::<Vec<_>>();
 
-            let mqtt_configs = config
-                .mqtt_configs
+            let mqtt_configs = mqtt_configs
                 .into_iter()
                 .map(|config| MqttConfigRs {
                     url: config.url,

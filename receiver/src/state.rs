@@ -316,7 +316,10 @@ impl FleetState {
     /// # Arguments
     ///
     /// * `mqtt_message` - The MQTT message wrapper.
-    pub fn process_message(&mut self, mqtt_message: MqttMessage) -> crate::Result<Option<Event>> {
+    pub fn process_mqtt_message(
+        &mut self,
+        mqtt_message: MqttMessage,
+    ) -> crate::Result<Option<Event>> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, now, payload) => self
                 .status_update(&payload, mac_address, now.into())

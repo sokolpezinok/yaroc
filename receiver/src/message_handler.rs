@@ -125,7 +125,7 @@ impl MessageHandler {
                 mqtt_msg = self.mqtt_rx.recv() => {
                     // None can't happen since self holds a copy of mqtt_tx
                     if let Some(mqtt_message) = mqtt_msg
-                        && let Some(message) = self.fleet_state.process_message(mqtt_message?)?
+                        && let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message?)?
                     {
                         return Ok(message);
                     }
