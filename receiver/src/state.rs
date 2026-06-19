@@ -322,21 +322,21 @@ impl FleetState {
     ) -> crate::Result<Option<Event>> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, now, payload) => self
-                .status_update(&payload, mac_address, now.into())
+                .status_update(&payload, mac_address, now)
                 .map(|msg| Some(Event::CellularLog(msg))),
-            MqttMessage::Punches(mac_address, now, payload) => self
-                .punches(&payload, mac_address, now.into())
-                .map(|msg| Some(Event::SiPunches(msg))),
+            MqttMessage::Punches(mac_address, now, payload) => {
+                self.punches(&payload, mac_address, now).map(|msg| Some(Event::SiPunches(msg)))
+            }
             MqttMessage::MeshtasticSerial(now, payload) => {
-                self.msh_serial_service_envelope(&payload, now.into()).and_then(|msg| {
+                self.msh_serial_service_envelope(&payload, now).and_then(|msg| {
                     let envelope = ServiceEnvelope::decode(payload.as_slice())?;
                     Ok(Some(Event::SiPunchesMeshtastic(msg, envelope)))
                 })
             }
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
-                self.msh_status_service_envelope(&payload, now.into(), recv_mac_address).map(
-                    |msg| msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope))),
-                )
+                self.msh_status_service_envelope(&payload, now, recv_mac_address).map(|msg| {
+                    msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope)))
+                })
             }
         }
     }
@@ -352,7 +352,7 @@ impl FleetState {
         service_envelope: ServiceEnvelope,
         recv_mac_address: MacAddress,
     ) -> crate::Result<Option<Event>> {
-        let now = Local::now().fixed_offset();
+        let now = Local::now().into();
         let Some(mesh_packet) = service_envelope.packet.clone() else {
             return Ok(None);
         };

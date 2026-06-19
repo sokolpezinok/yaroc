@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::system_info::MacAddress;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, FixedOffset, Local};
 use femtopb::Message as _;
 use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
@@ -53,20 +53,20 @@ pub struct MqttReceiver {
     url: String,
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
-    test_now: Option<DateTime<Local>>,
+    test_now: Option<DateTime<FixedOffset>>,
 }
 
 /// Represents messages received from MQTT topics.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Message {
     /// Cellular status update containing the sender MAC, arrival timestamp, and raw payload.
-    CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
+    CellularStatus(MacAddress, DateTime<FixedOffset>, Vec<u8>),
     /// Punches data containing the sender MAC, arrival timestamp, and raw payload.
-    Punches(MacAddress, DateTime<Local>, Vec<u8>),
+    Punches(MacAddress, DateTime<FixedOffset>, Vec<u8>),
     /// Meshtastic raw serial message with arrival timestamp and raw payload.
-    MeshtasticSerial(DateTime<Local>, Vec<u8>),
+    MeshtasticSerial(DateTime<FixedOffset>, Vec<u8>),
     /// Meshtastic status update containing the sender MAC, arrival timestamp, and raw payload.
-    MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
+    MeshtasticStatus(MacAddress, DateTime<FixedOffset>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -124,7 +124,7 @@ impl MqttReceiver {
 
     /// Processes an incoming MQTT message payload and topic, converting it into a structured `Message`.
     fn process_incoming(
-        now: DateTime<Local>,
+        now: DateTime<FixedOffset>,
         topic: &str,
         payload: &[u8],
     ) -> crate::Result<Message> {
@@ -177,11 +177,11 @@ impl MqttReceiver {
             let now = {
                 #[cfg(test)]
                 {
-                    self.test_now.unwrap_or_else(Local::now)
+                    self.test_now.unwrap_or_else(|| Local::now().into())
                 }
                 #[cfg(not(test))]
                 {
-                    Local::now()
+                    Local::now().into()
                 }
             };
             match notification {
@@ -262,8 +262,7 @@ mod test {
 
     #[test]
     fn test_process_incoming() {
-        let now = Local::now();
-
+        let now = Local::now().into();
         let msg =
             MqttReceiver::process_incoming(now, "yar/deadbeef9876/status", b"hello cell").unwrap();
         assert_eq!(
@@ -378,7 +377,7 @@ mod test {
         };
 
         let mut receiver = MqttReceiver::new(config, macs.iter());
-        let exact_time = Local::now();
+        let exact_time = Local::now().into();
         receiver.test_now = Some(exact_time);
 
         // Get the next message with a timeout to prevent hanging

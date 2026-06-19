@@ -71,7 +71,7 @@ impl MessageHandler {
                     // The first tick of tokio::time::interval completes immediately.
                     loop {
                         interval_timer.tick().await;
-                        let now = Local::now().fixed_offset();
+                        let now = Local::now().into();
                         let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
                         if let Err(e) = si_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
                             error!("Failed to send fake punch: {e}");
@@ -440,7 +440,7 @@ mod tests {
         mqtt_tx
             .send(Ok(crate::mqtt::Message::Punches(
                 MacAddress::default(),
-                Local::now(),
+                Local::now().into(),
                 buf,
             )))
             .unwrap();
