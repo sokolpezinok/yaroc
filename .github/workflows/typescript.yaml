@@ -51,7 +51,7 @@ jobs:
         cache: 'npm'
         cache-dependency-path: typescript/package.json
     - name: Install npm dependencies
-      run: npm install
+      run: npm install --omit=optional
     - name: Build NPM package
       run: npx napi build --cargo-cwd ../napi --js index.js --dts index.d.ts --target ${{ matrix.settings.target }} ${{ matrix.settings.args }}
     - name: Run typecheck
@@ -82,7 +82,7 @@ jobs:
         node-version: '22'
         registry-url: 'https://registry.npmjs.org'
     - name: Install npm dependencies
-      run: npm install
+      run: npm install --omit=optional
     - name: Download artifacts
       uses: actions/download-artifact@v8
       with:
