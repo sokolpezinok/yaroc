@@ -1,6 +1,6 @@
 {
   "name": "@lukasp47/yaroc",
-  "version": "0.1.1-beta.0",
+  "version": "0.1.1-beta.1",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
@@ -31,8 +31,8 @@
     "typescript": "^5.5.2"
   },
   "optionalDependencies": {
-    "@lukasp47/yaroc-linux-arm64-gnu": "0.1.1-beta.0",
-    "@lukasp47/yaroc-linux-x64-gnu": "0.1.1-beta.0",
-    "@lukasp47/yaroc-win32-x64-msvc": "0.1.1-beta.0"
+    "@lukasp47/yaroc-linux-arm64-gnu": "0.1.1-beta.1",
+    "@lukasp47/yaroc-linux-x64-gnu": "0.1.1-beta.1",
+    "@lukasp47/yaroc-win32-x64-msvc": "0.1.1-beta.1"
   }
 }
