@@ -7,12 +7,17 @@
   },
   "main": "index.js",
   "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
   "scripts": {
     "build": "napi build --platform --release --cargo-cwd ../napi --js index.js --dts index.d.ts",
     "build:debug": "napi build --platform --cargo-cwd ../napi --js index.js --dts index.d.ts",
     "prepublishOnly": "napi prepublish -t npm --skip-gh-release",
-    "typecheck": "tsc --noEmit --target es2020 --moduleResolution node --skipLibCheck mqtt_example.ts",
-    "mqtt_example": "tsx mqtt_example.ts"
+    "typecheck": "tsc --noEmit --target es2020 --moduleResolution node --skipLibCheck examples/mqtt_example.ts",
+    "mqtt_example": "tsx examples/mqtt_example.ts"
   },
   "napi": {
     "name": "index",

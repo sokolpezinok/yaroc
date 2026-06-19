@@ -1,4 +1,4 @@
-import { MqttClient, StartConfig, DnsEntry, MqttConfig } from './index';
+import { MqttClient, StartConfig, DnsEntry, MqttConfig } from '../index';
 
 function parseArgs() {
   const args = process.argv.slice(2);
