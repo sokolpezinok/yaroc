@@ -99,16 +99,16 @@ jobs:
           if [ -d "$dir" ]; then
             echo "Publishing $dir..."
             if [[ "${{ github.ref_name }}" == *beta* ]]; then
-              npm publish "$dir" --access public --tag beta
+              npm publish "$dir" --access public --tag beta --provenance
             else
-              npm publish "$dir" --access public
+              npm publish "$dir" --access public --provenance
             fi
           fi
         done
 
         # Publish the main wrapper package last
         if [[ "${{ github.ref_name }}" == *beta* ]]; then
-          npm publish --access public --tag beta
+          npm publish --access public --tag beta --provenance
         else
-          npm publish --access public
+          npm publish --access public --provenance
         fi
