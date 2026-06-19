@@ -51,49 +51,40 @@ impl MqttClient {
         }
     }
 
-    fn convert_event(event: EventRs) -> serde_json::Value {
+    fn convert_event(event: EventRs) -> Option<serde_json::Value> {
         match event {
-            EventRs::CellularLog(cell_log) => serde_json::json!({
+            EventRs::CellularLog(cell_log) => Some(serde_json::json!({
                 "type": "CellularLog",
                 "payload": {
                     "mac_address": cell_log.mac_address().to_string(),
                     "text": format!("{}", cell_log),
                 }
-            }),
-            EventRs::SiPunches(si_punches) => serde_json::json!({
+            })),
+            EventRs::SiPunches(si_punches) => Some(serde_json::json!({
                 "type": "SiPunches",
                 "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>()
-            }),
-            EventRs::SiPunchesMeshtastic(si_punches, service_envelope) => serde_json::json!({
-                "type": "SiPunchesMeshtastic",
-                "payload": {
-                    "punches": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>(),
-                    "gateway_id": service_envelope.gateway_id,
-                }
-            }),
-            EventRs::SiPunch(si_punch) => serde_json::json!({
+            })),
+            EventRs::SiPunchesMeshtastic(si_punches, _) => Some(serde_json::json!({
+                "type": "SiPunches",
+                "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>(),
+            })),
+            EventRs::SiPunch(si_punch) => Some(serde_json::json!({
                 "type": "SiPunch",
                 "payload": to_js_punch_val(si_punch)
-            }),
-            EventRs::MeshtasticLog(msh_log, service_envelope) => serde_json::json!({
+            })),
+            EventRs::MeshtasticLog(msh_log, service_envelope) => Some(serde_json::json!({
                 "type": "MeshtasticLog",
                 "payload": {
                     "text": format!("{}", msh_log),
                     "channel": service_envelope.channel_id,
                     "gateway_id": service_envelope.gateway_id,
                 }
-            }),
-            EventRs::NodeInfos(node_infos) => serde_json::json!({
+            })),
+            EventRs::NodeInfos(node_infos) => Some(serde_json::json!({
                 "type": "NodeInfos",
                 "payload": node_infos.into_iter().map(to_js_node_info_val).collect::<Vec<_>>()
-            }),
-            EventRs::DeviceEvent { added, device } => serde_json::json!({
-                "type": "DeviceEvent",
-                "payload": {
-                    "added": added,
-                    "device": device,
-                }
-            }),
+            })),
+            EventRs::DeviceEvent { .. } => None,
         }
     }
 
@@ -158,7 +149,10 @@ impl MqttClient {
                         match handler.next_event().await {
                             Ok(event) => {
                                 let js_event = Self::convert_event(event);
-                                tsfn.call(Ok(js_event), ThreadsafeFunctionCallMode::Blocking);
+                                if let Some(js_event) = js_event {
+                                    // TODO: emit Vec<SiPunchLog> as multiple events
+                                    tsfn.call(Ok(js_event), ThreadsafeFunctionCallMode::Blocking);
+                                }
                             }
                             Err(err) => {
                                 log::error!("{}", err);
