@@ -247,10 +247,11 @@ impl MessageHandlerBuilder {
     /// Builds the `MessageHandler`.
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
+        let timezone = self.timezone;
         let mqtt_receivers: Vec<MqttReceiver> = self
             .mqtt_configs
             .into_iter()
-            .map(|config| MqttReceiver::new(config, macs.clone()))
+            .map(|config| MqttReceiver::new(config, macs.clone()).with_timezone(timezone))
             .collect();
         let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<ServiceEnvelope>();
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();

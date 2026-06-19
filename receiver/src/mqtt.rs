@@ -54,6 +54,7 @@ pub struct MqttReceiver {
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
     test_now: Option<DateTime<FixedOffset>>,
+    timezone: FixedOffset,
 }
 
 /// Represents messages received from MQTT topics.
@@ -102,7 +103,14 @@ impl MqttReceiver {
             topics,
             #[cfg(test)]
             test_now: None,
+            timezone: *Local::now().fixed_offset().offset(),
         }
+    }
+
+    /// Sets the timezone offset to use.
+    pub fn with_timezone(mut self, timezone: FixedOffset) -> Self {
+        self.timezone = timezone;
+        self
     }
 
     /// Extracts the cellular MAC address from the topic name.
@@ -177,11 +185,11 @@ impl MqttReceiver {
             let now = {
                 #[cfg(test)]
                 {
-                    self.test_now.unwrap_or_else(|| Local::now().into())
+                    self.test_now.unwrap_or_else(|| Local::now().with_timezone(&self.timezone))
                 }
                 #[cfg(not(test))]
                 {
-                    Local::now().into()
+                    Local::now().with_timezone(&self.timezone)
                 }
             };
             match notification {
@@ -338,6 +346,31 @@ mod test {
         packet
     }
 
+    async fn run_mock_broker(
+        listener: TcpListener,
+        topic: &str,
+        payload: &[u8],
+        rx: tokio::sync::oneshot::Receiver<()>,
+    ) {
+        let (mut socket, _) = listener.accept().await.unwrap();
+
+        // 1. Read CONNECT packet
+        let mut buf = [0u8; 1024];
+        let _raw = socket.read(&mut buf).await.unwrap();
+
+        // 2. Write CONNACK packet
+        socket.write_all(&[0x20, 0x02, 0x00, 0x00]).await.unwrap();
+
+        // 3. Read SUBSCRIBE packet
+        let _raw = socket.read(&mut buf).await.unwrap();
+
+        // 4. Write PUBLISH packet
+        let publish_packet = encode_publish(topic, payload);
+        socket.write_all(&publish_packet).await.unwrap();
+
+        let _ = rx.await;
+    }
+
     #[tokio::test]
     async fn test_next_message_success() {
         // Bind TcpListener to a random port
@@ -345,37 +378,17 @@ mod test {
         let port = listener.local_addr().unwrap().port();
 
         // Spawn a background task representing the mock MQTT broker
-        let broker_handle = tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let topic = "yar/deadbeef9876/status";
+        let payload = b"cellular status payload";
+        let broker_handle = tokio::spawn(run_mock_broker(listener, topic, payload, rx));
 
-            // 1. Read CONNECT packet
-            let mut buf = [0u8; 1024];
-            let _n = socket.read(&mut buf).await.unwrap();
-
-            // 2. Write CONNACK packet
-            socket.write_all(&[0x20, 0x02, 0x00, 0x00]).await.unwrap();
-
-            // 3. Read SUBSCRIBE packet
-            let _n = socket.read(&mut buf).await.unwrap();
-
-            // 4. Write PUBLISH packet
-            // Topic: yar/deadbeef9876/status
-            // Payload: cellular status payload
-            let topic = "yar/deadbeef9876/status";
-            let payload = b"cellular status payload";
-            let publish_packet = encode_publish(topic, payload);
-            socket.write_all(&publish_packet).await.unwrap();
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        });
-
-        // Setup MqttReceiver pointing to our mock broker
         let macs = [MacAddress::Full(0xdeadbeef9876)];
         let config = MqttConfig {
             url: "127.0.0.1".to_string(),
             port,
             ..Default::default()
         };
-
         let mut receiver = MqttReceiver::new(config, macs.iter());
         let exact_time = Local::now().into();
         receiver.test_now = Some(exact_time);
@@ -389,6 +402,44 @@ mod test {
             Message::CellularStatus(macs[0], exact_time, b"cellular status payload".into())
         );
 
+        let _ = tx.send(());
+        broker_handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_next_message_timezone() {
+        // Bind TcpListener to a random port
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // Spawn a background task representing the mock MQTT broker
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let topic = "yar/deadbeef9876/status";
+        let payload = b"cellular status payload";
+        let broker_handle = tokio::spawn(run_mock_broker(listener, topic, payload, rx));
+
+        let macs = [MacAddress::Full(0xdeadbeef9876)];
+        let config = MqttConfig {
+            url: "127.0.0.1".to_string(),
+            port,
+            ..Default::default()
+        };
+        let finland_tz = FixedOffset::east_opt(3 * 3600).unwrap();
+        let mut receiver = MqttReceiver::new(config, macs.iter()).with_timezone(finland_tz);
+
+        // Get the next message with a timeout to prevent hanging
+        let result = tokio::time::timeout(Duration::from_secs(1), receiver.next_message())
+            .await
+            .expect("MQTT next_message() test timed out");
+
+        let message = result.unwrap();
+        if let Message::CellularStatus(_, timestamp, _) = message {
+            assert_eq!(timestamp.offset(), &finland_tz);
+        } else {
+            panic!("Expected Message::CellularStatus, got {:?}", message);
+        }
+
+        let _ = tx.send(());
         broker_handle.await.unwrap();
     }
 }
