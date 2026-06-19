@@ -92,9 +92,9 @@ impl CellularNodeStatus {
     }
 
     /// Simulates or updates a disconnection event by clearing signal state.
-    pub fn disconnect(&mut self) {
+    pub fn disconnect(&mut self, now: DateTime<FixedOffset>) {
         self.state = None;
-        self.last_update = Some(Local::now().into());
+        self.last_update = Some(now);
     }
 
     /// Translates raw battery voltage into a percentage and stores it.
@@ -104,9 +104,9 @@ impl CellularNodeStatus {
     }
 
     /// Updates the signal state and update timestamp upon a connection event.
-    pub fn mqtt_connect_update(&mut self, signal_info: CellSignalInfo) {
+    pub fn mqtt_connect_update(&mut self, signal_info: CellSignalInfo, now: DateTime<FixedOffset>) {
         self.state = Some(signal_info);
-        self.last_update = Some(Local::now().into());
+        self.last_update = Some(now);
     }
 
     /// Updates punch-related metrics, storing the punch time and recording the code.
@@ -181,22 +181,22 @@ impl MeshtasticNodeStatus {
     }
 
     /// Updates the node's battery percentage and updates the last status timestamp.
-    pub fn update_battery(&mut self, percent: u8) {
+    pub fn update_battery(&mut self, percent: u8, now: DateTime<FixedOffset>) {
         self.battery_percentage = Some(percent);
-        self.last_update = Some(Local::now().into());
+        self.last_update = Some(now);
     }
 
     /// Updates the RSSI and SNR details, marking the node as connected.
-    pub fn update_rssi_snr(&mut self, rssi_snr: RssiSnr) {
+    pub fn update_rssi_snr(&mut self, rssi_snr: RssiSnr, now: DateTime<FixedOffset>) {
         self.connected = true;
         self.rssi_snr = Some(rssi_snr);
-        self.last_update = Some(Local::now().into());
+        self.last_update = Some(now);
     }
 
     /// Clears the RSSI and SNR state, for instance, on link degradation.
-    pub fn clear_rssi_snr(&mut self) {
+    pub fn clear_rssi_snr(&mut self, now: DateTime<FixedOffset>) {
         self.rssi_snr = None;
-        self.last_update = Some(Local::now().into());
+        self.last_update = Some(now);
     }
 
     /// Registers a punch event, updating the last punch timestamp and adding the station code.
@@ -397,14 +397,14 @@ impl FleetState {
             CellularLogMessage::MCH(mch_log) => {
                 let mch = &mch_log.mini_call_home;
                 if let Some(signal_info) = mch.signal_info {
-                    status.mqtt_connect_update(signal_info);
+                    status.mqtt_connect_update(signal_info, now);
                 }
                 if let Some(batt_mv) = mch.batt_mv {
                     status.update_voltage(batt_mv);
                 }
             }
             CellularLogMessage::Disconnected { .. } => {
-                status.disconnect();
+                status.disconnect(now);
             }
             _ => {}
         }
@@ -480,7 +480,7 @@ impl FleetState {
         let recv_position = self.get_position_name(recv_mac_address);
         let meshtastic_log =
             MeshtasticLog::from_mesh_packet(mesh_packet, now, &self.dns, recv_position)?;
-        self.msh_status_update(&meshtastic_log);
+        self.msh_status_update(&meshtastic_log, now);
         Ok(meshtastic_log)
     }
 
@@ -498,27 +498,31 @@ impl FleetState {
         } else {
             None
         };
-        self.msh_status_update(&meshtastic_log);
+        self.msh_status_update(&meshtastic_log, now);
         Ok(meshtastic_log.map(|log| (log, service_envelope)))
     }
 
     /// Updates internal metrics for a Meshtastic node from a parsed log message.
-    fn msh_status_update(&mut self, log_message: &Option<MeshtasticLog>) {
+    fn msh_status_update(
+        &mut self,
+        log_message: &Option<MeshtasticLog>,
+        now: DateTime<FixedOffset>,
+    ) {
         match log_message {
             Some(log_message) => {
                 let status = self.msh_node_status(&log_message.host_info);
                 match log_message.metrics {
                     MshMetrics::Battery { percent, .. } => {
-                        status.update_battery(percent as u8);
+                        status.update_battery(percent as u8, now);
                     }
                     MshMetrics::Position(position) => status.position = Some(position),
                     // TODO: handle temperature
                     _ => {}
                 }
                 if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
-                    status.update_rssi_snr(rssi_snr.clone());
+                    status.update_rssi_snr(rssi_snr.clone(), now);
                 } else {
-                    status.clear_rssi_snr();
+                    status.clear_rssi_snr(now);
                 }
             }
             _ => {
@@ -553,7 +557,7 @@ impl FleetState {
             status.punch(&punch_log.punch);
         }
         if let Some(rssi_snr) = rssi_snr {
-            status.update_rssi_snr(rssi_snr);
+            status.update_rssi_snr(rssi_snr, now);
         }
         Ok(punches)
     }
@@ -915,7 +919,7 @@ mod test_meshtastic {
         let host_info = HostInfo::new("msh_node", MacAddress::default());
         let status = state.msh_node_status(&host_info);
 
-        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap());
+        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap(), Local::now().into());
 
         let node_info = status.serialize();
         assert!(matches!(node_info.signal_info, SignalInfo::Meshtastic(_)));
@@ -949,7 +953,7 @@ mod test_meshtastic {
 
         // This will insert the node and set the timeout key
         let status = state.msh_node_status(&host_info);
-        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap());
+        status.update_rssi_snr(RssiSnr::new(-90, 4.0, 0).unwrap(), Local::now().into());
 
         let node_info = status.serialize();
         assert!(matches!(node_info.signal_info, SignalInfo::Meshtastic(_)));
