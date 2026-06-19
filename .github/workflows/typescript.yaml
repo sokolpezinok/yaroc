@@ -80,6 +80,8 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version: '22'
+    - name: Upgrade npm
+      run: npm install -g npm@latest
     - name: Install npm dependencies
       run: npm install
     - name: Download artifacts
@@ -95,20 +97,20 @@ jobs:
     - name: Publish to NPM
       run: |
         # Publish all platform-specific subpackages first
-        for dir in npm/*; do
+        for dir in ./npm/*; do
           if [ -d "$dir" ]; then
             echo "Publishing $dir..."
             if [[ "${{ github.ref_name }}" == *beta* ]]; then
-              npm publish "$dir" --access public --tag beta
+              npm publish "$dir" --access public --tag beta --provenance
             else
-              npm publish "$dir" --access public
+              npm publish "$dir" --access public --provenance
             fi
           fi
         done
 
         # Publish the main wrapper package last
         if [[ "${{ github.ref_name }}" == *beta* ]]; then
-          npm publish --access public --tag beta
+          npm publish --access public --tag beta --provenance
         else
-          npm publish --access public
+          npm publish --access public --provenance
         fi
