@@ -1324,7 +1324,7 @@ wheels = [
 
 [[package]]
 name = "yaroc"
-version = "0.1.21b9"
+version = "0.1.21"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
