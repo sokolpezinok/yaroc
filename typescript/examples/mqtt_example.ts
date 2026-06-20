@@ -70,7 +70,7 @@ async function main() {
         break;
       case 'SiPunches':
         for (const punch_log of event.payload) {
-          console.log(`[SiPunch] ${punch_log.host_info.name} ${punch_log.punch.card} punched ${punch_log.punch.code} at ${punch_log.punch.time}`);
+          console.log(`[SiPunch] ${punch_log.host_info.name} ${punch_log.punch.card} punched ${punch_log.punch.code} at ${punch_log.punch.time}, latency ${punch_log.latency_ms}ms`);
         }
         break;
       case 'SiPunch':

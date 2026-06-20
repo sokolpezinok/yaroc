@@ -68,14 +68,12 @@ impl MqttClient {
                     "text": format!("{}", cell_log),
                 }
             })),
-            EventRs::SiPunches(si_punches) => Some(serde_json::json!({
-                "type": "SiPunches",
-                "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>()
-            })),
-            EventRs::SiPunchesMeshtastic(si_punches, _) => Some(serde_json::json!({
-                "type": "SiPunches",
-                "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>(),
-            })),
+            EventRs::SiPunches(si_punches) | EventRs::SiPunchesMeshtastic(si_punches, _) => {
+                Some(serde_json::json!({
+                    "type": "SiPunches",
+                    "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>()
+                }))
+            }
             EventRs::SiPunch(si_punch) => Some(serde_json::json!({
                 "type": "SiPunch",
                 "payload": to_js_punch_val(si_punch)
