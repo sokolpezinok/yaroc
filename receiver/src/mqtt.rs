@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::system_info::MacAddress;
-use chrono::{DateTime, FixedOffset, Local};
+use chrono::{DateTime, Local};
 use femtopb::Message as _;
 use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
@@ -53,21 +53,20 @@ pub struct MqttReceiver {
     url: String,
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
-    test_now: Option<DateTime<FixedOffset>>,
-    timezone: FixedOffset,
+    test_now: Option<DateTime<Local>>,
 }
 
 /// Represents messages received from MQTT topics.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Message {
     /// Cellular status update containing the sender MAC, arrival timestamp, and raw payload.
-    CellularStatus(MacAddress, DateTime<FixedOffset>, Vec<u8>),
+    CellularStatus(MacAddress, DateTime<Local>, Vec<u8>),
     /// Punches data containing the sender MAC, arrival timestamp, and raw payload.
-    Punches(MacAddress, DateTime<FixedOffset>, Vec<u8>),
+    Punches(MacAddress, DateTime<Local>, Vec<u8>),
     /// Meshtastic raw serial message with arrival timestamp and raw payload.
-    MeshtasticSerial(DateTime<FixedOffset>, Vec<u8>),
+    MeshtasticSerial(DateTime<Local>, Vec<u8>),
     /// Meshtastic status update containing the sender MAC, arrival timestamp, and raw payload.
-    MeshtasticStatus(MacAddress, DateTime<FixedOffset>, Vec<u8>),
+    MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
 impl MqttReceiver {
@@ -103,14 +102,7 @@ impl MqttReceiver {
             topics,
             #[cfg(test)]
             test_now: None,
-            timezone: *Local::now().fixed_offset().offset(),
         }
-    }
-
-    /// Sets the timezone offset to use.
-    pub fn with_timezone(mut self, timezone: FixedOffset) -> Self {
-        self.timezone = timezone;
-        self
     }
 
     /// Extracts the cellular MAC address from the topic name.
@@ -132,7 +124,7 @@ impl MqttReceiver {
 
     /// Processes an incoming MQTT message payload and topic, converting it into a structured `Message`.
     fn process_incoming(
-        now: DateTime<FixedOffset>,
+        now: DateTime<Local>,
         topic: &str,
         payload: &[u8],
     ) -> crate::Result<Message> {
@@ -185,11 +177,11 @@ impl MqttReceiver {
             let now = {
                 #[cfg(test)]
                 {
-                    self.test_now.unwrap_or_else(|| Local::now().with_timezone(&self.timezone))
+                    self.test_now.unwrap_or_else(|| Local::now())
                 }
                 #[cfg(not(test))]
                 {
-                    Local::now().with_timezone(&self.timezone)
+                    Local::now()
                 }
             };
             match notification {
@@ -270,7 +262,7 @@ mod test {
 
     #[test]
     fn test_process_incoming() {
-        let now = Local::now().into();
+        let now = Local::now();
         let msg =
             MqttReceiver::process_incoming(now, "yar/deadbeef9876/status", b"hello cell").unwrap();
         assert_eq!(
@@ -401,43 +393,6 @@ mod test {
             result.unwrap(),
             Message::CellularStatus(macs[0], exact_time, b"cellular status payload".into())
         );
-
-        let _ = tx.send(());
-        broker_handle.await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_next_message_timezone() {
-        // Bind TcpListener to a random port
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-
-        // Spawn a background task representing the mock MQTT broker
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let topic = "yar/deadbeef9876/status";
-        let payload = b"cellular status payload";
-        let broker_handle = tokio::spawn(run_mock_broker(listener, topic, payload, rx));
-
-        let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let config = MqttConfig {
-            url: "127.0.0.1".to_string(),
-            port,
-            ..Default::default()
-        };
-        let finland_tz = FixedOffset::east_opt(3 * 3600).unwrap();
-        let mut receiver = MqttReceiver::new(config, macs.iter()).with_timezone(finland_tz);
-
-        // Get the next message with a timeout to prevent hanging
-        let result = tokio::time::timeout(Duration::from_secs(1), receiver.next_message())
-            .await
-            .expect("MQTT next_message() test timed out");
-
-        let message = result.unwrap();
-        if let Message::CellularStatus(_, timestamp, _) = message {
-            assert_eq!(timestamp.offset(), &finland_tz);
-        } else {
-            panic!("Expected Message::CellularStatus, got {:?}", message);
-        }
 
         let _ = tx.send(());
         broker_handle.await.unwrap();

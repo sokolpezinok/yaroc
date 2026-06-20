@@ -272,6 +272,8 @@ pub struct FleetState {
     last_node_info_push: Instant,
     /// Signal notifier triggered when a previously unseen node joins the network.
     new_node: Notify,
+    /// Timezone used for timestamps
+    timezone: FixedOffset,
 }
 
 impl Default for FleetState {
@@ -286,6 +288,7 @@ impl Default for FleetState {
             meshtastic_timeout: Duration::from_secs(600),
             last_node_info_push: Instant::now(),
             new_node: Notify::new(),
+            timezone: *Local::now().fixed_offset().offset(),
         }
     }
 }
@@ -311,6 +314,12 @@ impl FleetState {
         }
     }
 
+    /// Sets the timezone offset to use.
+    pub fn with_timezone(mut self, timezone: FixedOffset) -> Self {
+        self.timezone = timezone;
+        self
+    }
+
     /// Processes an incoming MQTT message and returns a parsed system event, if applicable.
     ///
     /// # Arguments
@@ -322,21 +331,24 @@ impl FleetState {
     ) -> crate::Result<Option<Event>> {
         match mqtt_message {
             MqttMessage::CellularStatus(mac_address, now, payload) => self
-                .status_update(&payload, mac_address, now)
+                .status_update(&payload, mac_address, now.with_timezone(&self.timezone))
                 .map(|msg| Some(Event::CellularLog(msg))),
-            MqttMessage::Punches(mac_address, now, payload) => {
-                self.punches(&payload, mac_address, now).map(|msg| Some(Event::SiPunches(msg)))
-            }
-            MqttMessage::MeshtasticSerial(now, payload) => {
-                self.msh_serial_service_envelope(&payload, now).and_then(|msg| {
+            MqttMessage::Punches(mac_address, now, payload) => self
+                .punches(&payload, mac_address, now.with_timezone(&self.timezone))
+                .map(|msg| Some(Event::SiPunches(msg))),
+            MqttMessage::MeshtasticSerial(now, payload) => self
+                .msh_serial_service_envelope(&payload, now.with_timezone(&self.timezone))
+                .and_then(|msg| {
                     let envelope = ServiceEnvelope::decode(payload.as_slice())?;
                     Ok(Some(Event::SiPunchesMeshtastic(msg, envelope)))
-                })
-            }
+                }),
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
-                self.msh_status_service_envelope(&payload, now, recv_mac_address).map(|msg| {
-                    msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope)))
-                })
+                self.msh_status_service_envelope(
+                    &payload,
+                    now.with_timezone(&self.timezone),
+                    recv_mac_address,
+                )
+                .map(|msg| msg.map(|(log, envelope)| Event::MeshtasticLog(log, Box::new(envelope))))
             }
         }
     }
@@ -769,6 +781,68 @@ mod test_punch {
         let node_infos = state.node_infos();
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
+    }
+
+    #[test]
+    fn test_process_mqtt_message_timezone() {
+        let finland_tz = FixedOffset::east_opt(3 * 3600).unwrap();
+        let mut state = FleetState::default().with_timezone(finland_tz);
+
+        // 1. Test CellularStatus message conversion
+        let timestamp = Timestamp {
+            millis_epoch: 1_706_523_131_124, // 2024-01-29T11:12:11.124+01:00
+            ..Default::default()
+        };
+        let status = Status {
+            msg: Some(Msg::MiniCallHome(MiniCallHome {
+                cpu_temperature: 47.0,
+                millivolts: 3847,
+                network_type: EnumValue::Known(yaroc_common::proto::CellNetworkType::LteM),
+                rsrp_dbm: -80,
+                signal_snr_cb: 120,
+                time: Some(timestamp),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut buffer = vec![0u8; status.encoded_len()];
+        status.encode(&mut buffer.as_mut_slice()).unwrap();
+
+        let server_now = Local::now();
+        let msg = MqttMessage::CellularStatus(MacAddress::default(), server_now, buffer);
+
+        let event = state.process_mqtt_message(msg).unwrap();
+        if let Some(Event::CellularLog(CellularLogMessage::MCH(mch_log))) = event {
+            let timestamp = mch_log.mini_call_home.timestamp.unwrap();
+            assert_eq!(timestamp.offset(), &finland_tz);
+            assert_eq!(timestamp.timestamp(), 1_706_523_131);
+        } else {
+            panic!(
+                "Expected Event::CellularLog(CellularLogMessage::MCH), got {:?}",
+                event
+            );
+        }
+
+        // 2. Test Punches message conversion
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+        let punches_slice: &[&[u8]] = &[&punch];
+        let punches = Punches {
+            punches: Repeated::from_slice(punches_slice),
+            ..Default::default()
+        };
+        let mut buf = vec![0u8; punches.encoded_len()];
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
+
+        let msg = MqttMessage::Punches(MacAddress::default(), server_now, buf);
+        let event = state.process_mqtt_message(msg).unwrap();
+        if let Some(Event::SiPunches(punch_logs)) = event {
+            assert_eq!(punch_logs.len(), 1);
+            let parsed_punch = &punch_logs[0].punch;
+            assert_eq!(parsed_punch.time.offset(), &finland_tz);
+        } else {
+            panic!("Expected Event::SiPunches, got {:?}", event);
+        }
     }
 }
 

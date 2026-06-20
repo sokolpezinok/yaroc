@@ -67,12 +67,13 @@ impl MessageHandler {
             if let Some(interval) = init.fake_punch_interval {
                 let si_tx = self.si_tx.clone();
                 info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
+                let timezone = self.timezone;
                 self.tasks.spawn(async move {
                     let mut interval_timer = tokio::time::interval(interval);
                     // The first tick of tokio::time::interval completes immediately.
                     loop {
                         interval_timer.tick().await;
-                        let now = Local::now().into();
+                        let now = Local::now().with_timezone(&timezone);
                         let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
                         if let Err(e) = si_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
                             error!("Failed to send fake punch: {e}");
@@ -253,11 +254,10 @@ impl MessageHandlerBuilder {
     /// Builds the `MessageHandler`.
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
-        let timezone = self.timezone;
         let mqtt_receivers: Vec<MqttReceiver> = self
             .mqtt_configs
             .into_iter()
-            .map(|config| MqttReceiver::new(config, macs.clone()).with_timezone(timezone))
+            .map(|config| MqttReceiver::new(config, macs.clone()))
             .collect();
         let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<ServiceEnvelope>();
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
