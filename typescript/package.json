@@ -1,6 +1,6 @@
 {
   "name": "@lukasp47/yaroc",
-  "version": "0.1.1-beta.3",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sokolpezinok/yaroc.git"
@@ -40,8 +40,8 @@
     "typescript": "^5.5.2"
   },
   "optionalDependencies": {
-    "@lukasp47/yaroc-linux-arm64-gnu": "0.1.1-beta.3",
-    "@lukasp47/yaroc-linux-x64-gnu": "0.1.1-beta.3",
-    "@lukasp47/yaroc-win32-x64-msvc": "0.1.1-beta.3"
+    "@lukasp47/yaroc-linux-arm64-gnu": "0.1.1",
+    "@lukasp47/yaroc-linux-x64-gnu": "0.1.1",
+    "@lukasp47/yaroc-win32-x64-msvc": "0.1.1"
   }
 }
