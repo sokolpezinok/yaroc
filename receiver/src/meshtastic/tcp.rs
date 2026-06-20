@@ -4,7 +4,7 @@ use meshtastic::utils::stream;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::meshtastic_connection::MeshtasticConnection;
+use super::connection::MeshtasticConnection;
 use crate::system_info::MacAddress;
 
 pub struct MeshtasticTcp {
@@ -68,7 +68,7 @@ pub async fn connect_and_loop(host: String, mesh_packet_tx: UnboundedSender<Serv
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::meshtastic_connection::MeshtasticEvent;
+    use crate::meshtastic::connection::MeshtasticEvent;
     use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
     use prost::Message;
     use tokio::io::AsyncWriteExt;

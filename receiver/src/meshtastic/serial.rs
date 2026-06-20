@@ -10,8 +10,8 @@ use meshtastic::utils::stream;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
-use crate::meshtastic_connection::MeshtasticConnection;
-pub use crate::meshtastic_connection::MeshtasticEvent;
+use super::connection::MeshtasticConnection;
+pub use super::connection::MeshtasticEvent;
 use crate::si_uart::SILABS_VID;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};

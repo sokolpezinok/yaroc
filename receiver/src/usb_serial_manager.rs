@@ -277,7 +277,7 @@ impl UsbSerialManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{meshtastic_serial::MeshtasticFactory, system_info::MacAddress};
+    use crate::{meshtastic::serial::MeshtasticFactory, system_info::MacAddress};
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc;
 

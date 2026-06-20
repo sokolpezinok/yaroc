@@ -1,5 +1,5 @@
-use crate::meshtastic_serial::MeshtasticFactory;
-use crate::meshtastic_tcp;
+use crate::meshtastic::serial::MeshtasticFactory;
+use crate::meshtastic::tcp;
 use crate::si_uart::{SportIdentFactory, SportIdentMessage};
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
@@ -64,7 +64,7 @@ impl MessageHandler {
             if let Some(host) = init.meshtastic_tcp {
                 let mesh_packet_tx = self._mesh_packet_tx.clone();
                 self.tasks.spawn(async move {
-                    meshtastic_tcp::connect_and_loop(host, mesh_packet_tx).await;
+                    tcp::connect_and_loop(host, mesh_packet_tx).await;
                 });
             }
 

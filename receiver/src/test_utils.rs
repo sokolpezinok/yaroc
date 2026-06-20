@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use crate::meshtastic_serial::MeshtasticEvent;
+use crate::meshtastic::connection::MeshtasticEvent;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::UsbSerialTrait;
 use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};

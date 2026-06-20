@@ -1,3 +1,7 @@
+pub mod connection;
+pub mod serial;
+pub mod tcp;
+
 use chrono::prelude::*;
 use chrono::{DateTime, Duration};
 use meshtastic::Message as MeshtaticMessage;
@@ -115,7 +119,7 @@ pub struct MeshtasticLog {
     /// The timestamp of the data, according to the device.
     pub timestamp: DateTime<FixedOffset>,
     /// The latency of the message.
-    latency: Duration,
+    pub latency: Duration,
 }
 
 impl MeshtasticLog {
@@ -378,11 +382,11 @@ pub fn punches_from_mesh_packet(
 }
 
 /// Port number for the telemetry app.
-pub(crate) const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
+pub const TELEMETRY_APP: i32 = PortNum::TelemetryApp as i32;
 /// Port number for the position app.
-pub(crate) const POSITION_APP: i32 = PortNum::PositionApp as i32;
+pub const POSITION_APP: i32 = PortNum::PositionApp as i32;
 /// Port number for the serial app.
-pub(crate) const SERIAL_APP: i32 = PortNum::SerialApp as i32;
+pub const SERIAL_APP: i32 = PortNum::SerialApp as i32;
 
 impl fmt::Display for MeshtasticLog {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
