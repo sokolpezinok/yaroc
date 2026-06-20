@@ -95,22 +95,6 @@ jobs:
         cp npm-artifacts/bindings-aarch64-unknown-linux-gnu/*.node npm/linux-arm64-gnu/
         cp npm-artifacts/bindings-x86_64-pc-windows-msvc/*.node npm/win32-x64-msvc/
     - name: Publish to NPM
-      run: |
-        # Publish all platform-specific subpackages first
-        for dir in ./npm/*; do
-          if [ -d "$dir" ]; then
-            echo "Publishing $dir..."
-            if [[ "${{ github.ref_name }}" == *beta* ]]; then
-              npm publish "$dir" --access public --tag beta --provenance
-            else
-              npm publish "$dir" --access public --provenance
-            fi
-          fi
-        done
-
-        # Publish the main wrapper package last
-        if [[ "${{ github.ref_name }}" == *beta* ]]; then
-          npm publish --access public --tag beta --provenance
-        else
-          npm publish --access public --provenance
-        fi
+      run: npm publish
+      env:
+        NPM_CONFIG_TAG: ${{ contains(github.ref_name, 'beta') && 'beta' || 'latest' }}
