@@ -1,3 +1,4 @@
+use log::error;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
@@ -5,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
+use chrono::FixedOffset;
 use yaroc_common::punch::SiPunch;
 use yaroc_common::status::SignalStrength;
 use yaroc_receiver::message_handler::MessageHandlerBuilder;
@@ -37,16 +39,22 @@ pub struct MqttConfig {
 pub struct MqttClient {
     dns: Vec<DnsEntry>,
     mqtt_configs: Vec<MqttConfig>,
+    timezone: Option<String>,
     cancel_token: CancellationToken,
 }
 
 #[napi]
 impl MqttClient {
     #[napi(constructor)]
-    pub fn new(dns: Vec<DnsEntry>, mqtt_configs: Vec<MqttConfig>) -> Self {
+    pub fn new(
+        dns: Vec<DnsEntry>,
+        mqtt_configs: Vec<MqttConfig>,
+        timezone: Option<String>,
+    ) -> Self {
         MqttClient {
             dns,
             mqtt_configs,
+            timezone,
             cancel_token: CancellationToken::new(),
         }
     }
@@ -108,6 +116,7 @@ impl MqttClient {
         let dns = self.dns.clone();
         let mqtt_configs = self.mqtt_configs.clone();
         let cancel_token = self.cancel_token.clone();
+        let timezone = self.timezone.clone();
 
         napi::tokio::spawn(async move {
             let dns = dns
@@ -133,11 +142,24 @@ impl MqttClient {
                 })
                 .collect::<Vec<_>>();
 
-            let mut handler = MessageHandlerBuilder::new()
-                .with_dns(dns)
-                .with_mqtt_configs(mqtt_configs)
-                .build();
+            let mut builder =
+                MessageHandlerBuilder::new().with_dns(dns).with_mqtt_configs(mqtt_configs);
 
+            if let Some(ref tz_str) = timezone {
+                match parse_timezone(tz_str) {
+                    Ok(parsed_tz) => {
+                        builder = builder.with_timezone(parsed_tz);
+                    }
+                    Err(err) => {
+                        error!("{}", err);
+                        let napi_err = napi::Error::from_reason(err);
+                        tsfn.call(Err(napi_err), ThreadsafeFunctionCallMode::Blocking);
+                        return;
+                    }
+                }
+            }
+
+            let mut handler = builder.build();
             let init_status = serde_json::json!({
                 "status": "initialized"
             });
@@ -217,4 +239,80 @@ fn to_js_node_info_val(node: yaroc_receiver::state::NodeInfo) -> serde_json::Val
         "last_update": node.last_update.map(|t| t.to_rfc3339()),
         "last_punch": node.last_punch.map(|t| t.to_rfc3339()),
     })
+}
+
+fn parse_timezone(tz: &str) -> std::result::Result<FixedOffset, String> {
+    if tz == "UTC" || tz == "GMT" {
+        return Ok(FixedOffset::east_opt(0).unwrap());
+    }
+
+    // Try parsing ISO 8601 offset format: +HH:MM or -HH:MM
+    let chars: Vec<char> = tz.chars().collect();
+    if chars.len() == 6 && (chars[0] == '+' || chars[0] == '-') && chars[3] == ':' {
+        if let (Ok(hours), Ok(minutes)) = (
+            chars[1..3].iter().collect::<String>().parse::<i32>(),
+            chars[4..6].iter().collect::<String>().parse::<i32>(),
+        ) {
+            if (0..24).contains(&hours) && (0..60).contains(&minutes) {
+                let offset_secs = hours * 3600 + minutes * 60;
+                return if chars[0] == '+' {
+                    FixedOffset::east_opt(offset_secs)
+                        .ok_or_else(|| "Offset out of bounds".to_string())
+                } else {
+                    FixedOffset::west_opt(offset_secs)
+                        .ok_or_else(|| "Offset out of bounds".to_string())
+                };
+            }
+        }
+    }
+
+    // Try parsing as integer seconds offset (e.g. 7200 for UTC+2)
+    if let Ok(offset_secs) = tz.parse::<i32>() {
+        return if offset_secs >= 0 {
+            FixedOffset::east_opt(offset_secs).ok_or_else(|| "Offset out of bounds".to_owned())
+        } else {
+            FixedOffset::west_opt(-offset_secs).ok_or_else(|| "Offset out of bounds".to_owned())
+        };
+    }
+
+    Err(format!(
+        "Invalid timezone offset format: '{}'. Supported formats are '+HH:MM', '-HH:MM', '+HHMM', '-HHMM', 'UTC' and 'GMT'.",
+        tz
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_timezone() {
+        assert_eq!(
+            parse_timezone("UTC").unwrap(),
+            FixedOffset::east_opt(0).unwrap()
+        );
+        assert_eq!(
+            parse_timezone("GMT").unwrap(),
+            FixedOffset::east_opt(0).unwrap()
+        );
+        assert_eq!(
+            parse_timezone("+02:00").unwrap(),
+            FixedOffset::east_opt(7200).unwrap()
+        );
+        assert_eq!(
+            parse_timezone("-05:30").unwrap(),
+            FixedOffset::west_opt(19800).unwrap()
+        );
+        assert_eq!(
+            parse_timezone("3600").unwrap(),
+            FixedOffset::east_opt(3600).unwrap()
+        );
+        assert_eq!(
+            parse_timezone("-7200").unwrap(),
+            FixedOffset::west_opt(7200).unwrap()
+        );
+        assert!(parse_timezone("Invalid").is_err());
+        assert!(parse_timezone("+2:00").is_err());
+        assert!(parse_timezone("+02:0").is_err());
+    }
 }

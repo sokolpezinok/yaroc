@@ -51,7 +51,7 @@ async function main() {
     meshtastic_channel: mshChannel ?? undefined,
   };
   console.log('Starting Yaroc Native TypeScript client...');
-  const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2]);
+  const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2], "+02:00");
 
   client.start((err, event) => {
     if (err) {
@@ -69,26 +69,18 @@ async function main() {
         console.log(`[CellularLog] ${event.payload.text}`);
         break;
       case 'SiPunches':
-        for (const punch of event.payload) {
-          console.log(`[SiPunch] ${punch.host_info.name} ${punch.punch.card} punched ${punch.punch.code} at ${punch.punch.time}, latency ${punch.latency_ms}ms`);
-        }
-        break;
-      case 'SiPunchesMeshtastic':
-        for (const punch of event.payload.punches) {
-          console.log(`[Meshtastic SiPunch] (Gateway: ${event.payload.gateway_id}) ${punch.host_info.name} ${punch.punch.card} punched ${punch.punch.code} at ${punch.punch.time}, latency ${punch.latency_ms}ms`);
+        for (const punch_log of event.payload) {
+          console.log(`[SiPunch] ${punch_log.host_info.name} ${punch_log.punch.card} punched ${punch_log.punch.code} at ${punch_log.punch.time}`);
         }
         break;
       case 'SiPunch':
-        console.log(`[Local SiPunch] Card: ${event.payload.card}, Code: ${event.payload.code}, Time: ${event.payload.time}`);
+        console.log(`[SiPunch] ${event.payload.name} ${event.payload.card} punched ${event.payload.code} at ${event.payload.time}`);
         break;
       case 'MeshtasticLog':
         console.log(`[MeshtasticLog] (Channel: ${event.payload.channel}, Gateway: ${event.payload.gateway_id}) ${event.payload.text}`);
         break;
       case 'NodeInfos':
         console.log('[NodeInfos]', event.payload);
-        break;
-      case 'DeviceEvent':
-        console.log(`[DeviceEvent] added=${event.payload.added}, device=${event.payload.device}`);
         break;
     }
   });

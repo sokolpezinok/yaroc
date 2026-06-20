@@ -244,6 +244,12 @@ impl MessageHandlerBuilder {
         self
     }
 
+    /// Sets the timezone offset to use.
+    pub fn with_timezone(mut self, timezone: FixedOffset) -> Self {
+        self.timezone = timezone;
+        self
+    }
+
     /// Builds the `MessageHandler`.
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
