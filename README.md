@@ -30,7 +30,16 @@ YAROC is pronounced phonetically as **"jarok"** (/'jarɔk/), which is the Slovak
 
 Reflecting this name, the project's logo is based on the orienteering ISOM map symbol **[306 Minor/seasonal water channel](https://omapwiki.orienteering.sport/symbols/306-minor-seasonal-water-channel/)**.
 
-# Installation
+# Hardware Recommendations
+
+There will be a much more detailed and separate "Hardware recommendation" section later, but here is a short list of recommended setups:
+
+* **Finish Area, running `yarocd`**: [Raspberry Pi](https://rpishop.cz/) with a [Waveshare 2.66inch e-Paper Module](https://www.waveshare.com/2.66inch-e-paper-module.htm?srsltid=AfmBOoomFRnIrLDNmAqFSNwTLLluj7piMe67DC6wXiycHHUCPPDH4UsE) and a [Waveshare CP2102 USB UART Board (Type A)](https://www.waveshare.com/cp2102-usb-uart-board-type-a.htm) to display status and receive punches via USB (directly to MeOS, QuickEvent, etc.). Optionally, include a [RAK6421 Meshtastic Raspberry Pi HAT](https://store.rakwireless.com/products/meshtastic-raspberry-pi-hat-rak6421?variant=45805958955206) to listen to Meshtastic punches directly in `yarocd`.
+* **Online Controls (NB-IoT/LTE-M variant), running the nRF52840 firmware**: [RAK Link.One](https://store.rakwireless.com/products/link-one-lte-m-nb-iot-lorawan-device-based-on-nrf52840-sx1262-and-bg77-arduino-ide-compatible?variant=42659406446790) with a SportIdent SRR sensor connected to the Link.One pins. We recommend using a hybrid LTE-M / NB-IoT SIM card if available. Currently you also need the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool), flashing over the USB port is not yet possible (but coming by the end of 2026).
+* **Online Controls (LTE/USB Modem or NB-IoT HAT), running `send-punch`**: [Raspberry Pi](https://rpishop.cz/raspberry-pi-2b/5584-recyberry-raspberry-pi-2-model-b-1gb-ram-v11.html) with a USB modem (e.g. Huawei E3372) or a [SIM7020 NB-IoT](https://www.waveshare.com/sim7020e-nb-iot-hat.htm) modem. SportIdent USB SRR dongle in the USB port. We recommend using Model 2 (doesn't have Wi-Fi) or 3 (has Wi-Fi). Higher models 4 and 5 are unnecessarily power-hungry.
+* **Radio Controls (LoRa / radio), running Meshtastic**: [RAK4631](https://store.rakwireless.com/products/rak4631-wisblock-lpwan-module) + [RAK19007](https://store.rakwireless.com/products/rak19007-rak19007) inside a [Unify Enclosure 100x75x38mm with solar panel](https://store.rakwireless.com/products/unify-enclosure-ip65-100x75x38-solar?variant=42533523587270). The SportIdent SRR sensor is connected to the RAK19007 board UART pins. Optionally, include a [RAK12500 GPS module](https://store.rakwireless.com/products/rak12500-wisblock-gnss-location-module) for LoRa signal testing before the competition.
+
+# Installation on a Raspberry Pi or a PC
 
 Install the `yaroc` package from PyPI, which provides the `send-punch` and `yarocd` commands. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
 
@@ -54,14 +63,49 @@ pip install yaroc
 pip install --pre yaroc
 ```
 
-# Hardware Recommendations
+# Installation on RAK devices
 
-There will be a much more detailed and separate "Hardware recommendation" section later, but here is a short list of recommended setups:
+Note: You can run Meshtastic on many more devices other than RAK Wireless, see [the official list](https://meshtastic.org/docs/hardware/devices/).
 
-* **Finish Area, running `yarocd`**: [Raspberry Pi](https://rpishop.cz/) with a [Waveshare 2.66inch e-Paper Module](https://www.waveshare.com/2.66inch-e-paper-module.htm?srsltid=AfmBOoomFRnIrLDNmAqFSNwTLLluj7piMe67DC6wXiycHHUCPPDH4UsE) and a [Waveshare CP2102 USB UART Board (Type A)](https://www.waveshare.com/cp2102-usb-uart-board-type-a.htm) to display status and receive punches via USB (directly to MeOS, QuickEvent, etc.). Optionally, include a [RAK6421 Meshtastic Raspberry Pi HAT](https://store.rakwireless.com/products/meshtastic-raspberry-pi-hat-rak6421?variant=45805958955206) to listen to Meshtastic punches directly in `yarocd`.
-* **Online Controls (NB-IoT/LTE-M variant), running the nRF52840 firmware**: [RAK Link.One](https://store.rakwireless.com/products/link-one-lte-m-nb-iot-lorawan-device-based-on-nrf52840-sx1262-and-bg77-arduino-ide-compatible?variant=42659406446790) with a SportIdent SRR sensor connected to the Link.One pins. We recommend using a hybrid LTE-M / NB-IoT SIM card if available.
-* **Online Controls (LTE/USB Modem or NB-IoT HAT), running `send-punch`**: [Raspberry Pi](https://rpishop.cz/raspberry-pi-2b/5584-recyberry-raspberry-pi-2-model-b-1gb-ram-v11.html) with a USB modem (e.g. Huawei E3372) or a [SIM7020 NB-IoT](https://www.waveshare.com/sim7020e-nb-iot-hat.htm) modem. SportIdent USB SRR dongle in the USB port. We recommend using Model 2 (doesn't have Wi-Fi) or 3 (has Wi-Fi). Higher models 4 and 5 are unnecessarily power-hungry.
-* **Radio Controls (LoRa / radio), running Meshtastic**: [RAK4631](https://store.rakwireless.com/products/rak4631-wisblock-lpwan-module) + [RAK19007](https://store.rakwireless.com/products/rak19007-rak19007) inside a [Unify Enclosure 100x75x38mm with solar panel](https://store.rakwireless.com/products/unify-enclosure-ip65-100x75x38-solar?variant=42533523587270). The SportIdent SRR sensor is connected to the RAK19007 board UART pins. Optionally, include a [RAK12500 GPS module](https://store.rakwireless.com/products/rak12500-wisblock-gnss-location-module) for LoRa signal testing before the competition.
+For Meshtastic, follow the [official documentation for nRF52](https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/).
+
+For Link.One using YAROC firmware, the setup is currently quite complex and requires a working Rust toolchain and a debug probe. An easier way of flashing the firmware will be available by the end of 2026, without compilation and via USB.
+
+1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, follow [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). This will be used to flash the firmware and read the logs. Flashing over USB is currently not supported, but it is in the works.
+2. Install Rust, `rustup`, and `cargo` if you haven't already:
+   - **Linux**:
+     ```sh
+     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+     ```
+   - **Windows**: Download and run [rustup-init.exe](https://rustup.rs).
+3. Install `probe-rs` to communicate with the debug probe. The recommended installation method is using their official script:
+   - **Linux**:
+     ```sh
+     curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
+     ```
+     On Linux, you will also need to configure `udev` rules to access the debug probe without root permissions:
+     ```sh
+     sudo curl -L https://probe.rs/files/69-probe-rs.rules -o /etc/udev/rules.d/69-probe-rs.rules
+     sudo udevadm control --reload-rules && sudo udevadm trigger
+     ```
+   - **Windows (PowerShell)**:
+     ```powershell
+     irm https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.ps1 | iex
+     ```
+   Alternatively, you can install it via Cargo:
+   ```sh
+   cargo install probe-rs --features cli
+   ```
+4. Set up the Rust toolchain target for the nRF52840 (ARM Cortex-M4F):
+   ```sh
+   rustup target add thumbv7em-none-eabihf
+   ```
+5. Checkout this repository and flash the firmware using Cargo from its root directory:
+   ```sh
+   DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
+   ```
+6. This will run the firmware and also show the logs.
+7. Use `yaroc-cli` to configure the IoT network (APN, LTE-M vs. NB-IoT) and MQTT server, or you can use the default. TODO: needs more details.
 
 # Usage
 
@@ -71,7 +115,7 @@ By default, YAROC commands (`send-punch` and `yarocd`) search for their respecti
 
 1. **Current Working Directory (pwd)**: The local folder where the command is executed.
 2. **Platform Configuration Directory**:
-   - **Linux/macOS**: Checks `$XDG_CONFIG_HOME/yaroc/` if the environment variable is set, falling back to `~/.config/yaroc/`.
+   - **Linux**: Checks `$XDG_CONFIG_HOME/yaroc/` if the environment variable is set, falling back to `~/.config/yaroc/`.
    - **Windows**: Checks `%APPDATA%\yaroc\` (Roaming Application Data), falling back to `%USERPROFILE%\.config\yaroc\`.
 
 ## Send punches from an online control
