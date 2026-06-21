@@ -104,8 +104,7 @@ For Link.One using YAROC firmware, the setup is currently quite complex and requ
    ```sh
    DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
    ```
-6. This will run the firmware and also show the logs.
-7. Use `yaroc-nrf` to configure the IoT network (APN, LTE-M vs. NB-IoT) and MQTT server, or you can use the default. TODO: needs more details.
+6. This will run the firmware and also show the logs. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device network and MQTT parameters.
 
 # Usage
 
@@ -117,6 +116,50 @@ By default, YAROC commands (`send-punch` and `yarocd`) search for their respecti
 2. **Platform Configuration Directory**:
    - **Linux**: Checks `$XDG_CONFIG_HOME/yaroc/` if the environment variable is set, falling back to `~/.config/yaroc/`.
    - **Windows**: Checks `%APPDATA%\yaroc\` (Roaming Application Data), falling back to `%USERPROFILE%\.config\yaroc\`.
+
+## Send punches using RAK Wireless Link.One
+
+When running the nRF52840 firmware on a RAK Link.One device, you can configure the device's IoT network (APN, LTE-M vs. NB-IoT) and MQTT server using the `yaroc-nrf` tool.
+
+The `yaroc-nrf` command (installed automatically as part of the `yaroc` package) reads a TOML configuration file (by default `nrf52840.toml`) and transmits the settings to the connected device over USB serial.
+
+### Configuration File (`nrf52840.toml`)
+
+A template configuration is available at [conf/nrf52840.toml](file:///home/lukas/sokol/yaroc/conf/nrf52840.toml). Here is an example:
+
+```toml
+[modem]
+apn = "internet.iot"   # The APN of your SIM card
+rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
+# rat = "LTE-M"
+# rat = "nbiot"        # Dashes are ignored and capitalization does not matter
+
+[modem.bands]
+ltem = [20]            # LTE-M frequency bands
+nbiot = [20]           # NB-IoT frequency bands
+
+# Optional MQTT configuration (if omitted, default settings are used)
+[mqtt]
+url = "mqtt.example.com"
+port = 1883
+# credentials = ["username", "password"] # Optional MQTT username and password
+packet_timeout = 10                  # Packet transmission timeout in seconds
+minicallhome_interval = 30           # Mini-call-home status interval in seconds
+```
+
+### Running the configuration tool
+
+Connect the RAK Link.One board to your computer via USB, and run `yaroc-nrf` specifying the serial port:
+
+```sh
+yaroc-nrf --port /dev/ttyACM0
+```
+
+By default, the tool will search for the configuration file named `nrf52840.toml` in the default locations (see [Configuration Files Location](#configuration-files-location)). To specify a custom path to the configuration file, use the `--config` option:
+
+```sh
+yaroc-nrf --port /dev/ttyACM0 --config /path/to/custom-config.toml
+```
 
 ## Send punches using LoRa radio
 
