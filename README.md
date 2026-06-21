@@ -105,7 +105,7 @@ For Link.One using YAROC firmware, the setup is currently quite complex and requ
    DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
    ```
 6. This will run the firmware and also show the logs.
-7. Use `yaroc-cli` to configure the IoT network (APN, LTE-M vs. NB-IoT) and MQTT server, or you can use the default. TODO: needs more details.
+7. Use `yaroc-nrf` to configure the IoT network (APN, LTE-M vs. NB-IoT) and MQTT server, or you can use the default. TODO: needs more details.
 
 # Usage
 

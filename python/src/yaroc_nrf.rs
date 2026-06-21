@@ -30,7 +30,7 @@ fn send_command<S: Read + Write>(
 }
 
 #[pyfunction]
-pub fn yaroc_cli() {
+pub fn yaroc_nrf() {
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .format_timestamp_millis()

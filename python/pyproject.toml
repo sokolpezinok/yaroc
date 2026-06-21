@@ -51,7 +51,7 @@ lsp = [
 
 [project.scripts]
 send-punch = "yaroc.scripts.send_punch:main"
-yaroc-cli = "yaroc.rs:yaroc_cli"
+yaroc-nrf = "yaroc.rs:yaroc_nrf"
 yarocd = "yaroc.scripts.yarocd:main"
 
 [build-system]
