@@ -1,5 +1,5 @@
 use embassy_time::Duration;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use heapless::String as HString;
@@ -11,8 +11,50 @@ use yaroc_common::mqtt::MqttConfig;
 pub struct Args {
     #[arg(short, long)]
     pub port: String,
-    #[arg(short, long, default_value = "config.toml")]
+    #[arg(short, long, default_value = "nrf52840.toml")]
     pub config: PathBuf,
+}
+
+pub fn find_config_file(path: &Path) -> PathBuf {
+    if path.exists() {
+        return path.to_path_buf();
+    }
+
+    if let Some(file_name) = path.file_name() {
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                let windows_path = Path::new(&appdata).join("yaroc").join(file_name);
+                if windows_path.exists() {
+                    return windows_path;
+                }
+            }
+            if let Ok(home) = std::env::var("USERPROFILE") {
+                let windows_path_fallback =
+                    Path::new(&home).join(".config").join("yaroc").join(file_name);
+                if windows_path_fallback.exists() {
+                    return windows_path_fallback;
+                }
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
+                let linux_path = Path::new(&xdg_config_home).join("yaroc").join(file_name);
+                if linux_path.exists() {
+                    return linux_path;
+                }
+            } else if let Ok(home) = std::env::var("HOME") {
+                let linux_path = Path::new(&home).join(".config").join("yaroc").join(file_name);
+                if linux_path.exists() {
+                    return linux_path;
+                }
+            }
+        }
+    }
+
+    path.to_path_buf()
 }
 
 #[derive(Deserialize, Debug)]
@@ -153,5 +195,64 @@ mod tests {
         assert!(matches!(config.modem.rat, RatToml::LtemNbIot));
         assert_eq!(config.modem.bands.ltem, vec![1, 2, 3]);
         assert_eq!(config.modem.bands.nbiot, vec![20]);
+    }
+
+    #[test]
+    fn test_find_config_file() {
+        let temp_file_path = std::env::temp_dir().join("test_yaroc_config.toml");
+        std::fs::write(&temp_file_path, "").unwrap();
+
+        // 1. Existing file
+        assert_eq!(find_config_file(&temp_file_path), temp_file_path);
+
+        // Clean up
+        let _ = std::fs::remove_file(&temp_file_path);
+
+        // 2. Non-existent file
+        let non_existent = Path::new("non_existent_config.toml");
+        assert_eq!(find_config_file(non_existent), non_existent);
+
+        // 3. Fallback test using XDG_CONFIG_HOME on unix / APPDATA on windows
+        #[cfg(not(target_os = "windows"))]
+        {
+            let config_dir = std::env::temp_dir().join("yaroc_mock_config_unix");
+            let yaroc_dir = config_dir.join("yaroc");
+            std::fs::create_dir_all(&yaroc_dir).unwrap();
+            let mock_config_path = yaroc_dir.join("mock_nrf52840.toml");
+            std::fs::write(&mock_config_path, "test").unwrap();
+
+            // Temporarily set XDG_CONFIG_HOME to config_dir
+            unsafe {
+                std::env::set_var("XDG_CONFIG_HOME", &config_dir);
+            }
+            let result = find_config_file(Path::new("mock_nrf52840.toml"));
+            unsafe {
+                std::env::remove_var("XDG_CONFIG_HOME");
+            }
+
+            assert_eq!(result, mock_config_path);
+            let _ = std::fs::remove_dir_all(&config_dir);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let config_dir = std::env::temp_dir().join("yaroc_mock_config_win");
+            let yaroc_dir = config_dir.join("yaroc");
+            std::fs::create_dir_all(&yaroc_dir).unwrap();
+            let mock_config_path = yaroc_dir.join("mock_nrf52840.toml");
+            std::fs::write(&mock_config_path, "test").unwrap();
+
+            // Temporarily set APPDATA to config_dir
+            unsafe {
+                std::env::set_var("APPDATA", &config_dir);
+            }
+            let result = find_config_file(Path::new("mock_nrf52840.toml"));
+            unsafe {
+                std::env::remove_var("APPDATA");
+            }
+
+            assert_eq!(result, mock_config_path);
+            let _ = std::fs::remove_dir_all(&config_dir);
+        }
     }
 }

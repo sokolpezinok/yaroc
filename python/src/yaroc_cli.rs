@@ -42,7 +42,9 @@ pub fn yaroc_cli() {
         .open_native()
         .expect("Unable to open serial port");
 
-    let config_str = std::fs::read_to_string(&args.config).expect("Unable to read config file");
+    let config_path = crate::config::find_config_file(&args.config);
+    let config_str = std::fs::read_to_string(&config_path)
+        .unwrap_or_else(|e| panic!("Unable to read config file {}: {e}", config_path.display()));
     let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
 
     let modem_config: ModemConfig = config.modem.into();
