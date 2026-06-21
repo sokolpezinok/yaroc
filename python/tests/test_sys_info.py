@@ -1,6 +1,9 @@
 import os
 import socket
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 from yaroc.rs import RaspberryModel
@@ -64,41 +67,78 @@ class TestSysInfo(unittest.TestCase):
         model = raspberrypi_model()
         self.assertEqual(model, RaspberryModel.Unknown)
 
-    @patch("yaroc.utils.sys_info.os.path.exists")
-    def test_find_config_file_local(self, mock_exists):
-        mock_exists.return_value = True
-        self.assertEqual(find_config_file("config.toml"), "config.toml")
+    def test_find_config_file_local(self):
+        import tempfile
 
-    @patch("yaroc.utils.sys_info.is_windows")
-    @patch("yaroc.utils.sys_info.os.path.exists")
-    @patch.dict("os.environ", {"XDG_CONFIG_HOME": "/custom/config"})
-    def test_find_config_file_linux_xdg(self, mock_exists, mock_is_windows):
-        mock_is_windows.return_value = False
-        # First check (local) returns False, second check (XDG) returns True
-        mock_exists.side_effect = [False, True]
+        with tempfile.NamedTemporaryFile(suffix="-test-config.toml", delete=False) as f:
+            temp_file_path = f.name
+        try:
+            self.assertEqual(find_config_file(temp_file_path), temp_file_path)
+        finally:
+            os.remove(temp_file_path)
+
+    def test_find_config_file_fallback(self):
+        # Test non-existent file
         self.assertEqual(
-            find_config_file("config.toml"),
-            os.path.join("/custom/config", "yaroc", "config.toml"),
+            find_config_file("non-existent-config-file-12345.toml"),
+            "non-existent-config-file-12345.toml",
         )
 
-    @patch("yaroc.utils.sys_info.is_windows")
-    @patch("yaroc.utils.sys_info.os.path.exists")
-    @patch("yaroc.utils.sys_info.os.path.expanduser")
-    @patch.dict("os.environ", {}, clear=True)
-    def test_find_config_file_linux_default(self, mock_expanduser, mock_exists, mock_is_windows):
-        mock_is_windows.return_value = False
-        mock_expanduser.return_value = "/home/user"
-        mock_exists.side_effect = [False, True]
-        self.assertEqual(
-            find_config_file("config.toml"),
-            os.path.join("/home/user", ".config", "yaroc", "config.toml"),
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if sys.platform.lower() == "win32" or os.name.lower() == "nt":
+                # Windows tests
+                orig_appdata = os.environ.get("APPDATA")
+                os.environ["APPDATA"] = tmpdir
+                try:
+                    yaroc_dir = Path(tmpdir) / "yaroc"
+                    yaroc_dir.mkdir(parents=True, exist_ok=True)
+                    mock_config = yaroc_dir / "test_config_appdata.toml"
+                    mock_config.touch()
 
-    @patch("yaroc.utils.sys_info.is_windows")
-    @patch("yaroc.utils.sys_info.os.path.exists")
-    @patch.dict("os.environ", {"APPDATA": "C:\\Users\\user\\AppData\\Roaming"})
-    def test_find_config_file_windows_appdata(self, mock_exists, mock_is_windows):
-        mock_is_windows.return_value = True
-        mock_exists.side_effect = [False, True]
-        expected = os.path.join("C:\\Users\\user\\AppData\\Roaming", "yaroc", "config.toml")
-        self.assertEqual(find_config_file("config.toml"), expected)
+                    resolved = find_config_file("test_config_appdata.toml")
+                    self.assertEqual(resolved, str(mock_config))
+                finally:
+                    if orig_appdata is not None:
+                        os.environ["APPDATA"] = orig_appdata
+                    else:
+                        os.environ.pop("APPDATA", None)
+            else:
+                # Linux/Unix tests
+                # 1. Test XDG_CONFIG_HOME fallback
+                orig_xdg = os.environ.get("XDG_CONFIG_HOME")
+                os.environ["XDG_CONFIG_HOME"] = tmpdir
+                try:
+                    yaroc_dir = Path(tmpdir) / "yaroc"
+                    yaroc_dir.mkdir(parents=True, exist_ok=True)
+                    mock_config = yaroc_dir / "test_config_xdg.toml"
+                    mock_config.touch()
+
+                    resolved = find_config_file("test_config_xdg.toml")
+                    self.assertEqual(resolved, str(mock_config))
+                finally:
+                    if orig_xdg is not None:
+                        os.environ["XDG_CONFIG_HOME"] = orig_xdg
+                    else:
+                        os.environ.pop("XDG_CONFIG_HOME", None)
+
+                # 2. Test HOME fallback
+                orig_home = os.environ.get("HOME")
+                orig_xdg = os.environ.get("XDG_CONFIG_HOME")
+                if orig_xdg is not None:
+                    os.environ.pop("XDG_CONFIG_HOME")
+                os.environ["HOME"] = tmpdir
+                try:
+                    yaroc_dir = Path(tmpdir) / ".config" / "yaroc"
+                    yaroc_dir.mkdir(parents=True, exist_ok=True)
+                    mock_config = yaroc_dir / "test_config_home.toml"
+                    mock_config.touch()
+
+                    resolved = find_config_file("test_config_home.toml")
+                    self.assertEqual(resolved, str(mock_config))
+                finally:
+                    if orig_home is not None:
+                        os.environ["HOME"] = orig_home
+                    else:
+                        os.environ.pop("HOME", None)
+                    if orig_xdg is not None:
+                        os.environ["XDG_CONFIG_HOME"] = orig_xdg

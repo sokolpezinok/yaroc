@@ -70,12 +70,17 @@ pub fn current_timestamp_millis() -> i64 {
     Local::now().fixed_offset().timestamp_millis()
 }
 
+#[pyfunction]
+pub fn find_config_file(filename: std::path::PathBuf) -> String {
+    crate::config::find_config_file(&filename).to_string_lossy().into_owned()
+}
+
 #[pymodule]
 pub mod rs {
     use pyo3::prelude::*;
 
     #[pymodule_export]
-    use super::{RaspberryModel, current_timestamp_millis};
+    use super::{RaspberryModel, current_timestamp_millis, find_config_file};
     #[pymodule_export]
     use crate::message_handler::{
         Event, MeshtasticPunches, MessageHandler, MessageHandlerBuilder, MqttConfig,
