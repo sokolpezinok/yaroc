@@ -142,6 +142,10 @@ fn default_packet_timeout() -> u64 {
     35
 }
 
+fn default_minicallhome_interval() -> u64 {
+    30
+}
+
 #[derive(Deserialize, Debug)]
 pub struct MqttConfigToml {
     pub url: String,
@@ -151,7 +155,6 @@ pub struct MqttConfigToml {
     pub password: String,
     #[serde(default = "default_packet_timeout")]
     pub packet_timeout: u64,
-    pub minicallhome_interval: u64,
     #[serde(default = "default_port")]
     pub port: u16,
 }
@@ -173,7 +176,7 @@ impl From<MqttConfigToml> for MqttConfig {
             url: HString::try_from(toml.url.as_str()).unwrap_or_default(),
             credentials,
             packet_timeout: Duration::from_secs(toml.packet_timeout),
-            minicallhome_interval: Duration::from_secs(toml.minicallhome_interval),
+            minicallhome_interval: Duration::from_secs(30),
             port: toml.port,
         }
     }
@@ -183,6 +186,8 @@ impl From<MqttConfigToml> for MqttConfig {
 pub struct Config {
     pub modem: ModemConfigToml,
     pub mqtt: Option<MqttConfigToml>,
+    #[serde(default = "default_minicallhome_interval")]
+    pub minicallhome_interval: u64,
 }
 
 #[cfg(test)]
@@ -227,11 +232,28 @@ mod tests {
         assert!(matches!(config.modem.rat, RatToml::Ltem));
         assert_eq!(config.modem.bands.ltem, vec![1, 2, 3]);
         assert_eq!(config.modem.bands.nbiot, vec![20]);
+        assert_eq!(config.minicallhome_interval, 30); // default value
+    }
+
+    #[test]
+    fn test_config_deserialization_default_rat() {
+        let toml_str = r#"
+            [modem]
+            apn = "test.apn"
+            [modem.bands]
+            ltem = [1, 2, 3]
+            nbiot = [20]
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.modem.apn, "test.apn");
+        assert!(matches!(config.modem.rat, RatToml::LtemNbIot));
     }
 
     #[test]
     fn test_mqtt_config_deserialization() {
         let toml_str = r#"
+            minicallhome_interval = 60
+
             [modem]
             apn = "test.apn"
             rat = "both"
@@ -244,16 +266,16 @@ mod tests {
             username = "my_user"
             password = "my_pass"
             packet_timeout = 10
-            minicallhome_interval = 60
             port = 1883
         "#;
         let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.minicallhome_interval, 60);
+
         let mqtt = config.mqtt.unwrap();
         assert_eq!(mqtt.url, "mqtt.example.com");
         assert_eq!(mqtt.username, "my_user".to_string());
         assert_eq!(mqtt.password, "my_pass".to_string());
         assert_eq!(mqtt.packet_timeout, 10);
-        assert_eq!(mqtt.minicallhome_interval, 60);
         assert_eq!(mqtt.port, 1883);
 
         let mqtt_config: MqttConfig = mqtt.into();
@@ -274,9 +296,10 @@ mod tests {
 
             [mqtt]
             url = "mqtt.example.com"
-            minicallhome_interval = 30
         "#;
         let config_no_creds: Config = toml::from_str(toml_str_no_creds).unwrap();
+        assert_eq!(config_no_creds.minicallhome_interval, 30); // default value
+
         let mqtt_no_creds = config_no_creds.mqtt.unwrap();
         assert_eq!(mqtt_no_creds.username, "");
         assert_eq!(mqtt_no_creds.password, "");
@@ -295,7 +318,6 @@ mod tests {
             url = "mqtt.example.com"
             username = "my_user"
             packet_timeout = 5
-            minicallhome_interval = 30
             port = 1883
         "#;
         let config_only_username: Config = toml::from_str(toml_str_only_username).unwrap();

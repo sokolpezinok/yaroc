@@ -54,7 +54,9 @@ pub fn yaroc_nrf() {
     }
 
     if let Some(mqtt) = config.mqtt {
-        let mqtt_config: MqttConfig = mqtt.into();
+        let mut mqtt_config: MqttConfig = mqtt.into();
+        mqtt_config.minicallhome_interval =
+            embassy_time::Duration::from_secs(config.minicallhome_interval);
         match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt_config)) {
             Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
             Err(e) => error!("Failed to configure MQTT: {e}"),

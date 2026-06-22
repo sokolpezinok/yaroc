@@ -134,6 +134,8 @@ rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
 # rat = "LTE-M"
 # rat = "nbiot"        # Dashes are ignored and capitalization does not matter
 
+minicallhome_interval = 30           # Mini-call-home status interval in seconds
+
 [modem.bands]
 ltem = [20]            # LTE-M frequency bands
 nbiot = [20]           # NB-IoT frequency bands
@@ -145,7 +147,6 @@ port = 1883
 # username = "username"                   # Optional MQTT username
 # password = "password"                   # Optional MQTT password
 packet_timeout = 10                  # Packet transmission timeout in seconds
-minicallhome_interval = 30           # Mini-call-home status interval in seconds
 ```
 
 ### Running the configuration tool

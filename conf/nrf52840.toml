@@ -1,3 +1,5 @@
+# minicallhome_interval = 30           # Mini-call-home status interval in seconds
+
 [modem]
 apn = "internet.iot"   # The APN of your SIM card
 rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
@@ -12,4 +14,3 @@ nbiot = [20]           # NB-IoT frequency bands
 # url = "mqtt.example.com"
 # port = 1883
 # packet_timeout = 10                  # Packet transmission timeout in seconds
-# minicallhome_interval = 30           # Mini-call-home status interval in seconds

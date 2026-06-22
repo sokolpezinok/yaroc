@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::{error, info};
+use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
@@ -66,6 +66,8 @@ async fn main(spawner: Spawner) {
             flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await
         {
             mqtt_config.update(reduced_config);
+        } else {
+            warn!("Failed to read MQTT config from flash, using default MQTT config");
         }
     }
 
@@ -82,6 +84,7 @@ async fn main(spawner: Spawner) {
     };
 
     usb.spawn(spawner);
+    // TODO: minicallhome_interval shouldn't be in mqtt_config!
     spawner
         .spawn(minicallhome_loop(mqtt_config.minicallhome_interval).expect("Failed to spawn task"));
     spawner.spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()).expect("Failed to spawn task"));
