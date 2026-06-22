@@ -176,7 +176,6 @@ impl From<MqttConfigToml> for MqttConfig {
             url: HString::try_from(toml.url.as_str()).unwrap_or_default(),
             credentials,
             packet_timeout: Duration::from_secs(toml.packet_timeout),
-            minicallhome_interval: Duration::from_secs(30),
             port: toml.port,
         }
     }

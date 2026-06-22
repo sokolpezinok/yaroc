@@ -7,7 +7,6 @@ use postcard::to_stdvec;
 use pyo3::prelude::*;
 use yaroc_common::{
     bg77::modem_manager::ModemConfig,
-    mqtt::MqttConfig,
     usb::{UsbCommand, UsbResponse},
 };
 
@@ -54,12 +53,19 @@ pub fn yaroc_nrf() {
     }
 
     if let Some(mqtt) = config.mqtt {
-        let mut mqtt_config: MqttConfig = mqtt.into();
-        mqtt_config.minicallhome_interval =
-            embassy_time::Duration::from_secs(config.minicallhome_interval);
-        match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt_config)) {
+        match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
             Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
             Err(e) => error!("Failed to configure MQTT: {e}"),
         }
+    }
+
+    match send_command(
+        &mut serial,
+        UsbCommand::ConfigureDevice(embassy_time::Duration::from_secs(
+            config.minicallhome_interval,
+        )),
+    ) {
+        Ok(UsbResponse::Ok) => info!("Device configuration successful"),
+        Err(e) => error!("Failed to configure device: {e}"),
     }
 }

@@ -76,8 +76,6 @@ pub struct MqttClientConfig {
     pub name: String<24>,
     /// The MAC address of the device, used to form MQTT topics (e.g., "yar/mac_address/topic").
     pub mac_address: String<12>,
-    /// The interval at which mini call home messages are sent.
-    pub minicallhome_interval: Duration,
     /// The port of the MQTT broker.
     pub port: u16,
 }
@@ -90,7 +88,6 @@ impl Default for MqttClientConfig {
             packet_timeout: Duration::from_secs(35),
             name: String::from_str("test_client").unwrap(),
             mac_address: String::from_str("deadbeef").unwrap(),
-            minicallhome_interval: Duration::from_secs(30),
             port: 1883,
         }
     }
@@ -101,7 +98,6 @@ impl MqttClientConfig {
         self.url = reduced_config.url;
         self.credentials = reduced_config.credentials;
         self.packet_timeout = reduced_config.packet_timeout;
-        self.minicallhome_interval = reduced_config.minicallhome_interval;
         self.port = reduced_config.port;
     }
 }
@@ -118,8 +114,6 @@ pub struct MqttConfig {
     #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,
     /// The interval at which mini call home messages are sent.
-    #[serde(with = "duration_ms")]
-    pub minicallhome_interval: Duration,
     /// The port of the MQTT broker.
     pub port: u16,
 }
@@ -132,7 +126,6 @@ impl Default for MqttConfig {
             url: String::from_str("broker.emqx.io").unwrap(),
             credentials: None,
             packet_timeout: Duration::from_secs(35),
-            minicallhome_interval: Duration::from_secs(30),
             port: 1883,
         }
     }
@@ -162,7 +155,6 @@ mod tests {
                 String::from_str("my_password").unwrap(),
             )),
             packet_timeout: Duration::from_secs(10),
-            minicallhome_interval: Duration::from_secs(15),
             port: 8883,
         };
 
@@ -177,7 +169,6 @@ mod tests {
             ))
         );
         assert_eq!(client_config.packet_timeout, Duration::from_secs(10));
-        assert_eq!(client_config.minicallhome_interval, Duration::from_secs(15));
         assert_eq!(client_config.port, 8883);
         // Ensure name and mac address did not change
         assert_eq!(client_config.name, "test_client");
@@ -193,7 +184,6 @@ mod tests {
                 String::from_str("testpass").unwrap(),
             )),
             packet_timeout: Duration::from_secs(60),
-            minicallhome_interval: Duration::from_secs(45),
             port: 1884,
         };
 

@@ -17,7 +17,7 @@ use yaroc_common::{
 };
 use yaroc_nrf52840::{
     self as _,
-    device::Device,
+    device::{Device, DeviceConfig},
     flash::{Flash, NrfFlash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
@@ -60,6 +60,16 @@ async fn main(spawner: Spawner) {
         StaticCell::new();
     let flash_mutex = FLASH_MUTEX.init(flash_mutex);
     let mut flash = NrfFlash::new(flash_mutex);
+    let mut dc_buffer = [0; 4096];
+    let device_config = if let Ok(Some(device_config)) =
+        flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut dc_buffer).await
+    {
+        device_config
+    } else {
+        warn!("Failed to read device config from flash, using the default config");
+        DeviceConfig::default()
+    };
+
     let mut buffer = [0; 4096];
     {
         if let Ok(Some(reduced_config)) =
@@ -85,8 +95,9 @@ async fn main(spawner: Spawner) {
 
     usb.spawn(spawner);
     // TODO: minicallhome_interval shouldn't be in mqtt_config!
-    spawner
-        .spawn(minicallhome_loop(mqtt_config.minicallhome_interval).expect("Failed to spawn task"));
+    spawner.spawn(
+        minicallhome_loop(device_config.minicallhome_interval).expect("Failed to spawn task"),
+    );
     spawner.spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()).expect("Failed to spawn task"));
 
     let send_punch_fn = Bg77SendPunchFn::new(mqtt_config.packet_timeout);
