@@ -10,6 +10,11 @@ broker_url = "broker.emqx.io"
 [client.roc]
 enable = false
 
+[client.sim7020]
+# Use the Waveshare SIM7020 NB-IoT Raspbery Pi HAT
+enable = false
+port = "/dev/serial0"
+
 [meshtastic]
 # You can connect a Meshtastic device via USB and use it as a punch source.
 # The meshtastic devices acts as an online gateway for its LoRa mesh.

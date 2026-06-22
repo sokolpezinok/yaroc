@@ -34,7 +34,7 @@ Reflecting this name, the project's logo is based on the orienteering ISOM map s
 
 There will be a much more detailed and separate "Hardware recommendation" section later, but here is a short list of recommended setups:
 
-* **Finish Area, running `yarocd`**: [Raspberry Pi](https://rpishop.cz/) with a [Waveshare 2.66inch e-Paper Module](https://www.waveshare.com/2.66inch-e-paper-module.htm?srsltid=AfmBOoomFRnIrLDNmAqFSNwTLLluj7piMe67DC6wXiycHHUCPPDH4UsE) and a [Waveshare CP2102 USB UART Board (Type A)](https://www.waveshare.com/cp2102-usb-uart-board-type-a.htm) to display status and receive punches via USB (directly to MeOS, QuickEvent, etc.). Optionally, include a [RAK6421 Meshtastic Raspberry Pi HAT](https://store.rakwireless.com/products/meshtastic-raspberry-pi-hat-rak6421?variant=45805958955206) to listen to Meshtastic punches directly in `yarocd`.
+* **Finish Area, running `yarocd`**: [Raspberry Pi](https://rpishop.cz/) with a [Waveshare 2.66inch e-Paper Module](https://www.waveshare.com/2.66inch-e-paper-module.htm?srsltid=AfmBOoomFRnIrLDNmAqFSNwTLLluj7piMe67DC6wXiycHHUCPPDH4UsE) and a [Waveshare CP2102 USB UART Board (Type A)](https://www.waveshare.com/cp2102-usb-uart-board-type-a.htm) to display status and receive punches via USB (directly to MeOS, QuickEvent, etc.). Optionally, include a [RAK6421 Meshtastic Raspberry Pi HAT](https://store.rakwireless.com/products/meshtastic-raspberry-pi-hat-rak6421?variant=45805958955206) + [RAK13300](https://store.rakwireless.com/products/rak13300-wisblock-lpwan) to listen to Meshtastic punches directly in `yarocd`.
 * **Online Controls (NB-IoT/LTE-M variant), running the nRF52840 firmware**: [RAK Link.One](https://store.rakwireless.com/products/link-one-lte-m-nb-iot-lorawan-device-based-on-nrf52840-sx1262-and-bg77-arduino-ide-compatible?variant=42659406446790), EU868 variant with Unify Enclosure, and a SportIdent SRR sensor connected to the RAK19007 base board UART pins. We recommend using a hybrid LTE-M / NB-IoT SIM card if available. Currently you also need the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool), flashing over the USB port is not yet possible (but coming by the end of 2026).
 * **Online Controls (LTE/USB Modem or NB-IoT HAT), running `send-punch`**: [Raspberry Pi](https://rpishop.cz/raspberry-pi-2b/5584-recyberry-raspberry-pi-2-model-b-1gb-ram-v11.html) with a USB modem (e.g. Huawei E3372) or a [SIM7020 NB-IoT](https://www.waveshare.com/sim7020e-nb-iot-hat.htm) modem. SportIdent USB SRR dongle in the USB port. We recommend using Model 2 (doesn't have Wi-Fi) or 3 (has Wi-Fi). Higher models 4 and 5 are unnecessarily power-hungry.
 * **Radio Controls (LoRa / radio), running Meshtastic**: [RAK4631 + RAK19007](https://store.rakwireless.com/products/wisblock-starter-kit?variant=41786685096134) (EU868 variant) inside a [Unify Enclosure 100x75x38mm with solar panel](https://store.rakwireless.com/products/unify-enclosure-ip65-100x75x38-solar?variant=42533523587270), with a SportIdent SRR sensor connected to the RAK19007 base board UART pins. Optionally, include a [RAK12500 GPS module](https://store.rakwireless.com/products/rak12500-wisblock-gnss-location-module) for LoRa signal testing before the competition.
@@ -240,9 +240,9 @@ First, create a `send-punch.toml` file where you configure punch sources and cli
 ```toml
 log_level = "info"
 # USB sources are enabled by default: SRR dongle, mini-reader or BSM7-USB
-# You can disable that using `punch_source.usb.enable = false`
+# You can disable them using `punch_source.usb.enable = false`
 
-[punch_source.fake]
+[punch_source.fake] # Source of fake punches, triggered in regular intervals
 enable = true
 interval = 8
 
@@ -250,6 +250,11 @@ interval = 8
 enable = true
 broker_url = "broker.emqx.io"
 broker_port = 1883
+
+[client.sim7020]
+# Use the Waveshare SIM7020 NB-IoT HAT (linked in Hardware Recommendations) connected via serial UART
+enable = false
+port = "/dev/serial0"
 
 [meshtastic]
 # You can connect a Meshtastic device via USB or TCP and use it as a punch source.
