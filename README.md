@@ -344,18 +344,80 @@ When configured this way, `yarocd` will establish concurrent connections to all 
 
 # Development
 
-In order to start developing, install the dependencies using `uv`:
+Note: currently the development instructions are Linux-only. If there's interest, we can also add instructions for Windows. You should be able to figure out most things via quick internet search, though.
+
+## Rust Toolchain Setup
+
+Developing any of the Rust crates, Python bindings, or embedded firmware requires a working Rust toolchain. You can install it via [rustup](https://rustup.rs/):
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+The workspace defines its compiler toolchain settings in `rust-toolchain.toml` at the root level, which will be selected automatically by Cargo.
+
+## Pure Rust Crates (common, receiver)
+
+The workspace contains pure Rust crates like `common` and `receiver` which are used by both Python bindings and the embedded firmware.
+
+You can develop, build, and test them using standard `cargo` commands from the workspace root:
+
+- Check compilation: `cargo check`
+- Run unit tests: `cargo test`
+- Build specific packages: `cargo build -p yaroc-common` or `cargo build -p yaroc-receiver`
+
+## nRF52840 Embedded Firmware
+
+Development for the `nrf52840` embedded firmware requires specific hardware and flashing tools.
+
+### Hardware Requirements
+A [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) (or another compatible SWD debug probe) connected to the target board.
+
+### Software Installation
+You must have **`probe-rs`** installed on your development machine for flashing and debugging. You can install it using:
+```sh
+cargo install probe-rs-tools
+```
+
+On Linux, you will also need to configure `udev` rules to access the debug probe without root permissions:
+```sh
+sudo curl -L https://probe.rs/files/69-probe-rs.rules -o /etc/udev/rules.d/69-probe-rs.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+### Flashing and Running
+Since the cargo runner is configured with `probe-rs`, you can compile, flash, and run the firmware with logs outputted directly to your terminal by running:
+```sh
+cd nrf52840
+DEFMT_LOG=debug cargo run --release
+```
+
+## Python Bindings & Maturin
+
+In order to start developing the Python parts, install the dependencies using `uv`:
 
 ```sh
 cd python
 uv sync --all-extras
 ```
 
-This will create a `.venv` and install all extras including `dev` and `lsp`. The package is installed in edit mode by default, so you can test each file modification immediately.
+This will create a `.venv` and install all extras including `dev` and `lsp`.
 
+### Compiling Rust Bindings (Maturin)
+The Python package uses **[maturin](https://www.maturin.rs/)** as its build system to compile the Rust parts (under `python/src/`) into Python modules (specifically `yaroc.rs`).
+
+- Install `maturin` using `uv`: `uv tool install maturin`
+- maturin requires the **Rust toolchain** (documented above) to compile the Rust binary parts.
+- When running Python scripts/tests through `uv` (e.g. `uv run pytest`), `uv` automatically builds the Rust extension with Maturin behind the scenes.
+- You can manually build/install the package in editable mode inside the virtualenv with:
+  ```sh
+  cd python
+  uv run maturin develop -r
+  ```
 
 # Other projects
 
 * [ROC](https://roc.olresultat.se)
 * [jSh.radio](http://radio.jsh.de)
 * [WiRoc](https://wiroc.se)
+* [OriLive](https://orilive.live/)
