@@ -63,6 +63,16 @@ pub struct LteBandsToml {
     pub nbiot: Vec<u32>,
 }
 
+impl Default for LteBandsToml {
+    fn default() -> Self {
+        Self {
+            // Default bands in EU
+            ltem: vec![3, 8, 20],
+            nbiot: vec![3, 8, 20],
+        }
+    }
+}
+
 impl From<LteBandsToml> for LteBands {
     fn from(toml: LteBandsToml) -> Self {
         let mut bands = LteBands::default();
@@ -72,10 +82,11 @@ impl From<LteBandsToml> for LteBands {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum RatToml {
     Ltem,
     NbIot,
+    #[default]
     LtemNbIot,
 }
 
@@ -107,7 +118,9 @@ impl From<RatToml> for RAT {
 #[derive(Deserialize, Debug)]
 pub struct ModemConfigToml {
     pub apn: String,
+    #[serde(default)]
     pub rat: RatToml,
+    #[serde(default)]
     pub bands: LteBandsToml,
 }
 
@@ -124,7 +137,8 @@ impl From<ModemConfigToml> for ModemConfig {
 #[derive(Deserialize, Debug)]
 pub struct MqttConfigToml {
     pub url: String,
-    pub credentials: Option<(String, String)>,
+    pub username: Option<String>,
+    pub password: Option<String>,
     pub packet_timeout: u64,
     pub minicallhome_interval: u64,
     pub port: u16,
@@ -132,14 +146,20 @@ pub struct MqttConfigToml {
 
 impl From<MqttConfigToml> for MqttConfig {
     fn from(toml: MqttConfigToml) -> Self {
+        let u = toml.username.unwrap_or_default();
+        let p = toml.password.unwrap_or_default();
+        let credentials = if u.is_empty() && p.is_empty() {
+            None
+        } else {
+            Some((
+                HString::try_from(u.as_str()).unwrap_or_default(),
+                HString::try_from(p.as_str()).unwrap_or_default(),
+            ))
+        };
+
         MqttConfig {
             url: HString::try_from(toml.url.as_str()).unwrap_or_default(),
-            credentials: toml.credentials.as_ref().map(|(u, p)| {
-                (
-                    HString::try_from(u.as_str()).unwrap_or_default(),
-                    HString::try_from(p.as_str()).unwrap_or_default(),
-                )
-            }),
+            credentials,
             packet_timeout: Duration::from_secs(toml.packet_timeout),
             minicallhome_interval: Duration::from_secs(toml.minicallhome_interval),
             port: toml.port,
@@ -185,34 +205,114 @@ mod tests {
         let toml_str = r#"
             [modem]
             apn = "test.apn"
-            rat = "both"
+            rat = "LTE-M"
             [modem.bands]
             ltem = [1, 2, 3]
             nbiot = [20]
         "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.modem.apn, "test.apn");
-        assert!(matches!(config.modem.rat, RatToml::LtemNbIot));
+        assert!(matches!(config.modem.rat, RatToml::Ltem));
         assert_eq!(config.modem.bands.ltem, vec![1, 2, 3]);
         assert_eq!(config.modem.bands.nbiot, vec![20]);
+    }
+
+    #[test]
+    fn test_mqtt_config_deserialization() {
+        let toml_str = r#"
+            [modem]
+            apn = "test.apn"
+            rat = "both"
+            [modem.bands]
+            ltem = [1, 2, 3]
+            nbiot = [20]
+
+            [mqtt]
+            url = "mqtt.example.com"
+            username = "my_user"
+            password = "my_pass"
+            packet_timeout = 10
+            minicallhome_interval = 60
+            port = 1883
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let mqtt = config.mqtt.unwrap();
+        assert_eq!(mqtt.url, "mqtt.example.com");
+        assert_eq!(mqtt.username, Some("my_user".to_string()));
+        assert_eq!(mqtt.password, Some("my_pass".to_string()));
+        assert_eq!(mqtt.packet_timeout, 10);
+        assert_eq!(mqtt.minicallhome_interval, 60);
+        assert_eq!(mqtt.port, 1883);
+
+        let mqtt_config: MqttConfig = mqtt.into();
+        assert_eq!(
+            mqtt_config.credentials,
+            Some((
+                HString::try_from("my_user").unwrap(),
+                HString::try_from("my_pass").unwrap()
+            ))
+        );
+    }
+
+    #[test]
+    fn test_mqtt_config_no_credentials() {
+        let toml_str_no_creds = r#"
+            [modem]
+            apn = "test.apn"
+
+            [mqtt]
+            url = "mqtt.example.com"
+            packet_timeout = 5
+            minicallhome_interval = 30
+            port = 1883
+        "#;
+        let config_no_creds: Config = toml::from_str(toml_str_no_creds).unwrap();
+        let mqtt_no_creds = config_no_creds.mqtt.unwrap();
+        assert_eq!(mqtt_no_creds.username, None);
+        assert_eq!(mqtt_no_creds.password, None);
+
+        let mqtt_config_no_creds: MqttConfig = mqtt_no_creds.into();
+        assert_eq!(mqtt_config_no_creds.credentials, None);
+
+        // Test with only username specified
+        let toml_str_only_username = r#"
+            [modem]
+            apn = "test.apn"
+
+            [mqtt]
+            url = "mqtt.example.com"
+            username = "my_user"
+            packet_timeout = 5
+            minicallhome_interval = 30
+            port = 1883
+        "#;
+        let config_only_username: Config = toml::from_str(toml_str_only_username).unwrap();
+        let mqtt_only_username = config_only_username.mqtt.unwrap();
+        assert_eq!(mqtt_only_username.username, Some("my_user".to_string()));
+        assert_eq!(mqtt_only_username.password, None);
+
+        let mqtt_config_only_username: MqttConfig = mqtt_only_username.into();
+        assert_eq!(
+            mqtt_config_only_username.credentials,
+            Some((
+                HString::try_from("my_user").unwrap(),
+                HString::try_from("").unwrap()
+            ))
+        );
     }
 
     #[test]
     fn test_find_config_file() {
         let temp_file_path = std::env::temp_dir().join("test_yaroc_config.toml");
         std::fs::write(&temp_file_path, "").unwrap();
-
-        // 1. Existing file
         assert_eq!(find_config_file(&temp_file_path), temp_file_path);
-
-        // Clean up
         let _ = std::fs::remove_file(&temp_file_path);
 
-        // 2. Non-existent file
+        // Non-existent file
         let non_existent = Path::new("non_existent_config.toml");
         assert_eq!(find_config_file(non_existent), non_existent);
 
-        // 3. Fallback test using XDG_CONFIG_HOME on unix / APPDATA on windows
+        // Fallback test using XDG_CONFIG_HOME on unix / APPDATA on windows
         #[cfg(not(target_os = "windows"))]
         {
             let config_dir = std::env::temp_dir().join("yaroc_mock_config_unix");

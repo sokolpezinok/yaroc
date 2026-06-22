@@ -138,11 +138,12 @@ rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
 ltem = [20]            # LTE-M frequency bands
 nbiot = [20]           # NB-IoT frequency bands
 
-# Optional MQTT configuration (if omitted, default settings are used)
+# Optional MQTT configuration (if omitted, default broker `broker.emqx.io` is used)
 [mqtt]
 url = "mqtt.example.com"
 port = 1883
-# credentials = ["username", "password"] # Optional MQTT username and password
+# username = "username"                   # Optional MQTT username
+# password = "password"                   # Optional MQTT password
 packet_timeout = 10                  # Packet transmission timeout in seconds
 minicallhome_interval = 30           # Mini-call-home status interval in seconds
 ```
