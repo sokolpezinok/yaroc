@@ -134,20 +134,32 @@ impl From<ModemConfigToml> for ModemConfig {
     }
 }
 
+fn default_port() -> u16 {
+    1883
+}
+
+fn default_packet_timeout() -> u64 {
+    35
+}
+
 #[derive(Deserialize, Debug)]
 pub struct MqttConfigToml {
     pub url: String,
-    pub username: Option<String>,
-    pub password: Option<String>,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default = "default_packet_timeout")]
     pub packet_timeout: u64,
     pub minicallhome_interval: u64,
+    #[serde(default = "default_port")]
     pub port: u16,
 }
 
 impl From<MqttConfigToml> for MqttConfig {
     fn from(toml: MqttConfigToml) -> Self {
-        let u = toml.username.unwrap_or_default();
-        let p = toml.password.unwrap_or_default();
+        let u = toml.username;
+        let p = toml.password;
         let credentials = if u.is_empty() && p.is_empty() {
             None
         } else {
@@ -238,8 +250,8 @@ mod tests {
         let config: Config = toml::from_str(toml_str).unwrap();
         let mqtt = config.mqtt.unwrap();
         assert_eq!(mqtt.url, "mqtt.example.com");
-        assert_eq!(mqtt.username, Some("my_user".to_string()));
-        assert_eq!(mqtt.password, Some("my_pass".to_string()));
+        assert_eq!(mqtt.username, "my_user".to_string());
+        assert_eq!(mqtt.password, "my_pass".to_string());
         assert_eq!(mqtt.packet_timeout, 10);
         assert_eq!(mqtt.minicallhome_interval, 60);
         assert_eq!(mqtt.port, 1883);
@@ -262,14 +274,14 @@ mod tests {
 
             [mqtt]
             url = "mqtt.example.com"
-            packet_timeout = 5
             minicallhome_interval = 30
-            port = 1883
         "#;
         let config_no_creds: Config = toml::from_str(toml_str_no_creds).unwrap();
         let mqtt_no_creds = config_no_creds.mqtt.unwrap();
-        assert_eq!(mqtt_no_creds.username, None);
-        assert_eq!(mqtt_no_creds.password, None);
+        assert_eq!(mqtt_no_creds.username, "");
+        assert_eq!(mqtt_no_creds.password, "");
+        assert_eq!(mqtt_no_creds.port, 1883);
+        assert_eq!(mqtt_no_creds.packet_timeout, 35);
 
         let mqtt_config_no_creds: MqttConfig = mqtt_no_creds.into();
         assert_eq!(mqtt_config_no_creds.credentials, None);
@@ -288,8 +300,8 @@ mod tests {
         "#;
         let config_only_username: Config = toml::from_str(toml_str_only_username).unwrap();
         let mqtt_only_username = config_only_username.mqtt.unwrap();
-        assert_eq!(mqtt_only_username.username, Some("my_user".to_string()));
-        assert_eq!(mqtt_only_username.password, None);
+        assert_eq!(mqtt_only_username.username, "my_user".to_string());
+        assert_eq!(mqtt_only_username.password, "");
 
         let mqtt_config_only_username: MqttConfig = mqtt_only_username.into();
         assert_eq!(
