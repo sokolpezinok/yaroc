@@ -66,21 +66,21 @@ pip install --pre yaroc
 # Installation on RAK devices
 
 ## RAK Link.One NB-IoT/LTE-M
-The setup is currently quite complex and requires a working Rust toolchain and a debug probe. An easier way of flashing the firmware will be available by the end of 2026, without compilation and without a debug probe.
+Setting up the device is currently quite complex, requiring a working Rust toolchain and a debug probe. A simpler method to flash the firmware without compiling or using a debug probe will be available by late 2026.
 
-1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, follow [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). This will be used to flash the firmware and read the logs. Flashing over USB is currently not supported, but it is in the works.
+1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, following [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). The probe is used to flash the firmware and view logs. Flashing directly over USB is not currently supported, but is in development.
 2. Install Rust, `rustup`, and `cargo` if you haven't already:
    - **Linux**:
      ```sh
      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
      ```
    - **Windows**: Download and run [rustup-init.exe](https://rustup.rs).
-3. Install `probe-rs` to communicate with the debug probe. The recommended installation method is using their official script:
+3. Install `probe-rs` to communicate with the debug probe. We recommend installing it using the official script:
    - **Linux**:
      ```sh
      curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
      ```
-     On Linux, you will also need to configure `udev` rules to access the debug probe without root permissions:
+     On Linux, you must also configure `udev` rules to access the debug probe without root privileges:
      ```sh
      sudo curl -L https://probe.rs/files/69-probe-rs.rules -o /etc/udev/rules.d/69-probe-rs.rules
      sudo udevadm control --reload-rules && sudo udevadm trigger
@@ -97,15 +97,15 @@ The setup is currently quite complex and requires a working Rust toolchain and a
    ```sh
    rustup target add thumbv7em-none-eabihf
    ```
-5. Checkout this repository and flash the firmware using Cargo from its root directory:
+5. Clone the repository (if you haven't already), and flash the firmware using Cargo from the project root directory:
    ```sh
    DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
    ```
-6. This will run the firmware and also show the logs. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device network and MQTT parameters.
+6. This will compile, flash, and run the firmware, displaying the output logs in your terminal. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
 
 ## LoRa / Meshtastic
 > [!NOTE]
-> You can run Meshtastic on many more devices other than RAK Wireless, see [the official list](https://meshtastic.org/docs/hardware/devices/).
+> Meshtastic runs on many devices other than RAK Wireless; see [the official list](https://meshtastic.org/docs/hardware/devices/) for all supported hardware.
 
 Follow the [official documentation for nRF52](https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/).
 
