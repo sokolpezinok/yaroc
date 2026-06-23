@@ -35,7 +35,7 @@ Reflecting this name, the project's logo is based on the orienteering ISOM map s
 There will be a much more detailed and separate "Hardware recommendation" section later, but here is a short list of recommended setups:
 
 * **Finish Area, running `yarocd`**: [Raspberry Pi](https://rpishop.cz/) with a [Waveshare 2.66inch e-Paper Module](https://www.waveshare.com/2.66inch-e-paper-module.htm?srsltid=AfmBOoomFRnIrLDNmAqFSNwTLLluj7piMe67DC6wXiycHHUCPPDH4UsE) and a [Waveshare CP2102 USB UART Board (Type A)](https://www.waveshare.com/cp2102-usb-uart-board-type-a.htm) to display status and receive punches via USB (directly to MeOS, QuickEvent, etc.). Optionally, include a [RAK6421 Meshtastic Raspberry Pi HAT](https://store.rakwireless.com/products/meshtastic-raspberry-pi-hat-rak6421?variant=45805958955206) + [RAK13300](https://store.rakwireless.com/products/rak13300-wisblock-lpwan) to listen to Meshtastic punches directly in `yarocd`.
-* **Online Controls (NB-IoT/LTE-M variant), running the nRF52840 firmware**: [RAK Link.One](https://store.rakwireless.com/products/link-one-lte-m-nb-iot-lorawan-device-based-on-nrf52840-sx1262-and-bg77-arduino-ide-compatible?variant=42659406446790), EU868 variant with Unify Enclosure, and a SportIdent SRR sensor connected to the RAK19007 base board UART pins. We recommend using a hybrid LTE-M / NB-IoT SIM card if available. Currently you also need the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool), flashing over the USB port is not yet possible (but coming by the end of 2026).
+* **Online Controls (NB-IoT/LTE-M variant), running YAROC nRF52840 firmware**: [RAK Link.One](https://store.rakwireless.com/products/link-one-lte-m-nb-iot-lorawan-device-based-on-nrf52840-sx1262-and-bg77-arduino-ide-compatible?variant=42659406446790), EU868 variant with Unify Enclosure, and a SportIdent SRR sensor connected to the RAK19007 base board UART pins. We recommend using a hybrid LTE-M / NB-IoT SIM card if available. Currently you also need the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool), flashing over the USB port is not yet possible (but coming by the end of 2026).
 * **Online Controls (LTE/USB Modem or NB-IoT HAT), running `send-punch`**: [Raspberry Pi](https://rpishop.cz/raspberry-pi-2b/5584-recyberry-raspberry-pi-2-model-b-1gb-ram-v11.html) with a USB modem (e.g. Huawei E3372) or a [SIM7020 NB-IoT](https://www.waveshare.com/sim7020e-nb-iot-hat.htm) modem. SportIdent USB SRR dongle in the USB port. We recommend using Model 2 (doesn't have Wi-Fi) or 3 (has Wi-Fi). Higher models 4 and 5 are unnecessarily power-hungry.
 * **Radio Controls (LoRa / radio), running Meshtastic**: [RAK4631 + RAK19007](https://store.rakwireless.com/products/wisblock-starter-kit?variant=41786685096134) (EU868 variant) inside a [Unify Enclosure 100x75x38mm with solar panel](https://store.rakwireless.com/products/unify-enclosure-ip65-100x75x38-solar?variant=42533523587270), with a SportIdent SRR sensor connected to the RAK19007 base board UART pins. Optionally, include a [RAK12500 GPS module](https://store.rakwireless.com/products/rak12500-wisblock-gnss-location-module) for LoRa signal testing before the competition.
 
@@ -65,11 +65,8 @@ pip install --pre yaroc
 
 # Installation on RAK devices
 
-Note: You can run Meshtastic on many more devices other than RAK Wireless, see [the official list](https://meshtastic.org/docs/hardware/devices/).
-
-For Meshtastic, follow the [official documentation for nRF52](https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/).
-
-For Link.One using YAROC firmware, the setup is currently quite complex and requires a working Rust toolchain and a debug probe. An easier way of flashing the firmware will be available by the end of 2026, without compilation and via USB.
+## RAK Link.One NB-IoT/LTE-M
+The setup is currently quite complex and requires a working Rust toolchain and a debug probe. An easier way of flashing the firmware will be available by the end of 2026, without compilation and without a debug probe.
 
 1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, follow [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). This will be used to flash the firmware and read the logs. Flashing over USB is currently not supported, but it is in the works.
 2. Install Rust, `rustup`, and `cargo` if you haven't already:
@@ -105,6 +102,13 @@ For Link.One using YAROC firmware, the setup is currently quite complex and requ
    DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
    ```
 6. This will run the firmware and also show the logs. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device network and MQTT parameters.
+
+## LoRa / Meshtastic
+> [!NOTE]
+> You can run Meshtastic on many more devices other than RAK Wireless, see [the official list](https://meshtastic.org/docs/hardware/devices/).
+
+Follow the [official documentation for nRF52](https://meshtastic.org/docs/getting-started/flashing-firmware/nrf52/).
+
 
 # Usage
 
@@ -188,7 +192,8 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
        meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
        ```
 
-    > **Note:** This is not a bug, but a "feature" of some Meshtastic versions: the telemetry interval is scaled down to 60% for small meshes, so an interval of 5 minutes becomes 3 minutes in reality. To achieve a 5-minute update interval, set it to `500` instead of `300` (see [issue #8619](https://github.com/meshtastic/firmware/issues/8619)).
+    > [!WARNING]
+    > This is not a bug, but a "feature" of some Meshtastic versions: the telemetry interval is scaled down to 60% for small meshes, so an interval of 5 minutes becomes 3 minutes in reality. To achieve a 5-minute update interval, set it to `500` instead of `300` (see [issue #8619](https://github.com/meshtastic/firmware/issues/8619)).
 
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
