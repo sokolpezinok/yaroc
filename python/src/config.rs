@@ -1,19 +1,10 @@
 use embassy_time::Duration;
 use std::path::{Path, PathBuf};
 
-use clap::Parser;
 use heapless::String as HString;
 use serde::Deserialize;
 use yaroc_common::bg77::modem_manager::{LteBands, ModemConfig, RAT};
 use yaroc_common::mqtt::MqttConfig;
-
-#[derive(Parser, Debug)]
-pub struct Args {
-    #[arg(short, long)]
-    pub port: String,
-    #[arg(short, long, default_value = "nrf52840.toml")]
-    pub config: PathBuf,
-}
 
 pub fn find_config_file(path: &Path) -> PathBuf {
     if path.exists() {

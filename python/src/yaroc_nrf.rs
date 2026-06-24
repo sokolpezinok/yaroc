@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
@@ -10,7 +11,17 @@ use yaroc_common::{
     usb::{UsbCommand, UsbResponse},
 };
 
-use crate::config::{Args, Config};
+use crate::config::Config;
+
+#[derive(Parser, Debug)]
+pub struct Args {
+    #[arg(short, long)]
+    pub port: String,
+    #[arg(short, long, alias = "config", default_value = "nrf52840.toml")]
+    pub configure: PathBuf,
+    #[arg(long)]
+    pub erase_flash: bool,
+}
 
 fn send_command<S: Read + Write>(
     serial: &mut S,
@@ -41,31 +52,78 @@ pub fn yaroc_nrf() {
         .open_native()
         .expect("Unable to open serial port");
 
-    let config_path = crate::config::find_config_file(&args.config);
-    let config_str = std::fs::read_to_string(&config_path)
-        .unwrap_or_else(|e| panic!("Unable to read config file {}: {e}", config_path.display()));
-    let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
-
-    let modem_config: ModemConfig = config.modem.into();
-    match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
-        Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
-        Err(e) => error!("Failed to configure modem: {e}"),
-    }
-
-    if let Some(mqtt) = config.mqtt {
-        match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
-            Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
-            Err(e) => error!("Failed to configure MQTT: {e}"),
+    if args.erase_flash {
+        match send_command(&mut serial, UsbCommand::EraseFlash) {
+            Ok(UsbResponse::Ok) => info!("Flash erase successful"),
+            Err(e) => error!("Failed to erase flash: {e}"),
         }
     }
 
-    match send_command(
-        &mut serial,
-        UsbCommand::ConfigureDevice(embassy_time::Duration::from_secs(
-            config.minicallhome_interval,
-        )),
-    ) {
-        Ok(UsbResponse::Ok) => info!("Device configuration successful"),
-        Err(e) => error!("Failed to configure device: {e}"),
+    let config_path = crate::config::find_config_file(&args.configure);
+    match std::fs::read_to_string(&config_path) {
+        Ok(config_str) => {
+            let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
+            let modem_config: ModemConfig = config.modem.into();
+            match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
+                Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
+                Err(e) => error!("Failed to configure modem: {e}"),
+            }
+
+            if let Some(mqtt) = config.mqtt {
+                match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
+                    Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
+                    Err(e) => error!("Failed to configure MQTT: {e}"),
+                }
+            }
+
+            match send_command(
+                &mut serial,
+                UsbCommand::ConfigureDevice(embassy_time::Duration::from_secs(
+                    config.minicallhome_interval,
+                )),
+            ) {
+                Ok(UsbResponse::Ok) => info!("Device configuration successful"),
+                Err(e) => error!("Failed to configure device: {e}"),
+            }
+        }
+        Err(e) => {
+            if args.erase_flash {
+                info!("No config file found or readable, skipping configuration: {e}");
+            } else {
+                panic!("Unable to read config file {}: {e}", config_path.display());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_args_parsing() {
+        let args = Args::parse_from([
+            "test_bin",
+            "--port",
+            "/dev/ttyACM0",
+            "--configure",
+            "my_config.toml",
+            "--erase-flash",
+        ]);
+        assert_eq!(args.port, "/dev/ttyACM0");
+        assert_eq!(args.configure, PathBuf::from("my_config.toml"));
+        assert!(args.erase_flash);
+
+        // Test with config alias
+        let args_alias = Args::parse_from([
+            "test_bin",
+            "--port",
+            "/dev/ttyACM0",
+            "--config",
+            "my_config.toml",
+        ]);
+        assert_eq!(args_alias.port, "/dev/ttyACM0");
+        assert_eq!(args_alias.configure, PathBuf::from("my_config.toml"));
+        assert!(!args_alias.erase_flash);
     }
 }
