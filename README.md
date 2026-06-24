@@ -69,12 +69,19 @@ pip install --pre yaroc
 Setting up the device is currently quite complex, requiring a working Rust toolchain and a debug probe. A simpler method to flash the firmware without compiling or using a debug probe will be available by late 2026.
 
 1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, following [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). The probe is used to flash the firmware and view logs. Flashing directly over USB is not currently supported, but is in development.
+   > [!TIP]
+   > **Using a Raspberry Pi Debug Probe**
+   > If you do not have a RAKDAP1, you can use the Raspberry Pi Deubg Probe debug probe, too. More information will be added later.
 2. Install Rust, `rustup`, and `cargo` if you haven't already:
    - **Linux**:
      ```sh
      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
      ```
-   - **Windows**: Download and run [rustup-init.exe](https://rustup.rs).
+   - **Windows**: Install rustup and Visual Studio build tools using winget
+     ```powershell
+     winget install rustup
+     winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+     ```
 3. Install `probe-rs` to communicate with the debug probe. We recommend installing it using the official script:
    - **Linux**:
      ```sh
@@ -91,7 +98,7 @@ Setting up the device is currently quite complex, requiring a working Rust toolc
      ```
    Alternatively, you can install it via Cargo:
    ```sh
-   cargo install probe-rs --features cli
+   cargo install probe-rs-tools --locked
    ```
 4. Set up the Rust toolchain target for the nRF52840 (ARM Cortex-M4F):
    ```sh
@@ -141,16 +148,16 @@ rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
 minicallhome_interval = 30           # Mini-call-home status interval in seconds
 
 [modem.bands]
-ltem = [20]            # LTE-M frequency bands
-nbiot = [20]           # NB-IoT frequency bands
+ltem = [3, 8, 20]            # LTE-M frequency bands
+nbiot = [3, 8, 20]           # NB-IoT frequency bands
 
 # Optional MQTT configuration (if omitted, default broker `broker.emqx.io` is used)
 [mqtt]
 url = "mqtt.example.com"
 port = 1883
-# username = "username"                   # Optional MQTT username
-# password = "password"                   # Optional MQTT password
-packet_timeout = 10                  # Packet transmission timeout in seconds
+# username = "username"              # Optional MQTT username
+# password = "password"              # Optional MQTT password
+packet_timeout = 35                  # Packet transmission timeout in seconds
 ```
 
 ### Running the configuration tool
