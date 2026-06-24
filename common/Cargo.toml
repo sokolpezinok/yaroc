@@ -37,7 +37,7 @@ chrono = { workspace = true, features = ["alloc"] }
 critical-section = { version = "1", features = ["std"] }
 env_logger = "0.11.6"
 mockall = "0.14.0"
-static_cell = { workspace = true } #unified
+static_cell = { workspace = true }
 
 [[test]]
 name = "backoff"

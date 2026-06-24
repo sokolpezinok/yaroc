@@ -6,11 +6,11 @@ rat = "NB-IoT"         # Radio Access Technology: "NB-IoT", "LTE-M", or "both"
 # rat = "LTE-M"
 
 [modem.bands]
-ltem = [20]            # LTE-M frequency bands
-nbiot = [20]           # NB-IoT frequency bands
+ltem = [3, 8, 20]            # LTE-M frequency bands
+nbiot = [3, 8, 20]           # NB-IoT frequency bands
 
 # Optional MQTT configuration (if omitted, default settings are used)
 # [mqtt]
 # url = "mqtt.example.com"
 # port = 1883
-# packet_timeout = 10                  # Packet transmission timeout in seconds
+# packet_timeout = 35                  # Packet transmission timeout in seconds
