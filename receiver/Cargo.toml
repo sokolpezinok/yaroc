@@ -2,7 +2,7 @@
 name = "yaroc-receiver"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = { workspace = true }
 
 [features]
 default = ["udev"]
@@ -23,7 +23,7 @@ tokio = { workspace = true, features = ["full"] }
 tokio-serial = { workspace = true }
 tokio-util = { workspace = true, features = ["time"] }
 uuid = { version = "1.17.0", features = ["v4"] }
-yaroc-common = { path = "../common", features = ["std"] }
+yaroc-common = { workspace = true, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-udev = { version = "0.10.0", optional = true }

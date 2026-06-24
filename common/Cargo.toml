@@ -2,7 +2,7 @@
 name = "yaroc-common"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = { workspace = true }
 
 [features]
 default = []
@@ -25,8 +25,8 @@ geoutils = { workspace = true, optional = true }
 heapless =  { workspace = true, features = ["serde"] }
 log = { workspace = true }
 postcard = { workspace = true }
-serde = { workspace = true }
 sequential-storage = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [build-dependencies]

@@ -3,7 +3,7 @@ name = "yaroc-nrf52840"
 version = "0.1.0"
 authors = ["Lukáš Poláček <lukas@polacek.email>"]
 edition = "2024"
-rust-version = "1.96"
+rust-version = { workspace = true }
 
 [features]
 default = []
@@ -34,4 +34,4 @@ sequential-storage = { workspace = true, features = ["defmt"] }
 serde = { workspace = true }
 static_cell = { workspace = true }
 thiserror = { workspace = true }
-yaroc-common = { path = "../common", features = ["defmt", "nrf"] }
+yaroc-common = { workspace = true, features = ["defmt", "nrf"] }
