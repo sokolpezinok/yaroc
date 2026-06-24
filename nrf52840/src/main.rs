@@ -13,11 +13,11 @@ use yaroc_common::{
     bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig},
-    send_punch::SendPunch,
+    send_punch::{DeviceConfig, SendPunch},
 };
 use yaroc_nrf52840::{
     self as _,
-    device::{Device, DeviceConfig},
+    device::Device,
     flash::{Flash, NrfFlash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
@@ -94,7 +94,6 @@ async fn main(spawner: Spawner) {
     };
 
     usb.spawn(spawner);
-    // TODO: minicallhome_interval shouldn't be in mqtt_config!
     spawner.spawn(
         minicallhome_loop(device_config.minicallhome_interval).expect("Failed to spawn task"),
     );

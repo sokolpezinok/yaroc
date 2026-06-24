@@ -8,6 +8,7 @@ use femtopb::{Message, repeated};
 use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
+use sequential_storage::map::PostcardValue;
 
 use crate::at::response::AT_COMMAND_SIZE;
 use crate::at::uart::UrcHandlerType;
@@ -18,7 +19,7 @@ use crate::bg77::mqtt::MqttClient;
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
 use crate::flash::{Flash, ValueIndex};
-use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos};
+use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos, duration_ms};
 use crate::proto::Punches;
 use crate::punch::SiPunch;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
@@ -48,7 +49,29 @@ pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
     system_info: SystemInfo<M>,
     last_reconnect: Option<Instant>,
     flash: F,
+    name: String<24>,
 }
+
+/// Configuration for the device.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct DeviceConfig<'a> {
+    /// The name of the device.
+    pub name: &'a str,
+    /// MiniCallHome send interval
+    #[serde(with = "duration_ms")]
+    pub minicallhome_interval: Duration,
+}
+
+impl<'a> Default for DeviceConfig<'a> {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            minicallhome_interval: Duration::from_secs(30),
+        }
+    }
+}
+
+impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
 
 impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Creates a new `SendPunch` instance.
@@ -68,6 +91,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         modem_config: ModemConfig,
         flash: F,
     ) -> Self {
+        let name = mqtt_config.name.clone();
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
 
@@ -84,7 +108,20 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
             flash,
+            name,
         }
+    }
+
+    /// Updates the device configuration in flash.
+    pub async fn update_device_config(
+        &mut self,
+        minicallhome_interval: Duration,
+    ) -> crate::Result<()> {
+        let device_config = DeviceConfig {
+            name: &self.name,
+            minicallhome_interval,
+        };
+        self.flash.write(ValueIndex::DeviceConfig, device_config).await
     }
 
     /// Creates a new `SendPunch` instance without spawning any tasks.
@@ -114,6 +151,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             system_info: SystemInfo::<M>::default(),
             last_reconnect: None,
             flash,
+            name: "test-send-punch".try_into().unwrap(),
         }
     }
 

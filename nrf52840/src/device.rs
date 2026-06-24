@@ -9,15 +9,12 @@ use embassy_nrf::usb::{self, Driver};
 use embassy_nrf::{bind_interrupts, saadc, temp};
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::mutex::Mutex;
-use embassy_time::Duration;
 use heapless::String;
-use sequential_storage::map::PostcardValue;
 
 use crate::ble::Ble;
 use crate::usb::Usb;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
-use yaroc_common::mqtt::duration_ms;
 use yaroc_common::si_uart::SiUart;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -57,27 +54,6 @@ pub struct Device {
 /// The mechanism for detecting VBUS (USB power) presence.
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
-
-/// Configuration for the device.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct DeviceConfig<'a> {
-    /// The name of the device.
-    pub name: &'a str,
-    /// MiniCallHome send interval
-    #[serde(with = "duration_ms")]
-    pub minicallhome_interval: Duration,
-}
-
-impl<'a> Default for DeviceConfig<'a> {
-    fn default() -> Self {
-        Self {
-            name: Default::default(),
-            minicallhome_interval: Duration::from_secs(30),
-        }
-    }
-}
-
-impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
 
 impl Default for Device {
     /// Initializes all the drivers and peripherals of the device

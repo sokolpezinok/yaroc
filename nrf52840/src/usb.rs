@@ -85,8 +85,8 @@ impl RequestHandler for SendPunchHandler {
                 send_punch.configure_mqtt(mqtt_config).await?;
                 info!("MQTT reconfigured");
             }
-            UsbCommand::ConfigureDevice(_minicallhome_interval) => {
-                // todo!();
+            UsbCommand::ConfigureDevice(minicallhome_interval) => {
+                send_punch.update_device_config(minicallhome_interval).await?;
             }
             UsbCommand::EraseFlash => {
                 send_punch.erase_flash().await?;
