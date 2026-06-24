@@ -16,7 +16,7 @@ cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5.0"
 
 defmt = { workspace = true }
-defmt-rtt = "1.0"
+defmt-rtt = { version = "1.0", features = ["disable-blocking-mode"] }
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-embedded-hal = { workspace = true }
 embassy-executor = { workspace = true, features = ["platform-cortex-m", "defmt", "executor-interrupt"] }
