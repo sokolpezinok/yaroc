@@ -108,11 +108,13 @@ fn test_mqtt_connect_ok() {
 #[test]
 fn test_mqtt_connect_login_ok() {
     let mut bg77 = MockAtUart::new();
-    let mut config = MqttClientConfig::default();
-    config.credentials = Some((
-        String::from_str("user").unwrap(),
-        String::from_str("password").unwrap(),
-    ));
+    let config = MqttClientConfig {
+        credentials: Some((
+            String::from_str("user").unwrap(),
+            String::from_str("password").unwrap(),
+        )),
+        ..Default::default()
+    };
 
     expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
     expect_call_at(
@@ -139,8 +141,10 @@ fn test_mqtt_send_short_message_ok() {
     let mut bg77 = MockAtUart::new();
     let topic = "topic";
     let message = b"hello";
-    let mut mqtt_config = MqttClientConfig::default();
-    mqtt_config.packet_timeout = Duration::from_secs(27);
+    let mqtt_config = MqttClientConfig {
+        packet_timeout: Duration::from_secs(27),
+        ..Default::default()
+    };
 
     expect_call_at(
         &mut bg77,

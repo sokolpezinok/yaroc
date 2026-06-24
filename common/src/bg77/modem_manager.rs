@@ -266,8 +266,10 @@ mod test {
 
     #[test]
     fn test_configure_modem() {
-        let mut config = ModemConfig::default();
-        config.apn = String::from_str("test-apn").unwrap();
+        let mut config = ModemConfig {
+            apn: String::from_str("test-apn").unwrap(),
+            ..Default::default()
+        };
         config.bands.set_ltem_bands(&[3]);
         let modem_manager = ModemManager::<FakeModem>::new(config);
 

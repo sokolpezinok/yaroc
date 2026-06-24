@@ -285,7 +285,7 @@ mod test {
             cellid: 0x2EF46,
             network_type: EnumValue::Known(proto::CellNetworkType::LteM),
             time: Some(Timestamp {
-                millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+                millis_epoch: 1_706_523_131_124, // 2024-01-29T11:12:11.124+01:00
                 ..Default::default()
             }),
             ..Default::default()
@@ -322,7 +322,7 @@ mod test {
             cellid: 0x2EF46,
             network_type: EnumValue::Known(proto::CellNetworkType::LteM),
             time: Some(Timestamp {
-                millis_epoch: 1706523131_124, // 2024-01-29T11:12:11.124+01:00
+                millis_epoch: 1_706_523_131_124, // 2024-01-29T11:12:11.124+01:00
                 ..Default::default()
             }),
             ..Default::default()

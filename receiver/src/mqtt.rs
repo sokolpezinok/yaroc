@@ -177,7 +177,7 @@ impl MqttReceiver {
             let now = {
                 #[cfg(test)]
                 {
-                    self.test_now.unwrap_or_else(|| Local::now())
+                    self.test_now.unwrap_or_else(Local::now)
                 }
                 #[cfg(not(test))]
                 {
@@ -382,7 +382,7 @@ mod test {
             ..Default::default()
         };
         let mut receiver = MqttReceiver::new(config, macs.iter());
-        let exact_time = Local::now().into();
+        let exact_time = Local::now();
         receiver.test_now = Some(exact_time);
 
         // Get the next message with a timeout to prevent hanging

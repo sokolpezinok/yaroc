@@ -451,7 +451,7 @@ mod tests {
         mqtt_tx
             .send(Ok(crate::mqtt::Message::Punches(
                 MacAddress::default(),
-                Local::now().into(),
+                Local::now(),
                 buf,
             )))
             .unwrap();

@@ -27,7 +27,7 @@ impl TimedResponse {
 
 impl PartialOrd for TimedResponse {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.time.partial_cmp(&other.time)
+        Some(self.cmp(other))
     }
 }
 
@@ -215,7 +215,7 @@ async fn main(spawner: Spawner) {
             0 => assert!(time.as_millis().abs_diff(1800) <= 15),
             // 100 try 1,  400 try 2, 200 try 3, and in-between (1 + 2) * 100 backoff
             1 => assert!(time.as_millis().abs_diff(1000) <= 10),
-            _ => assert!(false, "Got wrong message"),
+            _ => panic!("Got wrong message"),
         }
     }
     assert!(PUBLISH_EVENTS.is_empty());

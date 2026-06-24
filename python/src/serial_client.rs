@@ -738,8 +738,7 @@ mod tests {
         let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
         let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
 
-        let stream = futures::stream::iter(vec![Err::<&[u8], io::Error>(io::Error::new(
-            io::ErrorKind::Other,
+        let stream = futures::stream::iter(vec![Err::<&[u8], io::Error>(io::Error::other(
             "mock error",
         ))]);
         let reader = tokio_util::io::StreamReader::new(stream);

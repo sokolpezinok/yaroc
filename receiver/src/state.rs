@@ -683,7 +683,7 @@ mod test_punch {
         let punch = SiPunch::new_send_last_record(1715004, 47, punch_time, 2).raw;
         let punches_slice: &[&[u8]] = &[&punch];
         let punches = Punches {
-            punches: Repeated::from_slice(&punches_slice),
+            punches: Repeated::from_slice(punches_slice),
             ..Default::default()
         };
         let mut buf = vec![0u8; punches.encoded_len()];

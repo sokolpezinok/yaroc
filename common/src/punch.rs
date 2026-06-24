@@ -502,7 +502,7 @@ mod test_punch {
     fn test_bytes_to_card() {
         let raw_punch =
             b"\xff\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3\x03";
-        let card = SiPunch::bytes_to_card(&raw_punch);
+        let card = SiPunch::bytes_to_card(raw_punch);
         assert_eq!(card, 1715004);
     }
 
