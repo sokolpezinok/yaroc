@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::{error, info, warn};
+use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
@@ -60,28 +60,27 @@ async fn main(spawner: Spawner) {
         StaticCell::new();
     let flash_mutex = FLASH_MUTEX.init(flash_mutex);
     let mut flash = NrfFlash::new(flash_mutex);
-    let mut dc_buffer = [0; 4096];
-    let device_config = if let Ok(Some(device_config)) =
-        flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut dc_buffer).await
-    {
-        device_config
-    } else {
-        warn!("Failed to read device config from flash, using the default config");
-        DeviceConfig::default()
-    };
-
     let mut buffer = [0; 4096];
-    {
-        if let Ok(Some(reduced_config)) =
-            flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await
-        {
+    let device_config =
+        match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut buffer).await {
+            Ok(config) => config.unwrap_or_default(),
+            Err(err) => {
+                error!("Error while reading device config from flash: {}", err);
+                DeviceConfig::default()
+            }
+        };
+
+    match flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await {
+        Ok(Some(reduced_config)) => {
             mqtt_config.update(reduced_config);
-        } else {
-            warn!("Failed to read MQTT config from flash, using default MQTT config");
+        }
+        Ok(None) => {}
+        Err(err) => {
+            error!("Error while reading MQTT config from flash: {}", err);
         }
     }
 
-    let modem_config = match flash.read(ValueIndex::ModemConfig, &mut buffer).await {
+    let modem_config = match flash.read::<ModemConfig>(ValueIndex::ModemConfig, &mut buffer).await {
         Ok(config) => config.unwrap_or_default(),
         Err(err) => {
             error!("Error while reading modem config from flash: {}", err);

@@ -54,15 +54,15 @@ pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
 
 /// Configuration for the device.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct DeviceConfig<'a> {
+pub struct DeviceConfig {
     /// The name of the device.
-    pub name: &'a str,
+    pub name: String<24>,
     /// MiniCallHome send interval
     #[serde(with = "duration_ms")]
     pub minicallhome_interval: Duration,
 }
 
-impl<'a> Default for DeviceConfig<'a> {
+impl Default for DeviceConfig {
     fn default() -> Self {
         Self {
             name: Default::default(),
@@ -71,7 +71,7 @@ impl<'a> Default for DeviceConfig<'a> {
     }
 }
 
-impl<'a> PostcardValue<'a> for DeviceConfig<'a> {}
+impl PostcardValue<'_> for DeviceConfig {}
 
 impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Creates a new `SendPunch` instance.
@@ -118,7 +118,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         minicallhome_interval: Duration,
     ) -> crate::Result<()> {
         let device_config = DeviceConfig {
-            name: &self.name,
+            name: self.name.clone(),
             minicallhome_interval,
         };
         self.flash.write(ValueIndex::DeviceConfig, device_config).await

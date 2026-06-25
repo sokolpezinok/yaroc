@@ -113,7 +113,6 @@ pub struct MqttConfig {
     /// The timeout duration for individual MQTT packets.
     #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,
-    /// The interval at which mini call home messages are sent.
     /// The port of the MQTT broker.
     pub port: u16,
 }
