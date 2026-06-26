@@ -133,7 +133,9 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         mut device_config: DeviceConfig,
     ) -> crate::Result<()> {
         device_config.name = self.name.clone();
-        self.flash.write(ValueIndex::DeviceConfig, device_config).await
+        self.flash.write(ValueIndex::DeviceConfig, device_config).await?;
+        info!("Device config written to flash");
+        Ok(())
     }
 
     /// Creates a new `SendPunch` instance without spawning any tasks.

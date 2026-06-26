@@ -81,6 +81,7 @@ pub fn yaroc_nrf() {
                 minicallhome_interval: embassy_time::Duration::from_secs(
                     config.minicallhome_interval,
                 ),
+                srr_rx_pin: config.srr_rx_pin.into(),
                 ..Default::default()
             };
             match send_command(&mut serial, UsbCommand::ConfigureDevice(device_config)) {

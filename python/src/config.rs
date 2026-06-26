@@ -1,5 +1,6 @@
 use embassy_time::Duration;
 use std::path::{Path, PathBuf};
+use yaroc_common::send_punch::UartRxPin;
 
 use heapless::String as HString;
 use serde::Deserialize;
@@ -91,7 +92,7 @@ impl<'de> Deserialize<'de> for RatToml {
             "ltem" => Ok(RatToml::Ltem),
             "nbiot" => Ok(RatToml::NbIot),
             "both" | "all" | "ltemnbiot" => Ok(RatToml::LtemNbIot),
-            _ => Err(serde::de::Error::custom(format!("unknown RAT: {}", s))),
+            _ => Err(serde::de::Error::custom(format!("Unknown RAT: {}", s))),
         }
     }
 }
@@ -102,6 +103,39 @@ impl From<RatToml> for RAT {
             RatToml::Ltem => RAT::Ltem,
             RatToml::NbIot => RAT::NbIot,
             RatToml::LtemNbIot => RAT::LtemNbIot,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum SrrRxPin {
+    #[default]
+    Scl,
+    Sda,
+    Ain1,
+}
+
+impl<'de> Deserialize<'de> for SrrRxPin {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?.to_lowercase();
+        match s.as_str() {
+            "scl" => Ok(SrrRxPin::Scl),
+            "sda" => Ok(SrrRxPin::Sda),
+            "ain1" => Ok(SrrRxPin::Ain1),
+            _ => Err(serde::de::Error::custom(format!("Unknown pin: {}", s))),
+        }
+    }
+}
+
+impl From<SrrRxPin> for UartRxPin {
+    fn from(value: SrrRxPin) -> Self {
+        match value {
+            SrrRxPin::Scl => UartRxPin::Scl,
+            SrrRxPin::Sda => UartRxPin::Sda,
+            SrrRxPin::Ain1 => UartRxPin::Ain1,
         }
     }
 }
@@ -178,6 +212,8 @@ pub struct Config {
     pub mqtt: Option<MqttConfigToml>,
     #[serde(default = "default_minicallhome_interval")]
     pub minicallhome_interval: u64,
+    #[serde(default)]
+    pub srr_rx_pin: SrrRxPin,
 }
 
 #[cfg(test)]
@@ -243,6 +279,7 @@ mod tests {
     fn test_mqtt_config_deserialization() {
         let toml_str = r#"
             minicallhome_interval = 60
+            srr_rx_pin = "sda"
 
             [modem]
             apn = "test.apn"
@@ -260,6 +297,7 @@ mod tests {
         "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.minicallhome_interval, 60);
+        assert_eq!(config.srr_rx_pin, SrrRxPin::Sda);
 
         let mqtt = config.mqtt.unwrap();
         assert_eq!(mqtt.url, "mqtt.example.com");
