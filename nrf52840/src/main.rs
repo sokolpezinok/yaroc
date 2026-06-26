@@ -31,7 +31,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 /// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let device = Device::new(Default::default()).await;
+    let device = Device::new().await;
     let Device {
         mut green_led,
         mac_address,

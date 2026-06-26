@@ -52,14 +52,28 @@ pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
     name: String<24>,
 }
 
+/// UART0 RX pin options.
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum UartRxPin {
+    /// The default SCL (P0.14) pin.
+    #[default]
+    Scl,
+    /// The SDA (P0.13) pin.
+    Sda,
+    /// The AIN1 (P0.31) pin.
+    Ain1,
+}
+
 /// Configuration for the device.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct DeviceConfig {
     /// The name of the device.
     pub name: String<24>,
     /// MiniCallHome send interval
     #[serde(with = "duration_ms")]
     pub minicallhome_interval: Duration,
+    /// The PIN used by SRR RX
+    pub srr_rx_pin: UartRxPin,
 }
 
 impl Default for DeviceConfig {
@@ -67,6 +81,7 @@ impl Default for DeviceConfig {
         Self {
             name: Default::default(),
             minicallhome_interval: Duration::from_secs(30),
+            srr_rx_pin: Default::default(),
         }
     }
 }
@@ -115,12 +130,9 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Updates the device configuration in flash.
     pub async fn update_device_config(
         &mut self,
-        minicallhome_interval: Duration,
+        mut device_config: DeviceConfig,
     ) -> crate::Result<()> {
-        let device_config = DeviceConfig {
-            name: self.name.clone(),
-            minicallhome_interval,
-        };
+        device_config.name = self.name.clone();
         self.flash.write(ValueIndex::DeviceConfig, device_config).await
     }
 

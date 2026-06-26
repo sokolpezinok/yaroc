@@ -3,7 +3,6 @@ use core::future::Future;
 use defmt::{debug, error, info, warn};
 #[cfg(feature = "nrf")]
 use embassy_nrf::usb::{Driver, vbus_detect::SoftwareVbusDetect};
-use embassy_time::Duration;
 #[cfg(feature = "nrf")]
 use embassy_usb::class::cdc_acm::CdcAcmClass;
 #[cfg(not(feature = "defmt"))]
@@ -13,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::bg77::modem_manager::ModemConfig;
 use crate::error::Error;
-use crate::mqtt::{MqttConfig, duration_ms};
+use crate::mqtt::MqttConfig;
+use crate::send_punch::DeviceConfig;
 
 #[cfg(feature = "nrf")]
 /// Type alias for the USB driver.
@@ -27,8 +27,7 @@ pub enum UsbCommand {
     /// Configure MQTT settings.
     ConfigureMqtt(MqttConfig),
     /// Configure device settings (MiniCallHome interval).
-    #[serde(with = "duration_ms")]
-    ConfigureDevice(Duration),
+    ConfigureDevice(DeviceConfig),
     /// Erase the flash memory.
     EraseFlash,
 }

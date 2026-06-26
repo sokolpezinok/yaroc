@@ -6,6 +6,7 @@ use clap::Parser;
 use log::{error, info};
 use postcard::to_stdvec;
 use pyo3::prelude::*;
+use yaroc_common::send_punch::DeviceConfig;
 use yaroc_common::{
     bg77::modem_manager::ModemConfig,
     usb::{UsbCommand, UsbResponse},
@@ -76,12 +77,13 @@ pub fn yaroc_nrf() {
                 }
             }
 
-            match send_command(
-                &mut serial,
-                UsbCommand::ConfigureDevice(embassy_time::Duration::from_secs(
+            let device_config = DeviceConfig {
+                minicallhome_interval: embassy_time::Duration::from_secs(
                     config.minicallhome_interval,
-                )),
-            ) {
+                ),
+                ..Default::default()
+            };
+            match send_command(&mut serial, UsbCommand::ConfigureDevice(device_config)) {
                 Ok(UsbResponse::Ok) => info!("Device configuration successful"),
                 Err(e) => error!("Failed to configure device: {e}"),
             }

@@ -19,7 +19,7 @@ use crate::usb::Usb;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::flash::{Flash, ValueIndex};
-use yaroc_common::send_punch::DeviceConfig;
+use yaroc_common::send_punch::{DeviceConfig, UartRxPin};
 use yaroc_common::si_uart::SiUart;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -63,28 +63,9 @@ static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
 static FLASH_MUTEX: StaticCell<Mutex<RawMutex, nrf_softdevice::Flash>> = StaticCell::new();
 
-/// UART0 RX pin options.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum UartRxPin {
-    /// The default SCL (P0.14) pin.
-    #[default]
-    Scl,
-    /// The SDA (P0.13) pin.
-    Sda,
-    /// The AIN1 (P0.31) pin.
-    Ain1,
-}
-
-/// Configuration for the Device.
-#[derive(Clone, Copy, Default)]
-pub struct Config {
-    /// The pin to use for UART0 RX.
-    pub srr_rx_pin: UartRxPin,
-}
-
 impl Device {
     /// Initializes all the drivers and peripherals of the device with the given configuration
-    pub async fn new(hw_config: Config) -> Self {
+    pub async fn new() -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -106,7 +87,7 @@ impl Device {
         config.baudrate = uarte::Baudrate::Baud38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
         Interrupt::UARTE1.set_priority(Priority::P2);
-        let rx_pin = match hw_config.srr_rx_pin {
+        let rx_pin = match device_config.srr_rx_pin {
             UartRxPin::Ain1 => p.P0_31.into::<AnyPin>(),
             UartRxPin::Scl => p.P0_14.into::<AnyPin>(),
             UartRxPin::Sda => p.P0_13.into::<AnyPin>(),
