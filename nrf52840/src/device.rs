@@ -1,5 +1,5 @@
 use embassy_nrf::config::Config as NrfConfig;
-use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
+use embassy_nrf::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
 use embassy_nrf::peripherals::{UARTE0, UARTE1};
 use embassy_nrf::saadc::{ChannelConfig, Config as SaadcConfig, Saadc, Time};
@@ -55,9 +55,35 @@ pub struct Device {
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
 
+/// UART0 RX pin options.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UartRxPin {
+    /// The default SCL (P0.14) pin.
+    #[default]
+    Scl,
+    /// The SDA (P0.13) pin.
+    Sda,
+    /// The AIN1 (P0.31) pin.
+    Ain1,
+}
+
+/// Configuration for the Device.
+#[derive(Clone, Copy, Default)]
+pub struct Config {
+    /// The pin to use for UART0 RX.
+    pub srr_rx_pin: UartRxPin,
+}
+
 impl Default for Device {
-    /// Initializes all the drivers and peripherals of the device
+    /// Initializes all the drivers and peripherals of the device with default configuration
     fn default() -> Self {
+        Self::new(Config::default())
+    }
+}
+
+impl Device {
+    /// Initializes all the drivers and peripherals of the device with the given configuration
+    pub fn new(hw_config: Config) -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
@@ -66,9 +92,12 @@ impl Default for Device {
         config.baudrate = uarte::Baudrate::Baud38400;
         Interrupt::UARTE0.set_priority(Priority::P2);
         Interrupt::UARTE1.set_priority(Priority::P2);
-        // TODO: make UART port configurable
-        // P0.14 is SCL, use it for UART0. P0.20 is UART0 TX, so it's unused.
-        let uart0 = uarte::Uarte::new(p.UARTE0, p.P0_14, p.P0_20, Irqs, config);
+        let rx_pin = match hw_config.srr_rx_pin {
+            UartRxPin::Ain1 => p.P0_31.into::<AnyPin>(),
+            UartRxPin::Scl => p.P0_14.into::<AnyPin>(),
+            UartRxPin::Sda => p.P0_13.into::<AnyPin>(),
+        };
+        let uart0 = uarte::Uarte::new(p.UARTE0, rx_pin, p.P0_20, Irqs, config);
         let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, Default::default());
         let (_tx0, rx0) = uart0.split_with_idle(p.TIMER2, p.PPI_CH2, p.PPI_CH3);
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER1, p.PPI_CH0, p.PPI_CH1);
