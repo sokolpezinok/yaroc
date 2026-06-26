@@ -6,19 +6,18 @@ use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 use heapless::format;
-use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig},
-    send_punch::{DeviceConfig, SendPunch},
+    send_punch::SendPunch,
 };
 use yaroc_nrf52840::{
     self as _,
     device::Device,
-    flash::{Flash, NrfFlash, ValueIndex},
+    flash::{Flash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
@@ -32,7 +31,7 @@ static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = C
 /// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let device = Device::default();
+    let device = Device::new(Default::default()).await;
     let Device {
         mut green_led,
         mac_address,
@@ -40,9 +39,10 @@ async fn main(spawner: Spawner) {
         modem_pin,
         si_uart,
         ble,
-        flash_mutex,
         usb,
         saadc,
+        mut flash,
+        device_config,
         ..
     } = device;
     green_led.set_high();
@@ -56,20 +56,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
-    static FLASH_MUTEX: StaticCell<embassy_sync::mutex::Mutex<RawMutex, nrf_softdevice::Flash>> =
-        StaticCell::new();
-    let flash_mutex = FLASH_MUTEX.init(flash_mutex);
-    let mut flash = NrfFlash::new(flash_mutex);
     let mut buffer = [0; 4096];
-    let device_config =
-        match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut buffer).await {
-            Ok(config) => config.unwrap_or_default(),
-            Err(err) => {
-                error!("Error while reading device config from flash: {}", err);
-                DeviceConfig::default()
-            }
-        };
-
     match flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await {
         Ok(Some(reduced_config)) => {
             mqtt_config.update(reduced_config);

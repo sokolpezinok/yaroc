@@ -1,3 +1,4 @@
+use defmt::error;
 use embassy_nrf::config::Config as NrfConfig;
 use embassy_nrf::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt::{Interrupt, InterruptExt, Priority};
@@ -10,11 +11,15 @@ use embassy_nrf::{bind_interrupts, saadc, temp};
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::mutex::Mutex;
 use heapless::String;
+use static_cell::StaticCell;
 
 use crate::ble::Ble;
+use crate::flash::NrfFlash;
 use crate::usb::Usb;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
+use yaroc_common::flash::{Flash, ValueIndex};
+use yaroc_common::send_punch::DeviceConfig;
 use yaroc_common::si_uart::SiUart;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -45,15 +50,18 @@ pub struct Device {
     pub si_uart: SiUart<UarteRxWithIdle<'static>>,
     /// The Bluetooth Low Energy device
     pub ble: Ble,
-    /// Flash mutex
-    pub flash_mutex: Mutex<RawMutex, nrf_softdevice::Flash>,
+    /// The NRF flash.
+    pub flash: NrfFlash<'static>,
     /// The USB device
     pub usb: Usb,
+    /// Device config.
+    pub device_config: DeviceConfig,
 }
 
 /// The mechanism for detecting VBUS (USB power) presence.
 static VBUS_DETECT: LazyLock<SoftwareVbusDetect> =
     LazyLock::new(|| SoftwareVbusDetect::new(true, true));
+static FLASH_MUTEX: StaticCell<Mutex<RawMutex, nrf_softdevice::Flash>> = StaticCell::new();
 
 /// UART0 RX pin options.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -74,19 +82,25 @@ pub struct Config {
     pub srr_rx_pin: UartRxPin,
 }
 
-impl Default for Device {
-    /// Initializes all the drivers and peripherals of the device with default configuration
-    fn default() -> Self {
-        Self::new(Config::default())
-    }
-}
-
 impl Device {
     /// Initializes all the drivers and peripherals of the device with the given configuration
-    pub fn new(hw_config: Config) -> Self {
+    pub async fn new(hw_config: Config) -> Self {
         let mut config: NrfConfig = Default::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
+
+        let ble = Ble::new();
+        let flash_mutex = FLASH_MUTEX.init(Mutex::new(ble.flash()));
+        let mut flash = NrfFlash::new(flash_mutex);
+        let mut buffer = [0; 4096];
+        let device_config =
+            match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut buffer).await {
+                Ok(config) => config.unwrap_or_default(),
+                Err(err) => {
+                    error!("Error while reading device config from flash: {}", err);
+                    DeviceConfig::default()
+                }
+            };
 
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::Baud38400;
@@ -123,10 +137,7 @@ impl Device {
         let driver = Driver::new(p.USBD, Irqs, VBUS_DETECT.get());
         let usb = Usb::new(driver);
 
-        let ble = Ble::new();
         let mac_address = ble.get_mac_address();
-        let flash_mutex = Mutex::<RawMutex, _>::new(ble.flash());
-
         Self {
             _blue_led: blue_led,
             green_led,
@@ -136,8 +147,9 @@ impl Device {
             si_uart: SiUart::new(rx0),
             saadc,
             ble,
-            flash_mutex,
+            flash,
             usb,
+            device_config,
         }
     }
 }
