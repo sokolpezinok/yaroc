@@ -5,6 +5,7 @@ use chrono::{DateTime, Local};
 use femtopb::Message as _;
 use log::{error, info, warn};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use uuid::Uuid;
 use yaroc_common::{
     error::Error,
@@ -45,17 +46,6 @@ impl MqttConfig {
     }
 }
 
-/// An MQTT receiver that handles subscriptions and listens for incoming messages.
-pub struct MqttReceiver {
-    client: AsyncClient,
-    topics: Vec<String>,
-    event_loop: EventLoop,
-    url: String,
-    #[cfg(test)]
-    /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
-    test_now: Option<DateTime<Local>>,
-}
-
 /// Represents messages received from MQTT topics.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Message {
@@ -67,6 +57,19 @@ pub enum Message {
     MeshtasticSerial(DateTime<Local>, Vec<u8>),
     /// Meshtastic status update containing the sender MAC, arrival timestamp, and raw payload.
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
+}
+
+/// An MQTT receiver that handles subscriptions and listens for incoming messages.
+pub struct MqttReceiver {
+    client: AsyncClient,
+    topics: Vec<String>,
+    event_loop: EventLoop,
+    url: String,
+    _mesh_rx: UnboundedReceiver<(MacAddress, Vec<u8>)>,
+    mesh_tx: UnboundedSender<(MacAddress, Vec<u8>)>,
+    #[cfg(test)]
+    /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
+    test_now: Option<DateTime<Local>>,
 }
 
 impl MqttReceiver {
@@ -95,11 +98,14 @@ impl MqttReceiver {
             }
         }
 
+        let (mesh_tx, _mesh_rx) = unbounded_channel::<(MacAddress, Vec<u8>)>();
         Self {
             url: config.url,
             client,
             event_loop,
             topics,
+            _mesh_rx,
+            mesh_tx,
             #[cfg(test)]
             test_now: None,
         }
@@ -163,41 +169,51 @@ impl MqttReceiver {
         }
     }
 
+    /// Processes rumqttc::Event.
+    async fn process_mqtt_event(
+        &mut self,
+        event: rumqttc::Event,
+    ) -> Option<crate::Result<Message>> {
+        let now = {
+            #[cfg(test)]
+            {
+                self.test_now.unwrap_or_else(Local::now)
+            }
+            #[cfg(not(test))]
+            {
+                Local::now()
+            }
+        };
+        match event {
+            Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
+                return Some(Self::process_incoming(now, &topic, &payload));
+            }
+            Event::Incoming(Packet::Disconnect) => {
+                warn!("MQTT Disconnected");
+            }
+            Event::Incoming(Packet::ConnAck(_)) => {
+                info!("Connected to MQTT server {}", self.url);
+                for topic in &self.topics {
+                    self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
+                }
+            }
+            _ => {} // Ignored
+        }
+        None
+    }
+
     /// Retrieves the next incoming MQTT message by polling the event loop.
     /// Reconnects and resubscribes automatically upon connection errors.
     pub async fn next_message(&mut self) -> crate::Result<Message> {
         loop {
-            let Ok(notification) = self.event_loop.poll().await else {
+            let Ok(event) = self.event_loop.poll().await else {
                 error!("MQTT Connection error");
                 // TODO: consider also exponential backoff up to the "keep alive" value.
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 continue;
             };
-
-            let now = {
-                #[cfg(test)]
-                {
-                    self.test_now.unwrap_or_else(Local::now)
-                }
-                #[cfg(not(test))]
-                {
-                    Local::now()
-                }
-            };
-            match notification {
-                Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
-                    return Self::process_incoming(now, &topic, &payload);
-                }
-                Event::Incoming(Packet::Disconnect) => {
-                    warn!("MQTT Disconnected");
-                }
-                Event::Incoming(Packet::ConnAck(_)) => {
-                    info!("Connected to MQTT server {}", self.url);
-                    for topic in &self.topics {
-                        self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
-                    }
-                }
-                _ => {} // ignored
+            if let Some(msg) = self.process_mqtt_event(event).await {
+                return msg;
             }
         }
     }
@@ -205,6 +221,11 @@ impl MqttReceiver {
     /// Returns the URL of the MQTT broker this receiver is connected to.
     pub fn url(&self) -> &str {
         &self.url
+    }
+
+    /// Returns a clone of a meshtastic event sender.
+    pub fn mesh_tx(&self) -> UnboundedSender<(MacAddress, Vec<u8>)> {
+        self.mesh_tx.clone()
     }
 }
 

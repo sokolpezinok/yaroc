@@ -32,8 +32,10 @@ pub struct MessageHandler {
     _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_rx: UnboundedReceiver<SportIdentMessage>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
-    mqtt_tx: UnboundedSender<crate::Result<Message>>,
-    mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
+    // TX side of inbound MQTT messages
+    inbound_mqtt_tx: UnboundedSender<crate::Result<Message>>,
+    // RX side of inbound MQTT messages
+    inbound_mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
     tasks: JoinSet<()>,
     initializer: Option<MessageHandlerInitializer>,
     timezone: FixedOffset,
@@ -54,9 +56,9 @@ pub struct UsbSerialConfig {
 }
 
 impl MessageHandler {
+    /// Spawn async background tasks when Self:;next_message() is ran for the first time.
     pub async fn init(&mut self) {
         if let Some(init) = self.initializer.take() {
-            // Initialize Meshtastic TCP connection if configured and when run for the first time.
             if let Some(host) = init.meshtastic_tcp {
                 let mesh_packet_tx = self._mesh_packet_tx.clone();
                 self.tasks.spawn(async move {
@@ -83,9 +85,8 @@ impl MessageHandler {
                 });
             }
 
-            // Spawn MQTT tasks when `next_event()` is run for the first time.
             for mut receiver in init.mqtt_receivers {
-                let mqtt_tx = self.mqtt_tx.clone();
+                let mqtt_tx = self.inbound_mqtt_tx.clone();
                 self.tasks.spawn(async move {
                     loop {
                         let msg = receiver.next_message().await;
@@ -124,7 +125,7 @@ impl MessageHandler {
         self.init().await;
         loop {
             tokio::select! {
-                mqtt_msg = self.mqtt_rx.recv() => {
+                mqtt_msg = self.inbound_mqtt_rx.recv() => {
                     // None can't happen since self holds a copy of mqtt_tx
                     if let Some(mqtt_message) = mqtt_msg
                         && let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message?)?
@@ -293,8 +294,8 @@ impl MessageHandlerBuilder {
             _mesh_packet_tx: mesh_packet_tx,
             si_rx,
             si_tx,
-            mqtt_tx,
-            mqtt_rx,
+            inbound_mqtt_tx: mqtt_tx,
+            inbound_mqtt_rx: mqtt_rx,
             tasks: JoinSet::new(),
             initializer: Some(MessageHandlerInitializer {
                 meshtastic_tcp: self.meshtastic_tcp,
@@ -336,8 +337,8 @@ mod tests {
                 _mesh_packet_tx: mesh_packet_tx.clone(),
                 si_rx: punch_rx,
                 si_tx: punch_tx.clone(),
-                mqtt_tx: mqtt_tx.clone(),
-                mqtt_rx,
+                inbound_mqtt_tx: mqtt_tx.clone(),
+                inbound_mqtt_rx: mqtt_rx,
                 tasks: JoinSet::new(),
                 initializer: Some(MessageHandlerInitializer {
                     meshtastic_tcp: None,
