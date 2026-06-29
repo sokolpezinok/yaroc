@@ -21,6 +21,4 @@ pub enum Error {
         /// Meshtastic channel ID
         channel_id: u32,
     },
-    #[error("Value error: wrong or missing data")]
-    ValueError,
 }
