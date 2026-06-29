@@ -69,9 +69,11 @@ pip install --pre yaroc
 Setting up the device is currently quite complex, requiring a working Rust toolchain and a debug probe. A simpler method to flash the firmware without compiling or using a debug probe will be available by late 2026.
 
 1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, following [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). The probe is used to flash the firmware and view logs. Flashing directly over USB is not currently supported, but is in development.
-   > [!TIP]
-   > **Using a Raspberry Pi Debug Probe**
-   > If you do not have a RAKDAP1, you can use the Raspberry Pi Deubg Probe debug probe, too. More information will be added later.
+
+> [!TIP]
+> **Using a Raspberry Pi Debug Probe**
+> If you do not have a RAKDAP1, you can use the Raspberry Pi Debug Probe, too. More information will be added later.
+
 2. Install Rust, `rustup`, and `cargo` if you haven't already:
    - **Linux**:
      ```sh
@@ -199,8 +201,8 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
        meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
        ```
 
-    > [!WARNING]
-    > This is not a bug, but a "feature" of some Meshtastic versions: the telemetry interval is scaled down to 60% for small meshes, so an interval of 5 minutes becomes 3 minutes in reality. To achieve a 5-minute update interval, set it to `500` instead of `300` (see [issue #8619](https://github.com/meshtastic/firmware/issues/8619)).
+> [!WARNING]
+> This is not a bug, but a "feature" of some Meshtastic versions: the telemetry interval is scaled down to 60% for small meshes, so an interval of 5 minutes becomes 3 minutes in reality. To achieve a 5-minute update interval, set it to `500` instead of `300` (see [issue #8619](https://github.com/meshtastic/firmware/issues/8619)).
 
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
