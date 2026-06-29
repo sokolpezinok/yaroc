@@ -85,15 +85,13 @@ class CellularLog(object):
 
 class MeshtasticLog(object):
     service_envelope: bytes
-    channel: str
-    gateway_id: str
+    mqtt_topic: str
     def __repr__(self) -> str: ...
 
 class MeshtasticPunches(object):
     punch_logs: List[SiPunchLog]
     service_envelope: bytes
-    channel: str
-    gateway_id: str
+    mqtt_topic: str
     def __repr__(self) -> str: ...
 
 class Event(object):

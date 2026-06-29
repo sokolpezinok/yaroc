@@ -91,11 +91,10 @@ class MqttClient(Client):
         await self._send(topics.status, status.SerializeToString(), "MiniCallHome")
 
     async def send_meshtastic(self, msg: MeshtasticLog | MeshtasticPunches):
-        topic = f"yar/2/e/{msg.channel}/{msg.gateway_id}"
         if isinstance(msg, MeshtasticLog):
-            await self._send(topic, msg.service_envelope, "MeshtasticLog")
+            await self._send(msg.mqtt_topic, msg.service_envelope, "MeshtasticLog")
         elif isinstance(msg, MeshtasticPunches):
-            await self._send(topic, msg.service_envelope, "MeshtasticPunches", 1)
+            await self._send(msg.mqtt_topic, msg.service_envelope, "MeshtasticPunches", 1)
 
     async def _send(self, topic: str, msg: bytes, message_type: str, qos: int = 0):
         try:

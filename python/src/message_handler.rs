@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
+use yaroc_receiver::meshtastic::MESHTASTIC_MQTT_PREFIX;
 use yaroc_receiver::message_handler::{
     MessageHandler as MessageHandlerRs, MessageHandlerBuilder as MessageHandlerBuilderRs,
     SportIdentConfig, UsbSerialConfig,
@@ -35,13 +36,11 @@ impl MeshtasticPunches {
     }
 
     #[getter]
-    pub fn channel(&self) -> &str {
-        "serial"
-    }
-
-    #[getter]
-    pub fn gateway_id(&self) -> &str {
-        &self.service_envelope.gateway_id
+    pub fn mqtt_topic(&self) -> String {
+        format!(
+            "{}serial/{}",
+            MESHTASTIC_MQTT_PREFIX, self.service_envelope.gateway_id
+        )
     }
 }
 

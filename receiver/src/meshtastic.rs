@@ -14,6 +14,8 @@ use log::error;
 use yaroc_common::punch::SiPunch;
 use yaroc_common::status::{Position, SignalStrength};
 
+pub const MESHTASTIC_MQTT_PREFIX: &str = "yar/2/e/";
+
 /// RSSI and SNR of a received LoRa packet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RssiSnr {

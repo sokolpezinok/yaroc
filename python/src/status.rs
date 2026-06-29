@@ -5,7 +5,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 use yaroc_common::status::SignalStrength;
 use yaroc_receiver::logs::CellularLogMessage as CellularLogMessageRs;
-use yaroc_receiver::meshtastic::MeshtasticLog as MeshtasticLogRs;
+use yaroc_receiver::meshtastic::{MESHTASTIC_MQTT_PREFIX, MeshtasticLog as MeshtasticLogRs};
 use yaroc_receiver::state::NodeInfo as NodeInfoRs;
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
@@ -98,13 +98,13 @@ impl MeshtasticLog {
     }
 
     #[getter]
-    pub fn channel(&self) -> &str {
-        &self.service_envelope.channel_id
-    }
-
-    #[getter]
-    pub fn gateway_id(&self) -> &str {
-        &self.service_envelope.gateway_id
+    pub fn mqtt_topic(&self) -> String {
+        format!(
+            "{}{}/{}",
+            MESHTASTIC_MQTT_PREFIX,
+            self.service_envelope.channel_id,
+            self.service_envelope.gateway_id
+        )
     }
 }
 
