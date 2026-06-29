@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, Eq, PartialEq)]
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("Common error: {0}")]
     CommonError(#[from] yaroc_common::error::Error),
@@ -21,4 +21,6 @@ pub enum Error {
         /// Meshtastic channel ID
         channel_id: u32,
     },
+    #[error("MQTT client error: {0}")]
+    MqttClientError(#[from] rumqttc::ClientError),
 }

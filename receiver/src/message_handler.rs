@@ -32,10 +32,12 @@ pub struct MessageHandler {
     _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_rx: UnboundedReceiver<SportIdentMessage>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
-    // TX side of inbound MQTT messages
+    /// TX side of inbound MQTT messages
     inbound_mqtt_tx: UnboundedSender<crate::Result<Message>>,
-    // RX side of inbound MQTT messages
+    /// RX side of inbound MQTT messages
     inbound_mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
+    /// Senders for meshtastic messages
+    mesh_txs: Vec<UnboundedSender<ServiceEnvelope>>,
     tasks: JoinSet<()>,
     initializer: Option<MessageHandlerInitializer>,
     timezone: FixedOffset,
@@ -86,6 +88,7 @@ impl MessageHandler {
             }
 
             for mut receiver in init.mqtt_receivers {
+                self.mesh_txs.push(receiver.mesh_tx());
                 let mqtt_tx = self.inbound_mqtt_tx.clone();
                 self.tasks.spawn(async move {
                     loop {
@@ -140,6 +143,11 @@ impl MessageHandler {
                         let gateway_id = service_envelope.gateway_id.strip_prefix('!')
                             .unwrap_or(&service_envelope.gateway_id);
                         let mac_address = MacAddress::try_from(gateway_id)?;
+                        for mesh_tx in &self.mesh_txs {
+                            let _ = mesh_tx
+                                .send(service_envelope.clone())
+                                .map_err(|e| error!("Error while forwarding meshtastic packets: {}", e));
+                        }
                         if let Some(message) = self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)? {
                             return Ok(message);
                         }
@@ -296,6 +304,7 @@ impl MessageHandlerBuilder {
             si_tx,
             inbound_mqtt_tx: mqtt_tx,
             inbound_mqtt_rx: mqtt_rx,
+            mesh_txs: Vec::new(),
             tasks: JoinSet::new(),
             initializer: Some(MessageHandlerInitializer {
                 meshtastic_tcp: self.meshtastic_tcp,
@@ -339,6 +348,7 @@ mod tests {
                 si_tx: punch_tx.clone(),
                 inbound_mqtt_tx: mqtt_tx.clone(),
                 inbound_mqtt_rx: mqtt_rx,
+                mesh_txs: Vec::new(),
                 tasks: JoinSet::new(),
                 initializer: Some(MessageHandlerInitializer {
                     meshtastic_tcp: None,

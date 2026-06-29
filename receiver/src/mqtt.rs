@@ -1,16 +1,20 @@
 use std::time::Duration;
 
-use crate::system_info::MacAddress;
 use chrono::{DateTime, Local};
 use femtopb::Message as _;
 use log::{error, info, warn};
+use meshtastic::protobufs::ServiceEnvelope;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use uuid::Uuid;
+
 use yaroc_common::{
     error::Error,
     proto::{Disconnected, Status, status::Msg},
 };
+
+use crate::meshtastic::MESHTASTIC_MQTT_PREFIX;
+use crate::system_info::MacAddress;
 
 /// Configuration options for connecting to an MQTT broker.
 pub struct MqttConfig {
@@ -65,8 +69,10 @@ pub struct MqttReceiver {
     topics: Vec<String>,
     event_loop: EventLoop,
     url: String,
-    _mesh_rx: UnboundedReceiver<(MacAddress, Vec<u8>)>,
-    mesh_tx: UnboundedSender<(MacAddress, Vec<u8>)>,
+    /// Meshtastic packet receiver
+    mesh_rx: Option<UnboundedReceiver<ServiceEnvelope>>,
+    /// Meshtastic packet sender
+    mesh_tx: UnboundedSender<ServiceEnvelope>,
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
     test_now: Option<DateTime<Local>>,
@@ -98,13 +104,13 @@ impl MqttReceiver {
             }
         }
 
-        let (mesh_tx, _mesh_rx) = unbounded_channel::<(MacAddress, Vec<u8>)>();
+        let (mesh_tx, mesh_rx) = unbounded_channel::<ServiceEnvelope>();
         Self {
             url: config.url,
             client,
             event_loop,
             topics,
-            _mesh_rx,
+            mesh_rx: Some(mesh_rx),
             mesh_tx,
             #[cfg(test)]
             test_now: None,
@@ -134,7 +140,7 @@ impl MqttReceiver {
         topic: &str,
         payload: &[u8],
     ) -> crate::Result<Message> {
-        if let Some(topic) = topic.strip_prefix("yar/2/e/") {
+        if let Some(topic) = topic.strip_prefix(MESHTASTIC_MQTT_PREFIX) {
             let channel = topic.split_once("/");
             match channel {
                 Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
@@ -202,9 +208,39 @@ impl MqttReceiver {
         None
     }
 
+    /// Publish meshtastic service envelope protobuf.
+    async fn publish_meshtastic_service_envelope(
+        _client: &AsyncClient,
+        _service_envelope: ServiceEnvelope,
+    ) -> crate::Result<()> {
+        // TODO: we do not publish the packet yet, as this would create an infinite loop in yarocd.
+        // let topic = format!(
+        //     "{MESHTASTIC_MQTT_PREFIX}{}/{}",
+        //     _service_envelope.channel_id, _service_envelope.gateway_id
+        // );
+        // We need to fix this first, but the rest is ready.
+        // let mut payload = vec![0; _service_envelope.encoded_len()];
+        // _service_envelope.encode(&mut payload.as_mut_slice()).unwrap();
+        // _client.publish(topic, QoS::AtMostOnce, false, payload).await?;
+        Ok(())
+    }
+
     /// Retrieves the next incoming MQTT message by polling the event loop.
     /// Reconnects and resubscribes automatically upon connection errors.
     pub async fn next_message(&mut self) -> crate::Result<Message> {
+        if let Some(mut mesh_rx) = self.mesh_rx.take() {
+            let client = self.client.clone();
+            tokio::spawn(async move {
+                while let Some(service_envelope) = mesh_rx.recv().await {
+                    let _ = Self::publish_meshtastic_service_envelope(&client, service_envelope)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Error while forwarding a meshtastic packet to MQTT: {e}")
+                        });
+                }
+            });
+        }
+
         loop {
             let Ok(event) = self.event_loop.poll().await else {
                 error!("MQTT Connection error");
@@ -224,7 +260,7 @@ impl MqttReceiver {
     }
 
     /// Returns a clone of a meshtastic event sender.
-    pub fn mesh_tx(&self) -> UnboundedSender<(MacAddress, Vec<u8>)> {
+    pub fn mesh_tx(&self) -> UnboundedSender<ServiceEnvelope> {
         self.mesh_tx.clone()
     }
 }
