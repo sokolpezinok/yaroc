@@ -5,6 +5,7 @@ use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use yaroc_receiver::logs::CellularLogMessage;
 
 use chrono::FixedOffset;
 use yaroc_common::punch::SiPunch;
@@ -61,13 +62,24 @@ impl MqttClient {
 
     fn convert_event(event: EventRs) -> Option<serde_json::Value> {
         match event {
-            EventRs::CellularLog(cell_log) => Some(serde_json::json!({
-                "type": "CellularLog",
-                "payload": {
-                    "mac_address": cell_log.mac_address().to_string(),
-                    "text": format!("{}", cell_log),
-                }
-            })),
+            EventRs::CellularLog(cell_log) => {
+                let CellularLogMessage::MCH(ref mch) = cell_log else {
+                    return None;
+                };
+                let rsrp = mch.mini_call_home.signal_info.as_ref().map(|s| s.rsrp_dbm as i32);
+                let snr = mch.mini_call_home.signal_info.as_ref().map(|s| s.snr_cb as f64 / 10.0);
+                let battery = mch.mini_call_home.batt_percents.map(|b| b as u32);
+                Some(serde_json::json!({
+                    "type": "CellularLog",
+                    "payload": {
+                        "mac_address": cell_log.mac_address().to_string(),
+                        "text": format!("{}", cell_log),
+                        "rsrp_dbm": rsrp,
+                        "snr": snr,
+                        "battery_percentage": battery,
+                    }
+                }))
+            }
             EventRs::SiPunches(si_punches) | EventRs::SiPunchesMeshtastic(si_punches, _) => {
                 Some(serde_json::json!({
                     "type": "SiPunches",
@@ -282,6 +294,9 @@ fn parse_timezone(tz: &str) -> std::result::Result<FixedOffset, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yaroc_common::status::{CellNetworkType, CellSignalInfo, MiniCallHome};
+    use yaroc_receiver::logs::MiniCallHomeLog;
+    use yaroc_receiver::system_info::HostInfo;
 
     #[test]
     fn test_parse_timezone() {
@@ -312,5 +327,47 @@ mod tests {
         assert!(parse_timezone("Invalid").is_err());
         assert!(parse_timezone("+2:00").is_err());
         assert!(parse_timezone("+02:0").is_err());
+    }
+
+    #[test]
+    fn test_convert_event_cellular_log() {
+        let host_info = HostInfo {
+            name: "TestNode".to_string(),
+            mac_address: MacAddress::try_from("1234567890ab").unwrap(),
+        };
+
+        // Case 1: MCH CellularLog
+        let mut mch = MiniCallHome::default();
+        mch.signal_info = Some(CellSignalInfo {
+            network_type: CellNetworkType::Lte,
+            rsrp_dbm: -85,
+            snr_cb: 120, // 12.0 dB
+            cellid: None,
+        });
+        mch.batt_percents = Some(88);
+
+        let cell_log_msg = CellularLogMessage::MCH(MiniCallHomeLog {
+            mini_call_home: mch,
+            host_info: host_info.clone(),
+            latency: chrono::Duration::zero(),
+        });
+
+        let event = EventRs::CellularLog(cell_log_msg);
+        let js_event = MqttClient::convert_event(event).unwrap();
+
+        assert_eq!(js_event["type"], "CellularLog");
+        assert_eq!(js_event["payload"]["mac_address"], "1234567890ab");
+        assert_eq!(js_event["payload"]["rsrp_dbm"], -85);
+        assert_eq!(js_event["payload"]["snr"], 12.0);
+        assert_eq!(js_event["payload"]["battery_percentage"], 88);
+
+        // Case 2: Disconnected CellularLog
+        let cell_log_disconnected = CellularLogMessage::Disconnected {
+            host_info,
+            client: "test_client".to_string(),
+        };
+        let event_disc = EventRs::CellularLog(cell_log_disconnected);
+        let js_event_disc = MqttClient::convert_event(event_disc);
+        assert!(js_event_disc.is_none());
     }
 }
