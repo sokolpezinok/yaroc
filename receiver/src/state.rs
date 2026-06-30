@@ -336,7 +336,7 @@ impl FleetState {
             MqttMessage::Punches(mac_address, now, payload) => self
                 .punches(&payload, mac_address, now.with_timezone(&self.timezone))
                 .map(|msg| Some(Event::SiPunches(msg))),
-            MqttMessage::MeshtasticSerial(now, payload) => self
+            MqttMessage::MeshtasticSerial(_, now, payload) => self
                 .msh_serial_service_envelope(&payload, now.with_timezone(&self.timezone))
                 .and_then(|msg| {
                     let envelope = ServiceEnvelope::decode(payload.as_slice())?;

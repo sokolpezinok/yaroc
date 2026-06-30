@@ -10,6 +10,7 @@ use crate::{
 use chrono::{FixedOffset, Local};
 use log::{error, info};
 use meshtastic::protobufs::ServiceEnvelope;
+use std::collections::HashSet;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinSet;
@@ -41,6 +42,7 @@ pub struct MessageHandler {
     tasks: JoinSet<()>,
     initializer: Option<MessageHandlerInitializer>,
     timezone: FixedOffset,
+    local_macs: HashSet<MacAddress>,
 }
 
 #[derive(Default)]
@@ -130,10 +132,22 @@ impl MessageHandler {
             tokio::select! {
                 mqtt_msg = self.inbound_mqtt_rx.recv() => {
                     // None can't happen since self holds a copy of mqtt_tx
-                    if let Some(mqtt_message) = mqtt_msg
-                        && let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message?)?
-                    {
-                        return Ok(message);
+                    if let Some(mqtt_message) = mqtt_msg {
+                        let mqtt_message = mqtt_message?;
+                        let gateway_mac = match &mqtt_message {
+                            Message::CellularStatus(mac, _, _)
+                            | Message::Punches(mac, _, _)
+                            | Message::MeshtasticSerial(mac, _, _)
+                            | Message::MeshtasticStatus(mac, _, _) => *mac,
+                        };
+                        // Instead of ignoring these packets, we could consider unsubscribing from
+                        // these topics.
+                        if self.local_macs.contains(&gateway_mac) {
+                            continue;
+                        }
+                        if let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message)? {
+                            return Ok(message);
+                        }
                     }
                 }
                 mesh_recv = self.mesh_packet_rx.recv() => {
@@ -143,6 +157,7 @@ impl MessageHandler {
                         let gateway_id = service_envelope.gateway_id.strip_prefix('!')
                             .unwrap_or(&service_envelope.gateway_id);
                         let mac_address = MacAddress::try_from(gateway_id)?;
+                        self.local_macs.insert(mac_address);
                         for mesh_tx in &self.mesh_txs {
                             let _ = mesh_tx
                                 .send(service_envelope.clone())
@@ -313,6 +328,7 @@ impl MessageHandlerBuilder {
                 usb_serial_manager,
             }),
             timezone: self.timezone,
+            local_macs: HashSet::new(),
         }
     }
 }
@@ -357,6 +373,7 @@ mod tests {
                     usb_serial_manager: None,
                 }),
                 timezone: *Local::now().fixed_offset().offset(),
+                local_macs: HashSet::new(),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
         }

@@ -4,6 +4,7 @@ use chrono::{DateTime, Local};
 use femtopb::Message as _;
 use log::{error, info, warn};
 use meshtastic::protobufs::ServiceEnvelope;
+use prost::Message as _;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use uuid::Uuid;
@@ -58,7 +59,7 @@ pub enum Message {
     /// Punches data containing the sender MAC, arrival timestamp, and raw payload.
     Punches(MacAddress, DateTime<Local>, Vec<u8>),
     /// Meshtastic raw serial message with arrival timestamp and raw payload.
-    MeshtasticSerial(DateTime<Local>, Vec<u8>),
+    MeshtasticSerial(MacAddress, DateTime<Local>, Vec<u8>),
     /// Meshtastic status update containing the sender MAC, arrival timestamp, and raw payload.
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
@@ -143,7 +144,14 @@ impl MqttReceiver {
         if let Some(topic) = topic.strip_prefix(MESHTASTIC_MQTT_PREFIX) {
             let channel = topic.split_once("/");
             match channel {
-                Some(("serial", _)) => Ok(Message::MeshtasticSerial(now, payload.into())),
+                Some(("serial", _)) => {
+                    let recv_mac_address = Self::extract_msh_mac(topic)?;
+                    Ok(Message::MeshtasticSerial(
+                        recv_mac_address,
+                        now,
+                        payload.into(),
+                    ))
+                }
                 _ => {
                     let recv_mac_address = Self::extract_msh_mac(topic)?;
                     Ok(Message::MeshtasticStatus(
@@ -210,18 +218,15 @@ impl MqttReceiver {
 
     /// Publish meshtastic service envelope protobuf.
     async fn publish_meshtastic_service_envelope(
-        _client: &AsyncClient,
-        _service_envelope: ServiceEnvelope,
+        client: &AsyncClient,
+        service_envelope: ServiceEnvelope,
     ) -> crate::Result<()> {
-        // TODO: we do not publish the packet yet, as this would create an infinite loop in yarocd.
-        // let topic = format!(
-        //     "{MESHTASTIC_MQTT_PREFIX}{}/{}",
-        //     _service_envelope.channel_id, _service_envelope.gateway_id
-        // );
-        // We need to fix this first, but the rest is ready.
-        // let mut payload = vec![0; _service_envelope.encoded_len()];
-        // _service_envelope.encode(&mut payload.as_mut_slice()).unwrap();
-        // _client.publish(topic, QoS::AtMostOnce, false, payload).await?;
+        let topic = format!(
+            "{MESHTASTIC_MQTT_PREFIX}{}/{}",
+            service_envelope.channel_id, service_envelope.gateway_id
+        );
+        let payload = service_envelope.encode_to_vec();
+        client.publish(topic, QoS::AtMostOnce, false, payload).await?;
         Ok(())
     }
 
@@ -344,7 +349,14 @@ mod test {
 
         let msg = MqttReceiver::process_incoming(now, "yar/2/e/serial/!12345678", b"hello serial")
             .unwrap();
-        assert_eq!(msg, Message::MeshtasticSerial(now, "hello serial".into()));
+        assert_eq!(
+            msg,
+            Message::MeshtasticSerial(
+                MacAddress::try_from("12345678").unwrap(),
+                now,
+                "hello serial".into()
+            )
+        );
 
         let msg = MqttReceiver::process_incoming(
             now,
