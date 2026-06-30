@@ -80,9 +80,7 @@ async def main_loop() -> None:
     hostname = socket.gethostname()
     mac_addr = eth_mac_addr() or "000000000000"
     host_info = HostInfo.new(hostname, mac_addr)
-    forwarder = Forwarder(
-        host_info, client_group, handler, StatusDrawer(config.get("display", None))
-    )
+    forwarder = Forwarder(host_info, client_group, handler, StatusDrawer(config.get("display", {})))
     await forwarder.loop()
 
 

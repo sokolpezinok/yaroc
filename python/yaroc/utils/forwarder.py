@@ -31,7 +31,7 @@ class Forwarder:
         host_info: HostInfo,
         client_group: ClientGroup,
         handler: MessageHandler,
-        drawer: StatusDrawer = StatusDrawer(None),
+        drawer: StatusDrawer = StatusDrawer({}),
         mch_interval: int | float | None = None,
     ):
         self.host_info = host_info

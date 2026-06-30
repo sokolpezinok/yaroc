@@ -1,23 +1,56 @@
 import logging
+import sys
 from datetime import datetime
 from itertools import accumulate
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
 from ..rs import NodeInfo
 
 
+def _init_epd(model: str, busy_pin: int | None) -> Any:
+    import epaper
+
+    # This is a hack to override the BUSY_PIN constant in epaper, as it's not possible with its
+    # current API.
+    if busy_pin is not None:
+        import gpiozero
+
+        original_button = gpiozero.Button
+
+        def custom_button(pin, *args, **kwargs):
+            return original_button(busy_pin, *args, **kwargs)
+
+        gpiozero.Button = custom_button
+
+        try:
+            epd = epaper.epaper(model).EPD()
+        finally:
+            if original_button is not None:
+                gpiozero.Button = original_button
+
+        epd.busy_pin = busy_pin
+        for name, module in sys.modules.items():
+            if name.endswith("epdconfig"):
+                try:
+                    module.implementation.BUSY_PIN = busy_pin
+                except Exception:
+                    pass
+                break
+    else:
+        epd = epaper.epaper(model).EPD()
+
+    return epd
+
+
 class StatusDrawer:
     """Class for tracking the status of all nodes"""
 
-    def __init__(
-        self,
-        display_model: str | None = None,
-    ):
-        if display_model is not None:
-            import epaper
-
-            self.epd = epaper.epaper(display_model).EPD()
+    def __init__(self, display_config: dict[str, Any]):
+        model = display_config.get("model", None)
+        if model is not None:
+            self.epd = _init_epd(model, display_config.get("busy_pin", None))
             self.epd.init(0)
             self.epd.Clear()
         else:

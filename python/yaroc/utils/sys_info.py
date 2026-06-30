@@ -12,7 +12,7 @@ from math import floor
 import psutil
 
 from ..pb.status_pb2 import MiniCallHome
-from ..rs import RaspberryModel, current_timestamp_millis, find_config_file
+from ..rs import RaspberryModel, current_timestamp_millis
 
 FREQ_MULTIPLIER: int = 20
 

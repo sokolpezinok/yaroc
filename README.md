@@ -293,8 +293,10 @@ First, create a `yarocd.toml` file where you configure the MAC addresses to rece
 
 ```toml
 log_level = "info"
+
+[display]
 # You can use a Waveshare e-ink display to show a status table of all YAROC units.
-display = "epd2in66"
+model = "epd2in66"
 
 [mqtt]
 broker_url = "broker.emqx.io"
