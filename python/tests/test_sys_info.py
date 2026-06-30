@@ -6,10 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
-from yaroc.rs import RaspberryModel
+from yaroc.rs import RaspberryModel, find_config_file
 from yaroc.utils.sys_info import (
     eth_mac_addr,
-    find_config_file,
     is_windows,
     local_ip,
     raspberrypi_model,

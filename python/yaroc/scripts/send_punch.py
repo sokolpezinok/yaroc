@@ -3,10 +3,10 @@ import logging
 import socket
 import tomllib
 
-from ..rs import HostInfo
+from ..rs import HostInfo, find_config_file
 from ..utils.container import Container, create_clients
 from ..utils.forwarder import Forwarder
-from ..utils.sys_info import eth_mac_addr, find_config_file, is_windows
+from ..utils.sys_info import eth_mac_addr, is_windows
 
 
 async def main_loop():

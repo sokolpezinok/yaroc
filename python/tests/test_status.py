@@ -17,7 +17,7 @@ class MockNodeInfo:
 
 class TestStatus(unittest.TestCase):
     def test_generate_info_table(self):
-        drawer = StatusDrawer()
+        drawer = StatusDrawer({})
 
         now = datetime.now().astimezone()
 
@@ -60,7 +60,7 @@ class TestStatus(unittest.TestCase):
         self.assertEqual(table[1][5], "")
 
     def test_draw_table(self):
-        drawer = StatusDrawer()
+        drawer = StatusDrawer({})
         table = [
             ["name", "signal", "bat", "code", "last info", "last punch"],
             ["Node1", "-80", "95", "100", "now", "5m ago"],
