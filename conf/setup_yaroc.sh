@@ -21,17 +21,25 @@ if [ -f /boot/firmware/config.txt ]; then
 fi
 
 # Install meshtasticd
-echo 'deb http://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/ /' > /etc/apt/sources.list.d/network:Meshtastic:beta.list
-curl -fsSL https://download.opensuse.org/repositories/network:Meshtastic:beta/Debian_13/Release.key | gpg --dearmor > /etc/apt/trusted.gpg.d/network_Meshtastic_beta.gpg
+DEB_VERSION=$(. /etc/os-release && echo "$VERSION_ID")
+ARCH=$(dpkg --print-architecture)
+if [ "$ARCH" = "armhf" ]; then
+    OS_TYPE="Raspbian"
+else
+    OS_TYPE="Debian"
+fi
+REPO_TARGET="${OS_TYPE}_${DEB_VERSION}"
+
+echo "Configuring meshtasticd repository for ${REPO_TARGET} (${ARCH})..."
+echo "deb http://download.opensuse.org/repositories/network:/Meshtastic:/beta/${REPO_TARGET}/ /" > /etc/apt/sources.list.d/network:Meshtastic:beta.list
+curl -fsSL "https://download.opensuse.org/repositories/network:Meshtastic:beta/${REPO_TARGET}/Release.key" | gpg --dearmor > /etc/apt/trusted.gpg.d/network_Meshtastic_beta.gpg
 apt update
 apt install -y meshtasticd
 
-# Configure for RAK6421 and RAK13300
+# Configure for RAK6421 and RAK13300 in slot 2
 mkdir -p /etc/meshtasticd/config.d
-if [ -f /etc/meshtasticd/available.d/lora-RAK6421-13300-slot1.yaml ]; then
-  ln -sf /etc/meshtasticd/available.d/lora-RAK6421-13300-slot1.yaml /etc/meshtasticd/config.d/
-elif [ -f /etc/meshtasticd/available.d/lora-hat-rak-6421-pi-hat.yaml ]; then
-  ln -sf /etc/meshtasticd/available.d/lora-hat-rak-6421-pi-hat.yaml /etc/meshtasticd/config.d/
+if [ -f /etc/meshtasticd/available.d/lora-RAK6421-13300-slot2.yaml ]; then
+  ln -sf /etc/meshtasticd/available.d/lora-RAK6421-13300-slot2.yaml /etc/meshtasticd/config.d/
 fi
 
 
