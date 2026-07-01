@@ -14,7 +14,7 @@ use yaroc_common::{
     proto::{Disconnected, Status, status::Msg},
 };
 
-use crate::meshtastic::MESHTASTIC_MQTT_PREFIX;
+use crate::meshtastic::{MESHTASTIC_MQTT_PREFIX, MeshtasticLog, SERIAL_APP};
 use crate::system_info::MacAddress;
 
 /// Configuration options for connecting to an MQTT broker.
@@ -221,9 +221,16 @@ impl MqttReceiver {
         client: &AsyncClient,
         service_envelope: ServiceEnvelope,
     ) -> crate::Result<()> {
+        let channel = if let Some(packet) = &service_envelope.packet
+            && MeshtasticLog::get_mesh_packet_portnum(packet).is_ok_and(|p| p == SERIAL_APP)
+        {
+            "serial"
+        } else {
+            &service_envelope.channel_id
+        };
         let topic = format!(
-            "{MESHTASTIC_MQTT_PREFIX}{}/{}",
-            service_envelope.channel_id, service_envelope.gateway_id
+            "{MESHTASTIC_MQTT_PREFIX}{channel}/{}",
+            service_envelope.gateway_id
         );
         let payload = service_envelope.encode_to_vec();
         client.publish(topic, QoS::AtMostOnce, false, payload).await?;
