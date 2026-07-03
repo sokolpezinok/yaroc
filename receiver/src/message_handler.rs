@@ -1,3 +1,14 @@
+use chrono::{FixedOffset, Local};
+use log::{debug, error, info};
+use meshtastic::protobufs::mesh_packet::PayloadVariant;
+use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
+use std::collections::HashSet;
+use std::time::Duration;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::task::JoinSet;
+
+use yaroc_common::punch::SiPunch;
+
 use crate::meshtastic::serial::MeshtasticFactory;
 use crate::meshtastic::tcp;
 use crate::si_uart::{SportIdentFactory, SportIdentMessage};
@@ -7,14 +18,6 @@ use crate::{
     state::{Event, FleetState},
     system_info::MacAddress,
 };
-use chrono::{FixedOffset, Local};
-use log::{error, info};
-use meshtastic::protobufs::ServiceEnvelope;
-use std::collections::HashSet;
-use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tokio::task::JoinSet;
-use yaroc_common::punch::SiPunch;
 
 pub struct MessageHandlerInitializer {
     pub meshtastic_tcp: Option<String>,
@@ -117,6 +120,26 @@ impl MessageHandler {
         }
     }
 
+    /// Process ServiceEnvelope proto
+    fn process_service_envelope(
+        &mut self,
+        service_envelope: ServiceEnvelope,
+    ) -> crate::Result<Option<Event>> {
+        let now = Local::now().with_timezone(&self.timezone);
+        let gateway_id = service_envelope
+            .gateway_id
+            .strip_prefix('!')
+            .unwrap_or(&service_envelope.gateway_id);
+        let mac_address = MacAddress::try_from(gateway_id)?;
+        self.local_macs.insert(mac_address);
+        for mesh_tx in &self.mesh_txs {
+            let _ = mesh_tx
+                .send(service_envelope.clone())
+                .inspect_err(|e| error!("Error while forwarding meshtastic packets: {}", e));
+        }
+        self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)
+    }
+
     /// Returns the next processed event from the active event sources.
     ///
     /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
@@ -153,18 +176,20 @@ impl MessageHandler {
                 mesh_recv = self.mesh_packet_rx.recv() => {
                     // None can't happen since self holds a copy of _mesh_packet_tx
                     if let Some(service_envelope) = mesh_recv {
-                        let now = Local::now().with_timezone(&self.timezone);
-                        let gateway_id = service_envelope.gateway_id.strip_prefix('!')
-                            .unwrap_or(&service_envelope.gateway_id);
-                        let mac_address = MacAddress::try_from(gateway_id)?;
-                        self.local_macs.insert(mac_address);
-                        for mesh_tx in &self.mesh_txs {
-                            let _ = mesh_tx
-                                .send(service_envelope.clone())
-                                .map_err(|e| error!("Error while forwarding meshtastic packets: {}", e));
-                        }
-                        if let Some(message) = self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)? {
-                            return Ok(message);
+                        if let Some(MeshPacket {
+                            from,
+                            payload_variant: Some(PayloadVariant::Encrypted(_)),
+                            ..
+                        }) = service_envelope.packet
+                        {
+                            debug!(
+                                "Ignoring encrypted message, cannot decrypt without a key. From node ID={from:x}."
+                            );
+                            continue;
+                        };
+                        let maybe_event = self.process_service_envelope(service_envelope).transpose();
+                        if let Some(event) = maybe_event {
+                            return event;
                         }
                     }
                 },
@@ -496,6 +521,89 @@ mod tests {
                 assert_eq!(punch_logs[0].punch.card, 1715004);
             }
             _ => panic!("Expected Event::SiPunches"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_encrypted_mesh_ignored() {
+        let (mut handler, punch_tx, mesh_tx, _mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_secs(60));
+
+        let encrypted_envelope = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                from: 0xdeadbeef,
+                payload_variant: Some(PayloadVariant::Encrypted(vec![1, 2, 3])),
+                ..Default::default()
+            }),
+            gateway_id: "!12345678".to_string(),
+            ..Default::default()
+        };
+
+        // Send the encrypted envelope. It should be ignored.
+        mesh_tx.send(encrypted_envelope).unwrap();
+
+        // Send a device event right after, which should be processed.
+        punch_tx
+            .send(SportIdentMessage::DeviceEvent {
+                added: true,
+                device: "/dev/ttyUSB0".to_owned(),
+            })
+            .unwrap();
+
+        // The next_event call should return the device event, skipping the encrypted packet.
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::DeviceEvent { added, device } => {
+                assert!(added);
+                assert_eq!(device, "/dev/ttyUSB0");
+            }
+            _ => panic!("Expected Event::DeviceEvent"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_decrypted_mesh_packet() {
+        use meshtastic::protobufs::{Data, PortNum};
+
+        let (mut handler, _punch_tx, mesh_tx, _mqtt_tx) =
+            MessageHandler::new_for_test(Duration::from_secs(60));
+
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+
+        let envelope = ServiceEnvelope {
+            packet: Some(MeshPacket {
+                from: 0xdeadbeef,
+                payload_variant: Some(PayloadVariant::Decoded(Data {
+                    portnum: PortNum::SerialApp as i32,
+                    payload: punch.to_vec(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
+            gateway_id: "!12345678".to_string(),
+            ..Default::default()
+        };
+
+        // Send the decoded (decrypted) envelope. It should be processed successfully.
+        mesh_tx.send(envelope).unwrap();
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::SiPunchesMeshtastic(punches, _envelope) => {
+                assert_eq!(punches.len(), 1);
+                assert_eq!(punches[0].punch.code, 47);
+                assert_eq!(punches[0].punch.card, 1715004);
+            }
+            _ => panic!("Expected Event::SiPunchesMeshtastic"),
         }
     }
 }
