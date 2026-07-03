@@ -22,6 +22,8 @@ pub struct Args {
     pub configure: PathBuf,
     #[arg(long)]
     pub erase_flash: bool,
+    #[arg(long)]
+    pub debug: bool,
 }
 
 fn send_command<S: Read + Write>(
@@ -42,12 +44,23 @@ fn send_command<S: Read + Write>(
 
 #[pyfunction]
 pub fn yaroc_nrf() {
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .format_timestamp_millis()
-        .try_init();
-
     let args = Args::parse_from(std::env::args().skip(1));
+    let _ = Python::attach(|py| {
+        let logging = py.import("logging")?;
+        let kwargs = pyo3::types::PyDict::new(py);
+        let level = if args.debug { "DEBUG" } else { "INFO" };
+        kwargs.set_item("level", logging.getattr(level)?)?;
+        // Same as in container.py
+        kwargs.set_item(
+            "format",
+            "%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s",
+        )?;
+        kwargs.set_item("datefmt", "%H:%M:%S")?;
+        logging.call_method("basicConfig", (), Some(&kwargs))?;
+        PyResult::Ok(())
+    });
+
+    info!("Opening serial port {}", args.port);
     let mut serial = tokio_serial::new(&args.port, 112800)
         .timeout(Duration::from_secs(2))
         .open_native()
