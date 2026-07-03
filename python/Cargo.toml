@@ -1,6 +1,6 @@
 [package]
 name = "yaroc-python"
-version = "0.1.22-beta.1"
+version = "0.1.22-beta.2"
 edition = "2024"
 rust-version = { workspace = true }
 
