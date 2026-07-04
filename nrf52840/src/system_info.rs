@@ -100,11 +100,9 @@ pub async fn battery_update(mut saadc: Saadc<'static, 1>) {
         // The raw value is in buf[0].
         let raw = buf[0].max(0);
         let mv = (f32::from(raw) * 1.2207031) as u16;
-        info!("battery: {} mV", mv);
-        battery_sender.send(BatteryInfo {
-            mv,
-            percents: voltage_to_percent(mv),
-        });
+        let percents = voltage_to_percent(mv);
+        info!("Battery voltage: {} mV", mv);
+        battery_sender.send(BatteryInfo { mv, percents });
         ticker.next().await;
     }
 }

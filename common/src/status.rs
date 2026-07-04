@@ -139,6 +139,27 @@ impl CellSignalInfo {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for CellSignalInfo {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "RSRP {}", self.rsrp_dbm);
+        defmt::write!(fmt, " SNR {}.{}", self.snr_cb / 10, self.snr_cb % 10);
+        let network_type = match self.network_type {
+            CellNetworkType::NbIotEcl0 => "NB ECL0",
+            CellNetworkType::NbIotEcl1 => "NB ECL1",
+            CellNetworkType::NbIotEcl2 => "NB ECL2",
+            CellNetworkType::LteM => "LTE-M",
+            CellNetworkType::Umts => "UMTS",
+            CellNetworkType::Lte => "LTE",
+            _ => "",
+        };
+        defmt::write!(fmt, " {}", network_type);
+        if let Some(cellid) = self.cellid {
+            defmt::write!(fmt, ", cell {:X}", cellid);
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
     pub lat: f32,
@@ -175,6 +196,14 @@ pub struct MiniCallHome {
     pub timestamp: Option<DateTime<FixedOffset>>,
     pub totaldatarx: u64,
     pub totaldatatx: u64,
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for MiniCallHome {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "{}", self.signal_info.unwrap_or_default());
+        // TODO: add more fields
+    }
 }
 
 impl MiniCallHome {
