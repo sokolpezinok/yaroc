@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use yaroc_receiver::logs::CellularLogMessage;
 
 use chrono::FixedOffset;
-use yaroc_common::punch::SiPunch;
+use yaroc_common::punch::SiPunch as SiPunchRs;
 use yaroc_common::status::SignalStrength;
 use yaroc_receiver::message_handler::MessageHandlerBuilder;
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
@@ -17,22 +17,93 @@ use yaroc_receiver::system_info::MacAddress;
 
 #[napi(object)]
 #[derive(Serialize, Deserialize, Clone)]
-pub struct DnsEntry {
+#[serde(rename_all = "camelCase")]
+pub struct HostInfo {
     pub name: String,
-    #[napi(js_name = "mac")]
     pub mac_address: String,
 }
 
 #[napi(object)]
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SiPunch {
+    pub card: u32,
+    pub code: u32,
+    pub time: String,
+    pub mode: u32,
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SiPunchLog {
+    pub punch: SiPunch,
+    pub latency_ms: f64,
+    pub host_info: HostInfo,
+    pub rssi_dbm: Option<i32>,
+    pub snr: Option<f64>,
+    pub hop_count: Option<u32>,
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CellularLogPayload {
+    pub mac_address: String,
+    pub text: String,
+    pub rsrp_dbm: Option<i32>,
+    pub snr: Option<f64>,
+    pub battery_percentage: Option<u32>,
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshtasticLogPayload {
+    pub text: String,
+    pub channel: String,
+    pub gateway_id: String,
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeInfo {
+    pub name: String,
+    pub signal_strength: String,
+    pub battery_percentage: Option<u32>,
+    pub codes: Vec<u16>,
+    pub last_update: Option<String>,
+    pub last_punch: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", content = "payload")]
+pub enum YarocEvent {
+    CellularLog(CellularLogPayload),
+    SiPunches(Vec<SiPunchLog>),
+    SiPunch(SiPunch),
+    MeshtasticLog(MeshtasticLogPayload),
+    NodeInfos(Vec<NodeInfo>),
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DnsEntry {
+    pub name: String,
+    pub mac_address: String,
+}
+
+#[napi(object)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct MqttConfig {
     pub url: String,
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
-    #[napi(js_name = "keep_alive_secs")]
     pub keep_alive_secs: u32,
-    #[napi(js_name = "meshtastic_channel")]
     pub meshtastic_channel: Option<String>,
 }
 
@@ -60,7 +131,7 @@ impl MqttClient {
         }
     }
 
-    fn convert_event(event: EventRs) -> Option<serde_json::Value> {
+    fn convert_event(event: EventRs) -> Option<YarocEvent> {
         match event {
             EventRs::CellularLog(cell_log) => {
                 let CellularLogMessage::MCH(ref mch) = cell_log else {
@@ -69,39 +140,28 @@ impl MqttClient {
                 let rsrp = mch.mini_call_home.signal_info.as_ref().map(|s| s.rsrp_dbm as i32);
                 let snr = mch.mini_call_home.signal_info.as_ref().map(|s| s.snr_cb as f64 / 10.0);
                 let battery = mch.mini_call_home.batt_percents.map(|b| b as u32);
-                Some(serde_json::json!({
-                    "type": "CellularLog",
-                    "payload": {
-                        "mac_address": cell_log.mac_address().to_string(),
-                        "text": format!("{}", cell_log),
-                        "rsrp_dbm": rsrp,
-                        "snr": snr,
-                        "battery_percentage": battery,
-                    }
+                Some(YarocEvent::CellularLog(CellularLogPayload {
+                    mac_address: cell_log.mac_address().to_string(),
+                    text: format!("{}", cell_log),
+                    rsrp_dbm: rsrp,
+                    snr,
+                    battery_percentage: battery,
                 }))
             }
-            EventRs::SiPunches(si_punches) | EventRs::SiPunchesMeshtastic(si_punches, _) => {
-                Some(serde_json::json!({
-                    "type": "SiPunches",
-                    "payload": si_punches.into_iter().map(to_js_punch_log_val).collect::<Vec<_>>()
+            EventRs::SiPunches(si_punches) | EventRs::SiPunchesMeshtastic(si_punches, _) => Some(
+                YarocEvent::SiPunches(si_punches.into_iter().map(to_js_punch_log).collect()),
+            ),
+            EventRs::SiPunch(si_punch) => Some(YarocEvent::SiPunch(to_js_punch(si_punch))),
+            EventRs::MeshtasticLog(msh_log, service_envelope) => {
+                Some(YarocEvent::MeshtasticLog(MeshtasticLogPayload {
+                    text: format!("{}", msh_log),
+                    channel: service_envelope.channel_id,
+                    gateway_id: service_envelope.gateway_id,
                 }))
             }
-            EventRs::SiPunch(si_punch) => Some(serde_json::json!({
-                "type": "SiPunch",
-                "payload": to_js_punch_val(si_punch)
-            })),
-            EventRs::MeshtasticLog(msh_log, service_envelope) => Some(serde_json::json!({
-                "type": "MeshtasticLog",
-                "payload": {
-                    "text": format!("{}", msh_log),
-                    "channel": service_envelope.channel_id,
-                    "gateway_id": service_envelope.gateway_id,
-                }
-            })),
-            EventRs::NodeInfos(node_infos) => Some(serde_json::json!({
-                "type": "NodeInfos",
-                "payload": node_infos.into_iter().map(to_js_node_info_val).collect::<Vec<_>>()
-            })),
+            EventRs::NodeInfos(node_infos) => Some(YarocEvent::NodeInfos(
+                node_infos.into_iter().map(to_js_node_info).collect(),
+            )),
             EventRs::DeviceEvent { .. } => None,
         }
     }
@@ -109,7 +169,8 @@ impl MqttClient {
     #[napi]
     pub fn start(
         &mut self,
-        #[napi(ts_arg_type = "(err: Error | null, event: any) => void")] callback: JsFunction,
+        #[napi(ts_arg_type = "(err: Error | null, event: YarocEvent) => void")]
+        callback: JsFunction,
     ) -> Result<()> {
         let tsfn: ThreadsafeFunction<serde_json::Value, ErrorStrategy::CalleeHandled> = callback
             .create_threadsafe_function(0, |ctx| {
@@ -183,7 +244,9 @@ impl MqttClient {
                                 let js_event = Self::convert_event(event);
                                 if let Some(js_event) = js_event {
                                     // TODO: emit Vec<SiPunchLog> as multiple events
-                                    tsfn.call(Ok(js_event), ThreadsafeFunctionCallMode::Blocking);
+                                    if let Ok(js_val) = serde_json::to_value(&js_event) {
+                                        tsfn.call(Ok(js_val), ThreadsafeFunctionCallMode::Blocking);
+                                    }
                                 }
                             }
                             Err(err) => {
@@ -206,34 +269,34 @@ impl MqttClient {
     }
 }
 
-fn to_js_punch_val(punch: SiPunch) -> serde_json::Value {
-    serde_json::json!({
-        "card": punch.card,
-        "code": punch.code,
-        "time": punch.time.to_rfc3339(),
-        "mode": punch.mode,
-    })
+fn to_js_punch(punch: SiPunchRs) -> SiPunch {
+    SiPunch {
+        card: punch.card,
+        code: punch.code as u32,
+        time: punch.time.to_rfc3339(),
+        mode: punch.mode as u32,
+    }
 }
 
-fn to_js_punch_log_val(log: yaroc_receiver::logs::SiPunchLog) -> serde_json::Value {
+fn to_js_punch_log(log: yaroc_receiver::logs::SiPunchLog) -> SiPunchLog {
     let rssi_dbm = log.rssi_snr.as_ref().map(|r| r.rssi_dbm as i32);
     let snr = log.rssi_snr.as_ref().map(|r| r.snr as f64);
     let hop_count = log.rssi_snr.as_ref().map(|r| r.hop_count as u32);
 
-    serde_json::json!({
-        "punch": to_js_punch_val(log.punch),
-        "latency_ms": log.latency.num_milliseconds() as f64,
-        "host_info": {
-            "name": log.host_info.name.clone(),
-            "mac_address": log.host_info.mac_address.to_string(),
+    SiPunchLog {
+        punch: to_js_punch(log.punch),
+        latency_ms: log.latency.num_milliseconds() as f64,
+        host_info: HostInfo {
+            name: log.host_info.name.clone(),
+            mac_address: log.host_info.mac_address.to_string(),
         },
-        "rssi_dbm": rssi_dbm,
-        "snr": snr,
-        "hop_count": hop_count,
-    })
+        rssi_dbm,
+        snr,
+        hop_count,
+    }
 }
 
-fn to_js_node_info_val(node: yaroc_receiver::state::NodeInfo) -> serde_json::Value {
+fn to_js_node_info(node: yaroc_receiver::state::NodeInfo) -> NodeInfo {
     let signal_strength = match node.signal_info.signal_strength() {
         SignalStrength::Disconnected => "____",
         SignalStrength::Weak => "▂___",
@@ -241,14 +304,14 @@ fn to_js_node_info_val(node: yaroc_receiver::state::NodeInfo) -> serde_json::Val
         SignalStrength::Good => "▂▄▆_",
         SignalStrength::Excellent => "▂▄▆█",
     };
-    serde_json::json!({
-        "name": node.name,
-        "signal_strength": signal_strength,
-        "battery_percentage": node.battery_percentage,
-        "codes": node.codes,
-        "last_update": node.last_update.map(|t| t.to_rfc3339()),
-        "last_punch": node.last_punch.map(|t| t.to_rfc3339()),
-    })
+    NodeInfo {
+        name: node.name,
+        signal_strength: signal_strength.to_string(),
+        battery_percentage: node.battery_percentage.map(|b| b as u32),
+        codes: node.codes,
+        last_update: node.last_update.map(|t| t.to_rfc3339()),
+        last_punch: node.last_punch.map(|t| t.to_rfc3339()),
+    }
 }
 
 fn parse_timezone(tz: &str) -> std::result::Result<FixedOffset, String> {
@@ -296,7 +359,7 @@ mod tests {
     use super::*;
     use yaroc_common::status::{CellNetworkType, CellSignalInfo, MiniCallHome};
     use yaroc_receiver::logs::MiniCallHomeLog;
-    use yaroc_receiver::system_info::HostInfo;
+    use yaroc_receiver::system_info::HostInfo as HostInfoRs;
 
     #[test]
     fn test_parse_timezone() {
@@ -331,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_convert_event_cellular_log() {
-        let host_info = HostInfo {
+        let host_info = HostInfoRs {
             name: "TestNode".to_string(),
             mac_address: MacAddress::try_from("1234567890ab").unwrap(),
         };
@@ -355,11 +418,14 @@ mod tests {
         let event = EventRs::CellularLog(cell_log_msg);
         let js_event = MqttClient::convert_event(event).unwrap();
 
-        assert_eq!(js_event["type"], "CellularLog");
-        assert_eq!(js_event["payload"]["mac_address"], "1234567890ab");
-        assert_eq!(js_event["payload"]["rsrp_dbm"], -85);
-        assert_eq!(js_event["payload"]["snr"], 12.0);
-        assert_eq!(js_event["payload"]["battery_percentage"], 88);
+        if let YarocEvent::CellularLog(payload) = js_event {
+            assert_eq!(payload.mac_address, "1234567890ab");
+            assert_eq!(payload.rsrp_dbm, Some(-85));
+            assert_eq!(payload.snr, Some(12.0));
+            assert_eq!(payload.battery_percentage, Some(88));
+        } else {
+            panic!("Expected CellularLog event");
+        }
 
         // Case 2: Disconnected CellularLog
         let cell_log_disconnected = CellularLogMessage::Disconnected {

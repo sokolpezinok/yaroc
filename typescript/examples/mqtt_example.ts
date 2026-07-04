@@ -27,7 +27,7 @@ async function main() {
     const parts = entry.split(',');
     if (parts.length === 2) {
       const [name, mac] = parts;
-      parsedDns.push({ name, mac });
+      parsedDns.push({ name, macAddress: mac });
     } else {
       console.error(`DNS record in the wrong format: ${entry}. It should be <name>,<MAC_address>`);
     }
@@ -38,8 +38,8 @@ async function main() {
     port: 1883,
     username: undefined,
     password: undefined,
-    keep_alive_secs: 15,
-    meshtastic_channel: mshChannel ?? undefined,
+    keepAliveSecs: 15,
+    meshtasticChannel: mshChannel ?? undefined,
   };
 
   const mqttConfig2: MqttConfig = {
@@ -47,8 +47,8 @@ async function main() {
     port: 1883,
     username: undefined,
     password: undefined,
-    keep_alive_secs: 15,
-    meshtastic_channel: mshChannel ?? undefined,
+    keepAliveSecs: 15,
+    meshtasticChannel: mshChannel ?? undefined,
   };
   console.log('Starting Yaroc Native TypeScript client...');
   const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2], "+02:00");
@@ -59,7 +59,7 @@ async function main() {
       return;
     }
 
-    if (event.status === 'initialized') {
+    if ('status' in event) {
       console.log('Everything initialized, starting the event loop');
       return;
     }
@@ -69,15 +69,15 @@ async function main() {
         console.log(`[CellularLog] ${event.payload.text}`);
         break;
       case 'SiPunches':
-        for (const punch_log of event.payload) {
-          console.log(`[SiPunch] ${punch_log.host_info.name} ${punch_log.punch.card} punched ${punch_log.punch.code} at ${punch_log.punch.time}, latency ${punch_log.latency_ms}ms`);
+        for (const punchLog of event.payload) {
+          console.log(`[SiPunch] ${punchLog.hostInfo.name} ${punchLog.punch.card} punched ${punchLog.punch.code} at ${punchLog.punch.time}, latency ${punchLog.latencyMs}ms`);
         }
         break;
       case 'SiPunch':
-        console.log(`[SiPunch] ${event.payload.name} ${event.payload.card} punched ${event.payload.code} at ${event.payload.time}`);
+        console.log(`[SiPunch] ${event.payload.card} punched ${event.payload.code} at ${event.payload.time}`);
         break;
       case 'MeshtasticLog':
-        console.log(`[MeshtasticLog] (Channel: ${event.payload.channel}, Gateway: ${event.payload.gateway_id}) ${event.payload.text}`);
+        console.log(`[MeshtasticLog] (Channel: ${event.payload.channel}, Gateway: ${event.payload.gatewayId}) ${event.payload.text}`);
         break;
       case 'NodeInfos':
         console.log('[NodeInfos]', event.payload);
