@@ -7,8 +7,8 @@
 # Run ideally with buildah:
 # buildah bud -t yaroc --layers --platform linux/arm64 -v ~/.cache/sccache:/root/.cache/sccache .
 
-FROM rust:1.82-slim AS chef
-RUN apt update && apt install -y python3-pip python3-venv sccache protobuf-compiler
+FROM rust:1.96-slim AS chef
+RUN apt update && apt install -y python3 sccache protobuf-compiler pkg-config libudev-dev
 ENV RUSTC_WRAPPER=sccache
 RUN cargo install cargo-chef
 WORKDIR /app
@@ -21,9 +21,12 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-RUN python3 -m venv /opt/venv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install maturin[patchelf]
+RUN uv pip install maturin[patchelf]
 
 COPY . .
 RUN cd python && maturin build --release
+
