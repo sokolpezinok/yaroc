@@ -2,6 +2,7 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
+use log;
 use static_cell::StaticCell;
 use yaroc_common::error::Error;
 use yaroc_common::usb::{RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
@@ -20,7 +21,8 @@ static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static CONTROL_BUF: StaticCell<[u8; 128]> = StaticCell::new();
 static MSOS_DESCRIPTOR: StaticCell<[u8; 128]> = StaticCell::new();
-static STATE: StaticCell<State<'static>> = StaticCell::new();
+static MAIN_STATE: StaticCell<State<'static>> = StaticCell::new();
+static LOG_STATE: StaticCell<State<'static>> = StaticCell::new();
 const PACKET_LEN: usize = 64;
 
 fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
@@ -29,6 +31,12 @@ fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
     config.manufacturer = Some("Sokol Pezinok");
     config.product = Some("Yaroc USB Serial");
     config.max_packet_size_0 = 64;
+
+    // Required for dual CDC ACM (composite device with Interface Association Descriptors)
+    config.device_class = 0xef;
+    config.device_sub_class = 0x02;
+    config.device_protocol = 0x01;
+    config.composite_with_iads = true;
 
     Builder::new(
         driver,
@@ -44,17 +52,24 @@ fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
 pub struct Usb {
     device: UsbDevice<'static, UsbDriver>,
     class: CdcAcmClass<'static, UsbDriver>,
+    log_class: CdcAcmClass<'static, UsbDriver>,
 }
 
 impl Usb {
     /// Creates a new `Usb` instance.
     pub fn new(driver: UsbDriver) -> Self {
         let mut builder = builder(driver);
-        let state = STATE.init(State::new());
-        let class = CdcAcmClass::new(&mut builder, state, PACKET_LEN as u16);
+        let state = MAIN_STATE.init(State::new());
+        let logger_state = LOG_STATE.init(State::new());
+        let main_class = CdcAcmClass::new(&mut builder, state, PACKET_LEN as u16);
+        let log_class = CdcAcmClass::new(&mut builder, logger_state, PACKET_LEN as u16);
         let device = builder.build();
 
-        Self { device, class }
+        Self {
+            device,
+            class: main_class,
+            log_class,
+        }
     }
 
     /// Spawns the USB tasks.
@@ -66,6 +81,7 @@ impl Usb {
             usb_packet_reader_loop(UsbPacketReader::new(self.class, SendPunchHandler))
                 .expect("Failed to spawn task"),
         );
+        spawner.spawn(usb_logger_loop(self.log_class).expect("Failed to spawn task"));
     }
 }
 
@@ -103,4 +119,9 @@ async fn usb_packet_reader_loop(
     usb_packet_reader: UsbPacketReader<CdcAcmClass<'static, UsbDriver>, SendPunchHandler>,
 ) {
     usb_packet_reader.run().await;
+}
+
+#[embassy_executor::task]
+async fn usb_logger_loop(log_class: CdcAcmClass<'static, UsbDriver>) {
+    embassy_usb_logger::with_class!(1024, log::LevelFilter::Debug, log_class).await;
 }

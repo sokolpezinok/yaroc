@@ -26,7 +26,9 @@ embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-usb = { workspace = true, features = ["defmt"] }
 embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
+embassy-usb-logger = { version = "0.6.0" }
 heapless =  { workspace = true }
+log = { workspace = true }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "47d6121c6e823120e8b883a7ac75f44ce7daa3aa", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }

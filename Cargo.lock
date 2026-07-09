@@ -853,6 +853,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-usb-logger"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d67df3b052328a06f8d1d9bb0cb8a013aff9740e43eaa03cc2015e8ccc48d8e5"
+dependencies = [
+ "embassy-futures",
+ "embassy-sync",
+ "embassy-usb",
+ "log",
+]
+
+[[package]]
 name = "embassy-usb-synopsys-otg"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3805,7 +3817,9 @@ dependencies = [
  "embassy-time",
  "embassy-usb",
  "embassy-usb-dfu",
+ "embassy-usb-logger",
  "heapless 0.9.3",
+ "log",
  "nrf-softdevice",
  "panic-probe",
  "postcard",
