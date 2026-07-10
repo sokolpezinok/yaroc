@@ -1,4 +1,4 @@
-# minicallhome_interval = 30           # Mini-call-home status interval in seconds
+minicallhome_interval = 30           # Mini-call-home status interval in seconds
 
 [modem]
 apn = "internet.iot"   # The APN of your SIM card
