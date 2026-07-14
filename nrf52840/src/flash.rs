@@ -1,13 +1,15 @@
 use embassy_embedded_hal::flash::partition::Partition;
 use embassy_sync::mutex::Mutex;
+use femtopb::Message as _;
 use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
     cache::NoCache,
     map::{MapConfig, MapStorage, Value},
     queue::{QueueConfig, QueueStorage},
 };
-pub use yaroc_common::flash::{Flash, ValueIndex};
-use yaroc_common::{RawMutex, error::Error};
+
+use yaroc_common::flash::{Flash, ValueIndex};
+use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
 unsafe extern "C" {
     // These symbols are provided by the linker script (memory.x)
@@ -18,6 +20,7 @@ unsafe extern "C" {
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>,
+    mch_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
     queue_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
 }
 
@@ -26,6 +29,7 @@ pub struct NrfFlash<'a> {
 unsafe impl Send for NrfFlash<'_> {}
 
 const MAP_SIZE: u32 = 8 * 1024;
+const MCH_SIZE: u32 = 24 * 1024;
 
 impl<'a> NrfFlash<'a> {
     /// Creates a new NrfFlash instance
@@ -33,20 +37,41 @@ impl<'a> NrfFlash<'a> {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
         let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
 
-        let queue_size = data_size - MAP_SIZE;
+        let queue_size = data_size - MAP_SIZE - MCH_SIZE;
 
         let map_partition = Partition::new(flash, data_start, MAP_SIZE);
         let config = MapConfig::new(0..MAP_SIZE);
         let map_storage = MapStorage::new(map_partition, config, NoCache::new());
 
-        let queue_partition = Partition::new(flash, data_start + MAP_SIZE, queue_size);
+        let mch_partition = Partition::new(flash, data_start + MAP_SIZE, MCH_SIZE);
+        let mch_config = QueueConfig::new(0..MCH_SIZE);
+        let mch_storage = QueueStorage::new(mch_partition, mch_config, NoCache::new());
+
+        let queue_partition = Partition::new(flash, data_start + MAP_SIZE + MCH_SIZE, queue_size);
         let queue_config = QueueConfig::new(0..queue_size);
         let queue_storage = QueueStorage::new(queue_partition, queue_config, NoCache::new());
 
         Self {
             map_storage,
+            mch_storage,
             queue_storage,
         }
+    }
+
+    /// Stores a MiniCallHome in flash (serialized as a proto).
+    pub async fn write_minicallhome(&mut self, mch: MiniCallHome) -> crate::Result<()> {
+        let status = mch.to_proto();
+        let mch_proto = match status.msg {
+            Some(yaroc_common::proto::status::Msg::MiniCallHome(p)) => p,
+            _ => return Err(Error::ValueError),
+        };
+
+        let mut buffer = [0u8; 256];
+        mch_proto
+            .encode(&mut buffer.as_mut_slice())
+            .map_err(|_| Error::BufferTooSmallError)?;
+        let len = mch_proto.encoded_len();
+        self.mch_storage.push(&buffer[..len], true).await.map_err(|_| Error::FlashError)
     }
 }
 
@@ -55,6 +80,7 @@ impl<'a> Flash for NrfFlash<'a> {
     async fn erase(&mut self) -> crate::Result<()> {
         // TODO: wrap and propagate the error
         self.map_storage.erase_all().await.map_err(|_| Error::FlashError)?;
+        self.mch_storage.erase_all().await.map_err(|_| Error::FlashError)?;
         self.queue_storage.erase_all().await.map_err(|_| Error::FlashError)
     }
 

@@ -11,13 +11,13 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
+    flash::{Flash, ValueIndex},
     mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,
 };
 use yaroc_nrf52840::{
     self as _,
     device::Device,
-    flash::{Flash, ValueIndex},
     send_punch::{
         Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
     },
