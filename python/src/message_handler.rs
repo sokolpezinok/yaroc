@@ -9,8 +9,8 @@ use tokio::sync::Mutex;
 use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::meshtastic::MESHTASTIC_MQTT_PREFIX;
 use yaroc_receiver::message_handler::{
-    MessageHandler as MessageHandlerRs, MessageHandlerBuilder as MessageHandlerBuilderRs,
-    SportIdentConfig, UsbSerialConfig,
+    FakePunchConfig, MessageHandler as MessageHandlerRs,
+    MessageHandlerBuilder as MessageHandlerBuilderRs, SportIdentConfig, UsbSerialConfig,
 };
 use yaroc_receiver::mqtt::MqttConfig as MqttConfigRs;
 use yaroc_receiver::state::Event as EventRs;
@@ -170,7 +170,7 @@ pub struct MessageHandlerBuilder {
     enable_sportident: bool,
     sportident_factory: Option<Py<PyUsbSerialFactory>>,
     meshtastic_tcp: Option<String>,
-    fake_punch_interval: Option<Duration>,
+    fake_punch_config: Option<FakePunchConfig>,
 }
 
 #[pymethods]
@@ -186,7 +186,7 @@ impl MessageHandlerBuilder {
             enable_sportident: false,
             sportident_factory: None,
             meshtastic_tcp: None,
-            fake_punch_interval: None,
+            fake_punch_config: None,
         }
     }
 
@@ -265,7 +265,11 @@ impl MessageHandlerBuilder {
         mut self_: PyRefMut<'py, Self>,
         interval: Duration,
     ) -> PyRefMut<'py, Self> {
-        self_.fake_punch_interval = Some(interval);
+        let config = FakePunchConfig {
+            interval,
+            ..Default::default()
+        };
+        self_.fake_punch_config = Some(config);
         self_
     }
 
@@ -297,8 +301,9 @@ impl MessageHandlerBuilder {
             builder = builder.with_tcp(host.clone());
         }
 
-        if let Some(interval) = self.fake_punch_interval {
-            builder = builder.with_fake_punch(interval);
+        if let Some(config) = &self.fake_punch_config {
+            builder =
+                builder.with_fake_punch(config.interval, Some(config.card), Some(config.code));
         }
 
         let message_handler_rs = builder.build();

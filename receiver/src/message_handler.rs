@@ -22,7 +22,7 @@ use crate::{
 pub struct MessageHandlerInitializer {
     pub meshtastic_tcp: Option<String>,
     pub mqtt_receivers: Vec<MqttReceiver>,
-    pub fake_punch_interval: Option<Duration>,
+    pub fake_punch_config: Option<FakePunchConfig>,
     pub usb_serial_manager: Option<UsbSerialManager>,
 }
 
@@ -73,9 +73,14 @@ impl MessageHandler {
                 });
             }
 
-            if let Some(interval) = init.fake_punch_interval {
+            if let Some(fake_punch_config) = init.fake_punch_config {
                 let si_tx = self.si_tx.clone();
-                info!("Starting a fake SportIdent worker, sending a punch every {interval:?}");
+                let card = fake_punch_config.card;
+                let code = fake_punch_config.code;
+                let interval = fake_punch_config.interval;
+                info!(
+                    "Starting a fake SportIdent worker, sending a punch every {interval:?} with card {card} and code {code}"
+                );
                 let timezone = self.timezone;
                 self.tasks.spawn(async move {
                     let mut interval_timer = tokio::time::interval(interval);
@@ -83,7 +88,7 @@ impl MessageHandler {
                     loop {
                         interval_timer.tick().await;
                         let now = Local::now().with_timezone(&timezone);
-                        let punch = SiPunch::new_send_last_record(46283, 47, now, 18);
+                        let punch = SiPunch::new_send_last_record(card, code, now, 18);
                         if let Err(e) = si_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
                             error!("Failed to send fake punch: {e}");
                             break;
@@ -219,15 +224,31 @@ impl MessageHandler {
     }
 }
 
+pub struct FakePunchConfig {
+    pub interval: Duration,
+    pub card: u32,
+    pub code: u16,
+}
+
+impl Default for FakePunchConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(30),
+            card: 46283,
+            code: 47,
+        }
+    }
+}
+
 /// A builder to construct `MessageHandler` using the builder pattern.
 pub struct MessageHandlerBuilder {
     dns: Vec<(String, MacAddress)>,
     mqtt_configs: Vec<MqttConfig>,
     node_infos_interval: Duration,
     meshtastic_timeout: Duration,
+    fake_punch_config: Option<FakePunchConfig>,
     config: UsbSerialConfig,
     meshtastic_tcp: Option<String>,
-    fake_punch_interval: Option<Duration>,
     timezone: FixedOffset,
 }
 
@@ -240,7 +261,7 @@ impl Default for MessageHandlerBuilder {
             meshtastic_timeout: Duration::from_secs(600),
             config: UsbSerialConfig::default(),
             meshtastic_tcp: None,
-            fake_punch_interval: None,
+            fake_punch_config: None,
             timezone: *Local::now().fixed_offset().offset(),
         }
     }
@@ -289,8 +310,18 @@ impl MessageHandlerBuilder {
     }
 
     /// Sets the interval for sending fake punches (optional).
-    pub fn with_fake_punch(mut self, interval: Duration) -> Self {
-        self.fake_punch_interval = Some(interval);
+    pub fn with_fake_punch(
+        mut self,
+        interval: Duration,
+        card: Option<u32>,
+        code: Option<u16>,
+    ) -> Self {
+        let config = FakePunchConfig {
+            interval,
+            card: card.unwrap_or(46283),
+            code: code.unwrap_or(47),
+        };
+        self.fake_punch_config = Some(config);
         self
     }
 
@@ -349,7 +380,7 @@ impl MessageHandlerBuilder {
             initializer: Some(MessageHandlerInitializer {
                 meshtastic_tcp: self.meshtastic_tcp,
                 mqtt_receivers,
-                fake_punch_interval: self.fake_punch_interval,
+                fake_punch_config: self.fake_punch_config,
                 usb_serial_manager,
             }),
             timezone: self.timezone,
@@ -394,7 +425,7 @@ mod tests {
                 initializer: Some(MessageHandlerInitializer {
                     meshtastic_tcp: None,
                     mqtt_receivers: Vec::new(),
-                    fake_punch_interval: None,
+                    fake_punch_config: None,
                     usb_serial_manager: None,
                 }),
                 timezone: *Local::now().fixed_offset().offset(),
@@ -426,8 +457,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_handler_fake_punch() {
-        let mut handler =
-            MessageHandlerBuilder::new().with_fake_punch(Duration::from_millis(10)).build();
+        let mut handler = MessageHandlerBuilder::new()
+            .with_fake_punch(Duration::from_millis(10), None, None)
+            .build();
 
         let event = timeout(Duration::from_secs(1), handler.next_event())
             .await
@@ -438,6 +470,26 @@ mod tests {
             Event::SiPunch(punch) => {
                 assert_eq!(punch.card, 46283);
                 assert_eq!(punch.code, 47);
+            }
+            _ => panic!("Expected Event::SiPunch"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_fake_punch_custom() {
+        let mut handler = MessageHandlerBuilder::new()
+            .with_fake_punch(Duration::from_millis(10), Some(12345), Some(56))
+            .build();
+
+        let event = timeout(Duration::from_secs(1), handler.next_event())
+            .await
+            .expect("next_event timed out")
+            .expect("next_event failed");
+
+        match event {
+            Event::SiPunch(punch) => {
+                assert_eq!(punch.card, 12345);
+                assert_eq!(punch.code, 56);
             }
             _ => panic!("Expected Event::SiPunch"),
         }
