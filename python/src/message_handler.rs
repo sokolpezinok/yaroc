@@ -264,10 +264,13 @@ impl MessageHandlerBuilder {
     pub fn with_fake_punch<'py>(
         mut self_: PyRefMut<'py, Self>,
         interval: Duration,
+        card: u32,
+        code: u16,
     ) -> PyRefMut<'py, Self> {
         let config = FakePunchConfig {
             interval,
-            ..Default::default()
+            card,
+            code,
         };
         self_.fake_punch_config = Some(config);
         self_

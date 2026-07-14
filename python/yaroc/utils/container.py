@@ -42,11 +42,6 @@ def create_message_handler(
     enable_meshtastic = watch_usb or (meshtastic_tcp is not None)
     enable_sportident = config.get("usb", {}).get("enable", True)
 
-    fake_punch_interval = None
-    if config.get("fake", {}).get("enable", False):
-        fake_punch_interval = config.get("fake", {}).get("interval")
-        logging.info(f"Enabled fake punch source with interval {fake_punch_interval}")
-
     mac_addresses = meshtastic_config.get("mac-addresses", {})
     dns: list[tuple[str, str]] = [
         (mac_address, name) for name, mac_address in mac_addresses.items()
@@ -60,8 +55,16 @@ def create_message_handler(
     )
     if meshtastic_tcp is not None:
         builder = builder.with_tcp(meshtastic_tcp)
-    if fake_punch_interval is not None:
-        builder = builder.with_fake_punch(timedelta(seconds=fake_punch_interval))
+    if config.get("fake", {}).get("enable", False):
+        fake_config = config.get("fake", {})
+        interval = fake_config.get("interval")
+        card = fake_config.get("card", 46283)
+        code = fake_config.get("code", 47)
+        logging.info(
+            f"Enabled fake punch source with interval {interval}, card {card}, code {code}"
+        )
+
+        builder = builder.with_fake_punch(timedelta(seconds=interval), card, code)
     return builder.build()
 
 
