@@ -41,7 +41,6 @@ class MqttClient(Client):
     def __init__(self, hostname: str, mac_addr: str, config: Dict[str, Any]):
         self.topics: Dict[str, Topics] = {}
         self._name = f"aiomqtt-{hostname}"
-        self.mac_addr = mac_addr
         self.broker_url = config.get("broker_url", BROKER_URL)
         self.broker_port = config.get("broker_port", BROKER_PORT)
 

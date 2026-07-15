@@ -16,7 +16,22 @@ async def main_loop():
 
     if "mac_addr" not in config:
         config["mac_addr"] = eth_mac_addr()
-    assert config["mac_addr"] is not None
+
+    client_config = config.get("client", {})
+
+    def is_client_enabled(client_name: str) -> bool:
+        client = client_config.get(client_name, {})
+        return isinstance(client, dict) and client.get("enable", False)
+
+    if is_client_enabled("mqtt") or is_client_enabled("sim7020") or is_client_enabled("roc"):
+        assert config["mac_addr"] is not None, (
+            "MAC address is required for MQTT, SIM7020, and ROC clients"
+        )
+    elif config["mac_addr"] is None:
+        # Irrelevant setting that will be ignored.
+        # TODO: refactor Client class so that this hack is not needed
+        config["mac_addr"] = "000000000000"
+
     hostname = socket.gethostname()
     config["hostname"] = hostname
 
