@@ -1,5 +1,7 @@
 use sequential_storage::map::Value;
 
+use crate::status::MiniCallHome;
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum ValueIndex {
@@ -18,6 +20,9 @@ pub trait Flash {
         key: ValueIndex,
         value: V,
     ) -> impl Future<Output = crate::Result<()>>;
+
+    /// Stores a MiniCallHome in flash (serialized as a proto).
+    fn log_minicallhome(&mut self, mch: MiniCallHome) -> impl Future<Output = crate::Result<()>>;
 
     /// Fetches a value from the flash memory.
     fn read<'b, V: Value<'b>>(

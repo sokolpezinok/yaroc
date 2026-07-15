@@ -201,6 +201,12 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         let mini_call_home = self.system_info.mini_call_home(&mut self.bg77).await;
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
+        // TODO: add a test for logging to flash
+        let _ = self
+            .flash
+            .log_minicallhome(mini_call_home)
+            .await
+            .inspect_err(|e| error!("Error while logging MiniCallHome: {}", { e }));
         self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
             .await
     }
@@ -362,6 +368,13 @@ mod tests {
             &mut self,
             _key: ValueIndex,
             _value: V,
+        ) -> crate::Result<()> {
+            Ok(())
+        }
+
+        async fn log_minicallhome(
+            &mut self,
+            _mch: crate::status::MiniCallHome,
         ) -> crate::Result<()> {
             Ok(())
         }

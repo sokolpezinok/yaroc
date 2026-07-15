@@ -57,22 +57,6 @@ impl<'a> NrfFlash<'a> {
             queue_storage,
         }
     }
-
-    /// Stores a MiniCallHome in flash (serialized as a proto).
-    pub async fn write_minicallhome(&mut self, mch: MiniCallHome) -> crate::Result<()> {
-        let status = mch.to_proto();
-        let mch_proto = match status.msg {
-            Some(yaroc_common::proto::status::Msg::MiniCallHome(p)) => p,
-            _ => return Err(Error::ValueError),
-        };
-
-        let mut buffer = [0u8; 256];
-        mch_proto
-            .encode(&mut buffer.as_mut_slice())
-            .map_err(|_| Error::BufferTooSmallError)?;
-        let len = mch_proto.encoded_len();
-        self.mch_storage.push(&buffer[..len], true).await.map_err(|_| Error::FlashError)
-    }
 }
 
 impl<'a> Flash for NrfFlash<'a> {
@@ -92,6 +76,22 @@ impl<'a> Flash for NrfFlash<'a> {
             .store_item(&mut buffer, &key, &value)
             .await
             .map_err(|_| Error::FlashError)
+    }
+
+    /// Stores a MiniCallHome in flash (serialized as a proto).
+    async fn log_minicallhome(&mut self, mch: MiniCallHome) -> crate::Result<()> {
+        let status = mch.to_proto();
+        let mch_proto = match status.msg {
+            Some(yaroc_common::proto::status::Msg::MiniCallHome(p)) => p,
+            _ => return Err(Error::ValueError),
+        };
+
+        let mut buffer = [0u8; 256];
+        mch_proto
+            .encode(&mut buffer.as_mut_slice())
+            .map_err(|_| Error::BufferTooSmallError)?;
+        let len = mch_proto.encoded_len();
+        self.mch_storage.push(&buffer[..len], true).await.map_err(|_| Error::FlashError)
     }
 
     /// Fetches a value from the flash memory.
