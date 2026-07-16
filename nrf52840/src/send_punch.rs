@@ -6,7 +6,7 @@ use crate::flash::NrfFlash;
 use crate::system_info::MCH_SIGNAL;
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_futures::select::{Either3, select3};
+use embassy_futures::select::{Either4, select4};
 use embassy_nrf::gpio::Output;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
@@ -20,7 +20,7 @@ use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
-    send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
+    send_punch::{AT_RESPONSE_CHANNEL, COMMAND_CHANNEL, SendPunch, SendPunchCommand},
 };
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
@@ -132,17 +132,18 @@ pub async fn send_punch_event_handler(
     }
 
     loop {
-        let signal = select3(
+        let signal = select4(
             MCH_SIGNAL.wait(),
             COMMAND_CHANNEL.receive(),
             punch_receiver.receive(),
+            AT_RESPONSE_CHANNEL.receive(),
         )
         .await;
         {
             let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either3::First(_) => match send_punch.send_mini_call_home().await {
+                Either4::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => {
                         COMMAND_CHANNEL
@@ -151,8 +152,14 @@ pub async fn send_punch_event_handler(
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },
-                Either3::Second(command) => send_punch.execute_command(command).await,
-                Either3::Third(punch) => send_punch.schedule_punch(punch).await,
+                Either4::Second(command) => send_punch.execute_command(command).await,
+                Either4::Third(punch) => send_punch.schedule_punch(punch).await,
+                Either4::Fourth(response) => {
+                    let _ = send_punch
+                        .log_at_response(response)
+                        .await
+                        .inspect_err(|e| error!("Failed to log AT response: {}", e));
+                }
             }
         }
     }

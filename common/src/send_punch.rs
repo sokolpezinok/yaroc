@@ -11,7 +11,7 @@ use heapless::{String, Vec, format};
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
-use crate::at::response::AT_COMMAND_SIZE;
+use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
@@ -38,6 +38,9 @@ pub enum SendPunchCommand {
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
+
+/// A channel for logging AT responses.
+pub static AT_RESPONSE_CHANNEL: Channel<RawMutex, LoggedAtResponse, 3> = Channel::new();
 
 /// A handler for sending punches and other data to the server.
 ///
@@ -309,6 +312,15 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     ) -> impl Future<Output = crate::Result<F::MchIter<'a>>> + 'a {
         info!("Request to read all MiniCallHome logs");
         self.flash.mch_iter()
+    }
+
+    /// Store AT response in flash
+    pub fn log_at_response(
+        &mut self,
+        response: LoggedAtResponse,
+    ) -> impl Future<Output = crate::Result<()>> {
+        info!("Request to read all MiniCallHome logs");
+        self.flash.log_at_response(response)
     }
 
     /// Connects to the MQTT broker.
