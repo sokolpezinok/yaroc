@@ -2,9 +2,13 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
+use femtopb::Message as _;
+use heapless::Vec;
 use log;
 use static_cell::StaticCell;
+
 use yaroc_common::error::Error;
+use yaroc_common::flash::MchIterator;
 use yaroc_common::usb::{RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
@@ -107,6 +111,22 @@ impl RequestHandler for SendPunchHandler {
             UsbCommand::EraseFlash => {
                 send_punch.erase_flash().await?;
                 info!("Flash erased");
+            }
+            UsbCommand::GetMiniCallHomeLogs => {
+                let mut iter = send_punch.get_minicallhome_logs().await?;
+                loop {
+                    let log = iter.next().await?;
+                    match log {
+                        None => break,
+                        Some(mch_proto) => {
+                            let mut buffer: Vec<u8, 128> = Vec::new();
+                            mch_proto
+                                .encode(&mut buffer.as_mut_slice())
+                                .map_err(|_| Error::BufferTooSmallError)?;
+                            return Ok(UsbResponse::MiniCallHomeLog(buffer));
+                        }
+                    }
+                }
             }
         }
         Ok(UsbResponse::Ok)

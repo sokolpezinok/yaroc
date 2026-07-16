@@ -301,6 +301,11 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         self.flash.erase().await
     }
 
+    /// Returns the stored MiniCallHome logs as serialized protos.
+    pub async fn get_minicallhome_logs<'a>(&'a mut self) -> crate::Result<F::MchIter<'a>> {
+        self.flash.mch_iter().await
+    }
+
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await

@@ -5,6 +5,7 @@ use defmt::{debug, error, info, warn};
 use embassy_nrf::usb::{Driver, vbus_detect::SoftwareVbusDetect};
 #[cfg(feature = "nrf")]
 use embassy_usb::class::cdc_acm::CdcAcmClass;
+use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::{debug, error, info, warn};
 use postcard::{from_bytes, to_vec};
@@ -30,13 +31,17 @@ pub enum UsbCommand {
     ConfigureDevice(DeviceConfig),
     /// Erase the flash memory.
     EraseFlash,
+    /// Get MiniCallHome logs.
+    GetMiniCallHomeLogs,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 /// Responses sent back over USB.
 pub enum UsbResponse {
     /// Operation successful.
     Ok,
+    /// MiniCallHome log.
+    MiniCallHomeLog(Vec<u8, 128>),
 }
 
 /// Abstraction over the CDC ACM class.

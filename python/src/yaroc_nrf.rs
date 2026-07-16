@@ -69,6 +69,7 @@ pub fn yaroc_nrf() {
     if args.erase_flash {
         match send_command(&mut serial, UsbCommand::EraseFlash) {
             Ok(UsbResponse::Ok) => info!("Flash erase successful"),
+            Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
             Err(e) => error!("Failed to erase flash: {e}"),
         }
     }
@@ -80,12 +81,14 @@ pub fn yaroc_nrf() {
             let modem_config: ModemConfig = config.modem.into();
             match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
                 Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
+                Ok(r) => error!("Unexpected response from modem configuration: {r:?}"),
                 Err(e) => error!("Failed to configure modem: {e}"),
             }
 
             if let Some(mqtt) = config.mqtt {
                 match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
                     Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
+                    Ok(r) => error!("Unexpected response from MQTT configuration: {r:?}"),
                     Err(e) => error!("Failed to configure MQTT: {e}"),
                 }
             }
@@ -99,6 +102,7 @@ pub fn yaroc_nrf() {
             };
             match send_command(&mut serial, UsbCommand::ConfigureDevice(device_config)) {
                 Ok(UsbResponse::Ok) => info!("Device configuration successful"),
+                Ok(r) => error!("Unexpected response from device configuration: {r:?}"),
                 Err(e) => error!("Failed to configure device: {e}"),
             }
         }
