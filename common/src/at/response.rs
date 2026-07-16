@@ -1,10 +1,11 @@
 use core::{fmt::Display, str::FromStr};
 use heapless::{String, Vec};
+use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents a substring within a larger string, defined by its start and end indices.
 pub struct Substring {
     start: usize,
@@ -35,7 +36,7 @@ pub const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 40;
 const AT_VALUE_COUNT: usize = 8;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents a parsed AT command response line.
 pub struct CommandResponse {
     line: String<AT_COMMAND_SIZE>,
@@ -144,7 +145,7 @@ impl defmt::Format for CommandResponse {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents different types of responses received from a modem.
 pub enum FromModem {
     Line(String<AT_COMMAND_SIZE>),
@@ -187,6 +188,7 @@ impl defmt::Format for FromModem {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents a complete AT response, which can consist of multiple lines.
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
@@ -436,6 +438,22 @@ mod test_at_utils {
         assert_eq!(snr_mult, 55);
         assert_eq!(rsrq_dbm, -20);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_postcard_serialization() -> crate::Result<()> {
+        let from_modem_vec = Vec::from_array([
+            FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?),
+            FromModem::Ok,
+        ]);
+        let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
+
+        let mut buf = [0u8; 256];
+        let serialized = postcard::to_slice(&at_response, &mut buf).unwrap();
+        let deserialized: AtResponse = postcard::from_bytes(serialized).unwrap();
+
+        assert_eq!(at_response, deserialized);
         Ok(())
     }
 }
