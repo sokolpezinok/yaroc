@@ -18,8 +18,8 @@ use crate::config::Config;
 pub struct Args {
     #[arg(short, long)]
     pub port: String,
-    #[arg(short, long, alias = "config", default_value = "nrf52840.toml")]
-    pub configure: PathBuf,
+    #[arg(short, long, alias = "config", num_args = 0..=1, default_missing_value = "nrf52840.toml")]
+    pub configure: Option<PathBuf>,
     #[arg(long)]
     pub erase_flash: bool,
     #[arg(long)]
@@ -74,7 +74,11 @@ pub fn yaroc_nrf() {
         }
     }
 
-    let config_path = crate::config::find_config_file(&args.configure);
+    let Some(ref configure_path) = args.configure else {
+        return;
+    };
+
+    let config_path = crate::config::find_config_file(configure_path);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
             let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
@@ -108,7 +112,7 @@ pub fn yaroc_nrf() {
         }
         Err(e) => {
             if args.erase_flash {
-                info!("No config file found or readable, skipping configuration: {e}");
+                info!("No config file found or not readable, skipping configuration: {e}");
             } else {
                 panic!("Unable to read config file {}: {e}", config_path.display());
             }
@@ -131,7 +135,7 @@ mod tests {
             "--erase-flash",
         ]);
         assert_eq!(args.port, "/dev/ttyACM0");
-        assert_eq!(args.configure, PathBuf::from("my_config.toml"));
+        assert_eq!(args.configure, Some(PathBuf::from("my_config.toml")));
         assert!(args.erase_flash);
 
         // Test with config alias
@@ -143,7 +147,23 @@ mod tests {
             "my_config.toml",
         ]);
         assert_eq!(args_alias.port, "/dev/ttyACM0");
-        assert_eq!(args_alias.configure, PathBuf::from("my_config.toml"));
+        assert_eq!(args_alias.configure, Some(PathBuf::from("my_config.toml")));
         assert!(!args_alias.erase_flash);
+
+        // Test with no configuration specified
+        let args_no_config = Args::parse_from(["test_bin", "--port", "/dev/ttyACM0"]);
+        assert_eq!(args_no_config.port, "/dev/ttyACM0");
+        assert_eq!(args_no_config.configure, None);
+        assert!(!args_no_config.erase_flash);
+
+        // Test with configure flag specified but no path
+        let args_missing_val =
+            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "--configure"]);
+        assert_eq!(args_missing_val.port, "/dev/ttyACM0");
+        assert_eq!(
+            args_missing_val.configure,
+            Some(PathBuf::from("nrf52840.toml"))
+        );
+        assert!(!args_missing_val.erase_flash);
     }
 }
