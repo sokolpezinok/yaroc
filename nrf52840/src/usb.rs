@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{debug, error, info, warn};
 use embassy_executor::Spawner;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::{Builder, UsbDevice};
@@ -9,7 +9,7 @@ use static_cell::StaticCell;
 
 use yaroc_common::error::Error;
 use yaroc_common::flash::MchIterator;
-use yaroc_common::usb::{RequestHandler, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
+use yaroc_common::usb::{CdcAcm, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
 
@@ -82,35 +82,51 @@ impl Usb {
     pub fn spawn(self, spawner: Spawner) {
         spawner.spawn(usb_task(self.device).expect("Failed to spawn task"));
         spawner.spawn(
-            usb_packet_reader_loop(UsbPacketReader::new(self.class, SendPunchHandler))
+            usb_packet_reader_loop(SendPunchUsbPacketReader::new(self.class))
                 .expect("Failed to spawn task"),
         );
         spawner.spawn(usb_logger_loop(self.log_class).expect("Failed to spawn task"));
     }
 }
 
-/// A handler for USB requests that relate to `SendPunch`.
-pub struct SendPunchHandler;
+pub struct SendPunchUsbPacketReader<T> {
+    reader: UsbPacketReader<T>,
+}
 
-impl RequestHandler for SendPunchHandler {
-    async fn handle(&mut self, command: UsbCommand) -> Result<UsbResponse, Error> {
+impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
+    pub fn new(class: T) -> Self {
+        Self {
+            reader: UsbPacketReader::new(class),
+        }
+    }
+
+    async fn write_response(&mut self, response: UsbResponse) -> Result<(), Error> {
+        let response_bytes = postcard::to_vec::<_, 128>(&response)?;
+        self.reader.write(response_bytes.as_slice()).await
+    }
+
+    async fn respond(&mut self, command: UsbCommand) -> Result<(), Error> {
         let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch.as_mut().unwrap();
         match command {
             UsbCommand::ConfigureModem(modem_config) => {
                 send_punch.configure_modem(modem_config).await?;
                 info!("Modem reconfigured");
+                self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureMqtt(mqtt_config) => {
                 send_punch.configure_mqtt(mqtt_config).await?;
                 info!("MQTT reconfigured");
+                self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureDevice(device_config) => {
                 send_punch.update_device_config(device_config).await?;
+                self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::EraseFlash => {
                 send_punch.erase_flash().await?;
                 info!("Flash erased");
+                self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::GetMiniCallHomeLogs => {
                 let mut iter = send_punch.get_minicallhome_logs().await?;
@@ -123,20 +139,49 @@ impl RequestHandler for SendPunchHandler {
                             mch_proto
                                 .encode(&mut buffer.as_mut_slice())
                                 .map_err(|_| Error::BufferTooSmallError)?;
-                            return Ok(UsbResponse::MiniCallHomeLog(buffer));
+                            self.write_response(UsbResponse::MiniCallHomeLog(buffer)).await?;
                         }
+                    }
+                }
+                self.write_response(UsbResponse::Ok).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn run(mut self) {
+        loop {
+            self.reader.wait_connection().await;
+            info!("Connected to USB");
+            loop {
+                let command_result = self.reader.read().await.and_then(|data| {
+                    debug!("Read {} bytes from USB", data.len());
+                    postcard::from_bytes::<UsbCommand>(data).map_err(Into::into)
+                });
+                match command_result {
+                    Ok(command) => {
+                        let _ = self
+                            .respond(command)
+                            .await
+                            .inspect_err(|_| error!("Error while responding to a USB command"));
+                    }
+                    Err(Error::UsbDisconnected) => {
+                        warn!("USB disconnected");
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Error while reading from USB: {}", e);
                     }
                 }
             }
         }
-        Ok(UsbResponse::Ok)
     }
 }
 
 /// A task that reads packets from the USB and handles them.
 #[embassy_executor::task]
 async fn usb_packet_reader_loop(
-    usb_packet_reader: UsbPacketReader<CdcAcmClass<'static, UsbDriver>, SendPunchHandler>,
+    usb_packet_reader: SendPunchUsbPacketReader<CdcAcmClass<'static, UsbDriver>>,
 ) {
     usb_packet_reader.run().await;
 }
