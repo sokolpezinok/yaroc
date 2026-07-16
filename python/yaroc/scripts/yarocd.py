@@ -60,7 +60,7 @@ async def main_loop() -> None:
                 logging.info("Enabling tunneling of SportIdent devices connected via USB")
                 sportident_factory = client.usb_serial_factory()
 
-    meshtastic_serial = meshtastic_conf.get("watch_usb", True)
+    meshtastic_serial = meshtastic_conf.get("watch_usb", False)
     meshtastic_tcp = meshtastic_conf.get("tcp", None)
     meshtastic_timeout = meshtastic_conf.get("timeout", 600)
     builder = (

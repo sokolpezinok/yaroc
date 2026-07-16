@@ -312,8 +312,8 @@ radio2 = "7bfaf584"
 main_channel = "spe" # "SPE" is the shortcut for "Sokol Pezinok", our club name. We use it to name things.
 
 # Meshtastic packets are automatically received via MQTT. You can also connect a Meshtastic
-# device via USB or TCP. Disable `watch_usb` to turn off USB device monitoring.
-# watch_usb = false
+# device via USB or TCP. Enable `watch_usb` to turn on USB device monitoring.
+# watch_usb = true
 # Or connect to meshtasticd over TCP:
 # tcp = "127.0.0.1:4403"
 
