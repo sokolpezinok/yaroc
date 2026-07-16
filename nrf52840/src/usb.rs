@@ -136,7 +136,9 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                         None => break,
                         Some(mch_proto) => {
                             let mut buffer: Vec<u8, _> = Vec::new();
-                            buffer.resize(mch_proto.encoded_len(), 0);
+                            buffer
+                                .resize(mch_proto.encoded_len(), 0)
+                                .map_err(|_| Error::BufferTooSmallError)?;
                             mch_proto
                                 .encode(&mut buffer.as_mut_slice())
                                 .map_err(|_| Error::BufferTooSmallError)?;

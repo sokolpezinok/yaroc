@@ -32,7 +32,7 @@ pub struct NrfFlash<'a> {
 unsafe impl Send for NrfFlash<'_> {}
 
 const MAP_SIZE: u32 = 8 * 1024;
-const MCH_SIZE: u32 = 24 * 1024;
+const MCH_SIZE: u32 = 64 * 1024;
 
 impl<'a> NrfFlash<'a> {
     /// Creates a new NrfFlash instance
