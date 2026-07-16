@@ -393,6 +393,13 @@ mod tests {
             Ok(())
         }
 
+        async fn log_at_response(
+            &mut self,
+            _response: crate::at::response::LoggedAtResponse,
+        ) -> crate::Result<()> {
+            Ok(())
+        }
+
         async fn read<'a, V: Value<'a>>(
             &mut self,
             _key: ValueIndex,

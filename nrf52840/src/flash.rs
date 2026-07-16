@@ -97,6 +97,15 @@ impl<'a> Flash for NrfFlash<'a> {
         self.mch_storage.push(&buffer[..len], true).await.map_err(|_| Error::FlashError)
     }
 
+    async fn log_at_response(
+        &mut self,
+        response: yaroc_common::at::response::LoggedAtResponse,
+    ) -> crate::Result<()> {
+        let mut buffer = [0u8; 512];
+        let serialized = postcard::to_slice(&response, &mut buffer)?;
+        self.queue_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
+    }
+
     /// Fetches a value from the flash memory.
     async fn read<'b, V: Value<'b>>(
         &mut self,

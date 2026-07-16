@@ -1,3 +1,4 @@
+use chrono::{DateTime, FixedOffset};
 use core::{fmt::Display, str::FromStr};
 use heapless::{String, Vec};
 use serde::{Deserialize, Serialize};
@@ -341,6 +342,25 @@ impl AtResponse {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Represents an AT response logged with a timestamp.
+pub struct LoggedAtResponse {
+    pub timestamp: DateTime<FixedOffset>,
+    pub response: AtResponse,
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for LoggedAtResponse {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "LoggedAtResponse {{ timestamp_ms: {}, response: {:?} }}",
+            self.timestamp.timestamp_millis(),
+            self.response
+        );
+    }
+}
+
 #[cfg(test)]
 mod test_at_utils {
     use super::*;
@@ -454,6 +474,27 @@ mod test_at_utils {
         let deserialized: AtResponse = postcard::from_bytes(serialized).unwrap();
 
         assert_eq!(at_response, deserialized);
+        Ok(())
+    }
+
+    #[test]
+    fn test_logged_at_response_serialization() -> crate::Result<()> {
+        let from_modem_vec = Vec::from_array([
+            FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?),
+            FromModem::Ok,
+        ]);
+        let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
+        let timestamp = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let logged_response = LoggedAtResponse {
+            timestamp,
+            response: at_response,
+        };
+
+        let mut buf = [0u8; 512];
+        let serialized = postcard::to_slice(&logged_response, &mut buf).unwrap();
+        let deserialized: LoggedAtResponse = postcard::from_bytes(serialized).unwrap();
+
+        assert_eq!(logged_response, deserialized);
         Ok(())
     }
 }
