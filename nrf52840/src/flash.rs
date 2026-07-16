@@ -5,10 +5,11 @@ use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
     cache::NoCache,
     map::{MapConfig, MapStorage, Value},
-    queue::{QueueConfig, QueueStorage},
+    queue::{QueueConfig, QueueIterator, QueueStorage},
 };
 
-use yaroc_common::flash::{Flash, ValueIndex};
+use yaroc_common::flash::{Flash, MchIterator, ValueIndex};
+use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
 unsafe extern "C" {
@@ -17,11 +18,13 @@ unsafe extern "C" {
     unsafe static _data_flash_size: u32;
 }
 
+type SdPartition<'a> = Partition<'a, RawMutex, SdFlash>;
+
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
-    map_storage: MapStorage<u8, Partition<'a, RawMutex, SdFlash>, NoCache>,
-    mch_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
-    queue_storage: QueueStorage<Partition<'a, RawMutex, SdFlash>, NoCache>,
+    map_storage: MapStorage<u8, SdPartition<'a>, NoCache>,
+    mch_storage: QueueStorage<SdPartition<'a>, NoCache>,
+    queue_storage: QueueStorage<SdPartition<'a>, NoCache>,
 }
 
 // nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
@@ -102,5 +105,37 @@ impl<'a> Flash for NrfFlash<'a> {
     ) -> crate::Result<Option<V>> {
         let key = key as u8;
         self.map_storage.fetch_item(buffer, &key).await.map_err(|_| Error::FlashError)
+    }
+
+    type MchIter<'b>
+        = NrfMchIter<'b, 'a>
+    where
+        Self: 'b;
+
+    async fn mch_iter(&mut self) -> crate::Result<Self::MchIter<'_>> {
+        let iter = self.mch_storage.iter().await.map_err(|_| Error::FlashError)?;
+        Ok(NrfMchIter {
+            iter,
+            buffer: [0u8; 256],
+        })
+    }
+}
+
+pub struct NrfMchIter<'s, 'a> {
+    iter: QueueIterator<'s, SdPartition<'a>, NoCache>,
+    buffer: [u8; 256],
+}
+
+impl<'s, 'a> MchIterator for NrfMchIter<'s, 'a> {
+    async fn next<'b>(&'b mut self) -> crate::Result<Option<MiniCallHomeProto<'b>>> {
+        match self.iter.next(&mut self.buffer).await {
+            Ok(Some(entry)) => {
+                let mch_proto =
+                    MiniCallHomeProto::decode(entry.into_buf()).map_err(|_| Error::ValueError)?;
+                Ok(Some(mch_proto))
+            }
+            Ok(None) => Ok(None),
+            Err(_) => Err(Error::FlashError),
+        }
     }
 }

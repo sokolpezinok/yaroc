@@ -1,5 +1,6 @@
 use sequential_storage::map::Value;
 
+use crate::proto::MiniCallHome as MiniCallHomeProto;
 use crate::status::MiniCallHome;
 
 #[repr(u8)]
@@ -30,4 +31,16 @@ pub trait Flash {
         key: ValueIndex,
         buffer: &'b mut [u8],
     ) -> impl Future<Output = crate::Result<Option<V>>>;
+
+    type MchIter<'a>: MchIterator
+    where
+        Self: 'a;
+
+    /// Returns an iterator over the stored MiniCallHome messages.
+    fn mch_iter(&mut self) -> impl Future<Output = crate::Result<Self::MchIter<'_>>>;
+}
+
+pub trait MchIterator {
+    fn next<'b>(&'b mut self)
+    -> impl Future<Output = crate::Result<Option<MiniCallHomeProto<'b>>>>;
 }

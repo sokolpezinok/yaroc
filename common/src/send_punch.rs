@@ -353,7 +353,11 @@ mod tests {
     use embassy_futures::block_on;
     use sequential_storage::map::Value;
 
-    use crate::{at::fake_modem::FakeModem, bg77::modem_manager::FakePin, flash::ValueIndex};
+    use crate::{
+        at::fake_modem::FakeModem,
+        bg77::modem_manager::FakePin,
+        flash::{MchIterator, ValueIndex},
+    };
 
     use super::*;
 
@@ -384,6 +388,20 @@ mod tests {
             _key: ValueIndex,
             _buffer: &'a mut [u8],
         ) -> crate::Result<Option<V>> {
+            Ok(None)
+        }
+
+        type MchIter<'a> = FakeMchIter;
+
+        async fn mch_iter(&mut self) -> crate::Result<Self::MchIter<'_>> {
+            Ok(FakeMchIter)
+        }
+    }
+
+    struct FakeMchIter;
+
+    impl MchIterator for FakeMchIter {
+        async fn next<'b>(&'b mut self) -> crate::Result<Option<crate::proto::MiniCallHome<'b>>> {
             Ok(None)
         }
     }
