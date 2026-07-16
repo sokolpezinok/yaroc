@@ -299,6 +299,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
 
     /// Erases the flash memory.
     pub fn erase_flash(&mut self) -> impl Future<Output = crate::Result<()>> + '_ {
+        info!("Request to erase the flash");
         self.flash.erase()
     }
 
@@ -306,6 +307,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     pub fn get_minicallhome_logs<'a>(
         &'a mut self,
     ) -> impl Future<Output = crate::Result<F::MchIter<'a>>> + 'a {
+        info!("Request to read all MiniCallHome logs");
         self.flash.mch_iter()
     }
 
