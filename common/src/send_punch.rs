@@ -11,7 +11,7 @@ use heapless::{String, Vec, format};
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
-use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse};
+use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse, PendingLoggedAtResponse};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::hw::ModemHw;
@@ -38,9 +38,6 @@ pub enum SendPunchCommand {
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
-
-/// A channel for logging AT responses.
-pub static AT_RESPONSE_CHANNEL: Channel<RawMutex, LoggedAtResponse, 3> = Channel::new();
 
 /// A handler for sending punches and other data to the server.
 ///
@@ -315,12 +312,20 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Store AT response in flash
-    pub fn log_at_response(
+    pub async fn log_at_response(
         &mut self,
-        response: LoggedAtResponse,
-    ) -> impl Future<Output = crate::Result<()>> {
-        info!("Request to read all MiniCallHome logs");
-        self.flash.log_at_response(response)
+        response: PendingLoggedAtResponse,
+    ) -> crate::Result<()> {
+        if let Some(time) = self.time_from_instant(response.instant) {
+            let logged_response = LoggedAtResponse {
+                timestamp: time,
+                response: response.response,
+            };
+            self.flash.log_at_response(logged_response).await
+        } else {
+            // Return network registration error, as missing time is fault of the network.
+            Err(Error::NetworkRegistrationError)
+        }
     }
 
     /// Connects to the MQTT broker.
@@ -331,6 +336,11 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Synchronizes the system time with the network time from the modem.
     fn synchronize_time(&mut self) -> impl Future<Output = Option<DateTime<FixedOffset>>> + '_ {
         self.system_info.current_time(&mut self.bg77, false)
+    }
+
+    /// Returns the calendar time corresponding to the given `instant`, if synchronized.
+    fn time_from_instant(&self, instant: Instant) -> Option<DateTime<FixedOffset>> {
+        self.system_info.time_from_instant(instant)
     }
 
     /// Executes a `SendPunchCommand`.

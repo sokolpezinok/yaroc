@@ -5,9 +5,12 @@
 //! parses all incoming bytes and routes them to either a URC handler or the main channel for
 //! command-specific replies.
 
-use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
+use super::response::{
+    AT_COMMAND_SIZE, AT_LINES, AT_RESPONSE_CHANNEL, AtResponse, CommandResponse, FromModem,
+    PendingLoggedAtResponse,
+};
 #[cfg(feature = "defmt")]
-use defmt::{self, debug};
+use defmt::{debug, error};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 #[cfg(feature = "std")]
@@ -16,7 +19,7 @@ use embassy_time::{Duration, Instant, WithTimeout};
 use embedded_io_async::Write;
 use heapless::{Vec, format};
 #[cfg(not(feature = "defmt"))]
-use log::debug;
+use log::{debug, error};
 
 use crate::{RawMutex, error::Error};
 
@@ -287,6 +290,16 @@ where
         self.tx.write_all(message).await.map_err(From::from)
     }
 
+    /// Forward failed AT response to the logger.
+    fn forward_failed_response(response: AtResponse) {
+        let _ = AT_RESPONSE_CHANNEL
+            .try_send(PendingLoggedAtResponse {
+                response,
+                instant: Instant::now(),
+            })
+            .inspect_err(|_| error!("Failed to send AT response for loging, channel full"));
+    }
+
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.
     ///
     /// # Arguments
@@ -309,6 +322,7 @@ where
                     command,
                     lines.as_slice()
                 );
+                Self::forward_failed_response(AtResponse::new(lines, command));
                 Err(Error::AtErrorResponse)
             }
             _ => {
@@ -318,6 +332,7 @@ where
                     command,
                     lines.as_slice()
                 );
+                Self::forward_failed_response(AtResponse::new(lines, command));
                 Err(Error::ModemError)
             }
         }
@@ -349,6 +364,9 @@ where
             }
         }
         let response = AtResponse::new(lines, command_prefix);
+        if response.is_error() {
+            Self::forward_failed_response(response.clone());
+        }
         debug!(
             "{}: {}, took {}ms",
             command_prefix,
@@ -374,6 +392,9 @@ where
             }
         }
         let response = AtResponse::new(lines, command);
+        if response.is_error() {
+            Self::forward_failed_response(response.clone());
+        }
         debug!(
             "{}: {}, took {}ms",
             command,

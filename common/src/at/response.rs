@@ -3,7 +3,10 @@ use core::{fmt::Display, str::FromStr};
 use heapless::{String, Vec};
 use serde::{Deserialize, Serialize};
 
+use crate::RawMutex;
 use crate::error::Error;
+use embassy_sync::channel::Channel;
+use embassy_time::Instant;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -220,6 +223,11 @@ impl AtResponse {
         }
     }
 
+    /// Returns `true` if any of the lines in the response is `FromModem::Error`.
+    pub fn is_error(&self) -> bool {
+        self.lines.iter().any(|line| matches!(line, FromModem::Error))
+    }
+
     /// Returns a slice of the `FromModem` lines contained in this `AtResponse`.
     pub fn lines(&self) -> &[FromModem] {
         self.lines.as_slice()
@@ -348,6 +356,17 @@ pub struct LoggedAtResponse {
     pub timestamp: DateTime<FixedOffset>,
     pub response: AtResponse,
 }
+
+/// A response from the AT command interface along with the relative time when it was received.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct PendingLoggedAtResponse {
+    pub response: AtResponse,
+    pub instant: Instant,
+}
+
+/// A channel for logging AT responses.
+pub static AT_RESPONSE_CHANNEL: Channel<RawMutex, PendingLoggedAtResponse, 3> = Channel::new();
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for LoggedAtResponse {

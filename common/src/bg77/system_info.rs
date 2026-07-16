@@ -82,6 +82,15 @@ impl<M: ModemHw> SystemInfo<M> {
         })
     }
 
+    /// Returns the calendar time corresponding to the given `instant`,
+    /// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.
+    pub fn time_from_instant(&self, instant: Instant) -> Option<DateTime<FixedOffset>> {
+        self.boot_time.map(|boot_time| {
+            let delta = TimeDelta::milliseconds(instant.as_millis() as i64);
+            boot_time.checked_add_signed(delta).unwrap()
+        })
+    }
+
     async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
         let response = bg77.call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {

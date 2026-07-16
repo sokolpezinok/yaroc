@@ -26,7 +26,7 @@ pub trait Flash {
     /// Stores a MiniCallHome in flash (serialized as a proto).
     fn log_minicallhome(&mut self, mch: MiniCallHome) -> impl Future<Output = crate::Result<()>>;
 
-    /// Stores a LoggedAtResponse in flash (in the remaining queue storage).
+    /// Stores a LoggedAtResponse in flash.
     fn log_at_response(
         &mut self,
         response: LoggedAtResponse,
