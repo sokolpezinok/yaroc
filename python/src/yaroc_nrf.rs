@@ -62,7 +62,7 @@ pub fn yaroc_nrf() {
 
     info!("Opening serial port {}", args.port);
     let mut serial = tokio_serial::new(&args.port, 112800)
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(10))
         .open_native()
         .expect("Unable to open serial port");
 
