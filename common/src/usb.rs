@@ -36,7 +36,7 @@ pub enum UsbResponse {
     /// Operation successful.
     Ok,
     /// MiniCallHome log.
-    MiniCallHomeLog(Vec<u8, 128>),
+    MiniCallHomeLog(Vec<u8, 54>),
 }
 
 /// Abstraction over the CDC ACM class.

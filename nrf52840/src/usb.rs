@@ -135,7 +135,8 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                     match log {
                         None => break,
                         Some(mch_proto) => {
-                            let mut buffer: Vec<u8, 128> = Vec::new();
+                            let mut buffer: Vec<u8, _> = Vec::new();
+                            buffer.resize(mch_proto.encoded_len(), 0);
                             mch_proto
                                 .encode(&mut buffer.as_mut_slice())
                                 .map_err(|_| Error::BufferTooSmallError)?;
@@ -160,10 +161,9 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                 });
                 match command_result {
                     Ok(command) => {
-                        let _ = self
-                            .respond(command)
-                            .await
-                            .inspect_err(|_| error!("Error while responding to a USB command"));
+                        let _ = self.respond(command).await.inspect_err(|e| {
+                            error!("Error while responding to a USB command: {}", e)
+                        });
                     }
                     Err(Error::UsbDisconnected) => {
                         warn!("USB disconnected");
