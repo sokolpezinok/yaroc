@@ -297,7 +297,7 @@ where
                 response,
                 instant: Instant::now(),
             })
-            .inspect_err(|_| error!("Failed to send AT response for loging, channel full"));
+            .inspect_err(|_| error!("Failed to send AT response for logging, channel full"));
     }
 
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.

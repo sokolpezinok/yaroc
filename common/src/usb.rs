@@ -28,15 +28,20 @@ pub enum UsbCommand {
     EraseFlash,
     /// Get MiniCallHome logs.
     GetMiniCallHomeLogs,
+    /// Get LoggedAtResponse logs.
+    GetLoggedAtResponseLogs,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 /// Responses sent back over USB.
+#[allow(clippy::large_enum_variant)]
 pub enum UsbResponse {
     /// Operation successful.
     Ok,
     /// MiniCallHome log.
     MiniCallHomeLog(Vec<u8, 54>),
+    /// LoggedAtResponse log.
+    LoggedAtResponseLog(Vec<u8, 437>),
 }
 
 /// Abstraction over the CDC ACM class.

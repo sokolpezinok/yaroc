@@ -387,6 +387,9 @@ impl defmt::Format for LoggedAtResponse {
 mod test_at_utils {
     use super::*;
 
+    extern crate std;
+    use std::format;
+
     #[test]
     fn test_split_at_response() {
         let res = "+QMTSTAT: 0,2";
@@ -517,6 +520,35 @@ mod test_at_utils {
         let deserialized: LoggedAtResponse = postcard::from_bytes(serialized).unwrap();
 
         assert_eq!(logged_response, deserialized);
+        Ok(())
+    }
+
+    #[test]
+    fn test_max_logged_at_response_serialization() -> crate::Result<()> {
+        let line = format!("+{:A<10}: {:B<77}", "", "");
+        assert_eq!(line.len(), 90);
+        let from_modem_vec = Vec::from_array([
+            FromModem::CommandResponse(CommandResponse::new(&line)?),
+            FromModem::CommandResponse(CommandResponse::new(&line)?),
+            FromModem::CommandResponse(CommandResponse::new(&line)?),
+            FromModem::CommandResponse(CommandResponse::new(&line)?),
+        ]);
+        let max_prefix = "B".repeat(20);
+        let at_response = AtResponse::new(from_modem_vec, &max_prefix);
+        let timestamp =
+            DateTime::parse_from_rfc3339("2026-07-16T22:46:15.999999999+02:00").unwrap();
+        let logged_response = LoggedAtResponse {
+            timestamp,
+            response: at_response,
+        };
+
+        let mut buf = [0u8; 1024];
+        let serialized = postcard::to_slice(&logged_response, &mut buf).unwrap();
+        assert!(
+            serialized.len() <= 437,
+            "Serialized size exceeds 437: {}",
+            serialized.len()
+        );
         Ok(())
     }
 }

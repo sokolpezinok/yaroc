@@ -7,6 +7,7 @@ use femtopb::Message as _;
 use log::{error, info};
 use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
+use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::send_punch::DeviceConfig;
 use yaroc_common::status::MiniCallHome;
@@ -28,6 +29,8 @@ pub struct Args {
     #[arg(long)]
     pub dump_mch_logs: bool,
     #[arg(long)]
+    pub dump_at_logs: bool,
+    #[arg(long)]
     pub debug: bool,
 }
 
@@ -40,7 +43,7 @@ fn send_command<S: Read + Write>(
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
-    let mut read_buf = [0u8; 64];
+    let mut read_buf = [0u8; 1024];
     let n = serial
         .read(&mut read_buf)
         .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
@@ -56,7 +59,7 @@ fn send_command_multiple_responses<S: Read + Write>(
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
-    let mut read_buf = [0u8; 64];
+    let mut read_buf = [0u8; 1024];
     let mut responses = Vec::new();
     info!("Awaiting logs from the device");
     loop {
@@ -83,7 +86,22 @@ fn dump_mini_call_home_logs(responses: Vec<UsbResponse>) {
                     info!("{:?}", mch);
                 }
                 Err(e) => {
-                    error!("Failed to convert MiniCallHomeProto to MiniCallHome: {e:?}");
+                    error!("Failed to convert MiniCallHomeProto to MiniCallHome: {e}");
+                }
+            }
+        }
+    }
+}
+
+fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
+    for response in responses {
+        if let UsbResponse::LoggedAtResponseLog(buf) = response {
+            match from_bytes::<LoggedAtResponse>(buf.as_slice()) {
+                Ok(log) => {
+                    info!("{:?}", log);
+                }
+                Err(e) => {
+                    error!("Failed to deserialize LoggedAtResponse: {e}");
                 }
             }
         }
@@ -126,6 +144,13 @@ pub fn yaroc_nrf() {
         match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
             Ok(responses) => dump_mini_call_home_logs(responses),
             Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
+        }
+    }
+
+    if args.dump_at_logs {
+        match send_command_multiple_responses(&mut serial, UsbCommand::GetLoggedAtResponseLogs) {
+            Ok(responses) => dump_logged_at_response_logs(responses),
+            Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
         }
     }
 
@@ -188,11 +213,13 @@ mod tests {
             "my_config.toml",
             "--erase-flash",
             "--dump-mch-logs",
+            "--dump-at-logs",
         ]);
         assert_eq!(args.port, "/dev/ttyACM0");
         assert_eq!(args.configure, Some(PathBuf::from("my_config.toml")));
         assert!(args.erase_flash);
         assert!(args.dump_mch_logs);
+        assert!(args.dump_at_logs);
 
         // Test with config alias
         let args_alias = Args::parse_from([

@@ -8,7 +8,7 @@ use log;
 use static_cell::StaticCell;
 
 use yaroc_common::error::Error;
-use yaroc_common::flash::MchIterator;
+use yaroc_common::flash::{LoggedAtResponseIterator, MchIterator};
 use yaroc_common::usb::{CdcAcm, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
 use crate::send_punch::SEND_PUNCH_MUTEX;
@@ -101,7 +101,7 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
     }
 
     async fn write_response(&mut self, response: UsbResponse) -> Result<(), Error> {
-        let response_bytes = postcard::to_vec::<_, 128>(&response)?;
+        let response_bytes = postcard::to_vec::<_, 576>(&response)?;
         self.reader.write(response_bytes.as_slice()).await
     }
 
@@ -143,6 +143,25 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                                 .encode(&mut buffer.as_mut_slice())
                                 .map_err(|_| Error::BufferTooSmallError)?;
                             self.write_response(UsbResponse::MiniCallHomeLog(buffer)).await?;
+                        }
+                    }
+                }
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::GetLoggedAtResponseLogs => {
+                let mut iter = send_punch.get_logged_at_response_logs().await?;
+                loop {
+                    let log = iter.next().await?;
+                    match log {
+                        None => break,
+                        Some(logged_response) => {
+                            let serialized = postcard::to_vec::<_, 437>(&logged_response)?;
+                            let mut vec_buffer = Vec::new();
+                            vec_buffer
+                                .extend_from_slice(serialized.as_slice())
+                                .map_err(|_| Error::BufferTooSmallError)?;
+                            self.write_response(UsbResponse::LoggedAtResponseLog(vec_buffer))
+                                .await?;
                         }
                     }
                 }
