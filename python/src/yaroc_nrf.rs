@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use log::{error, info};
-use postcard::to_stdvec;
+use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
 use yaroc_common::send_punch::DeviceConfig;
 use yaroc_common::{
@@ -39,7 +39,32 @@ fn send_command<S: Read + Write>(
     let n = serial
         .read(&mut read_buf)
         .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
-    postcard::from_bytes(&read_buf[..n]).map_err(|e| format!("Failed to parse response: {e}"))
+    from_bytes(&read_buf[..n]).map_err(|e| format!("Failed to parse response: {e}"))
+}
+
+#[allow(dead_code)]
+fn send_command_multiple_responses<S: Read + Write>(
+    serial: &mut S,
+    command: UsbCommand,
+) -> Result<Vec<UsbResponse>, String> {
+    let buf = to_stdvec(&command).map_err(|e| format!("Serialization failed: {e}"))?;
+    serial
+        .write_all(buf.as_slice())
+        .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
+
+    let mut read_buf = [0u8; 64];
+    let mut responses = Vec::new();
+    loop {
+        let n = serial
+            .read(&mut read_buf)
+            .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
+        match from_bytes(&read_buf[..n]) {
+            Ok(UsbResponse::Ok) => break,
+            Ok(response) => responses.push(response),
+            Err(e) => error!("Failed to parse response: {e}"),
+        }
+    }
+    Ok(responses)
 }
 
 #[pyfunction]
