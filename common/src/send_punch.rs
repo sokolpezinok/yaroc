@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset};
+use core::future::Future;
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -297,23 +298,25 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Erases the flash memory.
-    pub async fn erase_flash(&mut self) -> crate::Result<()> {
-        self.flash.erase().await
+    pub fn erase_flash(&mut self) -> impl Future<Output = crate::Result<()>> + '_ {
+        self.flash.erase()
     }
 
     /// Returns the stored MiniCallHome logs as serialized protos.
-    pub async fn get_minicallhome_logs<'a>(&'a mut self) -> crate::Result<F::MchIter<'a>> {
-        self.flash.mch_iter().await
+    pub fn get_minicallhome_logs<'a>(
+        &'a mut self,
+    ) -> impl Future<Output = crate::Result<F::MchIter<'a>>> + 'a {
+        self.flash.mch_iter()
     }
 
     /// Connects to the MQTT broker.
-    async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await
+    fn mqtt_connect(&mut self) -> impl Future<Output = crate::Result<()>> + '_ {
+        self.mqtt_client.connect(&mut self.bg77, &self.modem_manager)
     }
 
     /// Synchronizes the system time with the network time from the modem.
-    async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
-        self.system_info.current_time(&mut self.bg77, false).await
+    fn synchronize_time(&mut self) -> impl Future<Output = Option<DateTime<FixedOffset>>> + '_ {
+        self.system_info.current_time(&mut self.bg77, false)
     }
 
     /// Executes a `SendPunchCommand`.
