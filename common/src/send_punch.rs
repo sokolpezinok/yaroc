@@ -311,6 +311,14 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         self.flash.mch_iter()
     }
 
+    /// Returns the stored LoggedAtResponse logs.
+    pub fn get_logged_at_response_logs<'a>(
+        &'a mut self,
+    ) -> impl Future<Output = crate::Result<F::LoggedAtResponseIter<'a>>> + 'a {
+        info!("Request to read all LoggedAtResponse logs");
+        self.flash.logged_at_response_iter()
+    }
+
     /// Store AT response in flash
     pub async fn log_at_response(
         &mut self,
@@ -388,7 +396,7 @@ mod tests {
     use crate::{
         at::fake_modem::FakeModem,
         bg77::modem_manager::FakePin,
-        flash::{MchIterator, ValueIndex},
+        flash::{LoggedAtResponseIterator, MchIterator, ValueIndex},
     };
 
     use super::*;
@@ -435,12 +443,28 @@ mod tests {
         async fn mch_iter(&mut self) -> crate::Result<Self::MchIter<'_>> {
             Ok(FakeMchIter)
         }
+
+        type LoggedAtResponseIter<'a> = FakeLoggedAtResponseIter;
+
+        async fn logged_at_response_iter(
+            &mut self,
+        ) -> crate::Result<Self::LoggedAtResponseIter<'_>> {
+            Ok(FakeLoggedAtResponseIter)
+        }
     }
 
     struct FakeMchIter;
 
     impl MchIterator for FakeMchIter {
         async fn next<'b>(&'b mut self) -> crate::Result<Option<crate::proto::MiniCallHome<'b>>> {
+            Ok(None)
+        }
+    }
+
+    struct FakeLoggedAtResponseIter;
+
+    impl LoggedAtResponseIterator for FakeLoggedAtResponseIter {
+        async fn next(&mut self) -> crate::Result<Option<crate::at::response::LoggedAtResponse>> {
             Ok(None)
         }
     }

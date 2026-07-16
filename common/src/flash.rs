@@ -45,9 +45,22 @@ pub trait Flash {
 
     /// Returns an iterator over the stored MiniCallHome messages.
     fn mch_iter(&mut self) -> impl Future<Output = crate::Result<Self::MchIter<'_>>>;
+
+    type LoggedAtResponseIter<'a>: LoggedAtResponseIterator
+    where
+        Self: 'a;
+
+    /// Returns an iterator over the stored LoggedAtResponse messages.
+    fn logged_at_response_iter(
+        &mut self,
+    ) -> impl Future<Output = crate::Result<Self::LoggedAtResponseIter<'_>>>;
 }
 
 pub trait MchIterator {
     fn next<'b>(&'b mut self)
     -> impl Future<Output = crate::Result<Option<MiniCallHomeProto<'b>>>>;
+}
+
+pub trait LoggedAtResponseIterator {
+    fn next(&mut self) -> impl Future<Output = crate::Result<Option<LoggedAtResponse>>>;
 }

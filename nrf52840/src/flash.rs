@@ -8,7 +8,8 @@ use sequential_storage::{
     queue::{QueueConfig, QueueIterator, QueueStorage},
 };
 
-use yaroc_common::flash::{Flash, MchIterator, ValueIndex};
+use yaroc_common::at::response::LoggedAtResponse;
+use yaroc_common::flash::{Flash, LoggedAtResponseIterator, MchIterator, ValueIndex};
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
@@ -128,6 +129,19 @@ impl<'a> Flash for NrfFlash<'a> {
             buffer: [0u8; 256],
         })
     }
+
+    type LoggedAtResponseIter<'b>
+        = NrfLoggedAtResponseIter<'b, 'a>
+    where
+        Self: 'b;
+
+    async fn logged_at_response_iter(&mut self) -> crate::Result<Self::LoggedAtResponseIter<'_>> {
+        let iter = self.queue_storage.iter().await.map_err(|_| Error::FlashError)?;
+        Ok(NrfLoggedAtResponseIter {
+            iter,
+            buffer: [0u8; 512],
+        })
+    }
 }
 
 pub struct NrfMchIter<'s, 'a> {
@@ -145,6 +159,23 @@ impl<'s, 'a> MchIterator for NrfMchIter<'s, 'a> {
             }
             Ok(None) => Ok(None),
             Err(_) => Err(Error::FlashError),
+        }
+    }
+}
+
+pub struct NrfLoggedAtResponseIter<'s, 'a> {
+    iter: QueueIterator<'s, SdPartition<'a>, NoCache>,
+    buffer: [u8; 512],
+}
+
+impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
+    async fn next(&mut self) -> crate::Result<Option<LoggedAtResponse>> {
+        match self.iter.next(&mut self.buffer).await.map_err(|_| Error::FlashError)? {
+            Some(entry) => {
+                let logged_response = postcard::from_bytes(entry.into_buf())?;
+                Ok(Some(logged_response))
+            }
+            None => Ok(None),
         }
     }
 }
