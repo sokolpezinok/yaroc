@@ -3,10 +3,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use femtopb::Message as _;
 use log::{error, info};
 use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
+use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::send_punch::DeviceConfig;
+use yaroc_common::status::MiniCallHome;
 use yaroc_common::{
     bg77::modem_manager::ModemConfig,
     usb::{UsbCommand, UsbResponse},
@@ -22,6 +25,8 @@ pub struct Args {
     pub configure: Option<PathBuf>,
     #[arg(long)]
     pub erase_flash: bool,
+    #[arg(long)]
+    pub dump_mch_logs: bool,
     #[arg(long)]
     pub debug: bool,
 }
@@ -42,7 +47,6 @@ fn send_command<S: Read + Write>(
     from_bytes(&read_buf[..n]).map_err(|e| format!("Failed to parse response: {e}"))
 }
 
-#[allow(dead_code)]
 fn send_command_multiple_responses<S: Read + Write>(
     serial: &mut S,
     command: UsbCommand,
@@ -54,6 +58,7 @@ fn send_command_multiple_responses<S: Read + Write>(
 
     let mut read_buf = [0u8; 64];
     let mut responses = Vec::new();
+    info!("Awaiting logs from the device");
     loop {
         let n = serial
             .read(&mut read_buf)
@@ -65,6 +70,24 @@ fn send_command_multiple_responses<S: Read + Write>(
         }
     }
     Ok(responses)
+}
+
+fn dump_mini_call_home_logs(responses: Vec<UsbResponse>) {
+    for response in responses {
+        if let UsbResponse::MiniCallHomeLog(buf) = response {
+            let mch = MiniCallHomeProto::decode(buf.as_slice())
+                .map_err(From::from)
+                .and_then(MiniCallHome::try_from);
+            match mch {
+                Ok(mch) => {
+                    info!("{:?}", mch);
+                }
+                Err(e) => {
+                    error!("Failed to convert MiniCallHomeProto to MiniCallHome: {e:?}");
+                }
+            }
+        }
+    }
 }
 
 #[pyfunction]
@@ -99,6 +122,13 @@ pub fn yaroc_nrf() {
         }
     }
 
+    if args.dump_mch_logs {
+        match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
+            Ok(responses) => dump_mini_call_home_logs(responses),
+            Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
+        }
+    }
+
     let Some(ref configure_path) = args.configure else {
         return;
     };
@@ -113,7 +143,6 @@ pub fn yaroc_nrf() {
                 Ok(r) => error!("Unexpected response from modem configuration: {r:?}"),
                 Err(e) => error!("Failed to configure modem: {e}"),
             }
-
             if let Some(mqtt) = config.mqtt {
                 match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
                     Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
@@ -158,10 +187,12 @@ mod tests {
             "--configure",
             "my_config.toml",
             "--erase-flash",
+            "--dump-mch-logs",
         ]);
         assert_eq!(args.port, "/dev/ttyACM0");
         assert_eq!(args.configure, Some(PathBuf::from("my_config.toml")));
         assert!(args.erase_flash);
+        assert!(args.dump_mch_logs);
 
         // Test with config alias
         let args_alias = Args::parse_from([
@@ -190,5 +221,6 @@ mod tests {
             Some(PathBuf::from("nrf52840.toml"))
         );
         assert!(!args_missing_val.erase_flash);
+        assert!(!args_alias.dump_mch_logs);
     }
 }

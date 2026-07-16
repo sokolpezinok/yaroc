@@ -9,6 +9,8 @@ pub enum Error {
     FormatError,
     #[error("Cannot parse string as the given type")]
     ParseError,
+    #[error("Protobuf parse error: {0}")]
+    FemtopbDecodeError(femtopb::error::DecodeError),
     #[error("Postcard parsing error")]
     PostcardParseError(#[from] postcard::Error),
     #[error("Supplied wrong function argument")]
@@ -62,5 +64,11 @@ impl From<core::convert::Infallible> for Error {
 impl From<embassy_nrf::uarte::Error> for Error {
     fn from(e: embassy_nrf::uarte::Error) -> Self {
         Error::UartWriteError(e)
+    }
+}
+
+impl From<femtopb::error::DecodeError> for Error {
+    fn from(e: femtopb::error::DecodeError) -> Self {
+        Error::FemtopbDecodeError(e)
     }
 }
