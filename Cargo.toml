@@ -53,3 +53,6 @@ overflow-checks = false
 lto = true
 codegen-units = 1
 strip = false
+
+[profile.dev]
+opt-level = 1

@@ -22,6 +22,7 @@ jobs:
       run: |
         cargo build --verbose
         rustup target add thumbv7em-none-eabihf
+        cargo build -p yaroc-nrf52840 --target thumbv7em-none-eabihf
         cargo build -r -p yaroc-nrf52840 --target thumbv7em-none-eabihf
     - name: Run tests
       run: |
