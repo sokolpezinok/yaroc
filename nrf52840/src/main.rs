@@ -56,7 +56,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
-    let mut buffer = [0; 4096];
+    let mut buffer = [0; 512];
     match flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await {
         Ok(Some(reduced_config)) => {
             mqtt_config.update(reduced_config);
