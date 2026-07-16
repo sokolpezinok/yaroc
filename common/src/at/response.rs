@@ -35,6 +35,7 @@ impl Display for Substring {
 }
 
 pub const AT_COMMAND_SIZE: usize = 90;
+pub const AT_PREFIX_SIZE: usize = 20;
 pub const AT_RESPONSE_SIZE: usize = 50;
 pub const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 40;
@@ -196,7 +197,9 @@ impl defmt::Format for FromModem {
 /// Represents a complete AT response, which can consist of multiple lines.
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
-    command: String<AT_COMMAND_SIZE>,
+    /// AT command prefix, e.g. `+QMTPUB`, without the initial `AT` and without anything that comes
+    /// after.
+    command_prefix: String<AT_PREFIX_SIZE>,
 }
 
 #[cfg(feature = "defmt")]
@@ -219,7 +222,7 @@ impl AtResponse {
         let command_prefix = &command[..pos];
         Self {
             lines,
-            command: String::from_str(command_prefix).unwrap(),
+            command_prefix: String::from_str(command_prefix).unwrap(),
         }
     }
 
@@ -244,7 +247,7 @@ impl AtResponse {
     ) -> Result<&CommandResponse, Error> {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line
-                && command_response.command() == &self.command[1..]
+                && command_response.command() == &self.command_prefix[1..]
             {
                 let values = command_response.values();
                 match filter.as_ref() {
