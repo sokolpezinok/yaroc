@@ -230,4 +230,21 @@ mod test {
         );
         assert_eq!(datetime.offset().local_minus_utc(), 3600);
     }
+
+    #[test]
+    fn test_time_from_instant() {
+        let mut system_info = SystemInfo::<FakeModem>::default();
+
+        // Returns None when boot time is not synchronized
+        assert!(system_info.time_from_instant(Instant::now()).is_none());
+
+        // Returns correct time when boot time is set
+        let boot_time = DateTime::parse_from_rfc3339("2026-07-17T18:00:00+02:00").unwrap();
+        system_info.boot_time = Some(boot_time);
+
+        let instant = Instant::from_secs(5);
+        let calculated = system_info.time_from_instant(instant).unwrap();
+        let expected = DateTime::parse_from_rfc3339("2026-07-17T18:00:05+02:00").unwrap();
+        assert_eq!(calculated, expected);
+    }
 }

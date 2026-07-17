@@ -302,6 +302,23 @@ mod tests {
     }
 
     #[test]
+    fn test_csv_serialization_edge_cases() {
+        // Non-MCH Log variants and corrupted payloads should be skipped
+        let responses = vec![
+            UsbResponse::Ok,
+            // Invalid protobuf payload
+            UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[0xFF; 10]).unwrap()),
+        ];
+        let mut csv_buf = Vec::new();
+        write_mch_logs_to_csv(&responses, &mut csv_buf).unwrap();
+        let csv_str = String::from_utf8(csv_buf).unwrap();
+        assert_eq!(
+            csv_str.trim(),
+            "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
+        );
+    }
+
+    #[test]
     fn test_args_parsing() {
         let args = Args::parse_from([
             "test_bin",
