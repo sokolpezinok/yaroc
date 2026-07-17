@@ -106,9 +106,10 @@ Setting up the device is currently quite complex, requiring a working Rust toolc
    ```sh
    rustup target add thumbv7em-none-eabihf
    ```
-5. Clone the repository (if you haven't already), and flash the firmware using Cargo from the project root directory:
+5. Clone the repository (if you haven't already), and flash the firmware using Cargo from the `nrf52840` directory:
    ```sh
-   DEFMT_LOG=debug cargo run -p yaroc-nrf52840 --release
+   cd nrf52840
+   DEFMT_LOG=debug cargo run --release
    ```
 6. This will compile, flash, and run the firmware, displaying the output logs in your terminal. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
 
