@@ -75,7 +75,16 @@ fn send_command_multiple_responses<S: Read + Write>(
     Ok(responses)
 }
 
-fn dump_mini_call_home_logs(responses: Vec<UsbResponse>) {
+fn write_mch_logs_to_csv<W: Write>(
+    responses: &[UsbResponse],
+    writer: &mut W,
+) -> Result<(), String> {
+    writeln!(
+        writer,
+        "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
+    )
+    .map_err(|e| format!("Failed to write CSV header: {e}"))?;
+
     for response in responses {
         if let UsbResponse::MiniCallHomeLog(buf) = response {
             let mch = MiniCallHomeProto::decode(buf.as_slice())
@@ -83,7 +92,41 @@ fn dump_mini_call_home_logs(responses: Vec<UsbResponse>) {
                 .and_then(MiniCallHome::try_from);
             match mch {
                 Ok(mch) => {
-                    info!("{:?}", mch);
+                    let timestamp_str = mch.timestamp.map(|t| t.to_rfc3339()).unwrap_or_default();
+                    let batt_mv_str = mch.batt_mv.map(|v| v.to_string()).unwrap_or_default();
+                    let batt_percents_str =
+                        mch.batt_percents.map(|p| p.to_string()).unwrap_or_default();
+                    let cpu_temp_str =
+                        mch.cpu_temperature.map(|t| t.to_string()).unwrap_or_default();
+
+                    let (network_type_str, rsrp_dbm_str, snr_db_str, cellid_str) =
+                        if let Some(ref signal_info) = mch.signal_info {
+                            (
+                                format!("{:?}", signal_info.network_type),
+                                signal_info.rsrp_dbm.to_string(),
+                                format!("{:.1}", signal_info.snr_cb as f32 / 10.0),
+                                signal_info
+                                    .cellid
+                                    .map(|id| format!("{:X}", id))
+                                    .unwrap_or_default(),
+                            )
+                        } else {
+                            (String::new(), String::new(), String::new(), String::new())
+                        };
+
+                    writeln!(
+                        writer,
+                        "{},{},{},{},{},{},{},{}",
+                        timestamp_str,
+                        batt_mv_str,
+                        batt_percents_str,
+                        cpu_temp_str,
+                        network_type_str,
+                        rsrp_dbm_str,
+                        snr_db_str,
+                        cellid_str
+                    )
+                    .map_err(|e| format!("Failed to write CSV row: {e}"))?;
                 }
                 Err(e) => {
                     error!("Failed to convert MiniCallHomeProto to MiniCallHome: {e}");
@@ -91,6 +134,8 @@ fn dump_mini_call_home_logs(responses: Vec<UsbResponse>) {
             }
         }
     }
+    writer.flush().map_err(|e| format!("Failed to flush CSV writer: {e}"))?;
+    Ok(())
 }
 
 fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
@@ -142,7 +187,12 @@ pub fn yaroc_nrf() {
 
     if args.dump_mch_logs {
         match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
-            Ok(responses) => dump_mini_call_home_logs(responses),
+            Ok(responses) => {
+                let mut stdout = std::io::stdout();
+                if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
+                    error!("Failed to write MiniCallHome logs to stdout: {e}");
+                }
+            }
             Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
         }
     }
@@ -202,6 +252,54 @@ pub fn yaroc_nrf() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_csv_serialization() {
+        use yaroc_common::proto::{CellNetworkType as ProtoCellNetworkType, Timestamp};
+
+        let mch_proto = MiniCallHomeProto {
+            freq: 32,
+            millivolts: 3600,
+            network_type: femtopb::EnumValue::Known(ProtoCellNetworkType::LteM),
+            rsrp_dbm: -100,
+            signal_snr_cb: 15,
+            cellid: 0x12ABCD,
+            time: Some(Timestamp {
+                millis_epoch: 1782512139000,
+                ..Default::default()
+            }),
+            totaldatarx: 500,
+            totaldatatx: 600,
+            ..Default::default()
+        };
+
+        let mut buf = [0u8; 100];
+        let mut slice = buf.as_mut_slice();
+        mch_proto.encode(&mut slice).unwrap();
+        let encoded_len = mch_proto.encoded_len();
+
+        let response =
+            UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&buf[..encoded_len]).unwrap());
+        let responses = vec![response];
+
+        let mut csv_buf = Vec::new();
+        write_mch_logs_to_csv(&responses, &mut csv_buf).unwrap();
+
+        let csv_str = String::from_utf8(csv_buf).unwrap();
+        let lines: Vec<&str> = csv_str.trim().split('\n').collect();
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(
+            lines[0],
+            "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
+        );
+        assert!(lines[1].contains("2026-06-26T22:15:39+00:00"));
+        assert!(lines[1].contains("3600"));
+        assert!(lines[1].contains("LteM"));
+        assert!(lines[1].contains("-100"));
+        assert!(lines[1].contains("1.5"));
+        assert!(lines[1].contains("12ABCD"));
+    }
 
     #[test]
     fn test_args_parsing() {
