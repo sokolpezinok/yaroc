@@ -4,6 +4,7 @@ target/
 *.py[cod]
 __pycache__/
 *.so
+*.log
 
 # AI
 .antigravity*

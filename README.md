@@ -111,7 +111,12 @@ Setting up the device is currently quite complex, requiring a working Rust toolc
    cd nrf52840
    DEFMT_LOG=debug cargo run --release
    ```
-6. This will compile, flash, and run the firmware, displaying the output logs in your terminal. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
+
+   Alternatively, you can download the pre-compiled firmware in Intel HEX format (`yaroc-nrf52840-0.1.0.hex`) from the GitHub Actions run artifacts or GitHub Releases, and flash it directly using:
+   ```sh
+   probe-rs download --chip nRF52840_xxAA --binary-format hex yaroc-nrf52840-0.1.0.hex
+   ```
+6. This will compile, flash, and run the firmware (or flash it directly), displaying the output logs in your terminal. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
 
 ## LoRa / Meshtastic
 > [!NOTE]
