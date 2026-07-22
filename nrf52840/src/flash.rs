@@ -4,12 +4,12 @@ use femtopb::Message as _;
 use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
     cache::NoCache,
-    map::{MapConfig, MapStorage, Value},
+    map::{MapConfig, MapStorage},
     queue::{QueueConfig, QueueIterator, QueueStorage},
 };
 
 use yaroc_common::at::response::LoggedAtResponse;
-use yaroc_common::flash::{Flash, LoggedAtResponseIterator, MchIterator, ValueIndex};
+use yaroc_common::flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator};
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
@@ -101,8 +101,8 @@ impl<'a> Flash for NrfFlash<'a> {
     }
 
     /// Stores a value in the flash memory.
-    async fn write<'b, V: Value<'b>>(&mut self, key: ValueIndex, value: V) -> crate::Result<()> {
-        let key = key as u8;
+    async fn write<V: FlashValue>(&mut self, value: V) -> crate::Result<()> {
+        let key = V::VALUE_INDEX as u8;
         self.map_storage
             .store_item(self.buffer.as_mut(), &key, &value)
             .await
@@ -136,8 +136,8 @@ impl<'a> Flash for NrfFlash<'a> {
     }
 
     /// Fetches a value from the flash memory.
-    async fn read<V: for<'b> Value<'b>>(&mut self, key: ValueIndex) -> crate::Result<Option<V>> {
-        let key = key as u8;
+    async fn read<V: FlashValue>(&mut self) -> crate::Result<Option<V>> {
+        let key = V::VALUE_INDEX as u8;
         self.map_storage
             .fetch_item(self.buffer.as_mut(), &key)
             .await

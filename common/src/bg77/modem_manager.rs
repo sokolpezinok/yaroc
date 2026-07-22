@@ -15,6 +15,7 @@ use crate::RawMutex;
 use crate::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
 use crate::bg77::hw::ModemHw;
 use crate::error::Error;
+use crate::flash::{FlashValue, ValueIndex};
 use crate::send_punch::SendPunchCommand;
 
 #[cfg(feature = "nrf")]
@@ -107,6 +108,10 @@ pub struct ModemConfig {
 }
 
 impl PostcardValue<'_> for ModemConfig {}
+
+impl FlashValue for ModemConfig {
+    const VALUE_INDEX: ValueIndex = ValueIndex::ModemConfig;
+}
 
 impl Default for ModemConfig {
     /// Creates a default modem configuration.

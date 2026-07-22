@@ -11,7 +11,7 @@ use yaroc_common::{
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
     bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
-    flash::{Flash, ValueIndex},
+    flash::Flash,
     mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,
 };
@@ -56,7 +56,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
-    match flash.read::<MqttConfig>(ValueIndex::MqttConfig).await {
+    match flash.read::<MqttConfig>().await {
         Ok(Some(reduced_config)) => {
             mqtt_config.update(reduced_config);
         }
@@ -66,12 +66,12 @@ async fn main(spawner: Spawner) {
         }
     }
 
-    let modem_config = match flash.read::<ModemConfig>(ValueIndex::ModemConfig).await {
+    let modem_config = match flash.read::<ModemConfig>().await {
         Ok(config) => config.unwrap_or_default(),
         Err(err) => {
             error!("Error while reading modem config from flash: {}", err);
             let _ = flash
-                .write(ValueIndex::ModemConfig, ModemConfig::default())
+                .write(ModemConfig::default())
                 .await
                 .inspect_err(|e| error!("Error while writing modem config: {}", e));
             ModemConfig::default()

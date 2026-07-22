@@ -1,9 +1,9 @@
+use crate::flash::{FlashValue, ValueIndex};
 use core::str::FromStr;
 use embassy_time::Duration;
 use heapless::String;
 use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum StatusCode {
@@ -118,6 +118,10 @@ pub struct MqttConfig {
 }
 
 impl PostcardValue<'_> for MqttConfig {}
+
+impl FlashValue for MqttConfig {
+    const VALUE_INDEX: ValueIndex = ValueIndex::MqttConfig;
+}
 
 impl Default for MqttConfig {
     fn default() -> Self {

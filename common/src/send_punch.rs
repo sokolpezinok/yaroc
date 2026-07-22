@@ -19,7 +19,7 @@ use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
 use crate::bg77::mqtt::MqttClient;
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
-use crate::flash::{Flash, ValueIndex};
+use crate::flash::{Flash, FlashValue, ValueIndex};
 use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos, duration_ms};
 use crate::proto::Punches;
 use crate::punch::SiPunch;
@@ -89,6 +89,10 @@ impl Default for DeviceConfig {
 
 impl PostcardValue<'_> for DeviceConfig {}
 
+impl FlashValue for DeviceConfig {
+    const VALUE_INDEX: ValueIndex = ValueIndex::DeviceConfig;
+}
+
 impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Creates a new `SendPunch` instance.
     ///
@@ -134,7 +138,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         mut device_config: DeviceConfig,
     ) -> crate::Result<()> {
         device_config.name = self.name.clone();
-        self.flash.write(ValueIndex::DeviceConfig, device_config).await?;
+        self.flash.write(device_config).await?;
         info!("Device config written to flash");
         Ok(())
     }
@@ -282,7 +286,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         &mut self,
         modem_config: ModemConfig,
     ) -> crate::Result<String<AT_COMMAND_SIZE>> {
-        self.flash.write(ValueIndex::ModemConfig, modem_config.clone()).await?;
+        self.flash.write(modem_config.clone()).await?;
         info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);
         self.modem_manager.configure(&mut self.bg77).await
@@ -290,7 +294,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
 
     /// Configures the MQTT client
     pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
-        self.flash.write(ValueIndex::MqttConfig, mqtt_config.clone()).await?;
+        self.flash.write(mqtt_config.clone()).await?;
         info!("MQTT config written to flash");
         self.mqtt_client.update_reduced_config(mqtt_config);
         self.mqtt_client.disconnect(&mut self.bg77).await?;
@@ -396,7 +400,7 @@ mod tests {
     use crate::{
         at::fake_modem::FakeModem,
         bg77::modem_manager::FakePin,
-        flash::{LoggedAtResponseIterator, MchIterator, ValueIndex},
+        flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
     };
 
     use super::*;
@@ -408,11 +412,7 @@ mod tests {
             Ok(())
         }
 
-        async fn write<'a, V: Value<'a>>(
-            &mut self,
-            _key: ValueIndex,
-            _value: V,
-        ) -> crate::Result<()> {
+        async fn write<V: FlashValue>(&mut self, _value: V) -> crate::Result<()> {
             Ok(())
         }
 
@@ -430,10 +430,7 @@ mod tests {
             Ok(())
         }
 
-        async fn read<V: for<'a> Value<'a>>(
-            &mut self,
-            _key: ValueIndex,
-        ) -> crate::Result<Option<V>> {
+        async fn read<V: FlashValue>(&mut self) -> crate::Result<Option<V>> {
             Ok(None)
         }
 

@@ -18,7 +18,7 @@ use crate::flash::NrfFlash;
 use crate::usb::Usb;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
-use yaroc_common::flash::{Flash, ValueIndex};
+use yaroc_common::flash::Flash;
 use yaroc_common::send_punch::{DeviceConfig, UartRxPin};
 use yaroc_common::si_uart::SiUart;
 
@@ -73,7 +73,7 @@ impl Device {
         let ble = Ble::new();
         let flash_mutex = FLASH_MUTEX.init(Mutex::new(ble.flash()));
         let mut flash = NrfFlash::new(flash_mutex);
-        let device_config = match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig).await {
+        let device_config = match flash.read::<DeviceConfig>().await {
             Ok(config) => config.unwrap_or_default(),
             Err(err) => {
                 error!("Error while reading device config from flash: {}", err);
