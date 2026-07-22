@@ -19,6 +19,32 @@ unsafe extern "C" {
     unsafe static _data_flash_size: u32;
 }
 
+/// A wrapper that ensures its inner byte array is 4-byte (word) aligned.
+/// This is critical for flash write/read operations on nRF52840 (NVMC requires word alignment).
+#[repr(align(4))]
+#[derive(Copy, Clone)]
+pub struct AlignedBuffer<const N: usize>(pub [u8; N]);
+
+impl<const N: usize> Default for AlignedBuffer<N> {
+    fn default() -> Self {
+        Self([0; _])
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for AlignedBuffer<N> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl<const N: usize> AsMut<[u8]> for AlignedBuffer<N> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
 type SdPartition<'a> = Partition<'a, RawMutex, SdFlash>;
 
 /// Flash abstraction for storing serializeable objects.
@@ -26,6 +52,7 @@ pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, SdPartition<'a>, NoCache>,
     mch_storage: QueueStorage<SdPartition<'a>, NoCache>,
     queue_storage: QueueStorage<SdPartition<'a>, NoCache>,
+    buffer: AlignedBuffer<512>,
 }
 
 // nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
@@ -59,6 +86,7 @@ impl<'a> NrfFlash<'a> {
             map_storage,
             mch_storage,
             queue_storage,
+            buffer: AlignedBuffer::default(),
         }
     }
 }
@@ -75,9 +103,8 @@ impl<'a> Flash for NrfFlash<'a> {
     /// Stores a value in the flash memory.
     async fn write<'b, V: Value<'b>>(&mut self, key: ValueIndex, value: V) -> crate::Result<()> {
         let key = key as u8;
-        let mut buffer = [0u8; 512];
         self.map_storage
-            .store_item(&mut buffer, &key, &value)
+            .store_item(self.buffer.as_mut(), &key, &value)
             .await
             .map_err(|_| Error::FlashError)
     }
@@ -90,31 +117,31 @@ impl<'a> Flash for NrfFlash<'a> {
             _ => return Err(Error::ValueError),
         };
 
-        let mut buffer = [0u8; 256];
-        mch_proto
-            .encode(&mut buffer.as_mut_slice())
-            .map_err(|_| Error::BufferTooSmallError)?;
+        let buf = self.buffer.as_mut();
         let len = mch_proto.encoded_len();
-        self.mch_storage.push(&buffer[..len], true).await.map_err(|_| Error::FlashError)
+        if len > buf.len() {
+            return Err(Error::BufferTooSmallError);
+        }
+        let mut cursor = &mut buf[..len];
+        mch_proto.encode(&mut cursor).map_err(|_| Error::BufferTooSmallError)?;
+        self.mch_storage.push(&buf[..len], true).await.map_err(|_| Error::FlashError)
     }
 
     async fn log_at_response(
         &mut self,
         response: yaroc_common::at::response::LoggedAtResponse,
     ) -> crate::Result<()> {
-        let mut buffer = [0u8; 512];
-        let serialized = postcard::to_slice(&response, &mut buffer)?;
+        let serialized = postcard::to_slice(&response, self.buffer.as_mut())?;
         self.queue_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
     }
 
     /// Fetches a value from the flash memory.
-    async fn read<'b, V: Value<'b>>(
-        &mut self,
-        key: ValueIndex,
-        buffer: &'b mut [u8],
-    ) -> crate::Result<Option<V>> {
+    async fn read<V: for<'b> Value<'b>>(&mut self, key: ValueIndex) -> crate::Result<Option<V>> {
         let key = key as u8;
-        self.map_storage.fetch_item(buffer, &key).await.map_err(|_| Error::FlashError)
+        self.map_storage
+            .fetch_item(self.buffer.as_mut(), &key)
+            .await
+            .map_err(|_| Error::FlashError)
     }
 
     type MchIter<'b>
@@ -126,7 +153,7 @@ impl<'a> Flash for NrfFlash<'a> {
         let iter = self.mch_storage.iter().await.map_err(|_| Error::FlashError)?;
         Ok(NrfMchIter {
             iter,
-            buffer: [0u8; 256],
+            buffer: AlignedBuffer::default(),
         })
     }
 
@@ -139,19 +166,19 @@ impl<'a> Flash for NrfFlash<'a> {
         let iter = self.queue_storage.iter().await.map_err(|_| Error::FlashError)?;
         Ok(NrfLoggedAtResponseIter {
             iter,
-            buffer: [0u8; 512],
+            buffer: AlignedBuffer::default(),
         })
     }
 }
 
 pub struct NrfMchIter<'s, 'a> {
     iter: QueueIterator<'s, SdPartition<'a>, NoCache>,
-    buffer: [u8; 256],
+    buffer: AlignedBuffer<256>,
 }
 
 impl<'s, 'a> MchIterator for NrfMchIter<'s, 'a> {
     async fn next<'b>(&'b mut self) -> crate::Result<Option<MiniCallHomeProto<'b>>> {
-        match self.iter.next(&mut self.buffer).await {
+        match self.iter.next(self.buffer.as_mut()).await {
             Ok(Some(entry)) => {
                 let mch_proto =
                     MiniCallHomeProto::decode(entry.into_buf()).map_err(|_| Error::ValueError)?;
@@ -165,12 +192,12 @@ impl<'s, 'a> MchIterator for NrfMchIter<'s, 'a> {
 
 pub struct NrfLoggedAtResponseIter<'s, 'a> {
     iter: QueueIterator<'s, SdPartition<'a>, NoCache>,
-    buffer: [u8; 512],
+    buffer: AlignedBuffer<512>,
 }
 
 impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
     async fn next(&mut self) -> crate::Result<Option<LoggedAtResponse>> {
-        match self.iter.next(&mut self.buffer).await.map_err(|_| Error::FlashError)? {
+        match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
             Some(entry) => {
                 let logged_response = postcard::from_bytes(entry.into_buf())?;
                 Ok(Some(logged_response))

@@ -33,10 +33,9 @@ pub trait Flash {
     ) -> impl Future<Output = crate::Result<()>>;
 
     /// Fetches a value from the flash memory.
-    fn read<'b, V: Value<'b>>(
+    fn read<V: for<'a> Value<'a>>(
         &mut self,
         key: ValueIndex,
-        buffer: &'b mut [u8],
     ) -> impl Future<Output = crate::Result<Option<V>>>;
 
     type MchIter<'a>: MchIterator

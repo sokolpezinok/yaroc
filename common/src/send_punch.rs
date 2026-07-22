@@ -430,10 +430,9 @@ mod tests {
             Ok(())
         }
 
-        async fn read<'a, V: Value<'a>>(
+        async fn read<V: for<'a> Value<'a>>(
             &mut self,
             _key: ValueIndex,
-            _buffer: &'a mut [u8],
         ) -> crate::Result<Option<V>> {
             Ok(None)
         }

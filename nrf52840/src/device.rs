@@ -73,15 +73,13 @@ impl Device {
         let ble = Ble::new();
         let flash_mutex = FLASH_MUTEX.init(Mutex::new(ble.flash()));
         let mut flash = NrfFlash::new(flash_mutex);
-        let mut buffer = [0; 512];
-        let device_config =
-            match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig, &mut buffer).await {
-                Ok(config) => config.unwrap_or_default(),
-                Err(err) => {
-                    error!("Error while reading device config from flash: {}", err);
-                    DeviceConfig::default()
-                }
-            };
+        let device_config = match flash.read::<DeviceConfig>(ValueIndex::DeviceConfig).await {
+            Ok(config) => config.unwrap_or_default(),
+            Err(err) => {
+                error!("Error while reading device config from flash: {}", err);
+                DeviceConfig::default()
+            }
+        };
 
         let mut config = uarte::Config::default();
         config.baudrate = uarte::Baudrate::Baud38400;

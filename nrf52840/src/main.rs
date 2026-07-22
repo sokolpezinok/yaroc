@@ -56,8 +56,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Device initialized: {}", mqtt_config.name.as_str(),);
 
-    let mut buffer = [0; 512];
-    match flash.read::<MqttConfig>(ValueIndex::MqttConfig, &mut buffer).await {
+    match flash.read::<MqttConfig>(ValueIndex::MqttConfig).await {
         Ok(Some(reduced_config)) => {
             mqtt_config.update(reduced_config);
         }
@@ -67,7 +66,7 @@ async fn main(spawner: Spawner) {
         }
     }
 
-    let modem_config = match flash.read::<ModemConfig>(ValueIndex::ModemConfig, &mut buffer).await {
+    let modem_config = match flash.read::<ModemConfig>(ValueIndex::ModemConfig).await {
         Ok(config) => config.unwrap_or_default(),
         Err(err) => {
             error!("Error while reading modem config from flash: {}", err);
