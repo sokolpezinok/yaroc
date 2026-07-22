@@ -1,10 +1,13 @@
+use meshtastic::protobufs::{
+    Data, MeshPacket, PortNum, ServiceEnvelope, mesh_packet::PayloadVariant,
+};
 use std::fmt::Display;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use crate::meshtastic::connection::MeshtasticEvent;
+use crate::si_uart::SportIdentMessage;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::UsbSerialTrait;
-use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 
 pub struct FakeMeshtasticSerial {
     mac_address: MacAddress,
@@ -55,8 +58,6 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
     }
 }
 
-use crate::si_uart::SportIdentMessage;
-
 pub struct FakeSportIdentSerial {
     port: String,
     rx: Receiver<SportIdentMessage>,
@@ -93,5 +94,44 @@ impl UsbSerialTrait for FakeSportIdentSerial {
                 }
             }
         }
+    }
+}
+
+/// Helper to construct a `ServiceEnvelope` containing decoded data.
+pub fn decoded_service_envelope(
+    from: u32,
+    portnum: PortNum,
+    payload: Vec<u8>,
+    gateway_id: impl Into<String>,
+) -> ServiceEnvelope {
+    ServiceEnvelope {
+        packet: Some(MeshPacket {
+            from,
+            payload_variant: Some(PayloadVariant::Decoded(Data {
+                portnum: portnum as i32,
+                payload,
+                ..Default::default()
+            })),
+            ..Default::default()
+        }),
+        gateway_id: gateway_id.into(),
+        ..Default::default()
+    }
+}
+
+/// Helper to construct a `ServiceEnvelope` containing encrypted data.
+pub fn encrypted_service_envelope(
+    from: u32,
+    payload: Vec<u8>,
+    gateway_id: impl Into<String>,
+) -> ServiceEnvelope {
+    ServiceEnvelope {
+        packet: Some(MeshPacket {
+            from,
+            payload_variant: Some(PayloadVariant::Encrypted(payload)),
+            ..Default::default()
+        }),
+        gateway_id: gateway_id.into(),
+        ..Default::default()
     }
 }

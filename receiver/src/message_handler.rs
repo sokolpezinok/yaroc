@@ -390,6 +390,7 @@ mod tests {
 
     use chrono::{DateTime, Local};
     use femtopb::{Message as _, Repeated};
+    use meshtastic::protobufs::PortNum;
     use tokio::time::timeout;
     use yaroc_common::proto::Punches;
     use yaroc_common::punch::RawPunch;
@@ -576,15 +577,8 @@ mod tests {
         let (mut handler, punch_tx, mesh_tx, _mqtt_tx) =
             MessageHandler::new_for_test(Duration::from_secs(60));
 
-        let encrypted_envelope = ServiceEnvelope {
-            packet: Some(MeshPacket {
-                from: 0xdeadbeef,
-                payload_variant: Some(PayloadVariant::Encrypted(vec![1, 2, 3])),
-                ..Default::default()
-            }),
-            gateway_id: "!12345678".to_string(),
-            ..Default::default()
-        };
+        let encrypted_envelope =
+            crate::test_utils::encrypted_service_envelope(0xdeadbeef, vec![1, 2, 3], "!12345678");
 
         // Send the encrypted envelope. It should be ignored.
         mesh_tx.send(encrypted_envelope).unwrap();
@@ -614,27 +608,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_handler_decrypted_mesh_packet() {
-        use meshtastic::protobufs::{Data, PortNum};
-
         let (mut handler, _punch_tx, mesh_tx, _mqtt_tx) =
             MessageHandler::new_for_test(Duration::from_secs(60));
 
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
-        let envelope = ServiceEnvelope {
-            packet: Some(MeshPacket {
-                from: 0xdeadbeef,
-                payload_variant: Some(PayloadVariant::Decoded(Data {
-                    portnum: PortNum::SerialApp as i32,
-                    payload: punch.to_vec(),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            }),
-            gateway_id: "!12345678".to_string(),
-            ..Default::default()
-        };
+        let envelope = crate::test_utils::decoded_service_envelope(
+            0xdeadbeef,
+            PortNum::SerialApp,
+            punch.to_vec(),
+            "!12345678",
+        );
 
         // Send the decoded (decrypted) envelope. It should be processed successfully.
         mesh_tx.send(envelope).unwrap();

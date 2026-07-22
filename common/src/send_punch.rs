@@ -395,7 +395,6 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
 #[cfg(test)]
 mod tests {
     use embassy_futures::block_on;
-    use sequential_storage::map::Value;
 
     use crate::{
         at::fake_modem::FakeModem,

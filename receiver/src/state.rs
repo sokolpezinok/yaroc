@@ -850,39 +850,25 @@ mod test_punch {
 mod test_meshtastic {
     use super::*;
 
-    use crate::meshtastic::RssiSnr;
     use meshtastic::Message;
     use meshtastic::protobufs::mesh_packet::PayloadVariant;
     use meshtastic::protobufs::telemetry::Variant;
-    use meshtastic::protobufs::{Data, DeviceMetrics, PortNum, ServiceEnvelope, Telemetry};
+    use meshtastic::protobufs::{Data, DeviceMetrics, PortNum, Telemetry};
 
-    fn envelope(from: u32, data: Data) -> ServiceEnvelope {
-        ServiceEnvelope {
-            packet: Some(MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(data)),
-                from,
-                ..Default::default()
-            }),
-            ..Default::default()
-        }
-    }
+    use crate::meshtastic::RssiSnr;
+    use crate::test_utils::decoded_service_envelope;
+    use yaroc_common::status::{CellNetworkType, CellSignalInfo};
 
     #[tokio::test]
     async fn test_meshtastic_serial() {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
-        let mut env = envelope(
-            0xdeadbeef,
-            Data {
-                portnum: PortNum::SerialApp as i32,
-                payload: punch.to_vec(),
-                ..Default::default()
-            },
-        );
-        env.packet.as_mut().unwrap().rx_rssi = -90;
-        env.packet.as_mut().unwrap().rx_snr = 4.5;
-        let message = env.encode_to_vec();
+        let mut envelope =
+            decoded_service_envelope(0xdeadbeef, PortNum::SerialApp, punch.to_vec(), "");
+        envelope.packet.as_mut().unwrap().rx_rssi = -90;
+        envelope.packet.as_mut().unwrap().rx_snr = 4.5;
+        let message = envelope.encode_to_vec();
 
         let mut state = FleetState::default();
         let punch_logs = state.msh_serial_service_envelope(&message, Local::now().into()).unwrap();
@@ -920,21 +906,13 @@ mod test_meshtastic {
                 ..Default::default()
             })),
         };
-        let data = Data {
-            portnum: PortNum::TelemetryApp as i32,
-            payload: telemetry.encode_to_vec(),
-            ..Default::default()
-        };
-        let envelope1 = ServiceEnvelope {
-            packet: Some(MeshPacket {
-                payload_variant: Some(PayloadVariant::Decoded(data.clone())),
-                rx_rssi: -98,
-                rx_snr: 4.0,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
+        let mut envelope1 =
+            decoded_service_envelope(0, PortNum::TelemetryApp, telemetry.encode_to_vec(), "");
+        let packet = envelope1.packet.as_mut().unwrap();
+        packet.rx_rssi = -98;
+        packet.rx_snr = 4.0;
         let message = envelope1.encode_to_vec();
+
         let mut state = FleetState::default();
         state
             .msh_status_service_envelope(&message, Local::now().into(), MacAddress::default())
@@ -953,7 +931,11 @@ mod test_meshtastic {
         );
 
         let mesh_packet = MeshPacket {
-            payload_variant: Some(PayloadVariant::Decoded(data)),
+            payload_variant: Some(PayloadVariant::Decoded(Data {
+                portnum: PortNum::TelemetryApp as i32,
+                payload: telemetry.encode_to_vec(),
+                ..Default::default()
+            })),
             ..Default::default()
         };
         state
@@ -973,15 +955,8 @@ mod test_meshtastic {
         let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03+01:00").unwrap();
         let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
 
-        let message = envelope(
-            0xdeadbeef,
-            Data {
-                portnum: PortNum::SerialApp as i32,
-                payload: punch.to_vec(),
-                ..Default::default()
-            },
-        )
-        .encode_to_vec();
+        let message = decoded_service_envelope(0xdeadbeef, PortNum::SerialApp, punch.to_vec(), "")
+            .encode_to_vec();
 
         let mut state = FleetState::default();
         state.msh_serial_service_envelope(&message, Local::now().into()).unwrap();
@@ -990,12 +965,13 @@ mod test_meshtastic {
             time: 1735157442,
             variant: Some(Variant::DeviceMetrics(Default::default())),
         };
-        let data = Data {
-            portnum: PortNum::TelemetryApp as i32,
-            payload: telemetry.encode_to_vec(),
-            ..Default::default()
-        };
-        let message = envelope(0xdeadbeef, data).encode_to_vec();
+        let message = decoded_service_envelope(
+            0xdeadbeef,
+            PortNum::TelemetryApp,
+            telemetry.encode_to_vec(),
+            "",
+        )
+        .encode_to_vec();
         state
             .msh_status_service_envelope(&message, Local::now().into(), MacAddress::default())
             .unwrap();
@@ -1005,7 +981,6 @@ mod test_meshtastic {
 
     #[test]
     fn test_cellular_node_signal_strength() {
-        use yaroc_common::status::{CellNetworkType, CellSignalInfo};
         let mut status = CellularNodeStatus::default();
         assert_eq!(status.signal_strength(), SignalStrength::Disconnected);
 
