@@ -158,44 +158,36 @@ impl MessageHandler {
         self.init().await;
         loop {
             tokio::select! {
-                mqtt_msg = self.inbound_mqtt_rx.recv() => {
-                    // None can't happen since self holds a copy of mqtt_tx
-                    if let Some(mqtt_message) = mqtt_msg {
-                        let mqtt_message = mqtt_message?;
-                        let gateway_mac = match &mqtt_message {
-                            Message::CellularStatus(mac, _, _)
-                            | Message::Punches(mac, _, _)
-                            | Message::MeshtasticSerial(mac, _, _)
-                            | Message::MeshtasticStatus(mac, _, _) => *mac,
-                        };
-                        // Instead of ignoring these packets, we could consider unsubscribing from
-                        // these topics.
-                        if self.local_macs.contains(&gateway_mac) {
-                            continue;
-                        }
-                        if let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message)? {
-                            return Ok(message);
-                        }
+                Some(mqtt_message) = self.inbound_mqtt_rx.recv() => {
+                    let mqtt_message = mqtt_message?;
+                    let gateway_mac = match &mqtt_message {
+                        Message::CellularStatus(mac, _, _)
+                        | Message::Punches(mac, _, _)
+                        | Message::MeshtasticSerial(mac, _, _)
+                        | Message::MeshtasticStatus(mac, _, _) => *mac,
+                    };
+                    // Instead of ignoring these packets, we could consider unsubscribing from
+                    // these topics.
+                    if self.local_macs.contains(&gateway_mac) {
+                        continue;
+                    }
+                    if let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message)? {
+                        return Ok(message);
                     }
                 }
-                mesh_recv = self.mesh_packet_rx.recv() => {
-                    // None can't happen since self holds a copy of _mesh_packet_tx
-                    if let Some(service_envelope) = mesh_recv {
-                        if let Some(MeshPacket {
-                            from,
-                            payload_variant: Some(PayloadVariant::Encrypted(_)),
-                            ..
-                        }) = service_envelope.packet
-                        {
-                            debug!(
-                                "Ignoring encrypted message, cannot decrypt without a key. From node ID={from:x}."
-                            );
-                            continue;
-                        };
-                        let maybe_event = self.process_service_envelope(service_envelope).transpose();
-                        if let Some(event) = maybe_event {
-                            return event;
-                        }
+                Some(service_envelope) = self.mesh_packet_rx.recv() => {
+                    if let Some(MeshPacket {
+                        from,
+                        payload_variant: Some(PayloadVariant::Encrypted(_)),
+                        ..
+                    }) = service_envelope.packet
+                    {
+                        debug!("Ignoring encrypted message. From node ID={from:x}.");
+                        continue;
+                    };
+                    let maybe_event = self.process_service_envelope(service_envelope).transpose();
+                    if let Some(event) = maybe_event {
+                        return event;
                     }
                 },
                 punch_recv = self.si_rx.recv() => {
@@ -214,10 +206,13 @@ impl MessageHandler {
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
                 }
-                Some(task_res) = self.tasks.join_next(), if !self.tasks.is_empty() => {
-                    if let Err(e) = task_res {
+                task_res = self.tasks.join_next(), if !self.tasks.is_empty() => {
+                    if let Some(Err(e)) = task_res {
                         error!("Background task failed: {e}");
                     }
+                }
+                else => {
+                    error!("Channel closed unexpectedly, this is a bug and it shouldn't happen.");
                 }
             }
         }
