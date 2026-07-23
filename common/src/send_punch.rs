@@ -328,16 +328,12 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         &mut self,
         response: PendingLoggedAtResponse,
     ) -> crate::Result<()> {
-        if let Some(time) = self.time_from_instant(response.instant) {
-            let logged_response = LoggedAtResponse {
-                timestamp: time,
-                response: response.response,
-            };
-            self.flash.log_at_response(logged_response).await
-        } else {
-            // Return network registration error, as missing time is fault of the network.
-            Err(Error::NetworkRegistrationError)
-        }
+        let timestamp = self.time_from_instant(response.instant);
+        let logged_response = LoggedAtResponse {
+            timestamp,
+            response: response.response,
+        };
+        self.flash.log_at_response(logged_response).await
     }
 
     /// Connects to the MQTT broker.
@@ -351,7 +347,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Returns the calendar time corresponding to the given `instant`, if synchronized.
-    fn time_from_instant(&self, instant: Instant) -> Option<DateTime<FixedOffset>> {
+    fn time_from_instant(&self, instant: Instant) -> DateTime<FixedOffset> {
         self.system_info.time_from_instant(instant)
     }
 
@@ -397,7 +393,10 @@ mod tests {
     use embassy_futures::block_on;
 
     use crate::{
-        at::fake_modem::FakeModem,
+        at::{
+            fake_modem::FakeModem,
+            response::{AtResponse, FromModem},
+        },
         bg77::modem_manager::FakePin,
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
     };
@@ -479,6 +478,14 @@ mod tests {
         );
 
         assert!(send_punch.last_reconnect.is_none());
+
+        // Test logging AT response when time is not synchronized yet (uses Unix 0 timestamp base)
+        let response = PendingLoggedAtResponse {
+            response: AtResponse::new([FromModem::Ok].into(), "+CSQ"),
+            instant: Instant::from_millis(5000),
+        };
+        assert!(block_on(send_punch.log_at_response(response)).is_ok());
+
         let expected_date = DateTime::parse_from_rfc3339("2025-11-24T01:40:34+01:00").unwrap();
         assert_eq!(
             block_on(send_punch.synchronize_time()).unwrap(),

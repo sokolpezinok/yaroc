@@ -84,11 +84,10 @@ impl<M: ModemHw> SystemInfo<M> {
 
     /// Returns the calendar time corresponding to the given `instant`,
     /// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.
-    pub fn time_from_instant(&self, instant: Instant) -> Option<DateTime<FixedOffset>> {
-        self.boot_time.map(|boot_time| {
-            let delta = TimeDelta::milliseconds(instant.as_millis() as i64);
-            boot_time.checked_add_signed(delta).unwrap()
-        })
+    pub fn time_from_instant(&self, instant: Instant) -> DateTime<FixedOffset> {
+        let boot_time = self.boot_time.unwrap_or_default();
+        let delta = TimeDelta::milliseconds(instant.as_millis() as i64);
+        boot_time.checked_add_signed(delta).unwrap()
     }
 
     async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
@@ -235,15 +234,17 @@ mod test {
     fn test_time_from_instant() {
         let mut system_info = SystemInfo::<FakeModem>::default();
 
-        // Returns None when boot time is not synchronized
-        assert!(system_info.time_from_instant(Instant::now()).is_none());
+        // Returns time in 1970 when boot time is not synchronized.
+        let instant = Instant::from_secs(5);
+        let expected = DateTime::parse_from_rfc3339("1970-01-01T00:00:05+00:00").unwrap();
+        assert_eq!(system_info.time_from_instant(instant), expected);
 
         // Returns correct time when boot time is set
         let boot_time = DateTime::parse_from_rfc3339("2026-07-17T18:00:00+02:00").unwrap();
         system_info.boot_time = Some(boot_time);
 
         let instant = Instant::from_secs(5);
-        let calculated = system_info.time_from_instant(instant).unwrap();
+        let calculated = system_info.time_from_instant(instant);
         let expected = DateTime::parse_from_rfc3339("2026-07-17T18:00:05+02:00").unwrap();
         assert_eq!(calculated, expected);
     }
