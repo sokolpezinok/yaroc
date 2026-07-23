@@ -123,11 +123,13 @@ impl<M: ModemHw> SystemInfo<M> {
     }
 
     async fn cell_id(bg77: &mut M) -> Result<u32, Error> {
-        bg77.call_at("+CEREG?", None)
-            .await?
-            // TODO: support roaming, that's answer 5
-            .parse2::<u32, String<8>>([1, 3], Some(1))
-            .and_then(|(_, cell)| u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError))
+        let (stat, cell) =
+            bg77.call_at("+CEREG?", None).await?.parse2::<u8, String<8>>([1, 3], None)?;
+        if stat == 1 || stat == 5 {
+            u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError)
+        } else {
+            Err(Error::NetworkRegistrationError)
+        }
     }
 
     /// Gathers various pieces of system information into a `MiniCallHome` struct.
@@ -247,5 +249,14 @@ mod test {
         let calculated = system_info.time_from_instant(instant);
         let expected = DateTime::parse_from_rfc3339("2026-07-17T18:00:05+02:00").unwrap();
         assert_eq!(calculated, expected);
+    }
+
+    #[test]
+    fn test_roaming_cell_id() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let mut bg77 = FakeModem::new(&[("AT+CEREG?", "+CEREG: 2,5,\"2008\",\"2B2078\",9")]);
+
+        let cell_id = block_on(SystemInfo::<FakeModem>::cell_id(&mut bg77)).unwrap();
+        assert_eq!(cell_id, u32::from_str_radix("2B2078", 16).unwrap());
     }
 }
