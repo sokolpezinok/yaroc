@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::bg77::mqtt::{ConnectError, TcpError};
+
 #[derive(Debug, Error, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
@@ -42,8 +44,10 @@ pub enum Error {
     StringEncodingError,
     #[error("Network registrarion error")]
     NetworkRegistrationError,
-    #[error("MQTT error {0}")]
-    MqttError(i8),
+    #[error("MQTT TCP error: {0}")]
+    MqttTcp(#[from] TcpError),
+    #[error("MQTT connect error: {0}")]
+    MqttConnect(#[from] ConnectError),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
 }

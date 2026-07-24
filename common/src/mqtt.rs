@@ -4,6 +4,7 @@ use embassy_time::Duration;
 use heapless::String;
 use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum StatusCode {

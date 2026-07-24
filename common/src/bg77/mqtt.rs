@@ -30,6 +30,81 @@ pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
 
 pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
+#[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum TcpError {
+    #[error("Failed to open network")]
+    FailedToOpenNetwork,
+    #[error("Wrong parameter")]
+    WrongParameter,
+    #[error("Identifier occupied")]
+    IdentifierOccupied,
+    #[error("Failed to activate PDP context")]
+    PdpContextFailed,
+    #[error("Domain name parse error")]
+    DomainNameError,
+    #[error("Network disconnected")]
+    NetworkDisconnected,
+    #[error("Unknown TCP error ({0})")]
+    Unknown(i8),
+}
+
+impl TcpError {
+    pub fn from_code(status: i8) -> Self {
+        match status {
+            -1 => Self::FailedToOpenNetwork,
+            1 => Self::WrongParameter,
+            2 => Self::IdentifierOccupied,
+            3 => Self::PdpContextFailed,
+            4 => Self::DomainNameError,
+            5 => Self::NetworkDisconnected,
+            code => Self::Unknown(code),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ConnectError {
+    #[error("Packet retransmission timeout")]
+    RetransmissionTimeout,
+    #[error("Failed to send packet")]
+    PacketSendFailed,
+    #[error("Connection refused: unacceptable protocol version")]
+    UnacceptableProtocolVersion,
+    #[error("Connection refused: identifier rejected")]
+    IdentifierRejected,
+    #[error("Connection refused: server unavailable")]
+    ServerUnavailable,
+    #[error("Connection refused: bad user name or password")]
+    BadUsernameOrPassword,
+    #[error("Connection refused: not authorized")]
+    NotAuthorized,
+    #[error("Unknown connect error ({0})")]
+    Unknown(u8),
+}
+
+impl ConnectError {
+    pub fn from_code(res: u8, reason: u8) -> Self {
+        if reason != 0 {
+            match reason {
+                1 => Self::UnacceptableProtocolVersion,
+                2 => Self::IdentifierRejected,
+                3 => Self::ServerUnavailable,
+                4 => Self::BadUsernameOrPassword,
+                5 => Self::NotAuthorized,
+                _ => Self::Unknown(reason),
+            }
+        } else {
+            match res {
+                1 => Self::RetransmissionTimeout,
+                2 => Self::PacketSendFailed,
+                code => Self::Unknown(code),
+            }
+        }
+    }
+}
+
 impl MqttStatus {
     /// Creates an `MqttStatus` from a BG77 `+QMTPUB` URC.
     ///
@@ -196,7 +271,7 @@ impl<M: ModemHw> MqttClient<M> {
                 "Could not open TCP connection to {}:{}",
                 self.config.url, self.config.port
             );
-            return Err(Error::MqttError(status));
+            return Err(TcpError::from_code(status).into());
         }
 
         Ok(())
@@ -264,10 +339,10 @@ impl<M: ModemHw> MqttClient<M> {
                     }
                     None => format!(100; "+QMTCONN={cid},\"{}\"", self.config.name)?,
                 };
-                let (_, res, reason) = bg77
+                let (_client_id, res, reason) = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
-                    .parse3::<u8, u32, i8>([0, 1, 2], Some(cid))?;
+                    .parse3::<u8, u8, u8>([0, 1, 2], Some(cid))?;
 
                 if res == 0 && reason == 0 {
                     info!("Successfully connected to MQTT");
@@ -277,7 +352,7 @@ impl<M: ModemHw> MqttClient<M> {
                     }
                     Ok(())
                 } else {
-                    Err(Error::MqttError(reason))
+                    Err(ConnectError::from_code(res, reason).into())
                 }
             }
             _ => Err(Error::ModemError),
@@ -337,8 +412,9 @@ impl<M: ModemHw> MqttClient<M> {
                 }
                 StatusCode::Retrying(_) => Ok(()),
                 StatusCode::Timeout => Err(Error::TimeoutError),
-                StatusCode::MqttError => Err(Error::MqttError(0)),
-                StatusCode::Unknown => Err(Error::MqttError(-1)),
+                // TODO: forward the actual error, if possible
+                StatusCode::MqttError => Err(ConnectError::Unknown(0).into()),
+                StatusCode::Unknown => Err(ConnectError::Unknown(1).into()),
             }
         } else {
             Ok(())
@@ -523,5 +599,101 @@ mod test {
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
         assert_eq!(status, BackoffCommand::Status(expected_status));
         assert!(CHANNEL.try_receive().is_err());
+    }
+
+    #[test]
+    fn test_mqtt_qmtopen_tcp_error() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let client_config = MqttClientConfig::default();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1"),
+            ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
+            ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
+            (
+                "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
+                "+QMTCFG: 1,0",
+            ),
+            ("AT+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", ""),
+            ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,-1"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(
+            block_on(client.connect(&mut bg77, &modem_manager)),
+            Err(Error::MqttTcp(TcpError::FailedToOpenNetwork))
+        );
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_mqtt_qmtopen_domain_name_error() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let client_config = MqttClientConfig::default();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1"),
+            ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
+            ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
+            (
+                "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
+                "+QMTCFG: 1,0",
+            ),
+            ("AT+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", ""),
+            ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,4"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(
+            block_on(client.connect(&mut bg77, &modem_manager)),
+            Err(Error::MqttTcp(TcpError::DomainNameError))
+        );
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_mqtt_qmtconn_mqtt_error() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let client_config = MqttClientConfig::default();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
+            ("AT+QMTCONN?", "+QMTCONN: 1,1"),
+            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,2"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(
+            block_on(client.connect(&mut bg77, &modem_manager)),
+            Err(Error::MqttConnect(ConnectError::IdentifierRejected))
+        );
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_mqtt_qmtconn_retransmission_timeout() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let client_config = MqttClientConfig::default();
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
+            ("AT+QMTCONN?", "+QMTCONN: 1,1"),
+            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1,0"),
+        ]);
+
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        let modem_manager = ModemManager::new(ModemConfig::default());
+        assert_eq!(
+            block_on(client.connect(&mut bg77, &modem_manager)),
+            Err(Error::MqttConnect(ConnectError::RetransmissionTimeout))
+        );
+        assert!(bg77.all_done());
     }
 }
