@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use chrono::Local;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use femtopb::Message as _;
 use log::{error, info};
 use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
+use serialport::TTYPort;
 use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::send_punch::DeviceConfig;
@@ -23,18 +24,46 @@ use crate::config::Config;
 pub struct Args {
     #[arg(short, long)]
     pub port: String,
-    #[arg(short, long, alias = "config", num_args = 0..=1, default_missing_value = "nrf52840.toml")]
-    pub configure: Option<PathBuf>,
-    #[arg(long)]
-    pub erase_flash: bool,
-    #[arg(long)]
-    pub dump_mch_logs: bool,
-    #[arg(long)]
-    pub dump_at_logs: bool,
+
     #[arg(long)]
     pub debug: bool,
-    #[arg(long)]
-    pub gpx: Option<PathBuf>,
+
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+pub enum Command {
+    /// Erase internal flash storage
+    #[command(alias = "erase")]
+    EraseFlash,
+
+    /// Configure modem and device settings
+    #[command(alias = "config")]
+    Configure {
+        #[arg(short, long, default_value = "nrf52840.toml")]
+        config: PathBuf,
+    },
+
+    /// Dump device logs
+    #[command(name = "dump-logs", alias = "dump")]
+    DumpLogs {
+        #[command(subcommand)]
+        log_type: LogType,
+    },
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+pub enum LogType {
+    /// Dump MiniCallHome logs
+    #[command(alias = "mch-logs")]
+    Mch {
+        #[arg(long)]
+        gpx: Option<PathBuf>,
+    },
+    /// Dump modem logs
+    #[command(alias = "at-logs")]
+    Modem,
 }
 
 fn send_command<S: Read + Write>(
@@ -160,68 +189,8 @@ fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
     }
 }
 
-#[pyfunction]
-pub fn yaroc_nrf() {
-    let args = Args::parse_from(std::env::args().skip(1));
-    let _ = Python::attach(|py| {
-        let logging = py.import("logging")?;
-        let kwargs = pyo3::types::PyDict::new(py);
-        let level = if args.debug { "DEBUG" } else { "INFO" };
-        kwargs.set_item("level", logging.getattr(level)?)?;
-        // Same as in container.py
-        kwargs.set_item(
-            "format",
-            "%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s",
-        )?;
-        kwargs.set_item("datefmt", "%H:%M:%S")?;
-        logging.call_method("basicConfig", (), Some(&kwargs))?;
-        PyResult::Ok(())
-    });
-
-    info!("Opening serial port {}", args.port);
-    let mut serial = tokio_serial::new(&args.port, 112800)
-        .timeout(Duration::from_secs(10))
-        .open_native()
-        .expect("Unable to open serial port");
-
-    if args.erase_flash {
-        match send_command(&mut serial, UsbCommand::EraseFlash) {
-            Ok(UsbResponse::Ok) => info!("Flash erase successful"),
-            Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
-            Err(e) => error!("Failed to erase flash: {e}"),
-        }
-    }
-
-    if args.dump_mch_logs {
-        match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
-            Ok(responses) => {
-                let mut stdout = std::io::stdout();
-                if let Some(ref gpx_path) = args.gpx {
-                    if let Err(e) =
-                        crate::gnss_geotag::geotag_mch_responses(gpx_path, &responses, &mut stdout)
-                    {
-                        error!("Failed to geotag MiniCallHome logs: {e}");
-                    }
-                } else if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
-                    error!("Failed to write MiniCallHome logs to stdout: {e}");
-                }
-            }
-            Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
-        }
-    }
-
-    if args.dump_at_logs {
-        match send_command_multiple_responses(&mut serial, UsbCommand::GetLoggedAtResponseLogs) {
-            Ok(responses) => dump_logged_at_response_logs(responses),
-            Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
-        }
-    }
-
-    let Some(ref configure_path) = args.configure else {
-        return;
-    };
-
-    let config_path = crate::config::find_config_file(configure_path);
+fn configure(config: PathBuf, mut serial: TTYPort) {
+    let config_path = crate::config::find_config_file(&config);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
             let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
@@ -253,12 +222,75 @@ pub fn yaroc_nrf() {
             }
         }
         Err(e) => {
-            if args.erase_flash {
-                info!("No config file found or not readable, skipping configuration: {e}");
-            } else {
-                panic!("Unable to read config file {}: {e}", config_path.display());
-            }
+            panic!("Unable to read config file {}: {e}", config_path.display());
         }
+    }
+}
+
+#[pyfunction]
+pub fn yaroc_nrf() {
+    let args = Args::parse_from(std::env::args().skip(1));
+    let _ = Python::attach(|py| {
+        let logging = py.import("logging")?;
+        let kwargs = pyo3::types::PyDict::new(py);
+        let level = if args.debug { "DEBUG" } else { "INFO" };
+        kwargs.set_item("level", logging.getattr(level)?)?;
+        // Same as in container.py
+        kwargs.set_item(
+            "format",
+            "%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s",
+        )?;
+        kwargs.set_item("datefmt", "%H:%M:%S")?;
+        logging.call_method("basicConfig", (), Some(&kwargs))?;
+        PyResult::Ok(())
+    });
+
+    info!("Opening serial port {}", args.port);
+    let mut serial = tokio_serial::new(&args.port, 112800)
+        .timeout(Duration::from_secs(10))
+        .open_native()
+        .expect("Unable to open serial port");
+
+    match args.command {
+        Command::EraseFlash => match send_command(&mut serial, UsbCommand::EraseFlash) {
+            Ok(UsbResponse::Ok) => info!("Flash erase successful"),
+            Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
+            Err(e) => error!("Failed to erase flash: {e}"),
+        },
+        Command::Configure { config } => {
+            configure(config, serial);
+        }
+        Command::DumpLogs { log_type } => match log_type {
+            LogType::Mch { gpx } => {
+                match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs)
+                {
+                    Ok(responses) => {
+                        let mut stdout = std::io::stdout();
+                        if let Some(ref gpx_path) = gpx {
+                            if let Err(e) = crate::gnss_geotag::geotag_mch_responses(
+                                gpx_path,
+                                &responses,
+                                &mut stdout,
+                            ) {
+                                error!("Failed to geotag MiniCallHome logs: {e}");
+                            }
+                        } else if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
+                            error!("Failed to write MiniCallHome logs to stdout: {e}");
+                        }
+                    }
+                    Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
+                }
+            }
+            LogType::Modem => {
+                match send_command_multiple_responses(
+                    &mut serial,
+                    UsbCommand::GetLoggedAtResponseLogs,
+                ) {
+                    Ok(responses) => dump_logged_at_response_logs(responses),
+                    Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
+                }
+            }
+        },
     }
 }
 
@@ -336,53 +368,67 @@ mod tests {
     }
 
     #[test]
-    fn test_args_parsing() {
-        let args = Args::parse_from([
-            "test_bin",
-            "--port",
-            "/dev/ttyACM0",
-            "--configure",
-            "my_config.toml",
-            "--erase-flash",
-            "--dump-mch-logs",
-            "--dump-at-logs",
-            "--gpx",
-            "track.gpx",
-        ]);
-        assert_eq!(args.port, "/dev/ttyACM0");
-        assert_eq!(args.configure, Some(PathBuf::from("my_config.toml")));
-        assert!(args.erase_flash);
-        assert!(args.dump_mch_logs);
-        assert!(args.dump_at_logs);
-        assert_eq!(args.gpx, Some(PathBuf::from("track.gpx")));
+    fn test_args_parsing_erase_flash() {
+        let args_erase = Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "erase-flash"]);
+        assert_eq!(args_erase.port, "/dev/ttyACM0");
+        assert_eq!(args_erase.command, Command::EraseFlash);
+    }
 
-        // Test with config alias
-        let args_alias = Args::parse_from([
+    #[test]
+    fn test_args_parsing_configure() {
+        let args_config = Args::parse_from([
             "test_bin",
             "--port",
             "/dev/ttyACM0",
+            "configure",
             "--config",
             "my_config.toml",
         ]);
-        assert_eq!(args_alias.port, "/dev/ttyACM0");
-        assert_eq!(args_alias.configure, Some(PathBuf::from("my_config.toml")));
-        assert!(!args_alias.erase_flash);
-
-        // Test with no configuration specified
-        let args_no_config = Args::parse_from(["test_bin", "--port", "/dev/ttyACM0"]);
-        assert_eq!(args_no_config.port, "/dev/ttyACM0");
-        assert_eq!(args_no_config.configure, None);
-        assert!(!args_no_config.erase_flash);
-
-        // Test with configure flag specified but no path
-        let args_missing_val =
-            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "--configure"]);
-        assert_eq!(args_missing_val.port, "/dev/ttyACM0");
+        assert_eq!(args_config.port, "/dev/ttyACM0");
         assert_eq!(
-            args_missing_val.configure,
-            Some(PathBuf::from("nrf52840.toml"))
+            args_config.command,
+            Command::Configure {
+                config: PathBuf::from("my_config.toml")
+            }
         );
-        assert!(!args_missing_val.erase_flash);
-        assert!(!args_alias.dump_mch_logs);
+
+        let args_config_default =
+            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "configure"]);
+        assert_eq!(
+            args_config_default.command,
+            Command::Configure {
+                config: PathBuf::from("nrf52840.toml")
+            }
+        );
+    }
+
+    #[test]
+    fn test_args_parsing_dump_logs() {
+        let args_dump_mch = Args::parse_from([
+            "test_bin",
+            "--port",
+            "/dev/ttyACM0",
+            "dump-logs",
+            "mch",
+            "--gpx",
+            "track.gpx",
+        ]);
+        assert_eq!(
+            args_dump_mch.command,
+            Command::DumpLogs {
+                log_type: LogType::Mch {
+                    gpx: Some(PathBuf::from("track.gpx"))
+                }
+            }
+        );
+
+        let args_dump_modem =
+            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "dump", "modem"]);
+        assert_eq!(
+            args_dump_modem.command,
+            Command::DumpLogs {
+                log_type: LogType::Modem
+            }
+        );
     }
 }
