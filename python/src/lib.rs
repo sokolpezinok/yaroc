@@ -1,4 +1,5 @@
 mod config;
+mod gnss_geotag;
 mod message_handler;
 mod punch;
 mod python;

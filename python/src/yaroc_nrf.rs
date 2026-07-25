@@ -32,6 +32,8 @@ pub struct Args {
     pub dump_at_logs: bool,
     #[arg(long)]
     pub debug: bool,
+    #[arg(long)]
+    pub gpx: Option<PathBuf>,
 }
 
 fn send_command<S: Read + Write>(
@@ -189,7 +191,13 @@ pub fn yaroc_nrf() {
         match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
             Ok(responses) => {
                 let mut stdout = std::io::stdout();
-                if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
+                if let Some(ref gpx_path) = args.gpx {
+                    if let Err(e) =
+                        crate::gnss_geotag::geotag_mch_responses(gpx_path, &responses, &mut stdout)
+                    {
+                        error!("Failed to geotag MiniCallHome logs: {e}");
+                    }
+                } else if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
                     error!("Failed to write MiniCallHome logs to stdout: {e}");
                 }
             }
@@ -329,12 +337,15 @@ mod tests {
             "--erase-flash",
             "--dump-mch-logs",
             "--dump-at-logs",
+            "--gpx",
+            "track.gpx",
         ]);
         assert_eq!(args.port, "/dev/ttyACM0");
         assert_eq!(args.configure, Some(PathBuf::from("my_config.toml")));
         assert!(args.erase_flash);
         assert!(args.dump_mch_logs);
         assert!(args.dump_at_logs);
+        assert_eq!(args.gpx, Some(PathBuf::from("track.gpx")));
 
         // Test with config alias
         let args_alias = Args::parse_from([
