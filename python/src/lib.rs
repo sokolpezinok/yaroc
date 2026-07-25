@@ -5,4 +5,4 @@ mod punch;
 mod python;
 mod serial_client;
 mod status;
-mod yaroc_nrf;
+mod yaroc_cli;

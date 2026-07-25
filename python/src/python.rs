@@ -92,7 +92,7 @@ pub mod rs {
     #[pymodule_export]
     use crate::status::{CellularLog, HostInfo, MeshtasticLog, NodeInfo};
     #[pymodule_export]
-    use crate::yaroc_nrf::yaroc_nrf;
+    use crate::yaroc_cli::yaroc_cli;
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -228,7 +228,7 @@ fn configure(config: PathBuf, mut serial: TTYPort) {
 }
 
 #[pyfunction]
-pub fn yaroc_nrf() {
+pub fn yaroc_cli() {
     let args = Args::parse_from(std::env::args().skip(1));
     let _ = Python::attach(|py| {
         let logging = py.import("logging")?;
