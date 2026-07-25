@@ -8,7 +8,6 @@ use femtopb::Message as _;
 use log::{error, info};
 use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
-use serialport::TTYPort;
 use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::send_punch::DeviceConfig;
@@ -189,7 +188,7 @@ fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
     }
 }
 
-fn configure(config: PathBuf, mut serial: TTYPort) {
+fn configure<S: Read + Write>(config: PathBuf, mut serial: S) {
     let config_path = crate::config::find_config_file(&config);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
