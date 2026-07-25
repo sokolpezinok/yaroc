@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use chrono::Local;
 use clap::Parser;
 use femtopb::Message as _;
 use log::{error, info};
@@ -94,7 +95,10 @@ fn write_mch_logs_to_csv<W: Write>(
                 .and_then(MiniCallHome::try_from);
             match mch {
                 Ok(mch) => {
-                    let timestamp_str = mch.timestamp.map(|t| t.to_rfc3339()).unwrap_or_default();
+                    let timestamp_str = mch
+                        .timestamp
+                        .map(|t| t.with_timezone(&Local).to_rfc3339())
+                        .unwrap_or_default();
                     let batt_mv_str = mch.batt_mv.map(|v| v.to_string()).unwrap_or_default();
                     let batt_percents_str =
                         mch.batt_percents.map(|p| p.to_string()).unwrap_or_default();
@@ -144,7 +148,8 @@ fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
     for response in responses {
         if let UsbResponse::LoggedAtResponseLog(buf) = response {
             match from_bytes::<LoggedAtResponse>(buf.as_slice()) {
-                Ok(log) => {
+                Ok(mut log) => {
+                    log.timestamp = log.timestamp.with_timezone(&Local).fixed_offset();
                     info!("{:?}", log);
                 }
                 Err(e) => {
@@ -301,7 +306,11 @@ mod tests {
             lines[0],
             "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
         );
-        assert!(lines[1].contains("2026-06-26T22:15:39+00:00"));
+        let expected_time = chrono::DateTime::from_timestamp_millis(1782512139000)
+            .unwrap()
+            .with_timezone(&Local)
+            .to_rfc3339();
+        assert!(lines[1].contains(&expected_time));
         assert!(lines[1].contains("3600"));
         assert!(lines[1].contains("LteM"));
         assert!(lines[1].contains("-100"));
