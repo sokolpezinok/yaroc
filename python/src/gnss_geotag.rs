@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, Local};
 use femtopb::Message as _;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::status::{CellSignalInfo, MiniCallHome};
@@ -138,7 +138,7 @@ pub fn geotag_mch_logs<W: Write>(
             )
         };
 
-        let time_str = time.to_rfc3339();
+        let time_str = time.with_timezone(&Local).to_rfc3339();
         writeln!(
             writer,
             "{lat},{lon},{time_str},{rsrp},{snr},{ecl},{cellid_str}"
@@ -234,10 +234,18 @@ mod tests {
         let lines: Vec<&str> = csv.trim().split('\n').collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "lat,lon,time,rsrp,snr,ecl,cellid");
+        let expected_time1 = DateTime::parse_from_rfc3339("2026-07-25T10:05:00Z")
+            .unwrap()
+            .with_timezone(&Local)
+            .to_rfc3339();
+        let expected_time2 = DateTime::parse_from_rfc3339("2026-07-25T10:08:00Z")
+            .unwrap()
+            .with_timezone(&Local)
+            .to_rfc3339();
         assert_eq!(
             lines[1],
-            "45,15,2026-07-25T10:05:00+00:00,-90,2.0,LteM,12ABCD"
+            format!("45,15,{expected_time1},-90,2.0,LteM,12ABCD")
         );
-        assert_eq!(lines[2], "48,18,2026-07-25T10:08:00+00:00,,,,N/A");
+        assert_eq!(lines[2], format!("48,18,{expected_time2},,,,N/A"));
     }
 }
