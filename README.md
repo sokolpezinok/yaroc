@@ -41,7 +41,7 @@ There will be a much more detailed and separate "Hardware recommendation" sectio
 
 # Installation on a Raspberry Pi or a PC
 
-Install the `yaroc` package from PyPI, which provides the `send-punch` and `yarocd` commands. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
+Install the `yaroc` package from PyPI, which provides the `send-punch`, `yarocd`, and `yaroc` commands. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
 
 ```sh
 uv tool install yaroc
@@ -124,7 +124,7 @@ Follow the [official documentation for nRF52](https://meshtastic.org/docs/gettin
 
 ## Configuration Files Location
 
-By default, YAROC commands (`send-punch`, `yarocd` and `yaroc-nrf`) search for their respective configuration files (`send-punch.toml`, `yarocd.toml` and `nrf52840.toml`) in the following locations, in order:
+By default, YAROC commands (`send-punch`, `yarocd` and `yaroc`) search for their respective configuration files (`send-punch.toml`, `yarocd.toml` and `nrf52840.toml`) in the following locations, in order:
 
 1. **Current Working Directory (pwd)**: The local folder where the command is executed.
 2. **Platform Configuration Directory**:
@@ -133,16 +133,16 @@ By default, YAROC commands (`send-punch`, `yarocd` and `yaroc-nrf`) search for t
 
 ## Send punches using RAK Wireless Link.One
 
-When running the nRF52840 firmware on a RAK Link.One device, you can configure the device's IoT network (APN, LTE-M vs. NB-IoT) and MQTT server using the `yaroc-nrf` tool.
+When running the nRF52840 firmware on a RAK Link.One device, you can configure device settings, erase flash storage, and dump device logs using the `yaroc` command-line tool.
 
-The `yaroc-nrf` command (installed automatically as part of the `yaroc` package) reads a TOML configuration file (by default `nrf52840.toml`) and transmits the settings to the connected device over USB serial.
+The `yaroc` command (installed automatically as part of the `yaroc` package) uses subcommands to interact with the device over USB serial.
 
 ### Configuration File (`nrf52840.toml`)
 
-A template configuration is available at [conf/nrf52840.toml](file:///home/lukas/sokol/yaroc/conf/nrf52840.toml). Here is an example:
+A template configuration is available at [conf/nrf52840.toml](conf/nrf52840.toml). Here is an example:
 
 ```toml
-minicallhomenterval = 30           # Mini-call-home status interval in seconds
+minicallhome_interval = 30           # Mini-call-home status interval in seconds
 
 [modem]
 apn = "internet.iot"   # The APN of your SIM card
@@ -163,19 +163,41 @@ port = 1883
 packet_timeout = 35                  # Packet transmission timeout in seconds
 ```
 
-### Running the configuration tool
+### Running the `yaroc` command
 
-Connect the RAK Link.One board to your computer via USB, and run `yaroc-nrf` specifying the serial port:
+Connect the RAK Link.One board to your computer via USB, specify the serial port `--port` (or `-p`), and run one of the subcommands:
 
-```sh
-yaroc-nrf --port /dev/ttyACM0
-```
-
-By default, the tool will search for the configuration file named `nrf52840.toml` in the default locations (see [Configuration Files Location](#configuration-files-location)). To specify a custom path to the configuration file, use the `--config` option:
+#### 1. Configure device (`configure` or `config`)
+Transmit modem, MQTT, and device parameters from a configuration file (defaults to `nrf52840.toml` in current directory or config path):
 
 ```sh
-yaroc-nrf --port /dev/ttyACM0 --config /path/to/custom-config.toml
+yaroc --port /dev/ttyACM0 configure
+# Or specify a custom config file path:
+yaroc -p /dev/ttyACM0 configure --config /path/to/custom-config.toml
 ```
+
+#### 2. Dump logs (`dump-logs` or `dump`)
+Fetch and print device logs:
+
+```sh
+# Dump MiniCallHome status logs as CSV
+yaroc -p /dev/ttyACM0 dump-logs mch
+
+# Dump MiniCallHome logs and geotag them with a GPX track file
+yaroc -p /dev/ttyACM0 dump-logs mch --gpx track.gpx
+
+# Dump modem (AT command) logs
+yaroc -p /dev/ttyACM0 dump-logs modem
+```
+
+#### 3. Erase internal flash (`erase-flash` or `erase`)
+Erase internal flash storage on the device:
+
+```sh
+yaroc -p /dev/ttyACM0 erase-flash
+```
+
+For more details on available subcommands and options, run `yaroc --help` or `yaroc <subcommand> --help`.
 
 ## Send punches using LoRa radio
 

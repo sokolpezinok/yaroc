@@ -55,7 +55,6 @@ pub enum Command {
 #[derive(Subcommand, Debug, PartialEq)]
 pub enum LogType {
     /// Dump MiniCallHome logs
-    #[command(alias = "mch-logs")]
     Mch {
         #[arg(long)]
         gpx: Option<PathBuf>,
