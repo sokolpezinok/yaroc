@@ -1,0 +1,33 @@
+log_level = "info"
+# USB sources are enabled by default: SRR dongle, mini-reader or BSM7-USB
+# You can disable that using `punch_source.usb.enable = false`
+
+# Source of fake SI punches at regular intervals
+[punch_source.fake]
+# enable = true
+# interval = 5
+
+[client.mqtt]
+enable = true
+broker_url = "broker.emqx.io"
+# broker_port = 1883
+
+[client.roc]
+enable = false
+
+[client.sim7020]
+# Use the Waveshare SIM7020 NB-IoT Raspbery Pi HAT
+enable = false
+port = "/dev/serial0"
+
+[meshtastic]
+# You can connect a Meshtastic device via USB or TCP and use it as a punch source.
+# The send-punch daemon acts as an online gateway for the Meshtatic mesh.
+
+# watch_usb = true  # Defaults to false
+tcp = "localhost:4403" # Connect to Meshtastic over TCP instead.
+
+[meshtastic.mac-addresses]
+# Configure meshtastic MAC addresses if you want to have better logging. Forwarding of meshtastic
+# packets works without this list.
+radio01 = "9e12f8a5"

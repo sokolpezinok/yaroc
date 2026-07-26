@@ -139,7 +139,7 @@ The `yaroc` command (installed automatically as part of the `yaroc` package) use
 
 ### Configuration File (`nrf52840.toml`)
 
-A template configuration is available at [conf/nrf52840.toml](conf/nrf52840.toml). Here is an example:
+A template configuration is available at [conf/nrf52840.toml.example](conf/nrf52840.toml.example). Here is an example:
 
 ```toml
 minicallhome_interval = 30           # Mini-call-home status interval in seconds

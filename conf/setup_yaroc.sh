@@ -64,8 +64,8 @@ echo "Reloading systemd manager configuration..."
 systemctl daemon-reload || true
 
 echo "Copying sample configuration files to /home/pi/..."
-cp "$TEMP_DIR/conf/send-punch.toml" "/home/pi/"
-cp "$TEMP_DIR/conf/yarocd.toml" "/home/pi/"
+cp "$TEMP_DIR/conf/send-punch.toml.example" "/home/pi/send-punch.toml"
+cp "$TEMP_DIR/conf/yarocd.toml.example" "/home/pi/yarocd.toml"
 chown pi:pi /home/pi/send-punch.toml /home/pi/yarocd.toml
 
 rm -rf "$TEMP_DIR"
