@@ -17,6 +17,7 @@ use embassy_sync::{
 use embassy_time::{Duration, Instant, WithTimeout};
 use yaroc_common::at::response::AT_RESPONSE_CHANNEL;
 use yaroc_common::at::uart::AtUart;
+use yaroc_common::bg77::modem::Bg77;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::{
     RawMutex,
@@ -26,8 +27,7 @@ use yaroc_common::{
 
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type Bg77SendPunchType = SendPunch<
-    AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>,
-    Output<'static>,
+    Bg77<AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>, Output<'static>>,
     NrfFlash<'static>,
 >;
 

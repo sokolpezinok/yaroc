@@ -7,7 +7,7 @@ use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Instant, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
@@ -18,34 +18,7 @@ use crate::error::Error;
 use crate::flash::{FlashValue, ValueIndex};
 use crate::send_punch::SendPunchCommand;
 
-#[cfg(feature = "nrf")]
-use embassy_nrf::gpio::Output;
-
-/// Trait for controlling the modem power pin.
-pub trait ModemPin {
-    /// Sets the pin output to high.
-    fn set_high(&mut self);
-    /// Sets the pin output to low.
-    fn set_low(&mut self);
-}
-
-pub struct FakePin {}
-
-impl ModemPin for FakePin {
-    fn set_high(&mut self) {}
-    fn set_low(&mut self) {}
-}
-
-#[cfg(feature = "nrf")]
-impl ModemPin for Output<'static> {
-    fn set_high(&mut self) {
-        self.set_high();
-    }
-
-    fn set_low(&mut self) {
-        self.set_low();
-    }
-}
+pub use crate::bg77::modem::{FakePin, ModemPin};
 
 /// Timeout for network activation.
 pub static ACTIVATION_TIMEOUT: Duration = Duration::from_secs(150);
@@ -162,27 +135,6 @@ impl<M: AtUartTrait> ModemManager<M> {
             "CEREG" => response.values().len() == 4,
             _ => false,
         }
-    }
-
-    /// Powers on the modem hardware.
-    ///
-    /// Tries to communicate with the modem. If it doesn't respond, it toggles the power pin
-    /// to reset/turn on the modem.
-    pub async fn turn_on<P: ModemPin>(&self, bg77: &mut M, modem_pin: &mut P) -> Result<(), Error> {
-        if bg77.call_at("E0", None).await.is_err() {
-            modem_pin.set_low();
-            Timer::after_secs(1).await;
-            modem_pin.set_high();
-            Timer::after_secs(2).await;
-            modem_pin.set_low();
-            let res = bg77.read(Duration::from_secs(1)).await?;
-            debug!("Modem response: {}", res);
-            bg77.long_call_at("+CFUN=1,0", Duration::from_secs(15)).await?;
-            let res = bg77.read(Duration::from_secs(5)).await?;
-            debug!("Modem response: {}", res);
-            bg77.call_at("E0", None).await?;
-        }
-        Ok(())
     }
 
     /// Updates the modem configuration.

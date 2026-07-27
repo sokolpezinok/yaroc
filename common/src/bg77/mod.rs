@@ -1,3 +1,4 @@
+pub mod modem;
 pub mod modem_manager;
 pub mod mqtt;
 pub mod system_info;

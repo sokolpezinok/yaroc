@@ -9,7 +9,7 @@ use heapless::format;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
-    bg77::{modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
+    bg77::{modem::Bg77, modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
     error::Error,
     flash::Flash,
     mqtt::{MqttClientConfig, MqttConfig},
@@ -93,7 +93,8 @@ async fn main(spawner: Spawner) {
     );
     spawner.spawn(backoff_retries_loop(backoff_retries).expect("Failed to spawn task"));
 
-    let send_punch = SendPunch::new(bg77, modem_pin, spawner, mqtt_config, modem_config, flash);
+    let bg77 = Bg77::new(bg77, modem_pin);
+    let send_punch = SendPunch::new(bg77, spawner, mqtt_config, modem_config, flash);
     {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }

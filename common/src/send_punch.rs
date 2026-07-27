@@ -15,7 +15,8 @@ use sequential_storage::map::PostcardValue;
 use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse, PendingLoggedAtResponse};
 use crate::at::uart::{AtUartTrait, UrcHandlerType};
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
-use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
+use crate::bg77::modem::Modem;
+use crate::bg77::modem_manager::{ModemConfig, ModemManager};
 use crate::bg77::mqtt::MqttClient;
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
@@ -42,9 +43,8 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
-pub struct SendPunch<M: AtUartTrait, P: ModemPin, F: Flash> {
+pub struct SendPunch<M: AtUartTrait, F: Flash> {
     bg77: Mutex<RawMutex, M>,
-    modem_pin: P,
     mqtt_client: MqttClient<M>,
     modem_manager: ModemManager<M>,
     system_info: SystemInfo<M>,
@@ -93,19 +93,17 @@ impl FlashValue for DeviceConfig {
     const VALUE_INDEX: ValueIndex = ValueIndex::DeviceConfig;
 }
 
-impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
+impl<M: Modem, F: Flash> SendPunch<M, F> {
     /// Creates a new `SendPunch` instance.
     ///
     /// # Arguments
     ///
     /// * `bg77`: An initialized modem instance.
-    /// * `modem_pin`: The pin used to reset/turn on the modem.
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     /// * `modem_config`: The Modem configuration.
     pub fn new(
         mut bg77: M,
-        modem_pin: P,
         spawner: Spawner,
         mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
@@ -122,7 +120,6 @@ impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         bg77.spawn_rx(&handlers, spawner);
         Self {
             bg77: Mutex::new(bg77),
-            modem_pin,
             mqtt_client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
@@ -150,12 +147,10 @@ impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// # Arguments
     ///
     /// * `bg77`: An initialized modem instance.
-    /// * `modem_pin`: The pin used to reset/turn on the modem.
     /// * `mqtt_config`: The MQTT configuration.
     #[cfg(test)]
     pub fn new_without_spawning(
         bg77: M,
-        modem_pin: P,
         mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
         flash: F,
@@ -164,7 +159,6 @@ impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         let modem_manager = ModemManager::new(modem_config);
         Self {
             bg77: Mutex::new(bg77),
-            modem_pin,
             mqtt_client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
@@ -295,7 +289,7 @@ impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
         let mut bg77 = self.bg77.lock().await;
-        self.modem_manager.turn_on(&mut *bg77, &mut self.modem_pin).await?;
+        bg77.turn_on().await?;
         let firmware = self.modem_manager.configure(&mut *bg77).await?;
         info!("Modem firmware version: {}", firmware);
 
@@ -425,7 +419,7 @@ mod tests {
             fake_modem::FakeModem,
             response::{AtResponse, FromModem},
         },
-        bg77::modem_manager::FakePin,
+        bg77::{modem::Bg77, modem_manager::FakePin},
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
     };
 
@@ -495,15 +489,11 @@ mod tests {
     fn send_punch_instantiation_test() {
         let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
         let fake_pin = FakePin {};
+        let modem = Bg77::new(fake_modem, fake_pin);
         let mqtt_config = MqttClientConfig::default();
 
-        let mut send_punch = SendPunch::new_without_spawning(
-            fake_modem,
-            fake_pin,
-            mqtt_config,
-            ModemConfig::default(),
-            FakeFlash,
-        );
+        let mut send_punch =
+            SendPunch::new_without_spawning(modem, mqtt_config, ModemConfig::default(), FakeFlash);
 
         assert!(send_punch.last_reconnect.is_none());
 
