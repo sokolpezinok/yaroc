@@ -9,16 +9,19 @@ use mockall::{Predicate, predicate::*};
 use yaroc_common::Result;
 use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromModem};
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
-use yaroc_common::bg77::hw::ModemHw;
 use yaroc_common::bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemConfig, ModemManager};
 use yaroc_common::bg77::mqtt::MqttClient;
 use yaroc_common::mqtt::{MqttClientConfig, MqttQos};
 
-// mockall::automock doesn't work next to `trait ModemHw` definition, so we use `mockall::mock!`
+const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
+
+// mockall::automock doesn't work next to `trait AtUartTrait` definition, so we use `mockall::mock!`
 // instead.
 mockall::mock! {
     pub AtUart {}
     impl AtUartTrait for AtUart {
+        const DEFAULT_TIMEOUT: Duration = DEFAULT_TIMEOUT;
+
         fn spawn_rx(&mut self, urc_handlers: &[UrcHandlerType], spawner: Spawner);
         async fn call_at_timeout(
             &mut self,
@@ -33,14 +36,12 @@ mockall::mock! {
             second_read: bool,
             timeout: Duration,
         ) -> Result<AtResponse>;
-        async fn read(
+        async fn read_lines(
             &self,
             timeout: Duration,
         ) -> Result<heapless::Vec<FromModem, AT_LINES>>;
     }
 }
-
-const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1);
 
 fn expect_call_at(
     mock: &mut MockAtUart,
@@ -61,10 +62,6 @@ fn expect_call_at(
             resps.push(FromModem::Ok).unwrap();
             Ok(AtResponse::new(resps, cmd))
         });
-}
-
-impl ModemHw for MockAtUart {
-    const DEFAULT_TIMEOUT: Duration = DEFAULT_TIMEOUT;
 }
 
 #[test]

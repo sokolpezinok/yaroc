@@ -13,9 +13,8 @@ use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
 use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse, PendingLoggedAtResponse};
-use crate::at::uart::UrcHandlerType;
+use crate::at::uart::{AtUartTrait, UrcHandlerType};
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
-use crate::bg77::hw::ModemHw;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager, ModemPin};
 use crate::bg77::mqtt::MqttClient;
 use crate::bg77::system_info::SystemInfo;
@@ -43,7 +42,7 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
-pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
+pub struct SendPunch<M: AtUartTrait, P: ModemPin, F: Flash> {
     bg77: Mutex<RawMutex, M>,
     modem_pin: P,
     mqtt_client: MqttClient<M>,
@@ -94,7 +93,7 @@ impl FlashValue for DeviceConfig {
     const VALUE_INDEX: ValueIndex = ValueIndex::DeviceConfig;
 }
 
-impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
+impl<M: AtUartTrait, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// Creates a new `SendPunch` instance.
     ///
     /// # Arguments

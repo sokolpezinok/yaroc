@@ -12,12 +12,9 @@ use log::{error, info, warn};
 
 use crate::{
     RawMutex,
-    at::response::CommandResponse,
+    at::{response::CommandResponse, uart::AtUartTrait},
     backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
-    bg77::{
-        hw::ModemHw,
-        modem_manager::{ACTIVATION_TIMEOUT, ModemManager},
-    },
+    bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemManager},
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig, MqttQos, MqttStatus, StatusCode},
     send_punch::SendPunchCommand,
@@ -126,7 +123,7 @@ impl MqttStatus {
 }
 
 /// An MQTT client for the BG77 modem.
-pub struct MqttClient<M: ModemHw> {
+pub struct MqttClient<M: AtUartTrait> {
     config: MqttClientConfig,
     last_successful_send: Instant,
     client_id: u8,
@@ -134,7 +131,7 @@ pub struct MqttClient<M: ModemHw> {
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw> MqttClient<M> {
+impl<M: AtUartTrait> MqttClient<M> {
     /// Creates a new `MqttClient`.
     pub fn new(config: MqttClientConfig, client_id: u8) -> Self {
         Self {

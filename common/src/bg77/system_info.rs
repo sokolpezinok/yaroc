@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use crate::{
     RawMutex,
-    bg77::hw::ModemHw,
+    at::uart::AtUartTrait,
     error::Error,
     status::{BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE},
 };
@@ -16,14 +16,14 @@ use heapless::{String, format};
 use log::{error, info};
 
 /// Gathers and provides system information from the Quectel BG77 modem.
-pub struct SystemInfo<M: ModemHw> {
+pub struct SystemInfo<M: AtUartTrait> {
     temp: Receiver<'static, RawMutex, f32, 1>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
     boot_time: Option<DateTime<FixedOffset>>,
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw> Default for SystemInfo<M> {
+impl<M: AtUartTrait> Default for SystemInfo<M> {
     fn default() -> Self {
         Self {
             temp: TEMPERATURE.receiver().unwrap(),
@@ -34,7 +34,7 @@ impl<M: ModemHw> Default for SystemInfo<M> {
     }
 }
 
-impl<M: ModemHw> SystemInfo<M> {
+impl<M: AtUartTrait> SystemInfo<M> {
     /// Parses the date and time from the output of the AT+QLTS=2 command.
     ///
     /// Expected format: `"YYYY/MM/DD,HH:MM:SS±ZZ,D"` (e.g. `"2024/12/24,10:48:23+04,0"`)

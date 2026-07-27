@@ -1,11 +1,8 @@
 extern crate std;
 
-use crate::{
-    at::{
-        response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem},
-        uart::{AtUartTrait, UrcHandlerType},
-    },
-    bg77::hw::ModemHw,
+use crate::at::{
+    response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem},
+    uart::{AtUartTrait, UrcHandlerType},
 };
 use core::str::FromStr;
 use embassy_executor::Spawner;
@@ -50,6 +47,8 @@ impl FakeModem {
 }
 
 impl AtUartTrait for FakeModem {
+    const DEFAULT_TIMEOUT: Duration = Duration::from_millis(10);
+
     fn spawn_rx(&mut self, _urc_handlers: &[UrcHandlerType], _spawner: Spawner) {}
 
     async fn call_at_timeout(
@@ -93,11 +92,7 @@ impl AtUartTrait for FakeModem {
         ))
     }
 
-    async fn read(&self, _timeout: Duration) -> crate::Result<Vec<FromModem, AT_LINES>> {
+    async fn read_lines(&self, _timeout: Duration) -> crate::Result<Vec<FromModem, AT_LINES>> {
         todo!()
     }
-}
-
-impl ModemHw for FakeModem {
-    const DEFAULT_TIMEOUT: Duration = Duration::from_millis(10);
 }

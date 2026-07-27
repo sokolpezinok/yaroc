@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
 use crate::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
-use crate::bg77::hw::ModemHw;
+use crate::at::uart::AtUartTrait;
 use crate::error::Error;
 use crate::flash::{FlashValue, ValueIndex};
 use crate::send_punch::SendPunchCommand;
@@ -134,7 +134,7 @@ pub struct ModemManager<M> {
     _phantom: PhantomData<M>,
 }
 
-impl<M: ModemHw> ModemManager<M> {
+impl<M: AtUartTrait> ModemManager<M> {
     /// Creates a new ModemManager with the given configuration.
     pub fn new(config: ModemConfig) -> Self {
         Self {

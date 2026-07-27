@@ -199,6 +199,10 @@ impl RxWithIdle for FakeRxWithIdle {
 }
 
 pub trait AtUartTrait {
+    /// Default timeout for a command. It's typically the minimum timeout, a couple hundred
+    /// milliseconds for a modem.
+    const DEFAULT_TIMEOUT: Duration = Duration::from_millis(300);
+
     /// Spawns a task that reads from the UART and brokers the replies.
     ///
     /// # Arguments
@@ -219,6 +223,30 @@ pub trait AtUartTrait {
         response_timeout: Option<Duration>,
     ) -> impl Future<Output = Result<AtResponse, Error>>;
 
+    /// Performs an AT call to the modem, optionally also waiting longer for a response.
+    ///
+    /// We send `cmd` prefixed by `AT`. We wait a short time for an OK/ERROR and then if
+    /// `response_timeout` is set, we wait `response_timeout` for a response that is prefixed by
+    /// `cmd`.
+    fn call_at(
+        &mut self,
+        cmd: &str,
+        response_timeout: Option<Duration>,
+    ) -> impl Future<Output = crate::Result<AtResponse>> {
+        self.call_at_timeout(cmd, Self::DEFAULT_TIMEOUT, response_timeout)
+    }
+
+    /// Performs an AT call to the modem and waits for an OK/ERROR response.
+    ///
+    /// The maximum waiting time is specified by `timeout`.
+    fn long_call_at(
+        &mut self,
+        cmd: &str,
+        timeout: Duration,
+    ) -> impl Future<Output = crate::Result<AtResponse>> {
+        self.call_at_timeout(cmd, timeout, None)
+    }
+
     /// Calls a command and waits for a reply.
     ///
     /// It optionally performs a second read within the timeout.
@@ -236,14 +264,38 @@ pub trait AtUartTrait {
         timeout: Duration,
     ) -> impl Future<Output = crate::Result<AtResponse>>;
 
-    /// Reads a reply from the modem.
+    /// Sends a raw message to the modem.
+    ///
+    /// Waits for a response if `second_read_timeout` is set and the timeout is the value of
+    /// `second_read_timeout`. The response should be prefixed with `command_prefix`.
+    fn call(
+        &mut self,
+        msg: &[u8],
+        command_prefix: &str,
+        second_read_timeout: Option<Duration>,
+    ) -> impl Future<Output = crate::Result<AtResponse>> {
+        match second_read_timeout {
+            None => self.call_second_read(msg, command_prefix, false, Self::DEFAULT_TIMEOUT),
+            Some(timeout) => self.call_second_read(msg, command_prefix, true, timeout),
+        }
+    }
+
+    /// Reads raw lines from the modem.
     ///
     /// # Arguments
     /// * `timeout` - The maximum time to wait for a reply.
-    fn read(
+    fn read_lines(
         &self,
         timeout: Duration,
     ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>, Error>>;
+
+    /// Reads a response from the modem.
+    fn read(&mut self, timeout: Duration) -> impl Future<Output = crate::Result<AtResponse>> {
+        async move {
+            let lines = self.read_lines(timeout).await?;
+            Ok(AtResponse::new(lines, ""))
+        }
+    }
 }
 
 /// A UART for sending and receiving AT-commands.
@@ -312,7 +364,7 @@ where
     ) -> Result<Vec<FromModem, AT_LINES>, Error> {
         //debug!("Calling: {}", command);
         self.write_at(command).await?;
-        let lines = self.read(timeout).await?;
+        let lines = self.read_lines(timeout).await?;
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
             Some(&FromModem::Error) => {
@@ -354,9 +406,9 @@ where
         self.write(msg).await?;
         // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
         // technicality, the timeout is doubled this way, but it's never a problem.
-        let mut lines = self.read(timeout).await?;
+        let mut lines = self.read_lines(timeout).await?;
         if second_read {
-            let new_lines = self.read(timeout).await?;
+            let new_lines = self.read_lines(timeout).await?;
             let remaining = lines.spare_capacity_mut().len();
             if new_lines.len() <= remaining {
                 // TODO: extend by as much from `new_lines` as possibble.
@@ -385,7 +437,7 @@ where
         let start = Instant::now();
         let mut lines = self.call_at_impl(command, call_timeout).await?;
         if let Some(response_timeout) = response_timeout {
-            let new_lines = self.read(response_timeout).await?;
+            let new_lines = self.read_lines(response_timeout).await?;
             let remaining = lines.spare_capacity_mut().len();
             if new_lines.len() <= remaining {
                 lines.extend(new_lines);
@@ -404,7 +456,7 @@ where
         Ok(response)
     }
 
-    async fn read(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
+    async fn read_lines(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
