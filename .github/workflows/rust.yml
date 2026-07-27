@@ -3,8 +3,13 @@ name: Rust
 on:
   push:
     branches: [ "master" ]
+    tags:
+      - "nrf-v*"
   pull_request:
     branches: [ "master" ]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,6 +17,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    name: Build & test Rust crates
     steps:
     - uses: actions/checkout@v5
     - name: Packages
@@ -19,13 +25,57 @@ jobs:
     - name: Cargo format
       run: cargo fmt --check
     - name: Build
-      run: |
-        cargo build --verbose
-        rustup target add thumbv7em-none-eabihf
-        cargo build -p yaroc-nrf52840 --target thumbv7em-none-eabihf
-        cargo build -r -p yaroc-nrf52840 --target thumbv7em-none-eabihf
+      run: cargo build --verbose
     - name: Run tests
-      run: |
-        cargo test --verbose
+      run: cargo test --verbose
     - name: Run clippy
       run: cargo clippy -- -D warnings
+
+  build-nrf52840:
+    runs-on: ubuntu-latest
+    name: Build nrf52840
+    defaults:
+      run:
+        working-directory: "nrf52840"
+    steps:
+    - uses: actions/checkout@v5
+    - name: Packages
+      run: sudo apt update && sudo apt install -y protobuf-compiler
+    - name: Build
+      run: |
+        rustup target add thumbv7em-none-eabihf
+        cargo build
+        cargo build -r
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/nrf-v')"
+    needs: [build, build-nrf52840]
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set version
+      run: |
+        VERSION="${GITHUB_REF_NAME#nrf-v}"
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+    - name: Install cargo-binutils
+      run: |
+        rustup component add llvm-tools-preview
+        rustup target add thumbv7em-none-eabihf
+        cargo install cargo-binutils
+    - name: Generate Hex Firmware
+      run: |
+        cargo objcopy --release -p yaroc-nrf52840 --target thumbv7em-none-eabihf -- -O ihex target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.hex
+    - name: Upload firmware hex
+      uses: actions/upload-artifact@v6
+      with:
+        name: yaroc-nrf52840-${{ env.VERSION }}.hex
+        path: target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
