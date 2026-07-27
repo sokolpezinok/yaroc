@@ -2648,7 +2648,6 @@ version = "7.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "574e5a379bf43653079b34cb4cf32958404b5f42e0ed5b5adcdff02c2de04d4d"
 dependencies = [
- "defmt 1.1.0",
  "embedded-storage-async",
  "postcard",
  "serde",

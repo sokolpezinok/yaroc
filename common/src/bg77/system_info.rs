@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     status::{BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE},
 };
-use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeDelta};
+use chrono::{DateTime, FixedOffset, TimeDelta};
 #[cfg(feature = "defmt")]
 use defmt::{error, info};
 use embassy_sync::watch::Receiver;
@@ -35,10 +35,31 @@ impl<M: ModemHw> Default for SystemInfo<M> {
 }
 
 impl<M: ModemHw> SystemInfo<M> {
-    /// Parses the output of AT+QLTS=2 command into date and time.
+    /// Parses the date and time from the output of the AT+QLTS=2 command.
+    ///
+    /// Expected format: `"YYYY/MM/DD,HH:MM:SS±ZZ,D"` (e.g. `"2024/12/24,10:48:23+04,0"`)
+    /// - `[0..4]`: Year (`YYYY`)
+    /// - `[5..7]`: Month (`MM`)
+    /// - `[8..10]`: Day (`DD`)
+    /// - `[11..13]`: Hour (`HH`)
+    /// - `[14..16]`: Minute (`MM`)
+    /// - `[17..19]`: Second (`SS`)
+    /// - `[20..22]`: Timezone offset in 15-minute intervals (`ZZ`)
     fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
-        let naive_date = NaiveDateTime::parse_from_str(&modem_clock[..19], "%Y/%m/%d,%H:%M:%S")
-            .map_err(|_| Error::ParseError)?;
+        if modem_clock.len() < 22 {
+            return Err(Error::ParseError);
+        }
+        let year: i32 = str::parse(&modem_clock[0..4]).map_err(|_| Error::ParseError)?;
+        let month: u32 = str::parse(&modem_clock[5..7]).map_err(|_| Error::ParseError)?;
+        let day: u32 = str::parse(&modem_clock[8..10]).map_err(|_| Error::ParseError)?;
+        let hour: u32 = str::parse(&modem_clock[11..13]).map_err(|_| Error::ParseError)?;
+        let min: u32 = str::parse(&modem_clock[14..16]).map_err(|_| Error::ParseError)?;
+        let sec: u32 = str::parse(&modem_clock[17..19]).map_err(|_| Error::ParseError)?;
+
+        let naive_date = chrono::NaiveDate::from_ymd_opt(year, month, day)
+            .ok_or(Error::ParseError)?
+            .and_hms_opt(hour, min, sec)
+            .ok_or(Error::ParseError)?;
 
         let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
         Ok(naive_date

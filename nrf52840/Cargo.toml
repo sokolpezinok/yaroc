@@ -33,7 +33,7 @@ log = { workspace = true }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "47d6121c6e823120e8b883a7ac75f44ce7daa3aa", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }
-sequential-storage = { workspace = true, features = ["defmt"] }
+sequential-storage = { workspace = true }
 serde = { workspace = true }
 static_cell = { workspace = true }
 thiserror = { workspace = true }
