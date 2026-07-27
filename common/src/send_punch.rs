@@ -4,6 +4,7 @@ use core::future::Future;
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant};
 use femtopb::{Message, repeated};
 use heapless::{String, Vec, format};
@@ -43,7 +44,7 @@ pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::n
 ///
 /// This struct manages the modem, the MQTT client, and system information.
 pub struct SendPunch<M: ModemHw, P: ModemPin, F: Flash> {
-    bg77: M,
+    bg77: Mutex<RawMutex, M>,
     modem_pin: P,
     mqtt_client: MqttClient<M>,
     modem_manager: ModemManager<M>,
@@ -121,7 +122,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         ];
         bg77.spawn_rx(&handlers, spawner);
         Self {
-            bg77,
+            bg77: Mutex::new(bg77),
             modem_pin,
             mqtt_client,
             modem_manager,
@@ -163,7 +164,7 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
         Self {
-            bg77,
+            bg77: Mutex::new(bg77),
             modem_pin,
             mqtt_client,
             modem_manager,
@@ -187,7 +188,8 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     /// * `qos`: The MQTT Quality of Service level.
     /// * `msg_id`: The message identifier.
     async fn send_message<const N: usize>(
-        &mut self,
+        mqtt_client: &mut MqttClient<M>,
+        bg77: &mut M,
         topic: &str,
         msg: impl Message<'_>,
         qos: MqttQos,
@@ -196,14 +198,15 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
-        self.mqtt_client
-            .send_message(&mut self.bg77, topic, &buf[..len], qos, msg_id)
-            .await
+        mqtt_client.send_message(bg77, topic, &buf[..len], qos, msg_id).await
     }
 
     /// Sends a `MiniCallHome` message, containing system information.
     pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mini_call_home = self.system_info.mini_call_home(&mut self.bg77).await;
+        let mini_call_home = {
+            let mut bg77 = self.bg77.lock().await;
+            self.system_info.mini_call_home(&mut *bg77).await
+        };
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
         // TODO: add a test for logging to flash
@@ -212,8 +215,16 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             .log_minicallhome(mini_call_home)
             .await
             .inspect_err(|e| error!("Error while logging MiniCallHome: {}", { e }));
-        self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
-            .await
+        let mut bg77 = self.bg77.lock().await;
+        Self::send_message::<250>(
+            &mut self.mqtt_client,
+            &mut *bg77,
+            "status",
+            mini_call_home.to_proto(),
+            MqttQos::Q0,
+            0,
+        )
+        .await
     }
 
     /// Schedules a batch of punches to be sent.
@@ -223,7 +234,11 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         match punch {
             Ok(punches) => {
                 let id = self.mqtt_client.schedule_punches(punches.clone()).await;
-                if let Some(time) = self.system_info.current_time(&mut self.bg77, true).await {
+                let time = {
+                    let mut bg77 = self.bg77.lock().await;
+                    self.system_info.current_time(&mut *bg77, true).await
+                };
+                if let Some(time) = time {
                     let today = time.date_naive();
                     for punch in punches {
                         let punch = SiPunch::from_raw(punch, today, time.offset());
@@ -264,18 +279,28 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
             ..Default::default()
         };
         const PROTO_LEN: usize = (crate::punch::LEN + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;
-        self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id).await
+        let mut bg77 = self.bg77.lock().await;
+        Self::send_message::<PROTO_LEN>(
+            &mut self.mqtt_client,
+            &mut *bg77,
+            "p",
+            punches_proto,
+            MqttQos::Q1,
+            msg_id,
+        )
+        .await
     }
 
     /// Performs the basic setup of the modem.
     ///
     /// This function turns on the modem, configures it, and connects to the MQTT broker.
     pub async fn setup(&mut self) -> crate::Result<()> {
-        self.modem_manager.turn_on(&mut self.bg77, &mut self.modem_pin).await?;
-        let firmware = self.modem_manager.configure(&mut self.bg77).await?;
+        let mut bg77 = self.bg77.lock().await;
+        self.modem_manager.turn_on(&mut *bg77, &mut self.modem_pin).await?;
+        let firmware = self.modem_manager.configure(&mut *bg77).await?;
         info!("Modem firmware version: {}", firmware);
 
-        let _ = self.mqtt_client.connect(&mut self.bg77, &self.modem_manager).await;
+        let _ = self.mqtt_client.connect(&mut *bg77, &self.modem_manager).await;
         Ok(())
     }
 
@@ -289,7 +314,8 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         self.flash.write(modem_config.clone()).await?;
         info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);
-        self.modem_manager.configure(&mut self.bg77).await
+        let mut bg77 = self.bg77.lock().await;
+        self.modem_manager.configure(&mut *bg77).await
     }
 
     /// Configures the MQTT client
@@ -297,7 +323,8 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
         self.flash.write(mqtt_config.clone()).await?;
         info!("MQTT config written to flash");
         self.mqtt_client.update_reduced_config(mqtt_config);
-        self.mqtt_client.disconnect(&mut self.bg77).await?;
+        let mut bg77 = self.bg77.lock().await;
+        self.mqtt_client.disconnect(&mut *bg77).await?;
         Ok(())
     }
 
@@ -337,13 +364,15 @@ impl<M: ModemHw, P: ModemPin, F: Flash> SendPunch<M, P, F> {
     }
 
     /// Connects to the MQTT broker.
-    fn mqtt_connect(&mut self) -> impl Future<Output = crate::Result<()>> + '_ {
-        self.mqtt_client.connect(&mut self.bg77, &self.modem_manager)
+    async fn mqtt_connect(&mut self) -> crate::Result<()> {
+        let mut bg77 = self.bg77.lock().await;
+        self.mqtt_client.connect(&mut *bg77, &self.modem_manager).await
     }
 
     /// Synchronizes the system time with the network time from the modem.
-    fn synchronize_time(&mut self) -> impl Future<Output = Option<DateTime<FixedOffset>>> + '_ {
-        self.system_info.current_time(&mut self.bg77, false)
+    async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
+        let mut bg77 = self.bg77.lock().await;
+        self.system_info.current_time(&mut *bg77, false).await
     }
 
     /// Returns the calendar time corresponding to the given `instant`, if synchronized.
