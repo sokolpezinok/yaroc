@@ -48,7 +48,8 @@ rust-version = "1.96.0"
 
 [profile.release]
 debug = 2
-opt-level = "s"
+opt-level = "z"
+panic = "abort"
 overflow-checks = false
 lto = true
 codegen-units = 1
