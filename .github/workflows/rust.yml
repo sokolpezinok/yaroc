@@ -67,15 +67,20 @@ jobs:
         rustup component add llvm-tools-preview
         rustup target add thumbv7em-none-eabihf
         cargo install cargo-binutils
-    - name: Generate Hex Firmware
+    - name: Generate Firmware Binaries
       run: |
         cargo objcopy --release -p yaroc-nrf52840 --target thumbv7em-none-eabihf -- -O ihex target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.hex
-    - name: Upload firmware hex
+        cp target/thumbv7em-none-eabihf/release/yaroc-nrf52840 target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.elf
+    - name: Upload firmware artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: yaroc-nrf52840-${{ env.VERSION }}.hex
-        path: target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+        name: yaroc-nrf52840-${{ env.VERSION }}
+        path: |
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.elf
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
-        files: target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+        files: |
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.elf
