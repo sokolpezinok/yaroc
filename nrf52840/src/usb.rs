@@ -8,10 +8,10 @@ use log;
 use static_cell::StaticCell;
 
 use yaroc_common::error::Error;
-use yaroc_common::flash::{LoggedAtResponseIterator, MchIterator};
+use yaroc_common::flash::{Flash, LoggedAtResponseIterator, MchIterator};
 use yaroc_common::usb::{CdcAcm, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
-use crate::send_punch::{BG77_MUTEX, SEND_PUNCH_MUTEX};
+use crate::send_punch::{BG77_MUTEX, FLASH_MUTEX, SEND_PUNCH_MUTEX};
 
 /// The main USB task.
 ///
@@ -106,13 +106,13 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
     }
 
     async fn respond(&mut self, command: UsbCommand) -> Result<(), Error> {
-        let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
-        let send_punch = send_punch.as_mut().unwrap();
         match command {
             UsbCommand::ConfigureModem(modem_config) => {
                 {
                     let mut bg77_guard = BG77_MUTEX.lock().await;
                     let bg77 = bg77_guard.as_mut().unwrap();
+                    let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
+                    let send_punch = send_punch.as_mut().unwrap();
                     send_punch.configure_modem(bg77, modem_config).await?;
                 }
                 info!("Modem reconfigured");
@@ -122,22 +122,32 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                 {
                     let mut bg77_guard = BG77_MUTEX.lock().await;
                     let bg77 = bg77_guard.as_mut().unwrap();
+                    let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
+                    let send_punch = send_punch.as_mut().unwrap();
                     send_punch.configure_mqtt(bg77, mqtt_config).await?;
                 }
                 info!("MQTT reconfigured");
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureDevice(device_config) => {
+                let mut send_punch = SEND_PUNCH_MUTEX.lock().await;
+                let send_punch = send_punch.as_mut().unwrap();
                 send_punch.update_device_config(device_config).await?;
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::EraseFlash => {
-                send_punch.erase_flash().await?;
+                info!("Request to erase the flash");
+                let mut flash_guard = FLASH_MUTEX.lock().await;
+                let flash = flash_guard.as_mut().unwrap();
+                flash.erase().await?;
                 info!("Flash erased");
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::GetMiniCallHomeLogs => {
-                let mut iter = send_punch.get_minicallhome_logs().await?;
+                info!("Request to read all MiniCallHome logs");
+                let mut flash_guard = FLASH_MUTEX.lock().await;
+                let flash = flash_guard.as_mut().unwrap();
+                let mut iter = flash.mch_iter().await?;
                 loop {
                     let log = iter.next().await?;
                     match log {
@@ -157,7 +167,10 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::GetLoggedAtResponseLogs => {
-                let mut iter = send_punch.get_logged_at_response_logs().await?;
+                info!("Request to read all LoggedAtResponse logs");
+                let mut flash_guard = FLASH_MUTEX.lock().await;
+                let flash = flash_guard.as_mut().unwrap();
+                let mut iter = flash.logged_at_response_iter().await?;
                 loop {
                     let log = iter.next().await?;
                     match log {

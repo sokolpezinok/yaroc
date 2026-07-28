@@ -34,6 +34,9 @@ pub type Bg77SendPunchType = SendPunch<Bg77Type, NrfFlash<'static>>;
 /// A mutex for the BG77 modem struct.
 pub static BG77_MUTEX: Mutex<RawMutex, Option<Bg77Type>> = Mutex::new(None);
 
+/// A mutex for the flash memory.
+pub static FLASH_MUTEX: Mutex<RawMutex, Option<NrfFlash<'static>>> = Mutex::new(None);
+
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);
 // Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.

@@ -1,9 +1,11 @@
 use chrono::{DateTime, FixedOffset};
 use core::future::Future;
+use core::ops::{Deref, DerefMut};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
+use embassy_sync::mutex::{Mutex, MutexGuard};
 use embassy_time::{Duration, Instant};
 use femtopb::{Message, repeated};
 use heapless::{String, Vec, format};
@@ -12,7 +14,7 @@ use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
 use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse, PendingLoggedAtResponse};
-use crate::at::uart::{AtUartTrait, UrcHandlerType};
+use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::modem::Modem;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager};
@@ -39,15 +41,34 @@ pub enum SendPunchCommand {
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
 
+/// A guard providing mutable access to the flash instance while holding the mutex lock.
+pub struct FlashGuard<'a, F: Flash + 'static> {
+    guard: MutexGuard<'a, RawMutex, Option<F>>,
+}
+
+impl<'a, F: Flash + 'static> Deref for FlashGuard<'a, F> {
+    type Target = F;
+
+    fn deref(&self) -> &Self::Target {
+        self.guard.as_ref().expect("Flash not initialized")
+    }
+}
+
+impl<'a, F: Flash + 'static> DerefMut for FlashGuard<'a, F> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.guard.as_mut().expect("Flash not initialized")
+    }
+}
+
 /// A handler for sending punches and other data to the server.
 ///
 /// This struct manages the modem, the MQTT client, and system information.
-pub struct SendPunch<M: AtUartTrait, F: Flash> {
+pub struct SendPunch<M: Modem, F: Flash + 'static> {
     mqtt_client: MqttClient<M>,
     modem_manager: ModemManager<M>,
     system_info: SystemInfo<M>,
+    flash_mutex: &'static Mutex<RawMutex, Option<F>>,
     last_reconnect: Option<Instant>,
-    flash: F,
     name: String<24>,
 }
 
@@ -91,21 +112,22 @@ impl FlashValue for DeviceConfig {
     const VALUE_INDEX: ValueIndex = ValueIndex::DeviceConfig;
 }
 
-impl<M: Modem, F: Flash> SendPunch<M, F> {
+impl<M: Modem, F: Flash + 'static> SendPunch<M, F> {
     /// Creates a new `SendPunch` instance.
     ///
     /// # Arguments
     ///
     /// * `bg77`: An initialized modem instance.
+    /// * `flash_mutex`: A static reference to the flash mutex.
     /// * `spawner`: The embassy spawner.
     /// * `mqtt_config`: The MQTT configuration.
     /// * `modem_config`: The Modem configuration.
     pub fn new(
         bg77: &mut M,
+        flash_mutex: &'static Mutex<RawMutex, Option<F>>,
         spawner: Spawner,
         mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
-        flash: F,
     ) -> Self {
         let name = mqtt_config.name.clone();
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
@@ -120,10 +142,16 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
             mqtt_client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
+            flash_mutex,
             last_reconnect: None,
-            flash,
             name,
         }
+    }
+
+    /// Locks the flash mutex and returns a guard providing access to the flash instance.
+    pub async fn lock_flash(&self) -> FlashGuard<'_, F> {
+        let guard = self.flash_mutex.lock().await;
+        FlashGuard { guard }
     }
 
     /// Updates the device configuration in flash.
@@ -132,7 +160,7 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
         mut device_config: DeviceConfig,
     ) -> crate::Result<()> {
         device_config.name = self.name.clone();
-        self.flash.write(device_config).await?;
+        self.lock_flash().await.write(device_config).await?;
         info!("Device config written to flash");
         Ok(())
     }
@@ -143,12 +171,13 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
     ///
     /// # Arguments
     ///
+    /// * `flash_mutex`: A static reference to the flash mutex.
     /// * `mqtt_config`: The MQTT configuration.
     #[cfg(test)]
     pub fn new_without_spawning(
+        flash_mutex: &'static Mutex<RawMutex, Option<F>>,
         mqtt_config: MqttClientConfig,
         modem_config: ModemConfig,
-        flash: F,
     ) -> Self {
         let mqtt_client = MqttClient::<_>::new(mqtt_config, 0);
         let modem_manager = ModemManager::new(modem_config);
@@ -156,8 +185,8 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
             mqtt_client,
             modem_manager,
             system_info: SystemInfo::<M>::default(),
+            flash_mutex,
             last_reconnect: None,
-            flash,
             name: "test-send-punch".try_into().unwrap(),
         }
     }
@@ -195,7 +224,8 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
         info!("MiniCallHome: {}", mini_call_home);
         // TODO: add a test for logging to flash
         let _ = self
-            .flash
+            .lock_flash()
+            .await
             .log_minicallhome(mini_call_home)
             .await
             .inspect_err(|e| error!("Error while logging MiniCallHome: {}", { e }));
@@ -277,7 +307,7 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
         bg77: &mut M,
         modem_config: ModemConfig,
     ) -> crate::Result<String<AT_COMMAND_SIZE>> {
-        self.flash.write(modem_config.clone()).await?;
+        self.lock_flash().await.write(modem_config.clone()).await?;
         info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);
         self.modem_manager.configure(bg77).await
@@ -289,33 +319,11 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
         bg77: &mut M,
         mqtt_config: MqttConfig,
     ) -> crate::Result<()> {
-        self.flash.write(mqtt_config.clone()).await?;
+        self.lock_flash().await.write(mqtt_config.clone()).await?;
         info!("MQTT config written to flash");
         self.mqtt_client.update_reduced_config(mqtt_config);
         self.mqtt_client.disconnect(bg77).await?;
         Ok(())
-    }
-
-    /// Erases the flash memory.
-    pub fn erase_flash(&mut self) -> impl Future<Output = crate::Result<()>> + '_ {
-        info!("Request to erase the flash");
-        self.flash.erase()
-    }
-
-    /// Returns the stored MiniCallHome logs as serialized protos.
-    pub fn get_minicallhome_logs<'a>(
-        &'a mut self,
-    ) -> impl Future<Output = crate::Result<F::MchIter<'a>>> + 'a {
-        info!("Request to read all MiniCallHome logs");
-        self.flash.mch_iter()
-    }
-
-    /// Returns the stored LoggedAtResponse logs.
-    pub fn get_logged_at_response_logs<'a>(
-        &'a mut self,
-    ) -> impl Future<Output = crate::Result<F::LoggedAtResponseIter<'a>>> + 'a {
-        info!("Request to read all LoggedAtResponse logs");
-        self.flash.logged_at_response_iter()
     }
 
     /// Store AT response in flash
@@ -328,7 +336,7 @@ impl<M: Modem, F: Flash> SendPunch<M, F> {
             timestamp,
             response: response.response,
         };
-        self.flash.log_at_response(logged_response).await
+        self.lock_flash().await.log_at_response(logged_response).await
     }
 
     /// Connects to the MQTT broker.
@@ -461,6 +469,8 @@ mod tests {
         }
     }
 
+    static FAKE_FLASH_MUTEX: Mutex<RawMutex, Option<FakeFlash>> = Mutex::new(None);
+
     #[test]
     fn send_punch_instantiation_test() {
         let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
@@ -468,8 +478,12 @@ mod tests {
         let mut modem = Bg77::new(fake_modem, fake_pin);
         let mqtt_config = MqttClientConfig::default();
 
+        block_on(async {
+            *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
+        });
+
         let mut send_punch =
-            SendPunch::new_without_spawning(mqtt_config, ModemConfig::default(), FakeFlash);
+            SendPunch::new_without_spawning(&FAKE_FLASH_MUTEX, mqtt_config, ModemConfig::default());
 
         assert!(send_punch.last_reconnect.is_none());
 
