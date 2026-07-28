@@ -24,6 +24,7 @@ use crate::flash::{Flash, FlashValue, ValueIndex};
 use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos, duration_ms};
 use crate::proto::Punches;
 use crate::punch::SiPunch;
+use crate::status::MiniCallHome;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
 
 /// Commands to be sent to the `send_punch_event_handler`.
@@ -250,11 +251,24 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     }
 
     /// Sends a `MiniCallHome` message, containing system information.
-    pub async fn send_mini_call_home(&mut self) -> crate::Result<()> {
-        let mut bg77 = self.lock_bg77().await;
-        let mini_call_home = self.system_info.mini_call_home(&mut *bg77).await;
-        #[cfg(feature = "defmt")]
-        info!("MiniCallHome: {}", mini_call_home);
+    pub async fn send_mini_call_home(&mut self) -> crate::Result<MiniCallHome> {
+        let mini_call_home = {
+            let mut bg77 = self.lock_bg77().await;
+            let mini_call_home = self.system_info.mini_call_home(&mut *bg77).await;
+            self.send_message::<250>(
+                &mut *bg77,
+                "status",
+                mini_call_home.to_proto(),
+                MqttQos::Q0,
+                0,
+            )
+            .await?;
+
+            #[cfg(feature = "defmt")]
+            info!("MiniCallHome: {}", mini_call_home);
+            mini_call_home
+        };
+
         // TODO: add a test for logging to flash
         let _ = self
             .lock_flash()
@@ -262,14 +276,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             .log_minicallhome(mini_call_home)
             .await
             .inspect_err(|e| error!("Error while logging MiniCallHome: {}", { e }));
-        self.send_message::<250>(
-            &mut *bg77,
-            "status",
-            mini_call_home.to_proto(),
-            MqttQos::Q0,
-            0,
-        )
-        .await
+        Ok(mini_call_home)
     }
 
     /// Schedules a batch of punches to be sent.

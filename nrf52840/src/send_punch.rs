@@ -150,8 +150,9 @@ pub async fn send_punch_event_handler(
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
                 Either4::First(_) => match send_punch.send_mini_call_home().await {
-                    Ok(()) => info!("MiniCallHome sent"),
+                    Ok(_mini_call_home) => info!("MiniCallHome sent"),
                     Err(err) => {
+                        // TODO: use a different type of trigger for reconnections
                         COMMAND_CHANNEL
                             .send(SendPunchCommand::MqttConnect(false, Instant::now()))
                             .await;
