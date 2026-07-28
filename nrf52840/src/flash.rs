@@ -8,7 +8,8 @@ use sequential_storage::{
     queue::{QueueConfig, QueueIterator, QueueStorage},
 };
 
-use yaroc_common::at::response::LoggedAtResponse;
+use yaroc_common::at::response::{LoggedAtResponse, PendingLoggedAtResponse};
+use yaroc_common::bg77::system_info::time_from_instant;
 use yaroc_common::flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator};
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
 use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
@@ -127,11 +128,13 @@ impl<'a> Flash for NrfFlash<'a> {
         self.mch_storage.push(&buf[..len], true).await.map_err(|_| Error::FlashError)
     }
 
-    async fn log_at_response(
-        &mut self,
-        response: yaroc_common::at::response::LoggedAtResponse,
-    ) -> crate::Result<()> {
-        let serialized = postcard::to_slice(&response, self.buffer.as_mut())?;
+    async fn log_at_response(&mut self, response: PendingLoggedAtResponse) -> crate::Result<()> {
+        let timestamp = time_from_instant(response.instant);
+        let logged_response = LoggedAtResponse {
+            timestamp,
+            response: response.response,
+        };
+        let serialized = postcard::to_slice(&logged_response, self.buffer.as_mut())?;
         self.queue_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
     }
 

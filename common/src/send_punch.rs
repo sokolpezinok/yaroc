@@ -12,7 +12,7 @@ use heapless::{String, Vec, format};
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
-use crate::at::response::{AT_COMMAND_SIZE, LoggedAtResponse, PendingLoggedAtResponse};
+use crate::at::response::AT_COMMAND_SIZE;
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::modem::Modem;
@@ -287,7 +287,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             Ok(punches) => {
                 let id = self.mqtt_client.schedule_punches(punches.clone()).await;
                 let mut bg77 = self.lock_bg77().await;
-                let time = self.system_info.current_time(&mut *bg77, true).await;
+                let time = SystemInfo::current_time(&mut *bg77, true).await;
                 if let Some(time) = time {
                     let today = time.date_naive();
                     for punch in punches {
@@ -371,19 +371,6 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         Ok(())
     }
 
-    /// Store AT response in flash
-    pub async fn log_at_response(
-        &mut self,
-        response: PendingLoggedAtResponse,
-    ) -> crate::Result<()> {
-        let timestamp = self.time_from_instant(response.instant);
-        let logged_response = LoggedAtResponse {
-            timestamp,
-            response: response.response,
-        };
-        self.lock_flash().await.log_at_response(logged_response).await
-    }
-
     /// Connects to the MQTT broker.
     pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
         let mut bg77 = self.lock_bg77().await;
@@ -393,12 +380,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// Synchronizes the system time with the network time from the modem.
     pub async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
         let mut bg77 = self.lock_bg77().await;
-        self.system_info.current_time(&mut *bg77, false).await
-    }
-
-    /// Returns the calendar time corresponding to the given `instant`, if synchronized.
-    fn time_from_instant(&self, instant: Instant) -> DateTime<FixedOffset> {
-        self.system_info.time_from_instant(instant)
+        SystemInfo::current_time(&mut *bg77, false).await
     }
 
     /// Executes a `SendPunchCommand`.
@@ -445,7 +427,7 @@ mod tests {
     use crate::{
         at::{
             fake_modem::FakeModem,
-            response::{AtResponse, FromModem},
+            response::{AtResponse, FromModem, PendingLoggedAtResponse},
         },
         bg77::{modem::Bg77, modem_manager::FakePin},
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
@@ -473,7 +455,7 @@ mod tests {
 
         async fn log_at_response(
             &mut self,
-            _response: crate::at::response::LoggedAtResponse,
+            _response: PendingLoggedAtResponse,
         ) -> crate::Result<()> {
             Ok(())
         }
@@ -535,13 +517,6 @@ mod tests {
             ModemConfig::default(),
         );
         assert!(send_punch.last_reconnect.is_none());
-
-        // Test logging AT response when time is not synchronized yet (uses Unix 0 timestamp base)
-        let response = PendingLoggedAtResponse {
-            response: AtResponse::new([FromModem::Ok].into(), "+CSQ"),
-            instant: Instant::from_millis(5000),
-        };
-        assert!(block_on(send_punch.log_at_response(response)).is_ok());
 
         let expected_date = DateTime::parse_from_rfc3339("2025-11-24T01:40:34+01:00").unwrap();
         assert_eq!(

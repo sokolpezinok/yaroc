@@ -9,17 +9,26 @@ use crate::{
 use chrono::{DateTime, FixedOffset, TimeDelta};
 #[cfg(feature = "defmt")]
 use defmt::{error, info};
-use embassy_sync::watch::Receiver;
+use embassy_sync::watch::{Receiver, Watch};
 use embassy_time::Instant;
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info};
 
+static BOOT_TIME: Watch<RawMutex, DateTime<FixedOffset>, 1> = Watch::new();
+
+/// Returns the calendar time corresponding to the given `instant`,
+/// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.
+pub fn time_from_instant(instant: Instant) -> DateTime<FixedOffset> {
+    let boot_time = BOOT_TIME.receiver().unwrap().try_get().unwrap_or_default();
+    let delta = TimeDelta::milliseconds(instant.as_millis() as i64);
+    boot_time.checked_add_signed(delta).unwrap()
+}
+
 /// Gathers and provides system information from the Quectel BG77 modem.
 pub struct SystemInfo<M: AtUartTrait> {
     temp: Receiver<'static, RawMutex, f32, 1>,
     battery: Receiver<'static, RawMutex, BatteryInfo, 1>,
-    boot_time: Option<DateTime<FixedOffset>>,
     _phantom: PhantomData<M>,
 }
 
@@ -28,7 +37,6 @@ impl<M: AtUartTrait> Default for SystemInfo<M> {
         Self {
             temp: TEMPERATURE.receiver().unwrap(),
             battery: BATTERY.receiver().unwrap(),
-            boot_time: None,
             _phantom: PhantomData,
         }
     }
@@ -81,12 +89,9 @@ impl<M: AtUartTrait> SystemInfo<M> {
     /// The time is fetched from the modem on the first call or when `cached` is false.
     /// Subsequent calls with `cached` as true will return a locally calculated time based on the
     /// boot time and the time elapsed since.
-    pub async fn current_time(
-        &mut self,
-        bg77: &mut M,
-        cached: bool,
-    ) -> Option<DateTime<FixedOffset>> {
-        if self.boot_time.is_none() || !cached {
+    pub async fn current_time(bg77: &mut M, cached: bool) -> Option<DateTime<FixedOffset>> {
+        let boot_time = BOOT_TIME.receiver().unwrap().try_get();
+        if boot_time.is_none() || !cached {
             let boot_time = Self::get_modem_time(bg77)
                 .await
                 .map(|time| {
@@ -95,20 +100,12 @@ impl<M: AtUartTrait> SystemInfo<M> {
                 })
                 .ok()?;
             info!("Boot at {}", format!(30; "{}", boot_time).unwrap());
-            self.boot_time = Some(boot_time);
+            BOOT_TIME.sender().send(boot_time);
         }
-        self.boot_time.map(|boot_time| {
+        BOOT_TIME.receiver().unwrap().try_get().map(|boot_time| {
             let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
             boot_time.checked_add_signed(delta).unwrap()
         })
-    }
-
-    /// Returns the calendar time corresponding to the given `instant`,
-    /// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.
-    pub fn time_from_instant(&self, instant: Instant) -> DateTime<FixedOffset> {
-        let boot_time = self.boot_time.unwrap_or_default();
-        let delta = TimeDelta::milliseconds(instant.as_millis() as i64);
-        boot_time.checked_add_signed(delta).unwrap()
     }
 
     async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
@@ -158,7 +155,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
 
     /// Gathers various pieces of system information into a `MiniCallHome` struct.
     pub async fn mini_call_home(&mut self, bg77: &mut M) -> MiniCallHome {
-        let timestamp = self.current_time(bg77, true).await;
+        let timestamp = Self::current_time(bg77, true).await;
         let cpu_temperature = self.temp.try_get();
         let mut mini_call_home = MiniCallHome::new(timestamp);
         if let Some(cpu_temperature) = cpu_temperature {
@@ -191,6 +188,7 @@ mod test {
     #[test]
     fn test_basic_system_info() {
         let _lock = block_on(TEST_MUTEX.lock());
+        BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
             ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
@@ -230,6 +228,7 @@ mod test {
     #[test]
     fn test_mini_call_home_no_timestamp() {
         let _lock = block_on(TEST_MUTEX.lock());
+        BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
             ("AT+QLTS=2", ""),
             ("AT+QCSQ", "+QCSQ: \"eMTC\",-100,-90,110,-120"),
@@ -258,19 +257,20 @@ mod test {
 
     #[test]
     fn test_time_from_instant() {
-        let mut system_info = SystemInfo::<FakeModem>::default();
+        let _lock = block_on(TEST_MUTEX.lock());
+        BOOT_TIME.sender().clear();
 
         // Returns time in 1970 when boot time is not synchronized.
         let instant = Instant::from_secs(5);
         let expected = DateTime::parse_from_rfc3339("1970-01-01T00:00:05+00:00").unwrap();
-        assert_eq!(system_info.time_from_instant(instant), expected);
+        assert_eq!(time_from_instant(instant), expected);
 
         // Returns correct time when boot time is set
         let boot_time = DateTime::parse_from_rfc3339("2026-07-17T18:00:00+02:00").unwrap();
-        system_info.boot_time = Some(boot_time);
+        BOOT_TIME.sender().send(boot_time);
 
         let instant = Instant::from_secs(5);
-        let calculated = system_info.time_from_instant(instant);
+        let calculated = time_from_instant(instant);
         let expected = DateTime::parse_from_rfc3339("2026-07-17T18:00:05+02:00").unwrap();
         assert_eq!(calculated, expected);
     }

@@ -19,6 +19,7 @@ use yaroc_common::at::response::AT_RESPONSE_CHANNEL;
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
+use yaroc_common::flash::Flash;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
@@ -162,7 +163,10 @@ pub async fn send_punch_event_handler(
                 Either4::Second(command) => send_punch.execute_command(command).await,
                 Either4::Third(punch) => send_punch.schedule_punch(punch).await,
                 Either4::Fourth(pending_response) => {
+                    // TODO: do it without locking SEND_PUNCH_MUTEX
                     let _ = send_punch
+                        .lock_flash()
+                        .await
                         .log_at_response(pending_response)
                         .await
                         .inspect_err(|e| error!("Failed to log AT response: {}", e));
