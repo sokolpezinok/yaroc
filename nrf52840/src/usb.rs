@@ -11,7 +11,7 @@ use yaroc_common::error::Error;
 use yaroc_common::flash::{LoggedAtResponseIterator, MchIterator};
 use yaroc_common::usb::{CdcAcm, UsbCommand, UsbDriver, UsbPacketReader, UsbResponse};
 
-use crate::send_punch::SEND_PUNCH_MUTEX;
+use crate::send_punch::{BG77_MUTEX, SEND_PUNCH_MUTEX};
 
 /// The main USB task.
 ///
@@ -110,12 +110,20 @@ impl<T: CdcAcm> SendPunchUsbPacketReader<T> {
         let send_punch = send_punch.as_mut().unwrap();
         match command {
             UsbCommand::ConfigureModem(modem_config) => {
-                send_punch.configure_modem(modem_config).await?;
+                {
+                    let mut bg77_guard = BG77_MUTEX.lock().await;
+                    let bg77 = bg77_guard.as_mut().unwrap();
+                    send_punch.configure_modem(bg77, modem_config).await?;
+                }
                 info!("Modem reconfigured");
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureMqtt(mqtt_config) => {
-                send_punch.configure_mqtt(mqtt_config).await?;
+                {
+                    let mut bg77_guard = BG77_MUTEX.lock().await;
+                    let bg77 = bg77_guard.as_mut().unwrap();
+                    send_punch.configure_mqtt(bg77, mqtt_config).await?;
+                }
                 info!("MQTT reconfigured");
                 self.write_response(UsbResponse::Ok).await?;
             }

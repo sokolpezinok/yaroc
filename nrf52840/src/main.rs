@@ -19,7 +19,8 @@ use yaroc_nrf52840::{
     self as _,
     device::Device,
     send_punch::{
-        Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop, send_punch_event_handler,
+        BG77_MUTEX, Bg77SendPunchFn, SEND_PUNCH_MUTEX, backoff_retries_loop,
+        send_punch_event_handler,
     },
     si_uart::read_si_uart,
     system_info::{SoftdeviceTemp, battery_update, minicallhome_loop, sysinfo_update},
@@ -93,9 +94,10 @@ async fn main(spawner: Spawner) {
     );
     spawner.spawn(backoff_retries_loop(backoff_retries).expect("Failed to spawn task"));
 
-    let bg77 = Bg77::new(bg77, modem_pin);
-    let send_punch = SendPunch::new(bg77, spawner, mqtt_config, modem_config, flash);
+    let mut bg77 = Bg77::new(bg77, modem_pin);
+    let send_punch = SendPunch::new(&mut bg77, spawner, mqtt_config, modem_config, flash);
     {
+        *(BG77_MUTEX.lock().await) = Some(bg77);
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
     spawner
