@@ -95,7 +95,14 @@ async fn main(spawner: Spawner) {
     spawner.spawn(backoff_retries_loop(backoff_retries).expect("Failed to spawn task"));
 
     let mut bg77 = Bg77::new(bg77, modem_pin);
-    let send_punch = SendPunch::new(&mut bg77, &FLASH_MUTEX, spawner, mqtt_config, modem_config);
+    let send_punch = SendPunch::new(
+        &mut bg77,
+        &BG77_MUTEX,
+        &FLASH_MUTEX,
+        spawner,
+        mqtt_config,
+        modem_config,
+    );
     {
         *(BG77_MUTEX.lock().await) = Some(bg77);
         *(FLASH_MUTEX.lock().await) = Some(flash);

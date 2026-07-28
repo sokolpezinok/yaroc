@@ -88,19 +88,13 @@ impl SendPunchFn for Bg77SendPunchFn {
     >;
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> crate::Result<()> {
-        let mut bg77_mutex = BG77_MUTEX
-            .lock()
-            .with_timeout(self.packet_timeout)
-            .await
-            .map_err(|_| Error::TimeoutError)?;
-        let bg77 = bg77_mutex.as_mut().unwrap();
         let mut send_punch_mutex = SEND_PUNCH_MUTEX
             .lock()
             .with_timeout(self.packet_timeout)
             .await
             .map_err(|_| Error::TimeoutError)?;
         let send_punch = send_punch_mutex.as_mut().unwrap();
-        send_punch.send_punch_impl(bg77, &punch.punches, punch.msg_id).await
+        send_punch.send_punch_impl(&punch.punches, punch.msg_id).await
     }
 
     async fn acquire(&mut self) -> crate::Result<Self::SemaphoreReleaser> {
@@ -135,12 +129,10 @@ pub async fn send_punch_event_handler(
     punch_receiver: Receiver<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
 ) {
     {
-        let mut bg77_mutex = BG77_MUTEX.lock().await;
-        let bg77 = bg77_mutex.as_mut().unwrap();
         let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
         let _ = send_punch
-            .setup(bg77)
+            .setup()
             .await
             .inspect_err(|err| error!("Modem setup failed: {}", err));
     }
@@ -154,12 +146,10 @@ pub async fn send_punch_event_handler(
         )
         .await;
         {
-            let mut bg77_mutex = BG77_MUTEX.lock().await;
-            let bg77 = bg77_mutex.as_mut().unwrap();
             let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either4::First(_) => match send_punch.send_mini_call_home(bg77).await {
+                Either4::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(()) => info!("MiniCallHome sent"),
                     Err(err) => {
                         COMMAND_CHANNEL
@@ -168,8 +158,8 @@ pub async fn send_punch_event_handler(
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },
-                Either4::Second(command) => send_punch.execute_command(bg77, command).await,
-                Either4::Third(punch) => send_punch.schedule_punch(bg77, punch).await,
+                Either4::Second(command) => send_punch.execute_command(command).await,
+                Either4::Third(punch) => send_punch.schedule_punch(punch).await,
                 Either4::Fourth(pending_response) => {
                     let _ = send_punch
                         .log_at_response(pending_response)
