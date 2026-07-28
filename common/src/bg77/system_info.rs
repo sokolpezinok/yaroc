@@ -120,13 +120,16 @@ impl<M: AtUartTrait> SystemInfo<M> {
             response.parse4::<String<10>, i16, u8, i8>([0, 2, 3, 4])?;
         let snr_cb = i16::from(snr_mult) * 2 - 200;
         let network_type = if network == "NBIoT" {
-            let response =
-                bg77.call_at("+QCFG=\"celevel\"", None).await?.parse1::<u8>([1], None)?;
+            let response = bg77
+                .call_at("+QCFG=\"celevel\"", None)
+                .await
+                .and_then(|r| r.parse1::<u8>([1], None));
             match response {
-                0 => CellNetworkType::NbIotEcl0,
-                1 => CellNetworkType::NbIotEcl1,
-                2 => CellNetworkType::NbIotEcl2,
-                _ => return Err(Error::ModemError),
+                Ok(0) => CellNetworkType::NbIotEcl0,
+                Ok(1) => CellNetworkType::NbIotEcl1,
+                Ok(2) => CellNetworkType::NbIotEcl2,
+                // Rather than returning an error, we default to ECL 0.
+                _ => CellNetworkType::NbIotEcl0,
             }
         } else {
             CellNetworkType::LteM
@@ -279,5 +282,30 @@ mod test {
 
         let cell_id = block_on(SystemInfo::<FakeModem>::cell_id(&mut bg77)).unwrap();
         assert_eq!(cell_id, u32::from_str_radix("2B2078", 16).unwrap());
+    }
+
+    #[test]
+    fn test_nbiot_celevel_fallback() {
+        let _lock = block_on(TEST_MUTEX.lock());
+
+        // Case 1: +QCFG="celevel" fails / returns empty response -> defaults to NbIotEcl0
+        let mut bg77_fail = FakeModem::new(&[
+            ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
+            ("AT+QCFG=\"celevel\"", ""),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+        ]);
+        let signal_info_fail =
+            block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77_fail)).unwrap();
+        assert_eq!(signal_info_fail.network_type, CellNetworkType::NbIotEcl0);
+
+        // Case 2: +QCFG="celevel" returns an unexpected level (e.g. 3) -> defaults to NbIotEcl0
+        let mut bg77_invalid = FakeModem::new(&[
+            ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
+            ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",3"),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+        ]);
+        let signal_info_invalid =
+            block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77_invalid)).unwrap();
+        assert_eq!(signal_info_invalid.network_type, CellNetworkType::NbIotEcl0);
     }
 }
