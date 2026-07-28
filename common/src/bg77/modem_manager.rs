@@ -198,16 +198,17 @@ impl<M: AtUartTrait> ModemManager<M> {
             }
         }
 
-        let _response =
-            bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
+        let _response = bg77
+            .long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1))
+            .await?;
         #[cfg(feature = "defmt")]
-        if let Ok(response) = _response
-            && !response.lines().is_empty()
-        {
-            debug!("Read {=[?]} after CGATT=1", response.lines());
+        if !_response.lines().is_empty() {
+            debug!("Read {=[?]} after CGATT=1", _response.lines());
         }
-        // TODO: should we do something with the result?
-        let (_, _) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        if stat != 1 {
+            return Err(Error::NetworkRegistrationError);
+        }
 
         Ok(())
     }
@@ -241,6 +242,32 @@ mod test {
         ]);
         let firmware = block_on(modem_manager.configure(&mut bg77));
         assert!(firmware.is_ok());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_network_registration_deactivated_context_fails() {
+        let modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 0"),
+            ("AT+CGATT=1", ""),
+            ("AT+CGACT?", "+CGACT: 1,0"),
+        ]);
+        let res = block_on(modem_manager.network_registration(&mut bg77, false));
+        assert_eq!(res, Err(Error::NetworkRegistrationError));
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_network_registration_success() {
+        let modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 0"),
+            ("AT+CGATT=1", ""),
+            ("AT+CGACT?", "+CGACT: 1,1"),
+        ]);
+        let res = block_on(modem_manager.network_registration(&mut bg77, false));
+        assert!(res.is_ok());
         assert!(bg77.all_done());
     }
 }
