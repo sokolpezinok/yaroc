@@ -3,10 +3,12 @@ use embassy_sync::mutex::Mutex;
 use femtopb::Message as _;
 use nrf_softdevice::Flash as SdFlash;
 use sequential_storage::{
-    cache::NoCache,
+    cache::{Cache, Uncached},
     map::{MapConfig, MapStorage},
     queue::{QueueConfig, QueueIterator, QueueStorage},
 };
+
+type NoCache<KEY = ()> = Cache<Uncached, Uncached, Uncached, KEY>;
 
 use yaroc_common::at::response::{LoggedAtResponse, PendingLoggedAtResponse};
 use yaroc_common::bg77::system_info::time_from_instant;
@@ -50,7 +52,7 @@ type SdPartition<'a> = Partition<'a, RawMutex, SdFlash>;
 
 /// Flash abstraction for storing serializeable objects.
 pub struct NrfFlash<'a> {
-    map_storage: MapStorage<u8, SdPartition<'a>, NoCache>,
+    map_storage: MapStorage<u8, SdPartition<'a>, NoCache<u8>>,
     mch_storage: QueueStorage<SdPartition<'a>, NoCache>,
     queue_storage: QueueStorage<SdPartition<'a>, NoCache>,
     buffer: AlignedBuffer<512>,
@@ -73,15 +75,15 @@ impl<'a> NrfFlash<'a> {
 
         let map_partition = Partition::new(flash, data_start, MAP_SIZE);
         let config = MapConfig::new(0..MAP_SIZE);
-        let map_storage = MapStorage::new(map_partition, config, NoCache::new());
+        let map_storage = MapStorage::new(map_partition, config, Cache::new_uncached());
 
         let mch_partition = Partition::new(flash, data_start + MAP_SIZE, MCH_SIZE);
         let mch_config = QueueConfig::new(0..MCH_SIZE);
-        let mch_storage = QueueStorage::new(mch_partition, mch_config, NoCache::new());
+        let mch_storage = QueueStorage::new(mch_partition, mch_config, Cache::new_uncached());
 
         let queue_partition = Partition::new(flash, data_start + MAP_SIZE + MCH_SIZE, queue_size);
         let queue_config = QueueConfig::new(0..queue_size);
-        let queue_storage = QueueStorage::new(queue_partition, queue_config, NoCache::new());
+        let queue_storage = QueueStorage::new(queue_partition, queue_config, Cache::new_uncached());
 
         Self {
             map_storage,
