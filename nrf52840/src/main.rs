@@ -17,7 +17,7 @@ use yaroc_nrf52840::{
     device::Device,
     send_punch::{
         Bg77SendPunchFn, FLASH_MUTEX, SEND_PUNCH_MUTEX, backoff_retries_loop,
-        send_punch_event_handler,
+        log_at_response_task, send_punch_event_handler,
     },
     si_uart::read_si_uart,
     system_info::{SoftdeviceTemp, battery_update, minicallhome_loop, sysinfo_update},
@@ -95,6 +95,7 @@ async fn main(spawner: Spawner) {
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
     spawner.spawn(send_punch_event_handler().expect("Failed to spawn task"));
+    spawner.spawn(log_at_response_task().expect("Failed to spawn task"));
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));
