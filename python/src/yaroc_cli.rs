@@ -6,7 +6,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use femtopb::Message as _;
 use log::{error, info};
-use postcard::{from_bytes, to_stdvec};
+use postcard::{from_bytes, take_from_bytes, to_stdvec};
 use pyo3::prelude::*;
 use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
@@ -64,6 +64,54 @@ pub enum LogType {
     Modem,
 }
 
+struct PostcardReader<'a, S> {
+    stream: &'a mut S,
+    buf: Vec<u8>,
+}
+
+impl<'a, S: Read> PostcardReader<'a, S> {
+    fn new(stream: &'a mut S) -> Self {
+        Self {
+            stream,
+            buf: Vec::with_capacity(1024),
+        }
+    }
+
+    fn read_one<T: serde::de::DeserializeOwned>(&mut self) -> Result<Option<T>, String> {
+        let mut temp_buf = [0u8; 1024];
+        loop {
+            if !self.buf.is_empty() {
+                match take_from_bytes::<T>(&self.buf) {
+                    Ok((item, rest)) => {
+                        let consumed = self.buf.len() - rest.len();
+                        self.buf.drain(..consumed);
+                        return Ok(Some(item));
+                    }
+                    Err(postcard::Error::DeserializeUnexpectedEnd) => {}
+                    Err(e) => {
+                        error!("Failed to parse response: {e}");
+                        self.buf.remove(0);
+                        continue;
+                    }
+                }
+            }
+
+            let n = self
+                .stream
+                .read(&mut temp_buf)
+                .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
+            if n == 0 {
+                if self.buf.is_empty() {
+                    return Ok(None);
+                } else {
+                    return Err("Serial port closed with incomplete response".to_string());
+                }
+            }
+            self.buf.extend_from_slice(&temp_buf[..n]);
+        }
+    }
+}
+
 fn send_command<S: Read + Write>(
     serial: &mut S,
     command: UsbCommand,
@@ -73,11 +121,10 @@ fn send_command<S: Read + Write>(
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
-    let mut read_buf = [0u8; 1024];
-    let n = serial
-        .read(&mut read_buf)
-        .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
-    from_bytes(&read_buf[..n]).map_err(|e| format!("Failed to parse response: {e}"))
+    let mut reader = PostcardReader::new(serial);
+    reader
+        .read_one()?
+        .ok_or_else(|| "Serial port closed before receiving response".to_string())
 }
 
 fn send_command_multiple_responses<S: Read + Write>(
@@ -89,18 +136,14 @@ fn send_command_multiple_responses<S: Read + Write>(
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
-    let mut read_buf = [0u8; 1024];
+    let mut reader = PostcardReader::new(serial);
     let mut responses = Vec::new();
     info!("Awaiting logs from the device");
-    loop {
-        let n = serial
-            .read(&mut read_buf)
-            .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
-        match from_bytes(&read_buf[..n]) {
-            Ok(UsbResponse::Ok) => break,
-            Ok(response) => responses.push(response),
-            Err(e) => error!("Failed to parse response: {e}"),
+    while let Some(response) = reader.read_one()? {
+        if response == UsbResponse::Ok {
+            break;
         }
+        responses.push(response);
     }
     Ok(responses)
 }
@@ -428,5 +471,71 @@ mod tests {
                 log_type: LogType::Modem
             }
         );
+    }
+
+    struct FragmentedStream {
+        data: Vec<u8>,
+        read_offset: usize,
+        chunk_size: usize,
+    }
+
+    impl Read for FragmentedStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.read_offset >= self.data.len() {
+                return Ok(0);
+            }
+            let to_read = self
+                .chunk_size
+                .min(self.data.len() - self.read_offset)
+                .min(buf.len());
+            buf[..to_read].copy_from_slice(&self.data[self.read_offset..self.read_offset + to_read]);
+            self.read_offset += to_read;
+            Ok(to_read)
+        }
+    }
+
+    impl Write for FragmentedStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_send_command_multiple_responses_fragmented_and_fused() {
+        let resp1 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[1, 2, 3, 4]).unwrap());
+        let resp2 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[5, 6, 7, 8]).unwrap());
+        let resp_ok = UsbResponse::Ok;
+
+        let mut stream_bytes = Vec::new();
+        stream_bytes.extend_from_slice(&to_stdvec(&resp1).unwrap());
+        stream_bytes.extend_from_slice(&to_stdvec(&resp2).unwrap());
+        stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
+
+        // Test 1: Fragmented reads (1 byte per read)
+        let mut frag_stream = FragmentedStream {
+            data: stream_bytes.clone(),
+            read_offset: 0,
+            chunk_size: 1,
+        };
+        let res = send_command_multiple_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
+            .unwrap();
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0], resp1);
+        assert_eq!(res[1], resp2);
+
+        // Test 2: Fused reads (all bytes in 1 read)
+        let mut fused_stream = FragmentedStream {
+            data: stream_bytes,
+            read_offset: 0,
+            chunk_size: 1024,
+        };
+        let res = send_command_multiple_responses(&mut fused_stream, UsbCommand::GetMiniCallHomeLogs)
+            .unwrap();
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0], resp1);
+        assert_eq!(res[1], resp2);
     }
 }
