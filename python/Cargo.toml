@@ -13,6 +13,7 @@ walkdir = "2.3.2"
 
 [dependencies]
 
+bytes = { workspace = true }
 chrono = { workspace = true, default-features = true }
 clap = { workspace = true }
 critical-section = { version = "1", features = ["std"] }

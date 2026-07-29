@@ -42,7 +42,7 @@ pub enum UsbCommand {
     GetLoggedAtResponseLogs,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 /// Responses sent back over USB.
 #[allow(clippy::large_enum_variant)]
 pub enum UsbResponse {

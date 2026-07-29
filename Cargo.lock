@@ -3841,6 +3841,7 @@ dependencies = [
 name = "yaroc-python"
 version = "0.1.23-beta.1"
 dependencies = [
+ "bytes",
  "chrono",
  "clap",
  "critical-section",
