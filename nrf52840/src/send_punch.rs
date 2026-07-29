@@ -29,9 +29,6 @@ pub type Bg77Type = Bg77<AtUart<UarteTx<'static>, UarteRxWithIdle<'static>>, Out
 /// A type alias for the `SendPunch` struct, configured for the BG77 modem.
 pub type Bg77SendPunchType = SendPunch<Bg77Type, NrfFlash<'static>>;
 
-/// A mutex for the BG77 modem struct.
-pub static BG77_MUTEX: Mutex<RawMutex, Option<Bg77Type>> = Mutex::new(None);
-
 /// A mutex for the flash memory.
 pub static FLASH_MUTEX: Mutex<RawMutex, Option<NrfFlash<'static>>> = Mutex::new(None);
 
