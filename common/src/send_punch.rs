@@ -1,10 +1,9 @@
 use chrono::{DateTime, FixedOffset};
-use core::ops::{Deref, DerefMut};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
-use embassy_sync::mutex::{Mutex, MutexGuard};
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant};
 use femtopb::{Message, repeated};
 use heapless::{String, Vec, format};
@@ -20,7 +19,7 @@ use crate::bg77::modem_manager::{ModemConfig, ModemManager};
 use crate::bg77::mqtt::MqttClient;
 use crate::bg77::system_info::SystemInfo;
 use crate::error::Error;
-use crate::flash::{Flash, FlashValue, ValueIndex};
+use crate::flash::{Flash, FlashGuard, FlashValue, ValueIndex};
 use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos, duration_ms};
 use crate::proto::Punches;
 use crate::status::MiniCallHome;
@@ -39,25 +38,6 @@ pub enum SendPunchCommand {
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
 pub static COMMAND_CHANNEL: Channel<RawMutex, SendPunchCommand, 10> = Channel::new();
-
-/// A guard providing mutable access to the flash instance while holding the mutex lock.
-pub struct FlashGuard<'a, F: Flash + 'static> {
-    guard: MutexGuard<'a, RawMutex, Option<F>>,
-}
-
-impl<'a, F: Flash + 'static> Deref for FlashGuard<'a, F> {
-    type Target = F;
-
-    fn deref(&self) -> &Self::Target {
-        self.guard.as_ref().expect("Flash not initialized")
-    }
-}
-
-impl<'a, F: Flash + 'static> DerefMut for FlashGuard<'a, F> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.as_mut().expect("Flash not initialized")
-    }
-}
 
 /// A handler for sending punches and other data to the server.
 ///
@@ -152,7 +132,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// Locks the flash mutex and returns a guard providing access to the flash instance.
     pub async fn lock_flash(&self) -> FlashGuard<'static, F> {
         let guard = self.flash_mutex.lock().await;
-        FlashGuard { guard }
+        FlashGuard::new(guard)
     }
 
     /// Updates the device configuration in flash.

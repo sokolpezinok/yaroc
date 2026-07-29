@@ -1,8 +1,36 @@
+use core::ops::{Deref, DerefMut};
+use embassy_sync::mutex::MutexGuard;
 use sequential_storage::map::Value;
 
+use crate::RawMutex;
 use crate::at::response::{LoggedAtResponse, PendingLoggedAtResponse};
 use crate::proto::MiniCallHome as MiniCallHomeProto;
 use crate::status::MiniCallHome;
+
+/// A guard providing mutable access to the flash instance while holding the mutex lock.
+pub struct FlashGuard<'a, F: Flash + 'static> {
+    guard: MutexGuard<'a, RawMutex, Option<F>>,
+}
+
+impl<'a, F: Flash + 'static> FlashGuard<'a, F> {
+    pub fn new(guard: MutexGuard<'a, RawMutex, Option<F>>) -> Self {
+        Self { guard }
+    }
+}
+
+impl<'a, F: Flash + 'static> Deref for FlashGuard<'a, F> {
+    type Target = F;
+
+    fn deref(&self) -> &Self::Target {
+        self.guard.as_ref().expect("Flash not initialized")
+    }
+}
+
+impl<'a, F: Flash + 'static> DerefMut for FlashGuard<'a, F> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.guard.as_mut().expect("Flash not initialized")
+    }
+}
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

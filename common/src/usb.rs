@@ -1,15 +1,25 @@
 use core::future::Future;
 #[cfg(feature = "nrf")]
 use embassy_nrf::usb::{Driver, vbus_detect::SoftwareVbusDetect};
+use embassy_sync::mutex::Mutex;
 #[cfg(feature = "nrf")]
 use embassy_usb::class::cdc_acm::CdcAcmClass;
+use femtopb::Message as _;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "defmt")]
+use defmt::{debug, error, info, warn};
+#[cfg(not(feature = "defmt"))]
+use log::{debug, error, info, warn};
+
+use crate::RawMutex;
+use crate::bg77::modem::Modem;
 use crate::bg77::modem_manager::ModemConfig;
 use crate::error::Error;
+use crate::flash::{Flash, FlashGuard, LoggedAtResponseIterator, MchIterator};
 use crate::mqtt::MqttConfig;
-use crate::send_punch::DeviceConfig;
+use crate::send_punch::{DeviceConfig, SendPunch};
 
 #[cfg(feature = "nrf")]
 /// Type alias for the USB driver.
@@ -127,6 +137,150 @@ impl<T: CdcAcm> UsbPacketReader<T> {
             self.class.write_packet(&[]).await?;
         }
         Ok(())
+    }
+}
+
+/// Reads packets from USB, handles commands, and sends responses.
+pub struct SendPunchUsb<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> {
+    reader: UsbPacketReader<T>,
+    send_punch_mutex: &'static Mutex<RawMutex, Option<SendPunch<M, F>>>,
+    flash_mutex: &'static Mutex<RawMutex, Option<F>>,
+}
+
+impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
+    /// Creates a new `SendPunchUsbPacketReader`.
+    pub fn new(
+        class: T,
+        send_punch_mutex: &'static Mutex<RawMutex, Option<SendPunch<M, F>>>,
+        flash_mutex: &'static Mutex<RawMutex, Option<F>>,
+    ) -> Self {
+        Self {
+            reader: UsbPacketReader::new(class),
+            send_punch_mutex,
+            flash_mutex,
+        }
+    }
+
+    /// Locks the flash mutex and returns a guard providing access to the flash instance.
+    pub async fn lock_flash(&self) -> FlashGuard<'static, F> {
+        let guard = self.flash_mutex.lock().await;
+        FlashGuard::new(guard)
+    }
+
+    async fn write_response(&mut self, response: UsbResponse) -> Result<(), Error> {
+        let response_bytes = postcard::to_vec::<_, 576>(&response)?;
+        self.reader.write(response_bytes.as_slice()).await
+    }
+
+    /// Responds to a USB command.
+    pub async fn respond(&mut self, command: UsbCommand) -> Result<(), Error> {
+        match command {
+            UsbCommand::ConfigureModem(modem_config) => {
+                {
+                    let mut send_punch = self.send_punch_mutex.lock().await;
+                    let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
+                    send_punch.configure_modem(modem_config).await?;
+                }
+                info!("Modem reconfigured");
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::ConfigureMqtt(mqtt_config) => {
+                {
+                    let mut send_punch = self.send_punch_mutex.lock().await;
+                    let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
+                    send_punch.configure_mqtt(mqtt_config).await?;
+                }
+                info!("MQTT reconfigured");
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::ConfigureDevice(device_config) => {
+                let mut send_punch = self.send_punch_mutex.lock().await;
+                let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
+                send_punch.update_device_config(device_config).await?;
+                info!("Device reconfigured");
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::EraseFlash => {
+                info!("Request to erase the flash");
+                let mut flash = self.lock_flash().await;
+                flash.erase().await?;
+                info!("Flash erased");
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::GetMiniCallHomeLogs => {
+                info!("Request to read all MiniCallHome logs");
+                let mut flash = self.lock_flash().await;
+                let mut iter = flash.mch_iter().await?;
+                loop {
+                    let log = iter.next().await?;
+                    match log {
+                        None => break,
+                        Some(mch_proto) => {
+                            let mut buffer: Vec<u8, _> = Vec::new();
+                            buffer
+                                .resize(mch_proto.encoded_len(), 0)
+                                .map_err(|_| Error::BufferTooSmallError)?;
+                            mch_proto
+                                .encode(&mut buffer.as_mut_slice())
+                                .map_err(|_| Error::BufferTooSmallError)?;
+                            self.write_response(UsbResponse::MiniCallHomeLog(buffer)).await?;
+                        }
+                    }
+                }
+                info!("All MiniCallHome logs read");
+                self.write_response(UsbResponse::Ok).await?;
+            }
+            UsbCommand::GetLoggedAtResponseLogs => {
+                info!("Request to read all LoggedAtResponse logs");
+                let mut flash = self.lock_flash().await;
+                let mut iter = flash.logged_at_response_iter().await?;
+                loop {
+                    let log = iter.next().await?;
+                    match log {
+                        None => break,
+                        Some(logged_response) => {
+                            let serialized = postcard::to_vec::<_, 437>(&logged_response)?;
+                            let mut vec_buffer = Vec::new();
+                            vec_buffer
+                                .extend_from_slice(serialized.as_slice())
+                                .map_err(|_| Error::BufferTooSmallError)?;
+                            self.write_response(UsbResponse::LoggedAtResponseLog(vec_buffer))
+                                .await?;
+                        }
+                    }
+                }
+                self.write_response(UsbResponse::Ok).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Continuously reads commands from USB and handles them.
+    pub async fn run(mut self) {
+        loop {
+            self.reader.wait_connection().await;
+            info!("Connected to USB");
+            loop {
+                let command_result = self.reader.read().await.and_then(|data| {
+                    debug!("Read {} bytes from USB", data.len());
+                    postcard::from_bytes::<UsbCommand>(data).map_err(Into::into)
+                });
+                match command_result {
+                    Ok(command) => {
+                        let _ = self.respond(command).await.inspect_err(|e| {
+                            error!("Error while responding to a USB command: {}", e)
+                        });
+                    }
+                    Err(Error::UsbDisconnected) => {
+                        warn!("USB disconnected");
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Error while reading from USB: {}", e);
+                    }
+                }
+            }
+        }
     }
 }
 
