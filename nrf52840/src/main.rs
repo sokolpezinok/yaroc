@@ -3,14 +3,11 @@
 
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 use heapless::format;
 use yaroc_common::{
-    RawMutex,
-    backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE},
+    backoff::{BackoffRetries, PUNCH_QUEUE_SIZE},
     bg77::{modem::Bg77, modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
-    error::Error,
     flash::Flash,
     mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,
@@ -25,9 +22,6 @@ use yaroc_nrf52840::{
     si_uart::read_si_uart,
     system_info::{SoftdeviceTemp, battery_update, minicallhome_loop, sysinfo_update},
 };
-
-/// A channel for the SI UART.
-static SI_UART_CHANNEL: Channel<RawMutex, Result<BatchedPunches, Error>, 24> = Channel::new();
 
 /// The main entry point of the application.
 #[embassy_executor::main]
@@ -83,7 +77,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(
         minicallhome_loop(device_config.minicallhome_interval).expect("Failed to spawn task"),
     );
-    spawner.spawn(read_si_uart(si_uart, SI_UART_CHANNEL.sender()).expect("Failed to spawn task"));
+    spawner.spawn(read_si_uart(si_uart).expect("Failed to spawn task"));
 
     let send_punch_fn = Bg77SendPunchFn::new(mqtt_config.packet_timeout);
     let backoff_retries = BackoffRetries::new(
@@ -108,8 +102,7 @@ async fn main(spawner: Spawner) {
         *(FLASH_MUTEX.lock().await) = Some(flash);
         *(SEND_PUNCH_MUTEX.lock().await) = Some(send_punch);
     }
-    spawner
-        .spawn(send_punch_event_handler(SI_UART_CHANNEL.receiver()).expect("Failed to spawn task"));
+    spawner.spawn(send_punch_event_handler().expect("Failed to spawn task"));
 
     let temp = SoftdeviceTemp::new(ble);
     spawner.spawn(sysinfo_update(temp).expect("Failed to spawn task"));

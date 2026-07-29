@@ -6,14 +6,11 @@ use crate::flash::NrfFlash;
 use crate::system_info::MCH_SIGNAL;
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_futures::select::{Either4, select4};
+use embassy_futures::select::{Either3, select3};
 use embassy_nrf::gpio::Output;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
-use embassy_sync::{
-    channel::Receiver,
-    semaphore::{FairSemaphore, Semaphore},
-};
+use embassy_sync::semaphore::{FairSemaphore, Semaphore};
 use embassy_time::{Duration, Instant, WithTimeout};
 use yaroc_common::at::response::AT_RESPONSE_CHANNEL;
 use yaroc_common::at::uart::AtUart;
@@ -22,7 +19,7 @@ use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::flash::Flash;
 use yaroc_common::{
     RawMutex,
-    backoff::{BackoffRetries, BatchedPunches, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
+    backoff::{BackoffRetries, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
     send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
 };
 
@@ -118,17 +115,10 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
 
 /// The main event handler for the `SendPunch` struct.
 ///
-/// This task listens for events from the `MCH_SIGNAL`, `EVENT_CHANNEL`, and `si_uart` and
+/// This task listens for events from `MCH_SIGNAL`, `COMMAND_CHANNEL`, and `AT_RESPONSE_CHANNEL` and
 /// dispatches them to the `SendPunch` instance.
-///
-/// # Arguments
-///
-/// * `send_punch_mutex`: A mutex to access the `SendPunch` instance.
-/// * `punch_receiver`: The receiver for batched punches.
 #[embassy_executor::task]
-pub async fn send_punch_event_handler(
-    punch_receiver: Receiver<'static, RawMutex, Result<BatchedPunches, Error>, 24>,
-) {
+pub async fn send_punch_event_handler() {
     {
         let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
@@ -139,10 +129,9 @@ pub async fn send_punch_event_handler(
     }
 
     loop {
-        let signal = select4(
+        let signal = select3(
             MCH_SIGNAL.wait(),
             COMMAND_CHANNEL.receive(),
-            punch_receiver.receive(),
             AT_RESPONSE_CHANNEL.receive(),
         )
         .await;
@@ -150,7 +139,7 @@ pub async fn send_punch_event_handler(
             let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either4::First(_) => match send_punch.send_mini_call_home().await {
+                Either3::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(_mini_call_home) => info!("MiniCallHome sent"),
                     Err(err) => {
                         // TODO: use a different type of trigger for reconnections
@@ -160,10 +149,9 @@ pub async fn send_punch_event_handler(
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },
-                Either4::Second(command) => send_punch.execute_command(command).await,
-                Either4::Third(punch) => send_punch.schedule_punch(punch).await,
-                Either4::Fourth(pending_response) => {
-                    // TODO: do it without locking SEND_PUNCH_MUTEX
+                Either3::Second(command) => send_punch.execute_command(command).await,
+                Either3::Third(pending_response) => {
+                    // TODO: do it without locking SEND_PUNCH_MUTEX, outside of this loop
                     let _ = send_punch
                         .lock_flash()
                         .await

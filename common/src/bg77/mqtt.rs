@@ -13,7 +13,7 @@ use log::{error, info, warn};
 use crate::{
     RawMutex,
     at::{response::CommandResponse, uart::AtUartTrait},
-    backoff::{BackoffCommand, BatchedPunches, CMD_FOR_BACKOFF},
+    backoff::{BackoffCommand, CMD_FOR_BACKOFF},
     bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemManager},
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig, MqttQos, MqttStatus, StatusCode},
@@ -127,7 +127,6 @@ pub struct MqttClient<M: AtUartTrait> {
     config: MqttClientConfig,
     last_successful_send: Instant,
     client_id: u8,
-    punch_cnt: u16,
     _phantom: PhantomData<M>,
 }
 
@@ -138,7 +137,6 @@ impl<M: AtUartTrait> MqttClient<M> {
             config,
             last_successful_send: Instant::now(),
             client_id,
-            punch_cnt: 0,
             _phantom: PhantomData,
         }
     }
@@ -416,16 +414,6 @@ impl<M: AtUartTrait> MqttClient<M> {
         } else {
             Ok(())
         }
-    }
-
-    /// Schedules a batch of punches to be sent via the backoff mechanism.
-    ///
-    /// Returns the assigned punch ID for the scheduled batch.
-    pub async fn schedule_punches(&mut self, punches: BatchedPunches) -> u16 {
-        let punch_id = self.punch_cnt;
-        CMD_FOR_BACKOFF.send(BackoffCommand::PublishPunches(punches, punch_id)).await;
-        self.punch_cnt += 1;
-        punch_id
     }
 }
 

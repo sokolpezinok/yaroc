@@ -23,7 +23,6 @@ use crate::error::Error;
 use crate::flash::{Flash, FlashValue, ValueIndex};
 use crate::mqtt::{MqttClientConfig, MqttConfig, MqttQos, duration_ms};
 use crate::proto::Punches;
-use crate::punch::SiPunch;
 use crate::status::MiniCallHome;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
 
@@ -279,35 +278,6 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         Ok(mini_call_home)
     }
 
-    /// Schedules a batch of punches to be sent.
-    ///
-    /// This function processes a batch of punches, logs them, and schedules them for sending.
-    pub async fn schedule_punch(&mut self, punch: crate::Result<BatchedPunches>) {
-        match punch {
-            Ok(punches) => {
-                let id = self.mqtt_client.schedule_punches(punches.clone()).await;
-                let mut bg77 = self.lock_bg77().await;
-                let time = SystemInfo::current_time(&mut *bg77, true).await;
-                if let Some(time) = time {
-                    let today = time.date_naive();
-                    for punch in punches {
-                        let punch = SiPunch::from_raw(punch, today, time.offset());
-                        info!(
-                            "{} punched {} at {}, ID={}",
-                            punch.card,
-                            punch.code,
-                            format!(40; "{}", punch.time).unwrap(),
-                            id,
-                        );
-                    }
-                }
-            }
-            Err(err) => {
-                error!("Wrong punch: {}", err);
-            }
-        }
-    }
-
     /// Sends a batch of punches to the server.
     ///
     /// # Arguments
@@ -425,10 +395,7 @@ mod tests {
     use embassy_futures::block_on;
 
     use crate::{
-        at::{
-            fake_modem::FakeModem,
-            response::{AtResponse, FromModem, PendingLoggedAtResponse},
-        },
+        at::{fake_modem::FakeModem, response::PendingLoggedAtResponse},
         bg77::{modem::Bg77, modem_manager::FakePin},
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
     };
