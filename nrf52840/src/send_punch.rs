@@ -6,7 +6,7 @@ use crate::flash::NrfFlash;
 use crate::system_info::MCH_SIGNAL;
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_futures::select::{Either3, select3};
+use embassy_futures::select::{Either, select};
 use embassy_nrf::gpio::Output;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
@@ -110,9 +110,24 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
     backoff_retries.r#loop().await;
 }
 
-/// The main event handler for the `SendPunch` struct.
+/// A task that logs AT responses to flash without locking `SEND_PUNCH_MUTEX`.
+#[embassy_executor::task]
+pub async fn log_at_response_task() {
+    loop {
+        let pending_response = AT_RESPONSE_CHANNEL.receive().await;
+        let mut flash = FLASH_MUTEX.lock().await;
+        if let Some(flash) = flash.as_mut() {
+            let _ = flash
+                .log_at_response(pending_response)
+                .await
+                .inspect_err(|e| error!("Failed to log AT response: {}", e));
+        }
+    }
+}
+
+/// Main event handler for the `SendPunch` struct.
 ///
-/// This task listens for events from `MCH_SIGNAL`, `COMMAND_CHANNEL`, and `AT_RESPONSE_CHANNEL` and
+/// This task listens for events from `MCH_SIGNAL` and `COMMAND_CHANNEL` and
 /// dispatches them to the `SendPunch` instance.
 #[embassy_executor::task]
 pub async fn send_punch_event_handler() {
@@ -126,17 +141,12 @@ pub async fn send_punch_event_handler() {
     }
 
     loop {
-        let signal = select3(
-            MCH_SIGNAL.wait(),
-            COMMAND_CHANNEL.receive(),
-            AT_RESPONSE_CHANNEL.receive(),
-        )
-        .await;
+        let signal = select(MCH_SIGNAL.wait(), COMMAND_CHANNEL.receive()).await;
         {
             let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either3::First(_) => match send_punch.send_mini_call_home().await {
+                Either::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(_mini_call_home) => info!("MiniCallHome sent"),
                     Err(err) => {
                         // TODO: use a different type of trigger for reconnections
@@ -146,16 +156,7 @@ pub async fn send_punch_event_handler() {
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },
-                Either3::Second(command) => send_punch.execute_command(command).await,
-                Either3::Third(pending_response) => {
-                    // TODO: do it without locking SEND_PUNCH_MUTEX, outside of this loop
-                    let _ = send_punch
-                        .lock_flash()
-                        .await
-                        .log_at_response(pending_response)
-                        .await
-                        .inspect_err(|e| error!("Failed to log AT response: {}", e));
-                }
+                Either::Second(command) => send_punch.execute_command(command).await,
             }
         }
     }
