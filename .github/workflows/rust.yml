@@ -68,6 +68,8 @@ jobs:
         rustup target add thumbv7em-none-eabihf
         cargo install cargo-binutils
     - name: Generate Firmware Binaries
+      env:
+        DEFMT_LOG: info
       run: |
         cargo objcopy --release -p yaroc-nrf52840 --target thumbv7em-none-eabihf -- -O ihex target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.hex
         cp target/thumbv7em-none-eabihf/release/yaroc-nrf52840 target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.elf
