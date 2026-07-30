@@ -65,7 +65,7 @@ pub enum UartRxPin {
 }
 
 /// Configuration for the device.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct DeviceConfig {
     /// The name of the device.
     pub name: String<24>,

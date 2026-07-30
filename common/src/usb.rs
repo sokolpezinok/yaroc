@@ -33,6 +33,8 @@ pub const PROTOCOL_VERSION: u32 = 0;
 pub enum UsbCommand {
     /// Handshake command to identify device and protocol version.
     Handshake,
+    /// Read all configs from flash.
+    GetConfig,
     /// Configure the modem.
     ConfigureModem(ModemConfig),
     /// Configure MQTT settings.
@@ -55,6 +57,12 @@ pub enum UsbResponse {
     Handshake(String<8>, u32),
     /// Operation successful.
     Ok,
+    /// Stored configuration (DeviceConfig, ModemConfig, MqttConfig).
+    Config(
+        Option<DeviceConfig>,
+        Option<ModemConfig>,
+        Option<MqttConfig>,
+    ),
     /// MiniCallHome log.
     MiniCallHomeLog(Vec<u8, 54>),
     /// LoggedAtResponse log.
@@ -186,6 +194,19 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 info!("Handshake request");
                 let magic = String::try_from("YAROC").map_err(|_| Error::StringEncodingError)?;
                 self.write_response(UsbResponse::Handshake(magic, PROTOCOL_VERSION)).await?;
+            }
+            UsbCommand::GetConfig => {
+                info!("Request to read all configs from flash");
+                let mut flash = self.lock_flash().await;
+                let device_config = flash.read::<DeviceConfig>().await?;
+                let modem_config = flash.read::<ModemConfig>().await?;
+                let mqtt_config = flash.read::<MqttConfig>().await?;
+                self.write_response(UsbResponse::Config(
+                    device_config,
+                    modem_config,
+                    mqtt_config,
+                ))
+                .await?;
             }
             UsbCommand::ConfigureModem(modem_config) => {
                 {
@@ -389,6 +410,30 @@ mod tests {
         assert_eq!(
             decoded,
             UsbResponse::Handshake(String::try_from("YAROC").unwrap(), PROTOCOL_VERSION)
+        );
+    }
+
+    #[test]
+    fn test_get_config_serialization() {
+        let command = UsbCommand::GetConfig;
+        let bytes = to_vec::<_, 8>(&command).unwrap();
+        let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
+        assert_matches!(decoded, UsbCommand::GetConfig);
+
+        let response = UsbResponse::Config(
+            Some(DeviceConfig::default()),
+            Some(ModemConfig::default()),
+            Some(MqttConfig::default()),
+        );
+        let bytes = to_vec::<_, 576>(&response).unwrap();
+        let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
+        assert_eq!(
+            decoded,
+            UsbResponse::Config(
+                Some(DeviceConfig::default()),
+                Some(ModemConfig::default()),
+                Some(MqttConfig::default()),
+            )
         );
     }
 }
