@@ -5,7 +5,7 @@ use embassy_sync::mutex::Mutex;
 #[cfg(feature = "nrf")]
 use embassy_usb::class::cdc_acm::CdcAcmClass;
 use femtopb::Message as _;
-use heapless::Vec;
+use heapless::{String, Vec};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "defmt")]
@@ -25,9 +25,14 @@ use crate::send_punch::{DeviceConfig, SendPunch};
 /// Type alias for the USB driver.
 pub type UsbDriver = Driver<'static, &'static SoftwareVbusDetect>;
 
+/// Protocol version for USB handshake.
+pub const PROTOCOL_VERSION: u32 = 0;
+
 #[derive(Debug, Serialize, Deserialize)]
 /// Commands that can be sent over USB.
 pub enum UsbCommand {
+    /// Handshake command to identify device and protocol version.
+    Handshake,
     /// Configure the modem.
     ConfigureModem(ModemConfig),
     /// Configure MQTT settings.
@@ -46,6 +51,8 @@ pub enum UsbCommand {
 /// Responses sent back over USB.
 #[allow(clippy::large_enum_variant)]
 pub enum UsbResponse {
+    /// Handshake response containing magic string and protocol version.
+    Handshake(String<8>, u32),
     /// Operation successful.
     Ok,
     /// MiniCallHome log.
@@ -175,6 +182,11 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
     /// Responds to a USB command.
     pub async fn respond(&mut self, command: UsbCommand) -> Result<(), Error> {
         match command {
+            UsbCommand::Handshake => {
+                info!("Handshake request");
+                let magic = String::try_from("YAROC").map_err(|_| Error::StringEncodingError)?;
+                self.write_response(UsbResponse::Handshake(magic, PROTOCOL_VERSION)).await?;
+            }
             UsbCommand::ConfigureModem(modem_config) => {
                 {
                     let mut send_punch = self.send_punch_mutex.lock().await;
@@ -361,5 +373,22 @@ mod tests {
         let bytes = to_vec::<_, 8>(&command).unwrap();
         let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
         assert_matches!(decoded, UsbCommand::EraseFlash);
+    }
+
+    #[test]
+    fn test_handshake_serialization() {
+        let command = UsbCommand::Handshake;
+        let bytes = to_vec::<_, 8>(&command).unwrap();
+        let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
+        assert_matches!(decoded, UsbCommand::Handshake);
+
+        let magic = String::try_from("YAROC").unwrap();
+        let response = UsbResponse::Handshake(magic, PROTOCOL_VERSION);
+        let bytes = to_vec::<_, 32>(&response).unwrap();
+        let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
+        assert_eq!(
+            decoded,
+            UsbResponse::Handshake(String::try_from("YAROC").unwrap(), PROTOCOL_VERSION)
+        );
     }
 }

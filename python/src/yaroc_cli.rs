@@ -141,6 +141,19 @@ fn send_command<S: Read + Write>(
         .ok_or_else(|| "Serial port closed before receiving response".to_string())
 }
 
+fn handshake<S: Read + Write>(serial: &mut S) -> Result<(), String> {
+    match send_command(serial, UsbCommand::Handshake)? {
+        UsbResponse::Handshake(magic, version) => {
+            if magic.as_str() != "YAROC" {
+                return Err(format!("Unexpected magic string: {magic}"));
+            }
+            info!("Connected to YAROC device (protocol v{version})");
+            Ok(())
+        }
+        resp => Err(format!("Unexpected response to handshake: {resp:?}")),
+    }
+}
+
 fn send_command_multiple_responses<S: Read + Write>(
     serial: &mut S,
     command: UsbCommand,
@@ -305,6 +318,11 @@ pub fn yaroc_cli() {
         .timeout(Duration::from_secs(10))
         .open_native()
         .expect("Unable to open serial port");
+
+    if let Err(e) = handshake(&mut serial) {
+        error!("USB handshake failed, you probably selected the wrong device: {e}");
+        return;
+    }
 
     match args.command {
         Command::EraseFlash => match send_command(&mut serial, UsbCommand::EraseFlash) {
@@ -551,5 +569,45 @@ mod tests {
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], resp1);
         assert_eq!(res[1], resp2);
+    }
+
+    #[test]
+    fn test_handshake_success() {
+        let magic = heapless::String::try_from("YAROC").unwrap();
+        let resp = UsbResponse::Handshake(magic, 1);
+        let stream_bytes = to_stdvec(&resp).unwrap();
+        let mut stream = FragmentedStream {
+            data: stream_bytes,
+            read_offset: 0,
+            chunk_size: 1024,
+        };
+        assert!(handshake(&mut stream).is_ok());
+    }
+
+    #[test]
+    fn test_handshake_invalid_magic() {
+        let magic = heapless::String::try_from("OTHER").unwrap();
+        let resp = UsbResponse::Handshake(magic, 1);
+        let stream_bytes = to_stdvec(&resp).unwrap();
+        let mut stream = FragmentedStream {
+            data: stream_bytes,
+            read_offset: 0,
+            chunk_size: 1024,
+        };
+        let err = handshake(&mut stream).unwrap_err();
+        assert!(err.contains("Unexpected magic string"));
+    }
+
+    #[test]
+    fn test_handshake_unexpected_response() {
+        let resp = UsbResponse::Ok;
+        let stream_bytes = to_stdvec(&resp).unwrap();
+        let mut stream = FragmentedStream {
+            data: stream_bytes,
+            read_offset: 0,
+            chunk_size: 1024,
+        };
+        let err = handshake(&mut stream).unwrap_err();
+        assert!(err.contains("Unexpected response to handshake"));
     }
 }
