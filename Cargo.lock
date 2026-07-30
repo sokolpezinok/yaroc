@@ -3806,7 +3806,7 @@ dependencies = [
 
 [[package]]
 name = "yaroc-nrf52840"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "cortex-m",
