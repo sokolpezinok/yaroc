@@ -34,6 +34,10 @@ pub struct Args {
 
 #[derive(Subcommand, Debug, PartialEq)]
 pub enum Command {
+    /// Export configuration from flash in TOML format
+    #[command(name = "export-config")]
+    ExportConfig,
+
     /// Erase internal flash storage
     #[command(alias = "erase")]
     EraseFlash,
@@ -325,6 +329,17 @@ pub fn yaroc_cli() {
     }
 
     match args.command {
+        Command::ExportConfig => match send_command(&mut serial, UsbCommand::GetConfig) {
+            Ok(UsbResponse::Config(device_config, modem_config, mqtt_config)) => {
+                let config = Config::from_configs(device_config, modem_config, mqtt_config);
+                match toml::to_string_pretty(&config) {
+                    Ok(toml_str) => print!("{toml_str}"),
+                    Err(e) => error!("Failed to serialize config to TOML: {e}"),
+                }
+            }
+            Ok(r) => error!("Unexpected response from export-config: {r:?}"),
+            Err(e) => error!("Failed to get config from device: {e}"),
+        },
         Command::EraseFlash => match send_command(&mut serial, UsbCommand::EraseFlash) {
             Ok(UsbResponse::Ok) => info!("Flash erase successful"),
             Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
@@ -503,6 +518,14 @@ mod tests {
                 log_type: LogType::Modem
             }
         );
+    }
+
+    #[test]
+    fn test_args_parsing_dump_config() {
+        let args_dump_config =
+            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "export-config"]);
+        assert_eq!(args_dump_config.port, "/dev/ttyACM0");
+        assert_eq!(args_dump_config.command, Command::ExportConfig);
     }
 
     struct FragmentedStream {

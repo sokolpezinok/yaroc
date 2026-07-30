@@ -1,9 +1,9 @@
 use embassy_time::Duration;
 use std::path::{Path, PathBuf};
-use yaroc_common::send_punch::UartRxPin;
+use yaroc_common::send_punch::{DeviceConfig, UartRxPin};
 
 use heapless::String as HString;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use yaroc_common::bg77::modem_manager::{LteBands, ModemConfig, RAT};
 use yaroc_common::mqtt::MqttConfig;
 
@@ -49,7 +49,7 @@ pub fn find_config_file(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct LteBandsToml {
     pub ltem: Vec<u32>,
     pub nbiot: Vec<u32>,
@@ -74,7 +74,15 @@ impl From<LteBandsToml> for LteBands {
     }
 }
 
-#[derive(Debug, Default)]
+impl From<LteBands> for LteBandsToml {
+    fn from(bands: LteBands) -> Self {
+        let ltem = (1..=128).filter(|&b| (bands.ltem & (1_u128 << (b - 1))) != 0).collect();
+        let nbiot = (1..=128).filter(|&b| (bands.nbiot & (1_u128 << (b - 1))) != 0).collect();
+        LteBandsToml { ltem, nbiot }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum RatToml {
     Ltem,
     NbIot,
@@ -97,12 +105,35 @@ impl<'de> Deserialize<'de> for RatToml {
     }
 }
 
+impl Serialize for RatToml {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            RatToml::Ltem => serializer.serialize_str("LTE-M"),
+            RatToml::NbIot => serializer.serialize_str("NB-IoT"),
+            RatToml::LtemNbIot => serializer.serialize_str("both"),
+        }
+    }
+}
+
 impl From<RatToml> for RAT {
     fn from(toml: RatToml) -> Self {
         match toml {
             RatToml::Ltem => RAT::Ltem,
             RatToml::NbIot => RAT::NbIot,
             RatToml::LtemNbIot => RAT::LtemNbIot,
+        }
+    }
+}
+
+impl From<RAT> for RatToml {
+    fn from(rat: RAT) -> Self {
+        match rat {
+            RAT::Ltem => RatToml::Ltem,
+            RAT::NbIot => RatToml::NbIot,
+            RAT::LtemNbIot => RatToml::LtemNbIot,
         }
     }
 }
@@ -130,6 +161,19 @@ impl<'de> Deserialize<'de> for SrrRxPin {
     }
 }
 
+impl Serialize for SrrRxPin {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            SrrRxPin::Scl => serializer.serialize_str("scl"),
+            SrrRxPin::Sda => serializer.serialize_str("sda"),
+            SrrRxPin::Ain1 => serializer.serialize_str("ain1"),
+        }
+    }
+}
+
 impl From<SrrRxPin> for UartRxPin {
     fn from(value: SrrRxPin) -> Self {
         match value {
@@ -140,7 +184,17 @@ impl From<SrrRxPin> for UartRxPin {
     }
 }
 
-#[derive(Deserialize, Debug)]
+impl From<UartRxPin> for SrrRxPin {
+    fn from(value: UartRxPin) -> Self {
+        match value {
+            UartRxPin::Scl => SrrRxPin::Scl,
+            UartRxPin::Sda => SrrRxPin::Sda,
+            UartRxPin::Ain1 => SrrRxPin::Ain1,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct ModemConfigToml {
     pub apn: String,
     #[serde(default)]
@@ -159,6 +213,16 @@ impl From<ModemConfigToml> for ModemConfig {
     }
 }
 
+impl From<ModemConfig> for ModemConfigToml {
+    fn from(config: ModemConfig) -> Self {
+        ModemConfigToml {
+            apn: config.apn.to_string(),
+            rat: config.rat.into(),
+            bands: config.bands.into(),
+        }
+    }
+}
+
 fn default_port() -> u16 {
     1883
 }
@@ -171,12 +235,12 @@ fn default_minicallhome_interval() -> u64 {
     30
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct MqttConfigToml {
     pub url: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub username: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub password: String,
     #[serde(default = "default_packet_timeout")]
     pub packet_timeout: u64,
@@ -206,14 +270,50 @@ impl From<MqttConfigToml> for MqttConfig {
     }
 }
 
-#[derive(Deserialize, Debug)]
+impl From<MqttConfig> for MqttConfigToml {
+    fn from(config: MqttConfig) -> Self {
+        let (username, password) = match config.credentials {
+            Some((u, p)) => (u.to_string(), p.to_string()),
+            None => (String::new(), String::new()),
+        };
+        MqttConfigToml {
+            url: config.url.to_string(),
+            username,
+            password,
+            packet_timeout: config.packet_timeout.as_secs(),
+            port: config.port,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct Config {
-    pub modem: ModemConfigToml,
-    pub mqtt: Option<MqttConfigToml>,
     #[serde(default = "default_minicallhome_interval")]
     pub minicallhome_interval: u64,
     #[serde(default)]
     pub srr_rx_pin: SrrRxPin,
+    pub modem: ModemConfigToml,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mqtt: Option<MqttConfigToml>,
+}
+
+impl Config {
+    pub fn from_configs(
+        device_config: Option<DeviceConfig>,
+        modem_config: Option<ModemConfig>,
+        mqtt_config: Option<MqttConfig>,
+    ) -> Self {
+        let (minicallhome_interval, srr_rx_pin) = match device_config {
+            Some(d) => (d.minicallhome_interval.as_secs(), d.srr_rx_pin.into()),
+            None => (default_minicallhome_interval(), SrrRxPin::default()),
+        };
+        Self {
+            minicallhome_interval,
+            srr_rx_pin,
+            modem: modem_config.unwrap_or_default().into(),
+            mqtt: mqtt_config.map(Into::into),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -416,5 +516,40 @@ mod tests {
             assert_eq!(result, mock_config_path);
             let _ = std::fs::remove_dir_all(&config_dir);
         }
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let mut modem = ModemConfig::default();
+        modem.apn = HString::try_from("internet.iot").unwrap();
+        modem.rat = RAT::NbIot;
+        modem.bands.set_ltem_bands(&[3, 8, 20]);
+        modem.bands.set_nbiot_bands(&[3, 8, 20]);
+
+        let device = DeviceConfig {
+            minicallhome_interval: Duration::from_secs(45),
+            srr_rx_pin: UartRxPin::Sda,
+            ..Default::default()
+        };
+
+        let mqtt = MqttConfig {
+            url: HString::try_from("broker.emqx.io").unwrap(),
+            credentials: None,
+            packet_timeout: Duration::from_secs(35),
+            port: 1883,
+        };
+
+        let config = Config::from_configs(Some(device), Some(modem), Some(mqtt));
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(toml_str.contains("minicallhome_interval = 45"));
+        assert!(toml_str.contains("srr_rx_pin = \"sda\""));
+        assert!(toml_str.contains("apn = \"internet.iot\""));
+        assert!(toml_str.contains("rat = \"NB-IoT\""));
+        assert!(toml_str.contains("[mqtt]"));
+        assert!(toml_str.contains("url = \"broker.emqx.io\""));
+
+        // Roundtrip deserialization
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed, config);
     }
 }
