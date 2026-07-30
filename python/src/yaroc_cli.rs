@@ -130,7 +130,23 @@ impl<'a, S: Read> PostcardReader<'a, S> {
     }
 }
 
-fn send_command<S: Read + Write>(
+impl<'a, S: SetTimeout> PostcardReader<'a, S> {
+    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
+        self.stream.set_timeout(timeout)
+    }
+}
+
+pub trait SetTimeout {
+    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String>;
+}
+
+impl<T: serialport::SerialPort> SetTimeout for T {
+    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
+        serialport::SerialPort::set_timeout(self, timeout).map_err(|e| e.to_string())
+    }
+}
+
+fn send_command<S: Read + Write + SetTimeout>(
     serial: &mut S,
     command: UsbCommand,
 ) -> Result<UsbResponse, String> {
@@ -140,12 +156,20 @@ fn send_command<S: Read + Write>(
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
     let mut reader = PostcardReader::new(serial);
-    reader
-        .read_one()?
-        .ok_or_else(|| "Serial port closed before receiving response".to_string())
+    loop {
+        let response = reader
+            .read_one()?
+            .ok_or_else(|| "Serial port closed before receiving response".to_string())?;
+        match response {
+            UsbResponse::PartialOk(timeout_ms) => {
+                reader.set_timeout(Duration::from_millis(timeout_ms as u64))?;
+            }
+            resp => return Ok(resp),
+        }
+    }
 }
 
-fn handshake<S: Read + Write>(serial: &mut S) -> Result<(), String> {
+fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String> {
     match send_command(serial, UsbCommand::Handshake)? {
         UsbResponse::Handshake(magic, version) => {
             if magic.as_str() != "YAROC" {
@@ -158,7 +182,7 @@ fn handshake<S: Read + Write>(serial: &mut S) -> Result<(), String> {
     }
 }
 
-fn send_command_multiple_responses<S: Read + Write>(
+fn send_command_multiple_responses<S: Read + Write + SetTimeout>(
     serial: &mut S,
     command: UsbCommand,
 ) -> Result<Vec<UsbResponse>, String> {
@@ -171,10 +195,13 @@ fn send_command_multiple_responses<S: Read + Write>(
     let mut responses = Vec::new();
     info!("Awaiting logs from the device");
     while let Some(response) = reader.read_one()? {
-        if response == UsbResponse::Ok {
-            break;
+        match response {
+            UsbResponse::PartialOk(timeout_ms) => {
+                reader.set_timeout(Duration::from_millis(timeout_ms as u64))?;
+            }
+            UsbResponse::Ok => break,
+            other => responses.push(other),
         }
-        responses.push(response);
     }
     Ok(responses)
 }
@@ -261,7 +288,7 @@ fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
     }
 }
 
-fn configure<S: Read + Write>(config: PathBuf, mut serial: S) {
+fn configure<S: Read + Write + SetTimeout>(config: PathBuf, mut serial: S) {
     let config_path = crate::config::find_config_file(&config);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
@@ -319,7 +346,7 @@ pub fn yaroc_cli() {
 
     info!("Opening serial port {}", args.port);
     let mut serial = tokio_serial::new(&args.port, 112800)
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_millis(1500))
         .open_native()
         .expect("Unable to open serial port");
 
@@ -556,6 +583,12 @@ mod tests {
         }
     }
 
+    impl SetTimeout for FragmentedStream {
+        fn set_timeout(&mut self, _timeout: Duration) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_send_command_multiple_responses_fragmented_and_fused() {
         let resp1 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[1, 2, 3, 4]).unwrap());
@@ -622,7 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handshake_unexpected_response() {
+    fn test_send_command_unexpected_response() {
         let resp = UsbResponse::Ok;
         let stream_bytes = to_stdvec(&resp).unwrap();
         let mut stream = FragmentedStream {
@@ -632,5 +665,23 @@ mod tests {
         };
         let err = handshake(&mut stream).unwrap_err();
         assert!(err.contains("Unexpected response to handshake"));
+    }
+
+    #[test]
+    fn test_send_command_with_partial_ok() {
+        let resp_partial = UsbResponse::PartialOk(150_000);
+        let resp_ok = UsbResponse::Ok;
+
+        let mut stream_bytes = Vec::new();
+        stream_bytes.extend_from_slice(&to_stdvec(&resp_partial).unwrap());
+        stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
+
+        let mut stream = FragmentedStream {
+            data: stream_bytes,
+            read_offset: 0,
+            chunk_size: 1024,
+        };
+        let res = send_command(&mut stream, UsbCommand::EraseFlash).unwrap();
+        assert_eq!(res, UsbResponse::Ok);
     }
 }

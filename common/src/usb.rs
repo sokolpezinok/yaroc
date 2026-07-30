@@ -57,6 +57,8 @@ pub enum UsbResponse {
     Handshake(String<8>, u32),
     /// Operation successful.
     Ok,
+    /// Partial success with expected next operation timeout in milliseconds.
+    PartialOk(u32),
     /// Stored configuration (DeviceConfig, ModemConfig, MqttConfig).
     Config(
         Option<DeviceConfig>,
@@ -210,6 +212,11 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
             }
             UsbCommand::ConfigureModem(modem_config) => {
                 {
+                    let mut flash = self.lock_flash().await;
+                    flash.write(modem_config.clone()).await?;
+                }
+                self.write_response(UsbResponse::PartialOk(150_000)).await?;
+                {
                     let mut send_punch = self.send_punch_mutex.lock().await;
                     let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
                     send_punch.configure_modem(modem_config).await?;
@@ -218,6 +225,12 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureMqtt(mqtt_config) => {
+                let timeout_ms = mqtt_config.packet_timeout.as_millis() as u32;
+                {
+                    let mut flash = self.lock_flash().await;
+                    flash.write(mqtt_config.clone()).await?;
+                }
+                self.write_response(UsbResponse::PartialOk(timeout_ms)).await?;
                 {
                     let mut send_punch = self.send_punch_mutex.lock().await;
                     let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
@@ -245,6 +258,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 let mut flash = self.lock_flash().await;
                 let mut iter = flash.mch_iter().await?;
                 loop {
+                    self.write_response(UsbResponse::PartialOk(3000)).await?;
                     let log = iter.next().await?;
                     match log {
                         None => break,
@@ -268,6 +282,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 let mut flash = self.lock_flash().await;
                 let mut iter = flash.logged_at_response_iter().await?;
                 loop {
+                    self.write_response(UsbResponse::PartialOk(5000)).await?;
                     let log = iter.next().await?;
                     match log {
                         None => break,
@@ -435,5 +450,18 @@ mod tests {
                 Some(MqttConfig::default()),
             )
         );
+    }
+
+    #[test]
+    fn test_partial_ok_response_serialization() {
+        let response_partial = UsbResponse::PartialOk(150_000);
+        let bytes = to_vec::<_, 16>(&response_partial).unwrap();
+        let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
+        assert_eq!(decoded, UsbResponse::PartialOk(150_000));
+
+        let response_ok = UsbResponse::Ok;
+        let bytes = to_vec::<_, 16>(&response_ok).unwrap();
+        let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
+        assert_eq!(decoded, UsbResponse::Ok);
     }
 }
