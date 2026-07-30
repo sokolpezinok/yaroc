@@ -442,6 +442,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"wrong.broker.io\",1883"), // Connected to wrong broker
             ("AT+QMTCLOSE=1", "+QMTCLOSE: 1,0"),                     // Disconnect from wrong broker
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
@@ -473,6 +474,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",8883"), // Already connected to correct port
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
@@ -488,6 +490,7 @@ mod test {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
@@ -593,6 +596,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1"),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
@@ -620,6 +624,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1"),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
@@ -647,6 +652,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,2"),
@@ -668,6 +674,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1,0"),

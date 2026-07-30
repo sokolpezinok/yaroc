@@ -69,6 +69,7 @@ fn test_mqtt_connect_ok() {
     let mut bg77 = MockAtUart::new();
 
     expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
+    expect_call_at(&mut bg77, eq("+CGACT?"), eq(None), Some("+CGACT: 1,1"));
     expect_call_at(&mut bg77, eq("+QMTOPEN?"), eq(None), None);
     expect_call_at(
         &mut bg77,
@@ -120,6 +121,7 @@ fn test_mqtt_connect_login_ok() {
     };
 
     expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
+    expect_call_at(&mut bg77, eq("+CGACT?"), eq(None), Some("+CGACT: 1,1"));
     expect_call_at(
         &mut bg77,
         eq("+QMTOPEN?"),

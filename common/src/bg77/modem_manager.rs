@@ -184,30 +184,37 @@ impl<M: AtUartTrait> ModemManager<M> {
         bg77: &mut M,
         force_reattach: bool,
     ) -> crate::Result<()> {
-        if force_reattach {
+        let att_state = if force_reattach {
             warn!("Will reattach to network because of no messages being sent for a long time");
             bg77.call_at("E0", None).await?;
             let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
             let _ = bg77.long_call_at("+CGACT=0,1", ACTIVATION_TIMEOUT).await;
+            0
         } else {
-            let state = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?;
-            if state == 1 {
-                info!("Already registered to network");
-                return Ok(());
+            bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0], None)?
+        };
+
+        if att_state != 1 {
+            let _response = bg77
+                .long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1))
+                .await?;
+            #[cfg(feature = "defmt")]
+            if !_response.lines().is_empty() {
+                debug!("Read {=[?]} after CGATT=1", _response.lines());
             }
+        } else {
+            info!("Already registered to network");
         }
 
-        let _response = bg77
-            .long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1))
-            .await?;
-        #[cfg(feature = "defmt")]
-        if !_response.lines().is_empty() {
-            debug!("Read {=[?]} after CGATT=1", _response.lines());
-        }
         let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if stat != 1 {
-            return Err(Error::NetworkRegistrationError);
+            let _ = bg77.long_call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await;
+            let (_, stat_retry) =
+                bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+            if stat_retry != 1 {
+                return Err(Error::NetworkRegistrationError);
+            }
         }
 
         Ok(())
@@ -252,6 +259,8 @@ mod test {
             ("AT+CGATT?", "+CGATT: 0"),
             ("AT+CGATT=1", ""),
             ("AT+CGACT?", "+CGACT: 1,0"),
+            ("AT+CGACT=1,1", ""),
+            ("AT+CGACT?", "+CGACT: 1,0"),
         ]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
         assert_eq!(res, Err(Error::NetworkRegistrationError));
@@ -264,6 +273,20 @@ mod test {
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 0"),
             ("AT+CGATT=1", ""),
+            ("AT+CGACT?", "+CGACT: 1,1"),
+        ]);
+        let res = block_on(modem_manager.network_registration(&mut bg77, false));
+        assert!(res.is_ok());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_network_registration_already_registered_reactivates_context() {
+        let modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,0"),
+            ("AT+CGACT=1,1", ""),
             ("AT+CGACT?", "+CGACT: 1,1"),
         ]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
