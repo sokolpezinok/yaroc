@@ -107,7 +107,7 @@ async fn main(spawner: Spawner) {
     loop {
         let connected = mqtt_status.try_get().unwrap_or_default();
         let delay = if connected {
-            Duration::from_millis(5000)
+            Duration::from_millis(3000)
         } else {
             Duration::from_millis(166)
         };
