@@ -68,25 +68,20 @@ impl AtRxBroker {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
-            let to_send = match line.trim() {
-                "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
-                "ERROR" => Ok(FromModem::Error),
-                line => FromModem::from_line(line),
-            };
-
-            if let Ok(FromModem::CommandResponse(command_response)) = to_send.as_ref()
+            let from_modem = FromModem::from_line(line);
+            if let Ok(FromModem::CommandResponse(command_response)) = from_modem.as_ref()
                 && self.urc_handler(command_response)
             {
                 debug!("Got URC {}", line);
                 continue;
             }
 
-            if let Ok(from_modem) = to_send.as_ref() {
+            if let Ok(from_modem) = from_modem.as_ref() {
                 open_stream = !from_modem.terminal();
             } else {
                 open_stream = false;
             }
-            self.main_channel.send(to_send).await;
+            self.main_channel.send(from_modem).await;
         }
         if open_stream {
             self.main_channel.send(Ok(FromModem::Eof)).await; // Stop transmission

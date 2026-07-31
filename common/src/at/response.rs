@@ -1,5 +1,5 @@
 use chrono::{DateTime, FixedOffset};
-use core::{fmt::Display, str::FromStr};
+use core::{fmt::Display, ops::Range, str::FromStr};
 use heapless::{String, Vec};
 use serde::{Deserialize, Serialize};
 
@@ -7,32 +7,6 @@ use crate::RawMutex;
 use crate::error::Error;
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// Represents a substring within a larger string, defined by its start and end indices.
-pub struct Substring {
-    start: usize,
-    end: usize,
-}
-
-impl Substring {
-    /// Creates a new `Substring`.
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-
-    /// Returns the end index of the substring.
-    pub fn end(&self) -> usize {
-        self.end
-    }
-}
-
-impl Display for Substring {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "({},{})", self.start, self.end)
-    }
-}
 
 pub const AT_COMMAND_SIZE: usize = 90;
 pub const AT_PREFIX_SIZE: usize = 20;
@@ -45,7 +19,7 @@ const AT_VALUE_COUNT: usize = 8;
 /// Represents a parsed AT command response line.
 pub struct CommandResponse {
     line: String<AT_COMMAND_SIZE>,
-    prefix: Substring,
+    prefix: Range<usize>,
 }
 
 impl CommandResponse {
@@ -55,18 +29,18 @@ impl CommandResponse {
         Self::split_values(rest)?; // TODO: store the result to avoid duplicated parsing
         Ok(Self {
             line: String::from_str(line.trim()).map_err(|_| Error::BufferTooSmallError)?,
-            prefix: Substring::new(1, 1 + prefix.len()),
+            prefix: 1..1 + prefix.len(),
         })
     }
 
     /// Returns the command prefix of the AT response.
     pub fn command(&self) -> &str {
-        &self.line[1..self.prefix.end()]
+        &self.line[self.prefix.clone()]
     }
 
     /// Returns a vector of string slices representing the values in the AT response.
     pub fn values(&self) -> Vec<&str, AT_VALUE_COUNT> {
-        Self::split_values(&self.line[self.prefix.end() + 2..]).unwrap()
+        Self::split_values(&self.line[self.prefix.end + 2..]).unwrap()
     }
 
     /// Splits an AT response line into its prefix and the rest of the line containing values.
@@ -168,12 +142,16 @@ impl FromModem {
 
     /// Constructs `FromModem` from a line returned by the modem.
     pub fn from_line(line: &str) -> crate::Result<Self> {
-        // TODO: consider also adding "OK, ERROR, ..." parsing as well
-        match CommandResponse::new(line) {
-            Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
-            _ => String::from_str(line)
-                .map(FromModem::Line)
-                .map_err(|_| Error::BufferTooSmallError),
+        match line.trim() {
+            "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
+            "ERROR" => Ok(FromModem::Error),
+            // A line such as `+QMTPUB: 0,0,0` is a command response
+            line => match CommandResponse::new(line) {
+                Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
+                _ => String::from_str(line)
+                    .map(FromModem::Line)
+                    .map_err(|_| Error::BufferTooSmallError),
+            },
         }
     }
 }
@@ -548,6 +526,24 @@ mod test_at_utils {
             serialized.len() <= 437,
             "Serialized size exceeds 437: {}",
             serialized.len()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_line() -> crate::Result<()> {
+        assert_eq!(FromModem::from_line("OK")?, FromModem::Ok);
+        assert_eq!(FromModem::from_line("  RDY \r\n")?, FromModem::Ok);
+        assert_eq!(FromModem::from_line("APP RDY")?, FromModem::Ok);
+        assert_eq!(FromModem::from_line(">")?, FromModem::Ok);
+        assert_eq!(FromModem::from_line("ERROR")?, FromModem::Error);
+        assert_eq!(
+            FromModem::from_line("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
+            FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?)
+        );
+        assert_eq!(
+            FromModem::from_line("some raw line")?,
+            FromModem::Line(String::from_str("some raw line").unwrap())
         );
         Ok(())
     }
