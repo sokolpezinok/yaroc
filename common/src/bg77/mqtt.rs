@@ -254,8 +254,6 @@ impl<M: AtUartTrait> MqttClient<M> {
         )?;
         bg77.call_at(&cmd, None).await?;
 
-        // Set DNS servers
-        let _ = bg77.call_at("+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", None).await;
         let cmd = format!(100; "+QMTOPEN={cid},\"{}\",{}", self.config.url, self.config.port)?;
         let (_, status) = bg77
             .call_at(&cmd, Some(ACTIVATION_TIMEOUT))
@@ -451,7 +449,6 @@ mod test {
                 "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
                 "+QMTCFG: 1,0",
             ),
-            ("AT+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", ""),
             ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,0"),
@@ -597,14 +594,13 @@ mod test {
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
             ("AT+CGACT?", "+CGACT: 1,1"),
-            ("AT+QMTOPEN?", "+QMTOPEN: 1"),
+            ("AT+QMTOPEN?", ""),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
             (
                 "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
                 "+QMTCFG: 1,0",
             ),
-            ("AT+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", ""),
             ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,-1"),
         ]);
 
@@ -625,14 +621,13 @@ mod test {
         let mut bg77 = FakeModem::new(&[
             ("AT+CGATT?", "+CGATT: 1"),
             ("AT+CGACT?", "+CGACT: 1,1"),
-            ("AT+QMTOPEN?", "+QMTOPEN: 1"),
+            ("AT+QMTOPEN?", ""),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
             (
                 "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
                 "+QMTCFG: 1,0",
             ),
-            ("AT+QIDNSCFG=1,\"8.8.8.8\",\"1.1.1.1\"", ""),
             ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,4"),
         ]);
 
