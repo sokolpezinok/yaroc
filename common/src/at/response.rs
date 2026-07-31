@@ -414,16 +414,8 @@ mod test_at_utils {
     #[test]
     fn test_at_response() -> crate::Result<()> {
         let mut from_modem_vec = Vec::new();
-        from_modem_vec
-            .push(FromModem::CommandResponse(CommandResponse::new(
-                "+CONN: 1,\"disconnected\"",
-            )?))
-            .unwrap();
-        from_modem_vec
-            .push(FromModem::CommandResponse(CommandResponse::new(
-                "+CONN: 5,\"connected\"",
-            )?))
-            .unwrap();
+        from_modem_vec.push(FromModem::try_from("+CONN: 1,\"disconnected\"")?).unwrap();
+        from_modem_vec.push(FromModem::try_from("+CONN: 5,\"connected\"")?).unwrap();
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
         let response = at_response.response(Some((5u8, 0)))?;
         assert_eq!(response.values().as_slice(), &["5", "connected"]);
@@ -438,9 +430,8 @@ mod test_at_utils {
 
     #[test]
     fn test_at_response_parse2() -> crate::Result<()> {
-        let from_modem_vec = Vec::from_array([FromModem::CommandResponse(CommandResponse::new(
-            "+CONN: 1,783,\"disconnected\"",
-        )?)]);
+        let from_modem_vec =
+            Vec::from_array([FromModem::try_from("+CONN: 1,783,\"disconnected\"")?]);
 
         let at_response = AtResponse::new(from_modem_vec, "+CONN?");
         assert_eq!(at_response.count_response_values().unwrap(), 3);
@@ -453,9 +444,8 @@ mod test_at_utils {
 
     #[test]
     fn test_at_response_parse4() -> crate::Result<()> {
-        let from_modem_vec = Vec::from_array([FromModem::CommandResponse(CommandResponse::new(
-            "+QCSQ: \"NBIoT\",0,-131,55,-20",
-        )?)]);
+        let from_modem_vec =
+            Vec::from_array([FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?]);
 
         let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
         let (rssi_dbm, rsrp_dbm, snr_mult, rsrq_dbm) =
@@ -471,7 +461,7 @@ mod test_at_utils {
     #[test]
     fn test_postcard_serialization() -> crate::Result<()> {
         let from_modem_vec = Vec::from_array([
-            FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?),
+            FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
             FromModem::Ok,
         ]);
         let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
@@ -487,7 +477,7 @@ mod test_at_utils {
     #[test]
     fn test_logged_at_response_serialization() -> crate::Result<()> {
         let from_modem_vec = Vec::from_array([
-            FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?),
+            FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
             FromModem::Ok,
         ]);
         let at_response = AtResponse::new(from_modem_vec, "+QCSQ");
@@ -510,10 +500,10 @@ mod test_at_utils {
         let line = format!("+{:A<10}: {:B<77}", "", "");
         assert_eq!(line.len(), 90);
         let from_modem_vec = Vec::from_array([
-            FromModem::CommandResponse(CommandResponse::new(&line)?),
-            FromModem::CommandResponse(CommandResponse::new(&line)?),
-            FromModem::CommandResponse(CommandResponse::new(&line)?),
-            FromModem::CommandResponse(CommandResponse::new(&line)?),
+            FromModem::try_from(&line[..])?,
+            FromModem::try_from(&line[..])?,
+            FromModem::try_from(&line[..])?,
+            FromModem::try_from(&line[..])?,
         ]);
         let max_prefix = "B".repeat(20);
         let at_response = AtResponse::new(from_modem_vec, &max_prefix);

@@ -63,15 +63,20 @@ impl AtUartTrait for FakeModem {
             std::format!("AT{command}"),
             "Expected {at_cmd}, got AT{command}"
         );
-        let responses: Vec<_, _> = if at_response_raw.is_empty() {
-            [FromModem::Ok].into()
-        } else {
-            [
-                FromModem::try_from(at_response_raw.as_str()).unwrap(),
-                FromModem::Ok,
-            ]
-            .into()
-        };
+        let mut responses: Vec<FromModem, AT_LINES> = Vec::new();
+        if !at_response_raw.is_empty() {
+            for line in at_response_raw.lines() {
+                if line.is_empty() {
+                    continue;
+                }
+                responses
+                    .push(FromModem::try_from(line).unwrap())
+                    .expect("Fake modem responses too short");
+            }
+        }
+        if !responses.iter().any(|r| r.terminal()) {
+            responses.push(FromModem::Ok).expect("Fake modem responses too short");
+        }
         Ok(AtResponse::new(responses, command))
     }
 

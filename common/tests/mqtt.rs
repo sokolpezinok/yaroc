@@ -55,11 +55,17 @@ fn expect_call_at(
         .returning(move |cmd, _, _| {
             let mut resps = heapless::Vec::new();
             if let Some(r) = response {
-                resps
-                    .push(FromModem::CommandResponse(CommandResponse::new(r).unwrap()))
-                    .unwrap();
+                for line in r.lines() {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    resps.push(FromModem::try_from(line).unwrap()).unwrap();
+                }
             }
-            resps.push(FromModem::Ok).unwrap();
+            if !resps.iter().any(|r| r.terminal()) {
+                resps.push(FromModem::Ok).unwrap();
+            }
             Ok(AtResponse::new(resps, cmd))
         });
 }

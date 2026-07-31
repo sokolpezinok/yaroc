@@ -75,7 +75,7 @@ async fn main(spawner: Spawner) {
         response.lines(),
         &[
             FromModem::Ok,
-            FromModem::CommandResponse(CommandResponse::new("+QMTOPEN: 0,3").unwrap()),
+            FromModem::try_from("+QMTOPEN: 0,3").unwrap(),
             FromModem::Eof,
         ]
     );
