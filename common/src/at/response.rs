@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
 use crate::error::Error;
+use crate::status::MiniCallHome;
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
 
@@ -367,8 +368,16 @@ pub struct PendingLoggedAtResponse {
     pub instant: Instant,
 }
 
-/// A channel for logging AT responses.
-pub static AT_RESPONSE_CHANNEL: Channel<RawMutex, PendingLoggedAtResponse, 3> = Channel::new();
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[allow(clippy::large_enum_variant)]
+pub enum FlashLog {
+    AtResponse(PendingLoggedAtResponse),
+    MiniCallHome(MiniCallHome),
+}
+
+/// A channel for logging messages to flash.
+pub static FLASH_LOG_CHANNEL: Channel<RawMutex, FlashLog, 3> = Channel::new();
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for LoggedAtResponse {

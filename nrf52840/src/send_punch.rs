@@ -12,7 +12,7 @@ use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::semaphore::{FairSemaphore, Semaphore};
 use embassy_time::{Duration, Instant, WithTimeout};
-use yaroc_common::at::response::AT_RESPONSE_CHANNEL;
+use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
@@ -110,17 +110,27 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
     backoff_retries.r#loop().await;
 }
 
-/// A task that logs AT responses to flash without locking `SEND_PUNCH_MUTEX`.
+/// A task that logs AT responses and MiniCallHome messages to flash without locking `SEND_PUNCH_MUTEX`.
 #[embassy_executor::task]
-pub async fn log_at_response_task() {
+pub async fn flash_log_task() {
     loop {
-        let pending_response = AT_RESPONSE_CHANNEL.receive().await;
+        let item = FLASH_LOG_CHANNEL.receive().await;
         let mut flash = FLASH_MUTEX.lock().await;
         if let Some(flash) = flash.as_mut() {
-            let _ = flash
-                .log_at_response(pending_response)
-                .await
-                .inspect_err(|e| error!("Failed to log AT response: {}", e));
+            match item {
+                FlashLog::AtResponse(pending_response) => {
+                    let _ = flash
+                        .log_at_response(pending_response)
+                        .await
+                        .inspect_err(|e| error!("Failed to log AT response: {}", e));
+                }
+                FlashLog::MiniCallHome(mini_call_home) => {
+                    let _ = flash
+                        .log_minicallhome(mini_call_home)
+                        .await
+                        .inspect_err(|e| error!("Failed to log MiniCallHome: {}", e));
+                }
+            }
         }
     }
 }

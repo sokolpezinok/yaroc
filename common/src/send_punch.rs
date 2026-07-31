@@ -11,7 +11,7 @@ use heapless::{String, Vec, format};
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
-use crate::at::response::AT_COMMAND_SIZE;
+use crate::at::response::{AT_COMMAND_SIZE, FLASH_LOG_CHANNEL, FlashLog};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::modem::Modem;
@@ -130,7 +130,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     }
 
     /// Locks the flash mutex and returns a guard providing access to the flash instance.
-    pub async fn lock_flash(&self) -> FlashGuard<'static, F> {
+    async fn lock_flash(&self) -> FlashGuard<'static, F> {
         let guard = self.flash_mutex.lock().await;
         FlashGuard::new(guard)
     }
@@ -212,13 +212,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
 
-        // TODO: add a test for logging to flash
-        let _ = self
-            .lock_flash()
-            .await
-            .log_minicallhome(mini_call_home)
-            .await
-            .inspect_err(|e| error!("Error while logging MiniCallHome: {}", { e }));
+        let _ = FLASH_LOG_CHANNEL
+            .try_send(FlashLog::MiniCallHome(mini_call_home))
+            .inspect_err(|e| error!("Error while sending MiniCallHome for logging: {:?}", e));
         Ok(mini_call_home)
     }
 
@@ -281,12 +277,12 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     }
 
     /// Connects to the MQTT broker.
-    pub async fn mqtt_connect(&mut self) -> crate::Result<()> {
+    async fn mqtt_connect(&mut self) -> crate::Result<()> {
         self.mqtt_client.connect(&mut self.modem, &self.modem_manager).await
     }
 
     /// Synchronizes the system time with the network time from the modem.
-    pub async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
+    async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
         SystemInfo::current_time(&mut self.modem, false).await
     }
 
@@ -333,8 +329,9 @@ mod tests {
 
     use crate::{
         at::{fake_modem::FakeModem, response::PendingLoggedAtResponse},
-        bg77::{modem::Bg77, modem_manager::FakePin},
+        bg77::{modem::Bg77, modem_manager::FakePin, system_info::BOOT_TIME},
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
+        status::{BATTERY, TEMPERATURE},
     };
 
     use super::*;
@@ -401,8 +398,11 @@ mod tests {
 
     static FAKE_FLASH_MUTEX: Mutex<RawMutex, Option<FakeFlash>> = Mutex::new(None);
 
+    static TEST_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
+
     #[test]
     fn send_punch_instantiation_test() {
+        let _lock = block_on(TEST_MUTEX.lock());
         let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
         let fake_pin = FakePin {};
         let modem = Bg77::new(fake_modem, fake_pin);
@@ -411,7 +411,12 @@ mod tests {
         block_on(async {
             *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
         });
-        crate::bg77::system_info::BOOT_TIME.sender().clear();
+        BOOT_TIME.sender().clear();
+        TEMPERATURE.sender().send(27.0);
+        BATTERY.sender().send(crate::status::BatteryInfo {
+            mv: 3967,
+            percents: 76,
+        });
 
         let mut send_punch = SendPunch::new_without_spawning(
             modem,
@@ -426,5 +431,42 @@ mod tests {
             block_on(send_punch.synchronize_time()).unwrap(),
             expected_date
         );
+    }
+
+    #[test]
+    fn send_mini_call_home_flash_log_test() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        BOOT_TIME.sender().clear();
+        let mut fake_modem = FakeModem::new(&[
+            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
+            ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+            ("AT+QMTPUB=0,0,0,0,\"yar/deadbeef/status\",34", ""),
+        ]);
+        fake_modem.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 0,0,0")]);
+        let modem = Bg77::new(fake_modem, FakePin {});
+        let mqtt_config = MqttClientConfig::default();
+
+        block_on(async {
+            *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
+        });
+
+        TEMPERATURE.sender().send(27.0);
+        BATTERY.sender().send(crate::status::BatteryInfo {
+            mv: 3967,
+            percents: 76,
+        });
+
+        let mut send_punch = SendPunch::new_without_spawning(
+            modem,
+            &FAKE_FLASH_MUTEX,
+            mqtt_config,
+            ModemConfig::default(),
+        );
+
+        let mch = block_on(send_punch.send_mini_call_home()).unwrap();
+        let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
+        assert_eq!(logged_item, FlashLog::MiniCallHome(mch));
     }
 }

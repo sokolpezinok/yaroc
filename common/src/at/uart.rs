@@ -6,7 +6,7 @@
 //! command-specific replies.
 
 use super::response::{
-    AT_COMMAND_SIZE, AT_LINES, AT_RESPONSE_CHANNEL, AtResponse, CommandResponse, FromModem,
+    AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FLASH_LOG_CHANNEL, FlashLog, FromModem,
     PendingLoggedAtResponse,
 };
 #[cfg(feature = "defmt")]
@@ -339,11 +339,11 @@ where
 
     /// Forward failed AT response to the logger.
     fn forward_failed_response(response: AtResponse) {
-        let _ = AT_RESPONSE_CHANNEL
-            .try_send(PendingLoggedAtResponse {
+        let _ = FLASH_LOG_CHANNEL
+            .try_send(FlashLog::AtResponse(PendingLoggedAtResponse {
                 response,
                 instant: Instant::now(),
-            })
+            }))
             .inspect_err(|_| error!("Failed to send AT response for logging, channel full"));
     }
 
