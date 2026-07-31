@@ -68,7 +68,7 @@ impl AtRxBroker {
         let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
         for line in lines {
-            let from_modem = FromModem::from_line(line);
+            let from_modem = FromModem::try_from(line);
             if let Ok(FromModem::CommandResponse(command_response)) = from_modem.as_ref()
                 && self.urc_handler(command_response)
             {

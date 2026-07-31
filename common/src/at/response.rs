@@ -139,9 +139,13 @@ impl FromModem {
     pub fn terminal(&self) -> bool {
         matches!(self, FromModem::Ok | FromModem::Error | FromModem::Eof)
     }
+}
+
+impl TryFrom<&str> for FromModem {
+    type Error = Error;
 
     /// Constructs `FromModem` from a line returned by the modem.
-    pub fn from_line(line: &str) -> crate::Result<Self> {
+    fn try_from(line: &str) -> crate::Result<Self> {
         match line.trim() {
             "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
             "ERROR" => Ok(FromModem::Error),
@@ -531,18 +535,18 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_from_line() -> crate::Result<()> {
-        assert_eq!(FromModem::from_line("OK")?, FromModem::Ok);
-        assert_eq!(FromModem::from_line("  RDY \r\n")?, FromModem::Ok);
-        assert_eq!(FromModem::from_line("APP RDY")?, FromModem::Ok);
-        assert_eq!(FromModem::from_line(">")?, FromModem::Ok);
-        assert_eq!(FromModem::from_line("ERROR")?, FromModem::Error);
+    fn test_try_from() -> crate::Result<()> {
+        assert_eq!(FromModem::try_from("OK")?, FromModem::Ok);
+        assert_eq!(FromModem::try_from("  RDY \r\n")?, FromModem::Ok);
+        assert_eq!(FromModem::try_from("APP RDY")?, FromModem::Ok);
+        assert_eq!(FromModem::try_from(">")?, FromModem::Ok);
+        assert_eq!(FromModem::try_from("ERROR")?, FromModem::Error);
         assert_eq!(
-            FromModem::from_line("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
+            FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
             FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?)
         );
         assert_eq!(
-            FromModem::from_line("some raw line")?,
+            FromModem::try_from("some raw line")?,
             FromModem::Line(String::from_str("some raw line").unwrap())
         );
         Ok(())

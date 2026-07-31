@@ -67,7 +67,7 @@ impl AtUartTrait for FakeModem {
             [FromModem::Ok].into()
         } else {
             [
-                FromModem::from_line(at_response_raw.as_str()).unwrap(),
+                FromModem::try_from(at_response_raw.as_str()).unwrap(),
                 FromModem::Ok,
             ]
             .into()
