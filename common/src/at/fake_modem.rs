@@ -1,7 +1,7 @@
 extern crate std;
 
 use crate::at::{
-    response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem},
+    response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, FromModem},
     uart::{AtUartTrait, UrcHandlerType},
 };
 use core::str::FromStr;
@@ -85,9 +85,9 @@ impl AtUartTrait for FakeModem {
         let (expected_cmd, expected_read, at_response) = self.responses.remove(0);
         assert_eq!(expected_cmd, command_prefix);
         assert_eq!(expected_read, second_read);
-        let response = CommandResponse::new(at_response.as_str()).unwrap();
+        let from_modem = FromModem::try_from(at_response.as_str()).unwrap();
         Ok(AtResponse::new(
-            [FromModem::CommandResponse(response), FromModem::Eof].into(),
+            [from_modem, FromModem::Eof].into(),
             command_prefix,
         ))
     }
