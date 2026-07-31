@@ -4,6 +4,7 @@ use crate::at::{
     response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, FromModem},
     uart::{AtUartTrait, UrcHandlerType},
 };
+use crate::error::Error;
 use core::str::FromStr;
 use embassy_executor::Spawner;
 use embassy_time::Duration;
@@ -77,7 +78,12 @@ impl AtUartTrait for FakeModem {
         if !responses.iter().any(|r| r.terminal()) {
             responses.push(FromModem::Ok).expect("Fake modem responses too short");
         }
-        Ok(AtResponse::new(responses, command))
+
+        if responses.last().is_some_and(|f| f.is_error()) {
+            Err(Error::AtErrorResponse)
+        } else {
+            Ok(AtResponse::new(responses, command))
+        }
     }
 
     async fn call_second_read(

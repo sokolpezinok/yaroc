@@ -362,7 +362,7 @@ where
         let lines = self.read_lines(timeout).await?;
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
-            Some(&FromModem::Error) => {
+            Some(from_modem) if from_modem.is_error() => {
                 #[cfg(feature = "defmt")]
                 debug!(
                     "Failed response from modem: {} {=[?]}",
@@ -525,7 +525,7 @@ mod test_at {
         block_on(broker.parse_lines("+NONURC: 1\n"));
         assert_eq!(
             MAIN_RX_CHANNEL.try_receive().unwrap()?,
-            FromModem::CommandResponse(CommandResponse::new("+NONURC: 1")?)
+            FromModem::try_from("+NONURC: 1")?
         );
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Eof);
         assert_eq!(MAIN_RX_CHANNEL.len(), 0);

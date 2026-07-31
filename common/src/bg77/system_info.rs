@@ -15,7 +15,7 @@ use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info};
 
-static BOOT_TIME: Watch<RawMutex, DateTime<FixedOffset>, 1> = Watch::new();
+pub(crate) static BOOT_TIME: Watch<RawMutex, DateTime<FixedOffset>, 1> = Watch::new();
 
 /// Returns the calendar time corresponding to the given `instant`,
 /// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.

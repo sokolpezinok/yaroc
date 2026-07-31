@@ -411,6 +411,7 @@ mod tests {
         block_on(async {
             *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
         });
+        crate::bg77::system_info::BOOT_TIME.sender().clear();
 
         let mut send_punch = SendPunch::new_without_spawning(
             modem,

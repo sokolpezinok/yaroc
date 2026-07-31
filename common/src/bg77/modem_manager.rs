@@ -245,10 +245,20 @@ mod test {
             ("AT+QCFG=\"nwscanseq\",00", ""),
             ("AT+QCFG=\"iotopmode\",2,1", ""),
             ("AT+QCFG=\"band\",0,4,80000", ""),
-            ("AT+CGATT=1", ""),
+            ("AT+CGATT=1", "+CME ERROR: 30"),
         ]);
         let firmware = block_on(modem_manager.configure(&mut bg77));
         assert!(firmware.is_ok());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_network_registration_cgatt_error_fails() {
+        let modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut bg77 =
+            FakeModem::new(&[("AT+CGATT?", "+CGATT: 0"), ("AT+CGATT=1", "+CME ERROR: 30")]);
+        let res = block_on(modem_manager.network_registration(&mut bg77, false));
+        assert_eq!(res, Err(Error::AtErrorResponse));
         assert!(bg77.all_done());
     }
 

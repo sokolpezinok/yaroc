@@ -131,13 +131,22 @@ pub enum FromModem {
     CommandResponse(CommandResponse),
     Ok,
     Error,
+    CmeError(u16),
     Eof,
 }
 
 impl FromModem {
-    /// Returns `true` if the `FromModem` variant indicates a terminal response (Ok, Error, Eof).
+    /// Returns `true` if the `FromModem` variant indicates a terminal response (Ok, Error, CmeError, Eof).
     pub fn terminal(&self) -> bool {
-        matches!(self, FromModem::Ok | FromModem::Error | FromModem::Eof)
+        matches!(
+            self,
+            FromModem::Ok | FromModem::Error | FromModem::CmeError(_) | FromModem::Eof
+        )
+    }
+
+    /// Returns `true` if the `FromModem` variant indicates an error (Error or CmeError).
+    pub fn is_error(&self) -> bool {
+        matches!(self, FromModem::Error | FromModem::CmeError(_))
     }
 }
 
@@ -146,7 +155,14 @@ impl TryFrom<&str> for FromModem {
 
     /// Constructs `FromModem` from a line returned by the modem.
     fn try_from(line: &str) -> crate::Result<Self> {
-        match line.trim() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("+CME ERROR:")
+            && let Ok(code) = rest.trim().parse::<u16>()
+        {
+            return Ok(FromModem::CmeError(code));
+        }
+
+        match line {
             "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
             "ERROR" => Ok(FromModem::Error),
             // A line such as `+QMTPUB: 0,0,0` is a command response
@@ -170,6 +186,7 @@ impl defmt::Format for FromModem {
             }
             FromModem::Ok => defmt::write!(fmt, "Ok"),
             FromModem::Error => defmt::write!(fmt, "Error"),
+            FromModem::CmeError(code) => defmt::write!(fmt, "CmeError({})", code),
             FromModem::Eof => defmt::write!(fmt, "Eof"),
         }
     }
@@ -208,9 +225,9 @@ impl AtResponse {
         }
     }
 
-    /// Returns `true` if any of the lines in the response is `FromModem::Error`.
+    /// Returns `true` if any of the lines in the response are errors.
     pub fn is_error(&self) -> bool {
-        self.lines.iter().any(|line| matches!(line, FromModem::Error))
+        self.lines.iter().any(|from_modem| from_modem.is_error())
     }
 
     /// Returns a slice of the `FromModem` lines contained in this `AtResponse`.
@@ -531,6 +548,11 @@ mod test_at_utils {
         assert_eq!(FromModem::try_from("APP RDY")?, FromModem::Ok);
         assert_eq!(FromModem::try_from(">")?, FromModem::Ok);
         assert_eq!(FromModem::try_from("ERROR")?, FromModem::Error);
+        assert_eq!(
+            FromModem::try_from("+CME ERROR: 30")?,
+            FromModem::CmeError(30)
+        );
+        assert!(FromModem::CmeError(30).terminal());
         assert_eq!(
             FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
             FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?)
