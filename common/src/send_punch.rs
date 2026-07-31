@@ -11,7 +11,7 @@ use heapless::{String, Vec, format};
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
 
-use crate::at::response::{AT_COMMAND_SIZE, FLASH_LOG_CHANNEL, FlashLog};
+use crate::at::response::{AT_RESPONSE_SIZE, FLASH_LOG_CHANNEL, FlashLog};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
 use crate::bg77::modem::Modem;
@@ -260,7 +260,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     pub async fn configure_modem(
         &mut self,
         modem_config: ModemConfig,
-    ) -> crate::Result<String<AT_COMMAND_SIZE>> {
+    ) -> crate::Result<String<AT_RESPONSE_SIZE>> {
         self.lock_flash().await.write(modem_config.clone()).await?;
         info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);

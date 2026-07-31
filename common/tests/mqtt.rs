@@ -113,6 +113,7 @@ fn test_mqtt_connect_ok() {
 fn test_mqtt_connect_login_ok() {
     let mut bg77 = MockAtUart::new();
     let config = MqttClientConfig {
+        url: String::try_from("prod-blue.public-broker.com").unwrap(),
         credentials: Some((
             String::from_str("user").unwrap(),
             String::from_str("password").unwrap(),
@@ -126,12 +127,12 @@ fn test_mqtt_connect_login_ok() {
         &mut bg77,
         eq("+QMTOPEN?"),
         eq(None),
-        Some("+QMTOPEN: 1,\"broker.emqx.io\",1883,\"user\",\"password\""),
+        Some("+QMTOPEN: 1,\"prod-blue.public-broker.com\",1883"),
     );
     expect_call_at(&mut bg77, eq("+QMTCONN?"), eq(None), Some("+QMTCONN: 1,1"));
     expect_call_at(
         &mut bg77,
-        str::starts_with("+QMTCONN=1,\"test_client\""),
+        str::starts_with("+QMTCONN=1,\"test_client\",\"user\",\"password\""),
         always(),
         Some("+QMTCONN: 1,0,0"),
     );

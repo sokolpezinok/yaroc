@@ -9,9 +9,10 @@ use crate::status::MiniCallHome;
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
 
-pub const AT_COMMAND_SIZE: usize = 90;
+// The longest AT command is `AT+QMTCFG="will",...`, at 72 characters
+pub const AT_COMMAND_SIZE: usize = 80;
 pub const AT_PREFIX_SIZE: usize = 20;
-pub const AT_RESPONSE_SIZE: usize = 50;
+pub const AT_RESPONSE_SIZE: usize = 60;
 pub const AT_LINES: usize = 4;
 const AT_VALUE_LEN: usize = 40;
 const AT_VALUE_COUNT: usize = 8;
@@ -19,7 +20,7 @@ const AT_VALUE_COUNT: usize = 8;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents a parsed AT command response line.
 pub struct CommandResponse {
-    line: String<AT_COMMAND_SIZE>,
+    line: String<AT_RESPONSE_SIZE>,
     prefix: Range<usize>,
 }
 
@@ -128,7 +129,7 @@ impl defmt::Format for CommandResponse {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Represents different types of responses received from a modem.
 pub enum FromModem {
-    Line(String<AT_COMMAND_SIZE>),
+    Line(String<AT_RESPONSE_SIZE>),
     CommandResponse(CommandResponse),
     Ok,
     Error,
@@ -523,8 +524,8 @@ mod test_at_utils {
 
     #[test]
     fn test_max_logged_at_response_serialization() -> crate::Result<()> {
-        let line = format!("+{:A<10}: {:B<77}", "", "");
-        assert_eq!(line.len(), 90);
+        let line = format!("+{:A<10}: {:B<47}", "", "");
+        assert_eq!(line.len(), AT_RESPONSE_SIZE);
         let from_modem_vec = Vec::from_array([
             FromModem::try_from(&line[..])?,
             FromModem::try_from(&line[..])?,

@@ -68,9 +68,9 @@ pub mod duration_ms {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MqttClientConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
-    pub url: String<50>,
+    pub url: String<40>,
     /// Optional login credentials for the MQTT broker, username and password.
-    pub credentials: Option<(String<20>, String<30>)>,
+    pub credentials: Option<(String<20>, String<20>)>,
     /// The timeout duration for individual MQTT packets.
     pub packet_timeout: Duration,
     /// The name of the client, used to construct the MQTT client ID.
@@ -108,9 +108,9 @@ impl MqttClientConfig {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MqttConfig {
     /// The URL of the MQTT broker, e.g., "broker.emqx.io".
-    pub url: String<50>,
+    pub url: String<40>,
     /// Optional login credentials for the MQTT broker, username and password.
-    pub credentials: Option<(String<20>, String<30>)>,
+    pub credentials: Option<(String<20>, String<20>)>,
     /// The timeout duration for individual MQTT packets.
     #[serde(with = "duration_ms")]
     pub packet_timeout: Duration,

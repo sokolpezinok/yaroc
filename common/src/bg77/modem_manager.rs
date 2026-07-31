@@ -12,7 +12,7 @@ use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
-use crate::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
+use crate::at::response::{AT_RESPONSE_SIZE, CommandResponse, FromModem};
 use crate::at::uart::AtUartTrait;
 use crate::error::Error;
 use crate::flash::{FlashValue, ValueIndex};
@@ -145,7 +145,7 @@ impl<M: AtUartTrait> ModemManager<M> {
     /// Configures the modem with the current settings (APN, RAT, Bands).
     ///
     /// Returns the current firmware version.
-    pub async fn configure(&self, bg77: &mut M) -> crate::Result<String<AT_COMMAND_SIZE>> {
+    pub async fn configure(&self, bg77: &mut M) -> crate::Result<String<AT_RESPONSE_SIZE>> {
         let firmware = bg77.call_at("+QGMR", None).await?.lines().first().and_then(|x| {
             if let FromModem::Line(line) = x {
                 Some(line.clone())
