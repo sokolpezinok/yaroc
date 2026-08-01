@@ -296,7 +296,7 @@ impl<M: AtUartTrait> MqttClient<M> {
             self.last_successful_send = self.last_successful_send.max(publish_time);
         }
         let force_reattach =
-            self.last_successful_send + self.config.packet_timeout * 4 < Instant::now();
+            self.last_successful_send + self.config.packet_timeout * 6 < Instant::now();
 
         modem_manager
             .network_registration(bg77, force_reattach)
