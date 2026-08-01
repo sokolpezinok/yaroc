@@ -340,18 +340,21 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
         let punch_id = punch_msg.id;
-        STATUS_UPDATES.get()[msg_idx].reset();
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
         loop {
-            let _releaser = send_punch_fn.acquire().await.unwrap();
-            let res = send_punch_fn.send_punch(&punch_msg).await;
-            if res.is_err() {
-                STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
-            }
-            let res = Self::is_message_sent(&punch_msg, &mut mqtt_events)
-                .with_timeout(send_punch_timeout)
-                .await;
+            STATUS_UPDATES.get()[msg_idx].reset();
+            let res = {
+                let _releaser = send_punch_fn.acquire().await.unwrap();
+                let res = send_punch_fn.send_punch(&punch_msg).await;
+                if res.is_err() {
+                    STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
+                }
+                Self::is_message_sent(&punch_msg, &mut mqtt_events)
+                    .with_timeout(send_punch_timeout)
+                    .await
+            };
+
             match res {
                 Ok(true) => {
                     // Published
