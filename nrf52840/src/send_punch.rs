@@ -160,9 +160,11 @@ pub async fn send_punch_event_handler() {
                     Ok(_mini_call_home) => info!("MiniCallHome sent"),
                     Err(err) => {
                         // TODO: use a different type of trigger for reconnections
-                        COMMAND_CHANNEL
-                            .send(SendPunchCommand::MqttConnect(false, Instant::now()))
-                            .await;
+                        let _ = COMMAND_CHANNEL
+                            .try_send(SendPunchCommand::MqttConnect(false, Instant::now()))
+                            .inspect_err(|_| {
+                                error!("COMMAND_CHANNEL full, cannot send a reconnect command")
+                            });
                         error!("Sending of MiniCallHome failed: {}", err);
                     }
                 },
