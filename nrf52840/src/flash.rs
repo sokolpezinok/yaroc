@@ -1,3 +1,4 @@
+use defmt::error;
 use embassy_embedded_hal::flash::partition::Partition;
 use embassy_sync::mutex::Mutex;
 use femtopb::Message as _;
@@ -202,12 +203,20 @@ pub struct NrfLoggedAtResponseIter<'s, 'a> {
 
 impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
     async fn next(&mut self) -> crate::Result<Option<LoggedAtResponse>> {
-        match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
-            Some(entry) => {
-                let logged_response = postcard::from_bytes(entry.into_buf())?;
-                Ok(Some(logged_response))
+        loop {
+            match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
+                Some(entry) => match postcard::from_bytes(entry.into_buf()) {
+                    Ok(logged_response) => return Ok(Some(logged_response)),
+                    Err(e) => {
+                        error!(
+                            "Failed to deserialize LoggedAtResponse entry from flash: {}, skipping",
+                            e
+                        );
+                        continue;
+                    }
+                },
+                None => return Ok(None),
             }
-            None => Ok(None),
         }
     }
 }

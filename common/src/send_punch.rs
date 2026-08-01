@@ -206,15 +206,15 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// Sends a `MiniCallHome` message, containing system information.
     pub async fn send_mini_call_home(&mut self) -> crate::Result<MiniCallHome> {
         let mini_call_home = self.system_info.mini_call_home(&mut self.modem).await;
-        self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
-            .await?;
-
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
 
         let _ = FLASH_LOG_CHANNEL
             .try_send(FlashLog::MiniCallHome(mini_call_home))
             .inspect_err(|e| error!("Error while sending MiniCallHome for logging: {:?}", e));
+        self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
+            .await?;
+
         Ok(mini_call_home)
     }
 

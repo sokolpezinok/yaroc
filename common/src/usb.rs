@@ -283,17 +283,22 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 let mut iter = flash.logged_at_response_iter().await?;
                 loop {
                     self.write_response(UsbResponse::PartialOk(5000)).await?;
-                    let log = iter.next().await?;
-                    match log {
-                        None => break,
-                        Some(logged_response) => {
-                            let serialized = postcard::to_vec::<_, 437>(&logged_response)?;
-                            let mut vec_buffer = Vec::new();
-                            vec_buffer
-                                .extend_from_slice(serialized.as_slice())
-                                .map_err(|_| Error::BufferTooSmallError)?;
-                            self.write_response(UsbResponse::LoggedAtResponseLog(vec_buffer))
-                                .await?;
+                    match iter.next().await {
+                        Ok(Some(logged_response)) => {
+                            if let Ok(serialized) = postcard::to_vec::<_, 437>(&logged_response) {
+                                let mut vec_buffer = Vec::new();
+                                if vec_buffer.extend_from_slice(serialized.as_slice()).is_ok() {
+                                    self.write_response(UsbResponse::LoggedAtResponseLog(
+                                        vec_buffer,
+                                    ))
+                                    .await?;
+                                }
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            error!("Error reading AT response log from flash: {}", e);
+                            break;
                         }
                     }
                 }
