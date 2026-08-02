@@ -68,7 +68,7 @@ pub enum UsbResponse {
     /// MiniCallHome log.
     MiniCallHomeLog(Vec<u8, 54>),
     /// LoggedAtResponse log.
-    LoggedAtResponseLog(Vec<u8, 437>),
+    LoggedAtResponseLog(Vec<u8, 384>),
 }
 
 /// Abstraction over the CDC ACM class.
@@ -185,7 +185,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
     }
 
     async fn write_response(&mut self, response: UsbResponse) -> Result<(), Error> {
-        let response_bytes = postcard::to_vec::<_, 576>(&response)?;
+        let response_bytes = postcard::to_vec::<_, 448>(&response)?;
         self.reader.write(response_bytes.as_slice()).await
     }
 
@@ -285,7 +285,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                     self.write_response(UsbResponse::PartialOk(5000)).await?;
                     match iter.next().await {
                         Ok(Some(logged_response)) => {
-                            if let Ok(serialized) = postcard::to_vec::<_, 437>(&logged_response) {
+                            if let Ok(serialized) = postcard::to_vec::<_, 384>(&logged_response) {
                                 let mut vec_buffer = Vec::new();
                                 if vec_buffer.extend_from_slice(serialized.as_slice()).is_ok() {
                                     self.write_response(UsbResponse::LoggedAtResponseLog(

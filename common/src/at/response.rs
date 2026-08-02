@@ -397,7 +397,6 @@ mod test_at_utils {
     use super::*;
 
     extern crate std;
-    use std::format;
 
     #[test]
     fn test_split_at_response() {
@@ -524,15 +523,18 @@ mod test_at_utils {
 
     #[test]
     fn test_max_logged_at_response_serialization() -> crate::Result<()> {
-        let line = format!("+{:A<10}: {:B<47}", "", "");
+        let line = std::format!("+{:A<10}: {:B<47}", "", "");
         assert_eq!(line.len(), AT_RESPONSE_SIZE);
+        let cmd_resp = FromModem::try_from(&line[..])?;
+        assert!(matches!(cmd_resp, FromModem::CommandResponse(_)));
+
         let from_modem_vec = Vec::from_array([
-            FromModem::try_from(&line[..])?,
-            FromModem::try_from(&line[..])?,
-            FromModem::try_from(&line[..])?,
-            FromModem::try_from(&line[..])?,
+            cmd_resp.clone(),
+            cmd_resp.clone(),
+            cmd_resp.clone(),
+            cmd_resp,
         ]);
-        let max_prefix = "B".repeat(20);
+        let max_prefix = "B".repeat(AT_PREFIX_SIZE);
         let at_response = AtResponse::new(from_modem_vec, &max_prefix);
         let timestamp =
             DateTime::parse_from_rfc3339("2026-07-16T22:46:15.999999999+02:00").unwrap();
@@ -544,8 +546,13 @@ mod test_at_utils {
         let mut buf = [0u8; 1024];
         let serialized = postcard::to_slice(&logged_response, &mut buf).unwrap();
         assert!(
-            serialized.len() <= 437,
-            "Serialized size exceeds 437: {}",
+            serialized.len() <= 384,
+            "Serialized size exceeds 384: {}",
+            serialized.len()
+        );
+        assert!(
+            serialized.len() >= 300,
+            "Serialized size is unexpectedly small: {}",
             serialized.len()
         );
         Ok(())
