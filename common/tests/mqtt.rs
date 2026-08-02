@@ -9,7 +9,7 @@ use mockall::{Predicate, predicate::*};
 use yaroc_common::Result;
 use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromModem};
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
-use yaroc_common::bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemConfig, ModemManager};
+use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::bg77::mqtt::MqttClient;
 use yaroc_common::mqtt::{MqttClientConfig, MqttQos};
 
@@ -74,8 +74,6 @@ fn expect_call_at(
 fn test_mqtt_connect_ok() {
     let mut bg77 = MockAtUart::new();
 
-    expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
-    expect_call_at(&mut bg77, eq("+CGACT?"), eq(None), Some("+CGACT: 1,1"));
     expect_call_at(&mut bg77, eq("+QMTOPEN?"), eq(None), None);
     expect_call_at(
         &mut bg77,
@@ -105,8 +103,7 @@ fn test_mqtt_connect_ok() {
     );
 
     let mut client = MqttClient::new(MqttClientConfig::default(), 1);
-    let modem_manager = ModemManager::new(ModemConfig::default());
-    assert!(block_on(client.connect(&mut bg77, &modem_manager)).is_ok());
+    assert!(block_on(client.connect(&mut bg77)).is_ok());
 }
 
 #[test]
@@ -121,8 +118,6 @@ fn test_mqtt_connect_login_ok() {
         ..Default::default()
     };
 
-    expect_call_at(&mut bg77, eq("+CGATT?"), eq(None), Some("+CGATT: 1"));
-    expect_call_at(&mut bg77, eq("+CGACT?"), eq(None), Some("+CGACT: 1,1"));
     expect_call_at(
         &mut bg77,
         eq("+QMTOPEN?"),
@@ -138,8 +133,7 @@ fn test_mqtt_connect_login_ok() {
     );
 
     let mut client = MqttClient::new(config, 1);
-    let modem_manager = ModemManager::new(ModemConfig::default());
-    assert!(block_on(client.connect(&mut bg77, &modem_manager)).is_ok());
+    assert!(block_on(client.connect(&mut bg77)).is_ok());
 }
 
 #[test]

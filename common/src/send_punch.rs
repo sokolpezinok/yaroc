@@ -250,7 +250,10 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         let firmware = self.modem_manager.configure(&mut self.modem).await?;
         info!("Modem firmware version: {}", firmware);
 
-        let _ = self.mqtt_client.connect(&mut self.modem, &self.modem_manager).await;
+        let res = self.modem_manager.network_registration(&mut self.modem, false).await;
+        if res.is_ok() {
+            let _ = self.mqtt_client.connect(&mut self.modem).await;
+        }
         Ok(())
     }
 
@@ -274,7 +277,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
 
     /// Connects to the MQTT broker.
     async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.mqtt_client.connect(&mut self.modem, &self.modem_manager).await
+        self.mqtt_client.connect(&mut self.modem).await
     }
 
     /// Synchronizes the system time with the network time from the modem.
@@ -297,7 +300,15 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
                 {
                     return;
                 }
-
+                let force_reattach = self.mqtt_client.last_successful_send()
+                    + Duration::from_secs(210) // TODO: infer from packet timeout
+                    < Instant::now();
+                if let Err(err) =
+                    self.modem_manager.network_registration(&mut self.modem, force_reattach).await
+                {
+                    error!("Network registration failed: {}", err);
+                    return;
+                };
                 let res = self.mqtt_connect().await;
                 self.last_reconnect = Some(Instant::now());
                 let _ = res.inspect_err(|err| error!("Error connecting to MQTT: {}", err));

@@ -14,7 +14,7 @@ use crate::{
     RawMutex,
     at::{response::CommandResponse, uart::AtUartTrait},
     backoff::{BackoffCommand, CMD_FOR_BACKOFF},
-    bg77::modem_manager::{ACTIVATION_TIMEOUT, ModemManager},
+    bg77::modem_manager::ACTIVATION_TIMEOUT,
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig, MqttQos, MqttStatus, StatusCode},
     send_punch::SendPunchCommand,
@@ -298,37 +298,23 @@ impl<M: AtUartTrait> MqttClient<M> {
     ///
     /// This function first ensures network registration and then opens a TCP connection
     /// using `Self::open()`. Finally, it attempts to connect to the MQTT broker.
-    pub async fn connect(
-        &mut self,
-        bg77: &mut M,
-        modem_manager: &ModemManager<M>,
-    ) -> crate::Result<()> {
-        let res = self.connect_inner(bg77, modem_manager).await;
+    pub async fn connect(&mut self, bg77: &mut M) -> crate::Result<()> {
+        let res = self.connect_inner(bg77).await;
         if res.is_err() {
             MQTT_CONNECTION_STATUS.sender().send(false);
         }
         res
     }
 
-    async fn connect_inner(
-        &mut self,
-        bg77: &mut M,
-        modem_manager: &ModemManager<M>,
-    ) -> crate::Result<()> {
-        let cid = self.client_id;
-        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[cid as usize].try_take() {
+    pub fn last_successful_send(&mut self) -> Instant {
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
         }
-        let force_reattach =
-            self.last_successful_send + self.config.packet_timeout * 6 < Instant::now();
+        self.last_successful_send
+    }
 
-        modem_manager
-            .network_registration(bg77, force_reattach)
-            .await
-            .inspect_err(|err| error!("Network registration failed: {}", err))?;
-        if force_reattach {
-            self.last_successful_send = Instant::now();
-        }
+    async fn connect_inner(&mut self, bg77: &mut M) -> crate::Result<()> {
+        let cid = self.client_id;
         self.open(bg77).await?;
 
         let (_, status) =
@@ -364,6 +350,7 @@ impl<M: AtUartTrait> MqttClient<M> {
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
                         error!("Error while sending MQTT connect notification, channel full");
                     }
+                    self.last_successful_send = Instant::now();
                     Ok(())
                 } else {
                     Err(ConnectError::from_code(res, reason).into())
@@ -446,7 +433,6 @@ impl<M: AtUartTrait> MqttClient<M> {
 mod test {
     use super::*;
     use crate::at::fake_modem::FakeModem;
-    use crate::bg77::modem_manager::ModemConfig;
     use core::str::FromStr;
     use embassy_futures::block_on;
     use embassy_sync::channel::Channel;
@@ -465,8 +451,6 @@ mod test {
         };
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"wrong.broker.io\",1883"), // Connected to wrong broker
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
             ("AT+QMTCLOSE=1", "+QMTCLOSE: 1,0"), // Disconnect from wrong broker
@@ -482,8 +466,7 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
-        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
 
@@ -497,15 +480,12 @@ mod test {
         };
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",8883"), // Already connected to correct port
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
-        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
 
@@ -513,15 +493,12 @@ mod test {
     fn test_mqtt_already_connected() {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
         let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
-        assert_eq!(block_on(client.connect(&mut bg77, &modem_manager)), Ok(()));
+        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
 
@@ -622,8 +599,6 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", ""),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
@@ -635,9 +610,8 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(
-            block_on(client.connect(&mut bg77, &modem_manager)),
+            block_on(client.connect(&mut bg77)),
             Err(Error::MqttTcp(TcpError::FailedToOpenNetwork))
         );
         assert!(bg77.all_done());
@@ -649,8 +623,6 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", ""),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
@@ -662,9 +634,8 @@ mod test {
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(
-            block_on(client.connect(&mut bg77, &modem_manager)),
+            block_on(client.connect(&mut bg77)),
             Err(Error::MqttTcp(TcpError::DomainNameError))
         );
         assert!(bg77.all_done());
@@ -676,17 +647,14 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,2"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(
-            block_on(client.connect(&mut bg77, &modem_manager)),
+            block_on(client.connect(&mut bg77)),
             Err(Error::MqttConnect(ConnectError::IdentifierRejected))
         );
         assert!(bg77.all_done());
@@ -698,17 +666,14 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1,0"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);
-        let modem_manager = ModemManager::new(ModemConfig::default());
         assert_eq!(
-            block_on(client.connect(&mut bg77, &modem_manager)),
+            block_on(client.connect(&mut bg77)),
             Err(Error::MqttConnect(ConnectError::RetransmissionTimeout))
         );
         assert!(bg77.all_done());
