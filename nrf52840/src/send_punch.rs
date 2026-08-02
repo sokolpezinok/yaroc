@@ -11,7 +11,7 @@ use embassy_nrf::gpio::Output;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::semaphore::{FairSemaphore, Semaphore};
-use embassy_time::{Duration, Instant, WithTimeout};
+use embassy_time::{Duration, WithTimeout};
 use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
@@ -20,7 +20,7 @@ use yaroc_common::flash::Flash;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
-    send_punch::{COMMAND_CHANNEL, SendPunch, SendPunchCommand},
+    send_punch::{COMMAND_CHANNEL, SendPunch},
 };
 
 /// Type alias for the BG77 modem instance.
@@ -158,15 +158,7 @@ pub async fn send_punch_event_handler() {
             match signal {
                 Either::First(_) => match send_punch.send_mini_call_home().await {
                     Ok(_mini_call_home) => info!("MiniCallHome sent"),
-                    Err(err) => {
-                        // TODO: use a different type of trigger for reconnections
-                        let _ = COMMAND_CHANNEL
-                            .try_send(SendPunchCommand::MqttConnect(false, Instant::now()))
-                            .inspect_err(|_| {
-                                error!("COMMAND_CHANNEL full, cannot send a reconnect command")
-                            });
-                        error!("Sending of MiniCallHome failed: {}", err);
-                    }
+                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
                 Either::Second(command) => send_punch.execute_command(command).await,
             }

@@ -94,6 +94,11 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.state
     }
 
+    #[cfg(test)]
+    pub fn set_last_connect_attempt(&mut self, now: Instant) {
+        self.last_connect_attempt = Some(now);
+    }
+
     /// Processes an incoming connection event (e.g. URC notification or publish failure).
     pub fn handle_event(&mut self, event: ConnectionEvent) {
         match event {

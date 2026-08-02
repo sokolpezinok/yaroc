@@ -14,7 +14,7 @@ use crate::{
     RawMutex,
     at::{response::CommandResponse, uart::AtUartTrait},
     backoff::{BackoffCommand, CMD_FOR_BACKOFF},
-    bg77::modem_manager::ACTIVATION_TIMEOUT,
+    bg77::{connection::ConnectionEvent, modem_manager::ACTIVATION_TIMEOUT},
     error::Error,
     mqtt::{MqttClientConfig, MqttConfig, MqttQos, MqttStatus, StatusCode},
     send_punch::SendPunchCommand,
@@ -192,7 +192,8 @@ impl<M: AtUartTrait> MqttClient<M> {
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                     error!("Channel full when sending MQTT disconnect notification");
                 }
-                let message = SendPunchCommand::MqttConnect(true, Instant::now());
+                let message =
+                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::MqttDisconnect(1));
                 if command_sender.try_send(message).is_err() {
                     error!("Error while sending MQTT connect command, channel full");
                 }

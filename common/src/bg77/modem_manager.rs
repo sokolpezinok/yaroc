@@ -4,7 +4,7 @@ use core::str::FromStr;
 #[cfg(feature = "defmt")]
 use defmt::{debug, error, info, warn};
 use embassy_sync::channel::Sender;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Timer};
 use heapless::{String, format};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::RawMutex;
 use crate::at::response::{AT_RESPONSE_SIZE, CommandResponse, FromModem};
 use crate::at::uart::AtUartTrait;
+use crate::bg77::connection::ConnectionEvent;
 use crate::error::Error;
 use crate::flash::{FlashValue, ValueIndex};
 use crate::send_punch::SendPunchCommand;
@@ -126,7 +127,8 @@ impl<M: AtUartTrait> ModemManager<M> {
     ) -> bool {
         match response.command() {
             "QIURC" => {
-                let message = SendPunchCommand::NetworkConnect(Instant::now());
+                let message =
+                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate(1));
                 if command_sender.try_send(message).is_err() {
                     error!("Channel full when sending network connect command");
                 }

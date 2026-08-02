@@ -4,7 +4,7 @@ use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant};
+use embassy_time::Duration;
 use femtopb::{Message, repeated};
 use heapless::{String, Vec, format};
 #[cfg(not(feature = "defmt"))]
@@ -14,6 +14,7 @@ use sequential_storage::map::PostcardValue;
 use crate::at::response::{AT_RESPONSE_SIZE, FLASH_LOG_CHANNEL, FlashLog};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
+use crate::bg77::connection::{ConnectionEvent, ConnectionState, ConnectionSupervisor};
 use crate::bg77::modem::Modem;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager};
 use crate::bg77::mqtt::MqttClient;
@@ -29,11 +30,8 @@ use crate::{PUNCH_EXTRA_LEN, RawMutex};
 pub enum SendPunchCommand {
     /// Instructs the modem to synchronize its time with the network.
     SynchronizeTime,
-    /// Instructs the modem to connect to the MQTT broker.
-    ///
-    /// The `bool` parameter indicates whether to force a reconnection.
-    MqttConnect(bool, Instant),
-    NetworkConnect(Instant),
+    /// Event for the connection supervisor.
+    ConnectionSupervisorEvent(ConnectionEvent),
 }
 
 /// A channel for sending `Command`s to the `send_punch_event_handler`.
@@ -46,9 +44,9 @@ pub struct SendPunch<M: Modem + 'static, F: Flash + 'static> {
     modem: M,
     mqtt_client: MqttClient<M>,
     modem_manager: ModemManager<M>,
+    connection_supervisor: ConnectionSupervisor<M>,
     system_info: SystemInfo<M>,
     flash_mutex: &'static Mutex<RawMutex, Option<F>>,
-    last_reconnect: Option<Instant>,
     name: String<24>,
 }
 
@@ -122,9 +120,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             modem,
             mqtt_client,
             modem_manager,
+            connection_supervisor: ConnectionSupervisor::new(),
             system_info: SystemInfo::<M>::default(),
             flash_mutex,
-            last_reconnect: None,
             name,
         }
     }
@@ -169,11 +167,17 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             modem,
             mqtt_client,
             modem_manager,
+            connection_supervisor: ConnectionSupervisor::new(),
             system_info: SystemInfo::<M>::default(),
             flash_mutex,
-            last_reconnect: None,
             name: "test-send-punch".try_into().unwrap(),
         }
+    }
+
+    #[cfg(test)]
+    fn set_last_connect_attempt(&mut self) {
+        self.connection_supervisor
+            .set_last_connect_attempt(embassy_time::Instant::now());
     }
 
     /// Encodes and sends a message to the given MQTT topic.
@@ -208,6 +212,10 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         let mini_call_home = self.system_info.mini_call_home(&mut self.modem).await;
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
+
+        if self.connection_supervisor.state() != ConnectionState::Connected {
+            let _ = self.ensure_connected().await;
+        }
 
         let _ = FLASH_LOG_CHANNEL
             .try_send(FlashLog::MiniCallHome(mini_call_home))
@@ -250,10 +258,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         let firmware = self.modem_manager.configure(&mut self.modem).await?;
         info!("Modem firmware version: {}", firmware);
 
-        let res = self.modem_manager.network_registration(&mut self.modem, false).await;
-        if res.is_ok() {
-            let _ = self.mqtt_client.connect(&mut self.modem).await;
-        }
+        let _ = self.ensure_connected().await;
         Ok(())
     }
 
@@ -271,18 +276,24 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// Configures the MQTT client
     pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
         self.mqtt_client.update_reduced_config(mqtt_config);
-        self.mqtt_client.disconnect(&mut self.modem).await?;
+        let _ = self.ensure_connected().await;
         Ok(())
-    }
-
-    /// Connects to the MQTT broker.
-    async fn mqtt_connect(&mut self) -> crate::Result<()> {
-        self.mqtt_client.connect(&mut self.modem).await
     }
 
     /// Synchronizes the system time with the network time from the modem.
     async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
         SystemInfo::current_time(&mut self.modem, false).await
+    }
+
+    /// Ensures connection to the cellular network and the MQTT broker.
+    async fn ensure_connected(&mut self) -> crate::Result<()> {
+        self.connection_supervisor
+            .ensure_connected(
+                &mut self.modem,
+                &mut self.modem_manager,
+                &mut self.mqtt_client,
+            )
+            .await
     }
 
     /// Executes a `SendPunchCommand`.
@@ -292,29 +303,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// * `command`: The command to be executed.
     pub async fn execute_command(&mut self, command: SendPunchCommand) {
         match command {
-            SendPunchCommand::MqttConnect(force, _) => {
-                if !force
-                    && self
-                        .last_reconnect
-                        .is_some_and(|t| t + Duration::from_secs(30) > Instant::now())
-                {
-                    return;
-                }
-                let force_reattach = self.mqtt_client.last_successful_send()
-                    + Duration::from_secs(210) // TODO: infer from packet timeout
-                    < Instant::now();
-                if let Err(err) =
-                    self.modem_manager.network_registration(&mut self.modem, force_reattach).await
-                {
-                    error!("Network registration failed: {}", err);
-                    return;
-                };
-                let res = self.mqtt_connect().await;
-                self.last_reconnect = Some(Instant::now());
-                let _ = res.inspect_err(|err| error!("Error connecting to MQTT: {}", err));
-            }
-            SendPunchCommand::NetworkConnect(_) => {
-                //TODO: do something with it
+            SendPunchCommand::ConnectionSupervisorEvent(event) => {
+                self.connection_supervisor.handle_event(event);
+                let _ = self.ensure_connected().await;
             }
             SendPunchCommand::SynchronizeTime => {
                 let time = self.synchronize_time().await;
@@ -336,7 +327,10 @@ mod tests {
 
     use crate::{
         at::{fake_modem::FakeModem, response::PendingLoggedAtResponse},
-        bg77::{modem::Bg77, modem_manager::FakePin, system_info::BOOT_TIME},
+        bg77::{
+            connection::ConnectionState, modem::Bg77, modem_manager::FakePin,
+            system_info::BOOT_TIME,
+        },
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
         status::{BATTERY, TEMPERATURE},
     };
@@ -431,7 +425,10 @@ mod tests {
             mqtt_config,
             ModemConfig::default(),
         );
-        assert!(send_punch.last_reconnect.is_none());
+        assert_eq!(
+            send_punch.connection_supervisor.state(),
+            ConnectionState::Disconnected
+        );
 
         let expected_date = DateTime::parse_from_rfc3339("2025-11-24T01:40:34+01:00").unwrap();
         assert_eq!(
@@ -471,6 +468,7 @@ mod tests {
             mqtt_config,
             ModemConfig::default(),
         );
+        send_punch.set_last_connect_attempt();
 
         let mch = block_on(send_punch.send_mini_call_home()).unwrap();
         let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
