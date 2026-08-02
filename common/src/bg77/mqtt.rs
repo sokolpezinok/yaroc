@@ -376,9 +376,10 @@ impl<M: AtUartTrait> MqttClient<M> {
     pub async fn disconnect(&self, bg77: &mut M) -> Result<(), Error> {
         let cid = self.client_id;
         // TODO: query the current connection status, rather than calling a redundant command.
-        let (_, status) =
-            bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
-        if Ok(QmtconnStatus::Connected) == QmtconnStatus::try_from(status) {
+        let response = bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid));
+        if let Ok((_, status)) = response
+            && Ok(QmtconnStatus::Connected) == QmtconnStatus::try_from(status)
+        {
             let cmd = format!(50; "+QMTCLOSE={cid}")?;
             bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
             MQTT_CONNECTION_STATUS.sender().send(false);
