@@ -35,7 +35,6 @@ pub struct Args {
 #[derive(Subcommand, Debug, PartialEq)]
 pub enum Command {
     /// Export configuration from flash in TOML format
-    #[command(name = "export-config")]
     ExportConfig,
 
     /// Erase internal flash storage
@@ -43,14 +42,13 @@ pub enum Command {
     EraseFlash,
 
     /// Configure modem and device settings
-    #[command(alias = "config")]
     Configure {
         #[arg(short, long, default_value = "nrf52840.toml")]
         config: PathBuf,
     },
 
     /// Dump device logs
-    #[command(name = "dump-logs", alias = "dump")]
+    #[command(name = "dump-logs")]
     DumpLogs {
         #[command(subcommand)]
         log_type: LogType,
