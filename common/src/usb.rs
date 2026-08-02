@@ -247,12 +247,13 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                     let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
                     send_punch.update_device_config(device_config).await?;
                 }
-                info!("Device reconfigured");
+                // TODO: we should restart tasks to apply the settings, or restart the whole device?
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::EraseFlash => {
                 info!("Request to erase the flash");
                 let mut flash = self.lock_flash().await;
+                self.write_response(UsbResponse::PartialOk(8_000)).await?;
                 flash.erase().await?;
                 info!("Flash erased");
                 self.write_response(UsbResponse::Ok).await?;

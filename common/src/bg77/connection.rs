@@ -2,9 +2,9 @@ use core::marker::PhantomData;
 use embassy_time::{Duration, Instant};
 
 #[cfg(feature = "defmt")]
-use defmt::{Format, error, info, warn};
+use defmt::{Format, error, warn};
 #[cfg(not(feature = "defmt"))]
-use log::{error, info, warn};
+use log::{error, warn};
 
 use crate::at::uart::AtUartTrait;
 use crate::bg77::modem_manager::ModemManager;
@@ -164,7 +164,6 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.state = ConnectionState::ConnectingMqtt;
         match mqtt_client.connect(bg77).await {
             Ok(()) => {
-                info!("MQTT connected successfully");
                 self.on_connection_success();
                 Ok(())
             }
