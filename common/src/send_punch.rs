@@ -261,16 +261,12 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         &mut self,
         modem_config: ModemConfig,
     ) -> crate::Result<String<AT_RESPONSE_SIZE>> {
-        self.lock_flash().await.write(modem_config.clone()).await?;
-        info!("Modem config written to flash");
         self.modem_manager.update_config(modem_config);
         self.modem_manager.configure(&mut self.modem).await
     }
 
     /// Configures the MQTT client
     pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
-        self.lock_flash().await.write(mqtt_config.clone()).await?;
-        info!("MQTT config written to flash");
         self.mqtt_client.update_reduced_config(mqtt_config);
         self.mqtt_client.disconnect(&mut self.modem).await?;
         Ok(())

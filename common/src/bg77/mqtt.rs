@@ -130,6 +130,30 @@ pub struct MqttClient<M: AtUartTrait> {
     _phantom: PhantomData<M>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+/// Status of the +QMTCONN AT command.
+enum QmtconnStatus {
+    Initializing = 1,
+    Connecting = 2,
+    Connected = 3,
+    Disconnecting = 4,
+}
+
+impl TryFrom<u8> for QmtconnStatus {
+    type Error = Error;
+
+    fn try_from(val: u8) -> crate::Result<Self> {
+        match val {
+            1 => Ok(Self::Initializing),
+            2 => Ok(Self::Connecting),
+            3 => Ok(Self::Connected),
+            4 => Ok(Self::Disconnecting),
+            _ => Err(Error::ValueError),
+        }
+    }
+}
+
 impl<M: AtUartTrait> MqttClient<M> {
     /// Creates a new `MqttClient`.
     pub fn new(config: MqttClientConfig, client_id: u8) -> Self {
@@ -309,22 +333,19 @@ impl<M: AtUartTrait> MqttClient<M> {
 
         let (_, status) =
             bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
-        const MQTT_INITIALIZING: u8 = 1;
-        const MQTT_CONNECTING: u8 = 2;
-        const MQTT_CONNECTED: u8 = 3;
-        const MQTT_DISCONNECTING: u8 = 4;
+        let status = QmtconnStatus::try_from(status).map_err(|_| Error::ModemError)?;
         match status {
-            MQTT_CONNECTED => {
+            QmtconnStatus::Connected => {
                 info!("Already connected to MQTT");
                 MQTT_CONNECTION_STATUS.sender().send(true);
                 Ok(())
             }
-            MQTT_DISCONNECTING | MQTT_CONNECTING => {
+            QmtconnStatus::Disconnecting | QmtconnStatus::Connecting => {
                 info!("Connecting or disconnecting from MQTT in progress");
                 MQTT_CONNECTION_STATUS.sender().send(false);
                 Ok(())
             }
-            MQTT_INITIALIZING => {
+            QmtconnStatus::Initializing => {
                 info!("Will connect to MQTT");
                 let cmd = match &self.config.credentials {
                     Some((username, password)) => {
@@ -348,16 +369,20 @@ impl<M: AtUartTrait> MqttClient<M> {
                     Err(ConnectError::from_code(res, reason).into())
                 }
             }
-            _ => Err(Error::ModemError),
         }
     }
 
     /// Close the MQTT connection to the MQTT broker.
     pub async fn disconnect(&self, bg77: &mut M) -> Result<(), Error> {
         let cid = self.client_id;
-        let cmd = format!(50; "+QMTCLOSE={cid}")?;
-        bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
-        MQTT_CONNECTION_STATUS.sender().send(false);
+        // TODO: query the current connection status, rather than calling a redundant command.
+        let (_, status) =
+            bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
+        if Ok(QmtconnStatus::Connected) == QmtconnStatus::try_from(status) {
+            let cmd = format!(50; "+QMTCLOSE={cid}")?;
+            bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
+            MQTT_CONNECTION_STATUS.sender().send(false);
+        }
         Ok(())
     }
 
@@ -442,7 +467,8 @@ mod test {
             ("AT+CGATT?", "+CGATT: 1"),
             ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"wrong.broker.io\",1883"), // Connected to wrong broker
-            ("AT+QMTCLOSE=1", "+QMTCLOSE: 1,0"),                     // Disconnect from wrong broker
+            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
+            ("AT+QMTCLOSE=1", "+QMTCLOSE: 1,0"), // Disconnect from wrong broker
             ("AT+QMTCFG=\"timeout\",1,35,2,1", "+QMTCFG: 1,0"),
             ("AT+QMTCFG=\"keepalive\",1,70", "+QMTCFG: 1,0"),
             (
@@ -501,7 +527,10 @@ mod test {
     #[test]
     fn test_mqtt_disconnect_ok() {
         let _lock = block_on(CHANNEL_MUTEX.lock());
-        let mut bg77 = FakeModem::new(&[("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0")]);
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QMTCONN?", "+QMTCONN: 2,3"),
+            ("AT+QMTCLOSE=2", "+QMTCLOSE: 2,0"),
+        ]);
 
         let client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         assert_eq!(block_on(client.disconnect(&mut bg77)), Ok(()));
