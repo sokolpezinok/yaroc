@@ -175,6 +175,19 @@ impl<M: AtUartTrait> MqttClient<M> {
         self.config.update(reduced);
     }
 
+    /// Returns the time of the last successful sent message
+    pub fn last_successful_send(&mut self) -> Instant {
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
+            self.last_successful_send = self.last_successful_send.max(publish_time);
+        }
+        self.last_successful_send
+    }
+
+    /// Returns the configured value of packet timeout
+    pub fn packet_timeout(&self) -> Duration {
+        self.config.packet_timeout
+    }
+
     /// Handles Unsolicited Result Codes (URCs) from the modem.
     ///
     /// This function processes various URCs such as `QMTSTAT`, `QIURC`, `CEREG`, and `QMTPUB`.
@@ -305,13 +318,6 @@ impl<M: AtUartTrait> MqttClient<M> {
             MQTT_CONNECTION_STATUS.sender().send(false);
         }
         res
-    }
-
-    pub fn last_successful_send(&mut self) -> Instant {
-        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
-            self.last_successful_send = self.last_successful_send.max(publish_time);
-        }
-        self.last_successful_send
     }
 
     async fn connect_inner(&mut self, bg77: &mut M) -> crate::Result<()> {

@@ -10,8 +10,6 @@ use crate::at::uart::AtUartTrait;
 use crate::bg77::modem_manager::ModemManager;
 use crate::bg77::mqtt::{MQTT_CONNECTION_STATUS, MqttClient};
 
-// TODO: calculate this from MQTT packet timeout instead
-const RECONNECT_RATE_LIMIT: Duration = Duration::from_secs(70);
 const MAX_INACTIVE_FORCE_REATTACH: Duration = Duration::from_secs(210);
 const FORCE_REATTACH_RATE_LIMIT: Duration =
     Duration::from_secs(MAX_INACTIVE_FORCE_REATTACH.as_secs() * 2);
@@ -133,7 +131,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         let now = Instant::now();
         // Rate-limiting check for connection attempts
         if let Some(last_attempt) = self.last_connect_attempt
-            && last_attempt + RECONNECT_RATE_LIMIT > now
+            && last_attempt + mqtt_client.packet_timeout() * 2 > now
         {
             return Ok(());
         }
@@ -259,11 +257,12 @@ mod tests {
         let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
         let mut mqtt_client = MqttClient::<FakeModem>::new(MqttClientConfig::default(), 1);
 
-        // Since last_force_reattach is recent (within 420s), force_reattach evaluates to false
-        // and normal AT+CGATT? / AT+CGACT? queries are run instead of CGATT=0 / CGACT=0
+        supervisor.state = ConnectionState::MqttConnectionError;
+        supervisor.last_connect_attempt = None;
+
+        // Since state is MqttConnectionError and last_force_reattach is recent (within 420s),
+        // force_reattach evaluates to false, skipping cellular reattachment.
         let mut bg77 = FakeModem::new(&[
-            ("AT+CGATT?", "+CGATT: 1"),
-            ("AT+CGACT?", "+CGACT: 1,1"),
             ("AT+QMTOPEN?", ""),
             ("AT+QMTCFG=\"timeout\",1,35,2,1", ""),
             ("AT+QMTCFG=\"keepalive\",1,70", ""),
@@ -280,5 +279,20 @@ mod tests {
             block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
         assert!(res.is_ok());
         assert_eq!(supervisor.state(), ConnectionState::Connected);
+    }
+
+    #[test]
+    fn test_supervisor_reconnect_rate_limiting() {
+        let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut mqtt_client = MqttClient::<FakeModem>::new(MqttClientConfig::default(), 1);
+
+        supervisor.set_last_connect_attempt(Instant::now());
+        let mut bg77 = FakeModem::new(&[]);
+
+        let res =
+            block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
+        assert!(res.is_ok());
+        assert_eq!(supervisor.state(), ConnectionState::Disconnected);
     }
 }

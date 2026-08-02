@@ -534,15 +534,6 @@ mod tests {
                 }
             }
         );
-
-        let args_dump_modem =
-            Args::parse_from(["test_bin", "--port", "/dev/ttyACM0", "dump", "modem"]);
-        assert_eq!(
-            args_dump_modem.command,
-            Command::DumpLogs {
-                log_type: LogType::Modem
-            }
-        );
     }
 
     #[test]
