@@ -166,12 +166,12 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.state = ConnectionState::ConnectingMqtt;
         match mqtt_client.connect(bg77).await {
             Ok(()) => {
-                info!("ConnectionSupervisor: MQTT connected successfully");
+                info!("MQTT connected successfully");
                 self.on_connection_success();
                 Ok(())
             }
             Err(err) => {
-                error!("ConnectionSupervisor: MQTT connection failed: {}", err);
+                error!("MQTT connection failed: {}", err);
                 self.state = ConnectionState::MqttConnectionError;
                 Err(err)
             }

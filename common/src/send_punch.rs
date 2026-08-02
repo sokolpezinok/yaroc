@@ -199,6 +199,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         qos: MqttQos,
         msg_id: u16,
     ) -> Result<(), Error> {
+        // TODO: send message only if connected to the MQTT broker
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
