@@ -155,7 +155,14 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
         }
 
-        // Step 2: MQTT Connection
+        self.ensure_mqtt_connected(bg77, mqtt_client).await
+    }
+
+    pub async fn ensure_mqtt_connected(
+        &mut self,
+        bg77: &mut M,
+        mqtt_client: &mut MqttClient<M>,
+    ) -> crate::Result<()> {
         self.state = ConnectionState::ConnectingMqtt;
         match mqtt_client.connect(bg77).await {
             Ok(()) => {

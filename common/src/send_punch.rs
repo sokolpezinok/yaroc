@@ -276,7 +276,10 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     /// Configures the MQTT client
     pub async fn configure_mqtt(&mut self, mqtt_config: MqttConfig) -> crate::Result<()> {
         self.mqtt_client.update_reduced_config(mqtt_config);
-        let _ = self.ensure_connected().await;
+        let _ = self
+            .connection_supervisor
+            .ensure_mqtt_connected(&mut self.modem, &mut self.mqtt_client)
+            .await;
         Ok(())
     }
 
@@ -473,5 +476,47 @@ mod tests {
         let mch = block_on(send_punch.send_mini_call_home()).unwrap();
         let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
         assert_eq!(logged_item, FlashLog::MiniCallHome(mch));
+    }
+
+    #[test]
+    fn configure_mqtt_test() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let fake_modem = FakeModem::new(&[
+            ("AT+QMTOPEN?", ""),
+            ("AT+QMTCFG=\"timeout\",0,35,2,1", ""),
+            ("AT+QMTCFG=\"keepalive\",0,70", ""),
+            (
+                "AT+QMTCFG=\"will\",0,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
+                "",
+            ),
+            ("AT+QMTOPEN=0,\"new.broker.com\",1883", "+QMTOPEN: 0,0"),
+            ("AT+QMTCONN?", "+QMTCONN: 0,1"),
+            ("AT+QMTCONN=0,\"test_client\"", "+QMTCONN: 0,0,0"),
+        ]);
+        let modem = Bg77::new(fake_modem, FakePin {});
+        let mqtt_config = MqttClientConfig::default();
+        let mut send_punch = SendPunch::new_without_spawning(
+            modem,
+            &FAKE_FLASH_MUTEX,
+            mqtt_config,
+            ModemConfig::default(),
+        );
+
+        assert_eq!(
+            send_punch.connection_supervisor.state(),
+            ConnectionState::Disconnected
+        );
+
+        let new_config = MqttConfig {
+            url: String::try_from("new.broker.com").unwrap(),
+            ..Default::default()
+        };
+
+        let res = block_on(send_punch.configure_mqtt(new_config.clone()));
+        assert!(res.is_ok());
+        assert_eq!(
+            send_punch.connection_supervisor.state(),
+            ConnectionState::Connected
+        );
     }
 }
