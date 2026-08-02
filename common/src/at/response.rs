@@ -139,6 +139,7 @@ pub enum FromModem {
 
 impl FromModem {
     /// Returns `true` if the `FromModem` variant indicates a terminal response (Ok, Error, CmeError, Eof).
+    #[inline]
     pub fn terminal(&self) -> bool {
         matches!(
             self,
@@ -147,6 +148,7 @@ impl FromModem {
     }
 
     /// Returns `true` if the `FromModem` variant indicates an error (Error or CmeError).
+    #[inline]
     pub fn is_error(&self) -> bool {
         matches!(self, FromModem::Error | FromModem::CmeError(_))
     }
