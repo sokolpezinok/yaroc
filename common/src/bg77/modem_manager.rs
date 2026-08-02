@@ -260,7 +260,7 @@ mod test {
         let mut bg77 =
             FakeModem::new(&[("AT+CGATT?", "+CGATT: 0"), ("AT+CGATT=1", "+CME ERROR: 30")]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
-        assert_eq!(res, Err(Error::AtErrorResponse));
+        assert_eq!(res, Err(Error::CmeError(30)));
         assert!(bg77.all_done());
     }
 

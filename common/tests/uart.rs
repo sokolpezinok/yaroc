@@ -42,6 +42,7 @@ async fn main(spawner: Spawner) {
             ("ATI\r", "Fake modem\r\n+URC: 123\r\nOK"),
             ("AT+QMTOPEN=0,\"broker.com\",1883\r", "OK\r\n+QMTOPEN: 0,3"),
             ("AT+CBC\r", "ERROR"),
+            ("AT+CSQ\r", "+CME ERROR: 30"),
             ("AT+QCSQ\r", "Text"),
             ("AT+CEREG?\r", ""),
         ]),
@@ -82,6 +83,9 @@ async fn main(spawner: Spawner) {
 
     let error = at_uart.call_at_timeout("+CBC", Duration::from_millis(10), None).await.err();
     assert_eq!(error, Some(Error::AtErrorResponse));
+
+    let error = at_uart.call_at_timeout("+CSQ", Duration::from_millis(10), None).await.err();
+    assert_eq!(error, Some(Error::CmeError(30)));
 
     let error = at_uart.call_at_timeout("+QCSQ", Duration::from_millis(10), None).await.err();
     assert_eq!(error, Some(Error::ModemError));

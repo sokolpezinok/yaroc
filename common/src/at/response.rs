@@ -152,6 +152,16 @@ impl FromModem {
     pub fn is_error(&self) -> bool {
         matches!(self, FromModem::Error | FromModem::CmeError(_))
     }
+
+    pub fn into_error(&self) -> Option<Error> {
+        if self == &FromModem::Error {
+            Some(Error::AtErrorResponse)
+        } else if let FromModem::CmeError(code) = self {
+            Some(Error::CmeError(*code))
+        } else {
+            None
+        }
+    }
 }
 
 impl TryFrom<&str> for FromModem {
@@ -576,6 +586,12 @@ mod test_at_utils {
             FromModem::try_from("+QCSQ: \"NBIoT\",0,-131,55,-20")?,
             FromModem::CommandResponse(CommandResponse::new("+QCSQ: \"NBIoT\",0,-131,55,-20")?)
         );
+        assert_eq!(FromModem::Error.into_error(), Some(Error::AtErrorResponse));
+        assert_eq!(
+            FromModem::CmeError(30).into_error(),
+            Some(Error::CmeError(30))
+        );
+        assert_eq!(FromModem::Ok.into_error(), None);
         assert_eq!(
             FromModem::try_from("some raw line")?,
             FromModem::Line(String::from_str("some raw line").unwrap())

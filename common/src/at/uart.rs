@@ -362,7 +362,7 @@ where
         let lines = self.read_lines(timeout).await?;
         match lines.last() {
             Some(&FromModem::Ok) => Ok(lines),
-            Some(from_modem) if from_modem.is_error() => {
+            Some(from_modem) if let Some(err) = from_modem.into_error() => {
                 #[cfg(feature = "defmt")]
                 debug!(
                     "Failed response from modem: {} {=[?]}",
@@ -370,7 +370,7 @@ where
                     lines.as_slice()
                 );
                 Self::forward_failed_response(AtResponse::new(lines, command));
-                Err(Error::AtErrorResponse)
+                Err(err)
             }
             _ => {
                 #[cfg(feature = "defmt")]
@@ -440,6 +440,7 @@ where
         }
         let response = AtResponse::new(lines, command);
         if response.is_error() {
+            // TODO: we should take into account the expected values, not just is_error().
             Self::forward_failed_response(response.clone());
         }
         debug!(

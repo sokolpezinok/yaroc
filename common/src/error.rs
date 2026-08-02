@@ -38,6 +38,8 @@ pub enum Error {
     UartClosedError,
     #[error("AT 'ERROR' response")]
     AtErrorResponse,
+    #[error("CME error: {0}")]
+    CmeError(u16),
     #[error("Timeout error")]
     TimeoutError,
     #[error("String encoding error")]
