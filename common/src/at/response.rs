@@ -1,6 +1,10 @@
 use chrono::{DateTime, FixedOffset};
 use core::{fmt::Display, ops::Range, str::FromStr};
+#[cfg(feature = "defmt")]
+use defmt::error;
 use heapless::{String, Vec};
+#[cfg(not(feature = "defmt"))]
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
@@ -249,6 +253,16 @@ impl AtResponse {
         self.lines.as_slice()
     }
 
+    /// Forward failed AT response to the flash logger.
+    pub fn forward_failed_response(&self) {
+        let _ = FLASH_LOG_CHANNEL
+            .try_send(FlashLog::AtResponse(PendingLoggedAtResponse {
+                response: self.clone(),
+                instant: Instant::now(),
+            }))
+            .inspect_err(|_| error!("Failed to send AT response for logging, channel full"));
+    }
+
     /// Returns a response to the command.
     ///
     /// If `filter` is `None`, it returns the first one.
@@ -276,6 +290,7 @@ impl AtResponse {
                 }
             }
         }
+        self.forward_failed_response();
         Err(Error::ModemError)
     }
 

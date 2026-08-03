@@ -474,6 +474,7 @@ mod tests {
         );
         send_punch.set_last_connect_attempt();
 
+        FLASH_LOG_CHANNEL.clear();
         let mch = block_on(send_punch.send_mini_call_home()).unwrap();
         let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
         assert_eq!(logged_item, FlashLog::MiniCallHome(mch));

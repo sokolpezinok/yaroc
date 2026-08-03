@@ -5,12 +5,9 @@
 //! parses all incoming bytes and routes them to either a URC handler or the main channel for
 //! command-specific replies.
 
-use super::response::{
-    AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FLASH_LOG_CHANNEL, FlashLog, FromModem,
-    PendingLoggedAtResponse,
-};
+use super::response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, CommandResponse, FromModem};
 #[cfg(feature = "defmt")]
-use defmt::{debug, error};
+use defmt::debug;
 use embassy_executor::Spawner;
 use embassy_sync::channel::Channel;
 #[cfg(feature = "std")]
@@ -19,7 +16,7 @@ use embassy_time::{Duration, Instant, WithTimeout};
 use embedded_io_async::Write;
 use heapless::{Vec, format};
 #[cfg(not(feature = "defmt"))]
-use log::{debug, error};
+use log::debug;
 
 use crate::{RawMutex, error::Error};
 
@@ -337,16 +334,6 @@ where
         self.tx.write_all(message).await.map_err(From::from)
     }
 
-    /// Forward failed AT response to the logger.
-    fn forward_failed_response(response: AtResponse) {
-        let _ = FLASH_LOG_CHANNEL
-            .try_send(FlashLog::AtResponse(PendingLoggedAtResponse {
-                response,
-                instant: Instant::now(),
-            }))
-            .inspect_err(|_| error!("Failed to send AT response for logging, channel full"));
-    }
-
     /// Calls an AT command and waits for a reply, with a final `OK` or `ERROR`.
     ///
     /// # Arguments
@@ -369,7 +356,7 @@ where
                     command,
                     lines.as_slice()
                 );
-                Self::forward_failed_response(AtResponse::new(lines, command));
+                AtResponse::new(lines, command).forward_failed_response();
                 Err(err)
             }
             _ => {
@@ -379,7 +366,7 @@ where
                     command,
                     lines.as_slice()
                 );
-                Self::forward_failed_response(AtResponse::new(lines, command));
+                AtResponse::new(lines, command).forward_failed_response();
                 Err(Error::ModemError)
             }
         }
@@ -412,7 +399,7 @@ where
         }
         let response = AtResponse::new(lines, command_prefix);
         if response.is_error() {
-            Self::forward_failed_response(response.clone());
+            response.forward_failed_response();
         }
         debug!(
             "{}: {}, took {}ms",
@@ -440,8 +427,8 @@ where
         }
         let response = AtResponse::new(lines, command);
         if response.is_error() {
-            // TODO: we should take into account the expected values, not just is_error().
-            Self::forward_failed_response(response.clone());
+            // Note that this could lead to double logging, if the response is parsed.
+            response.forward_failed_response();
         }
         debug!(
             "{}: {}, took {}ms",
