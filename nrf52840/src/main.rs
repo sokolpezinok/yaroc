@@ -7,7 +7,7 @@ use embassy_time::{Duration, Timer};
 use heapless::format;
 use yaroc_common::{
     backoff::{BackoffRetries, PUNCH_QUEUE_SIZE},
-    bg77::{modem::Bg77, modem_manager::ModemConfig, mqtt::MQTT_CONNECTION_STATUS},
+    bg77::{connection::MQTT_CONNECTION_STATUS, modem::Bg77, modem_manager::ModemConfig},
     flash::Flash,
     mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,

@@ -4,7 +4,6 @@ use defmt::{error, info, warn};
 use embassy_sync::channel::Sender;
 use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::signal::Signal;
-use embassy_sync::watch::Watch;
 use embassy_time::{Duration, Instant};
 use heapless::format;
 #[cfg(not(feature = "defmt"))]
@@ -24,8 +23,6 @@ static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
     LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
-
-pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 #[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -201,7 +198,6 @@ impl<M: AtUartTrait> MqttClient<M> {
         match response.command() {
             "QMTSTAT" => {
                 warn!("MQTT disconnected");
-                MQTT_CONNECTION_STATUS.sender().send(false);
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                     error!("Channel full when sending MQTT disconnect notification");
                 }
@@ -313,14 +309,6 @@ impl<M: AtUartTrait> MqttClient<M> {
     /// This function first ensures network registration and then opens a TCP connection
     /// using `Self::open()`. Finally, it attempts to connect to the MQTT broker.
     pub async fn connect(&mut self, bg77: &mut M) -> crate::Result<()> {
-        let res = self.connect_inner(bg77).await;
-        if res.is_err() {
-            MQTT_CONNECTION_STATUS.sender().send(false);
-        }
-        res
-    }
-
-    async fn connect_inner(&mut self, bg77: &mut M) -> crate::Result<()> {
         let cid = self.client_id;
         self.open(bg77).await?;
 
@@ -330,12 +318,10 @@ impl<M: AtUartTrait> MqttClient<M> {
         match status {
             QmtconnStatus::Connected => {
                 info!("Already connected to MQTT");
-                MQTT_CONNECTION_STATUS.sender().send(true);
                 Ok(())
             }
             QmtconnStatus::Disconnecting | QmtconnStatus::Connecting => {
                 info!("Connecting or disconnecting from MQTT in progress");
-                MQTT_CONNECTION_STATUS.sender().send(false);
                 Ok(())
             }
             QmtconnStatus::Initializing => {
@@ -353,7 +339,6 @@ impl<M: AtUartTrait> MqttClient<M> {
 
                 if res == 0 && reason == 0 {
                     info!("Successfully connected to MQTT");
-                    MQTT_CONNECTION_STATUS.sender().send(true);
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
                         error!("Error while sending MQTT connect notification, channel full");
                     }
@@ -376,7 +361,6 @@ impl<M: AtUartTrait> MqttClient<M> {
         {
             let cmd = format!(50; "+QMTCLOSE={cid}")?;
             bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
-            MQTT_CONNECTION_STATUS.sender().send(false);
         }
         Ok(())
     }

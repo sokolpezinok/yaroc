@@ -128,9 +128,9 @@ impl<M: AtUartTrait> ModemManager<M> {
         match response.command() {
             "QIURC" => {
                 let message =
-                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate(1));
+                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate);
                 if command_sender.try_send(message).is_err() {
-                    error!("Channel full when sending network connect command");
+                    error!("Channel full when sending PDP deactivation event");
                 }
                 true
             }

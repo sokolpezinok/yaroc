@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use embassy_sync::watch::Watch;
 use embassy_time::{Duration, Instant};
 
 #[cfg(feature = "defmt")]
@@ -6,13 +7,16 @@ use defmt::{Format, error, warn};
 #[cfg(not(feature = "defmt"))]
 use log::{error, warn};
 
+use crate::RawMutex;
 use crate::at::uart::AtUartTrait;
 use crate::bg77::modem_manager::ModemManager;
-use crate::bg77::mqtt::{MQTT_CONNECTION_STATUS, MqttClient};
+use crate::bg77::mqtt::MqttClient;
 
 const MAX_INACTIVE_FORCE_REATTACH: Duration = Duration::from_secs(210);
 const FORCE_REATTACH_RATE_LIMIT: Duration =
     Duration::from_secs(MAX_INACTIVE_FORCE_REATTACH.as_secs() * 2);
+
+pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 /// Explicit state of the cellular and MQTT connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -56,7 +60,7 @@ pub enum ConnectionEvent {
     MqttDisconnect(u8),
     /// PDP context deactivation URC (+QIURC: "pdpdeact", <context_id>).
     /// Cellular network packet data connection is deactivated.
-    PdpDeactivate(u8),
+    PdpDeactivate,
     /// Periodic status/keepalive check tick.
     PeriodicCheck,
 }
@@ -96,18 +100,29 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.last_connect_attempt = Some(now);
     }
 
+    pub fn update_mqtt_status(connected: bool) {
+        MQTT_CONNECTION_STATUS.sender().send_if_modified(|cur| {
+            if cur.is_some_and(|v| v == connected) {
+                false
+            } else {
+                *cur = Some(connected);
+                true
+            }
+        });
+    }
+
     /// Processes an incoming connection event (e.g. URC notification or publish failure).
     pub fn handle_event(&mut self, event: ConnectionEvent) {
         match event {
             ConnectionEvent::MqttDisconnect(code) => {
                 warn!("MQTT disconnected (code: {})", code);
-                self.state = ConnectionState::Disconnected;
-                MQTT_CONNECTION_STATUS.sender().send(false);
+                self.state = ConnectionState::MqttConnectionError;
+                Self::update_mqtt_status(false);
             }
-            ConnectionEvent::PdpDeactivate(cid) => {
-                warn!("PDP deactivated (cid: {})", cid);
+            ConnectionEvent::PdpDeactivate => {
+                warn!("PDP deactivated");
                 self.state = ConnectionState::Disconnected;
-                MQTT_CONNECTION_STATUS.sender().send(false);
+                Self::update_mqtt_status(false);
             }
             ConnectionEvent::PeriodicCheck => {
                 // Check if the stored status matches the state of the modem
@@ -149,6 +164,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             if let Err(err) = modem_manager.network_registration(bg77, force_reattach).await {
                 error!("Cellular network registration failed: {}", err);
                 self.state = ConnectionState::CellularRegistrationFailed;
+                Self::update_mqtt_status(false);
                 return Err(err);
             }
         }
@@ -170,6 +186,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             Err(err) => {
                 error!("MQTT connection failed: {}", err);
                 self.state = ConnectionState::MqttConnectionError;
+                Self::update_mqtt_status(false);
                 Err(err)
             }
         }
@@ -177,7 +194,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
 
     fn on_connection_success(&mut self) {
         self.state = ConnectionState::Connected;
-        MQTT_CONNECTION_STATUS.sender().send(true);
+        Self::update_mqtt_status(true);
     }
 }
 
@@ -216,10 +233,10 @@ mod tests {
         let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
-        supervisor.handle_event(ConnectionEvent::PdpDeactivate(1));
+        supervisor.handle_event(ConnectionEvent::PdpDeactivate);
 
         supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
-        assert_eq!(supervisor.state(), ConnectionState::Disconnected);
+        assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
     }
 
     #[test]
@@ -293,5 +310,12 @@ mod tests {
             block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
         assert!(res.is_ok());
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
+    }
+
+    #[test]
+    fn test_update_mqtt_status() {
+        ConnectionSupervisor::<FakeModem>::update_mqtt_status(true);
+        let mut rx = MQTT_CONNECTION_STATUS.receiver().unwrap();
+        assert_eq!(rx.try_get(), Some(true));
     }
 }
