@@ -108,6 +108,14 @@ pub enum SignalStrength {
 }
 
 impl CellSignalInfo {
+    /// Formats SNR in centibells into (sign, whole, fraction) parts.
+    #[cfg(any(feature = "defmt", test))]
+    fn format_snr(snr_cb: i16) -> (&'static str, u16, u16) {
+        let sign = if snr_cb < 0 { "-" } else { "" };
+        let abs = snr_cb.unsigned_abs();
+        (sign, abs / 10, abs % 10)
+    }
+
     /// Returns the signal strength based on the network type and signal quality
     pub fn signal_strength(&self) -> SignalStrength {
         match self.network_type {
@@ -142,7 +150,8 @@ impl CellSignalInfo {
 impl defmt::Format for CellSignalInfo {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "RSRP {}", self.rsrp_dbm);
-        defmt::write!(fmt, " SNR {}.{}", self.snr_cb / 10, self.snr_cb % 10);
+        let (sign, whole, frac) = Self::format_snr(self.snr_cb);
+        defmt::write!(fmt, " SNR {}{}.{}", sign, whole, frac);
         let network_type = match self.network_type {
             CellNetworkType::NbIotEcl0 => "NB ECL0",
             CellNetworkType::NbIotEcl1 => "NB ECL1",
@@ -199,8 +208,25 @@ pub struct MiniCallHome {
 #[cfg(feature = "defmt")]
 impl defmt::Format for MiniCallHome {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{}", self.signal_info.unwrap_or_default());
-        // TODO: add more fields
+        if let Some(ts) = self.timestamp {
+            defmt::write!(
+                fmt,
+                "{:02}:{:02}:{:02}: ",
+                ts.hour(),
+                ts.minute(),
+                ts.second()
+            );
+        }
+        defmt::write!(fmt, "{}°C, ", self.cpu_temperature.unwrap_or_default());
+
+        if let Some(signal_info) = self.signal_info {
+            defmt::write!(fmt, "{}, ", signal_info);
+        }
+
+        if let Some(mv) = self.batt_mv {
+            let batt_p = voltage_to_percent(mv);
+            defmt::write!(fmt, "{}.{:02}V {}%", mv / 1000, (mv % 1000) / 10, batt_p);
+        }
     }
 }
 
@@ -423,5 +449,15 @@ mod test {
         assert_eq!(voltage_to_percent(4200), 100);
         assert_eq!(voltage_to_percent(3100), 0);
         assert_eq!(voltage_to_percent(3000), 0);
+    }
+
+    #[test]
+    fn test_format_snr() {
+        assert_eq!(CellSignalInfo::format_snr(45), ("", 4, 5));
+        assert_eq!(CellSignalInfo::format_snr(7), ("", 0, 7));
+        assert_eq!(CellSignalInfo::format_snr(0), ("", 0, 0));
+        assert_eq!(CellSignalInfo::format_snr(-5), ("-", 0, 5));
+        assert_eq!(CellSignalInfo::format_snr(-45), ("-", 4, 5));
+        assert_eq!(CellSignalInfo::format_snr(-130), ("-", 13, 0));
     }
 }
