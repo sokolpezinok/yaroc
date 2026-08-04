@@ -15,7 +15,6 @@ use embassy_time::{Duration, Ticker, WithTimeout};
 use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
-use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
 use yaroc_common::flash::Flash;
 use yaroc_common::{
     RawMutex,
@@ -57,7 +56,7 @@ impl Bg77SendPunchFn {
 
     /// Returns the timeout for sending a punch.
     pub fn send_punch_timeout(&self) -> Duration {
-        ACTIVATION_TIMEOUT + self.packet_timeout * 2
+        self.packet_timeout * 2
     }
 }
 
