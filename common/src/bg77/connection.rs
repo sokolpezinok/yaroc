@@ -115,7 +115,9 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         match event {
             ConnectionEvent::MqttDisconnect(code) => {
                 warn!("MQTT disconnected (code: {})", code);
-                self.state = ConnectionState::MqttConnectionError;
+                if self.state == ConnectionState::Connected {
+                    self.state = ConnectionState::MqttConnectionError;
+                }
                 Self::update_mqtt_status(false);
             }
             ConnectionEvent::PdpDeactivate => {
@@ -250,14 +252,22 @@ mod tests {
         let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
+        supervisor.state = ConnectionState::Connected;
+        supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
+        assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
+
         supervisor.handle_event(ConnectionEvent::PdpDeactivate);
         assert_eq!(
             supervisor.state(),
             ConnectionState::CellularRegistrationFailed
         );
 
+        // MqttDisconnect must not overwrite CellularRegistrationFailed
         supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
-        assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
+        assert_eq!(
+            supervisor.state(),
+            ConnectionState::CellularRegistrationFailed
+        );
     }
 
     #[test]
