@@ -51,6 +51,12 @@ async fn main(spawner: Spawner) {
     let mut at_uart = AtUart::new(&TX_PIPE, rx);
     at_uart.spawn_rx(&[urc_handler], spawner);
 
+    // Pre-populate MAIN_RX_CHANNEL with a stale leftover response to verify clearing
+    MAIN_RX_CHANNEL
+        .try_send(Ok(FromModem::try_from("+STALE: 999").unwrap()))
+        .unwrap();
+    assert_eq!(MAIN_RX_CHANNEL.len(), 1);
+
     let response = at_uart.call_at_timeout("I", Duration::from_millis(10), None).await.unwrap();
     assert_eq!(
         response.lines(),

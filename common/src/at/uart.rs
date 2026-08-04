@@ -322,6 +322,7 @@ where
     /// # Arguments
     /// * `command` - The AT command to write.
     async fn write_at(&mut self, command: &str) -> Result<(), Error> {
+        self.main_rx_channel.clear();
         let command = format!(AT_COMMAND_SIZE; "AT{command}\r")?;
         self.write(command.as_bytes()).await
     }
@@ -385,6 +386,7 @@ where
         timeout: Duration,
     ) -> crate::Result<AtResponse> {
         let start = Instant::now();
+        self.main_rx_channel.clear();
         self.write(msg).await?;
         // This is used for +QMTPUB, we have to read twice, because there's a pause. As a
         // technicality, the timeout is doubled this way, but it's never a problem.
