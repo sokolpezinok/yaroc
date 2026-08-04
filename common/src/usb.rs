@@ -216,7 +216,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                     flash.write(modem_config.clone()).await?;
                 }
                 info!("Modem config written to flash");
-                self.write_response(UsbResponse::PartialOk(150_000)).await?;
+                self.write_response(UsbResponse::PartialOk(155_000)).await?;
                 {
                     let mut send_punch = self.send_punch_mutex.lock().await;
                     let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
@@ -226,13 +226,12 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 self.write_response(UsbResponse::Ok).await?;
             }
             UsbCommand::ConfigureMqtt(mqtt_config) => {
-                let timeout_ms = mqtt_config.packet_timeout.as_millis() as u32;
                 {
                     let mut flash = self.lock_flash().await;
                     flash.write(mqtt_config.clone()).await?;
                 }
                 info!("MQTT config written to flash");
-                self.write_response(UsbResponse::PartialOk(timeout_ms)).await?;
+                self.write_response(UsbResponse::PartialOk(125_000)).await?;
                 {
                     let mut send_punch = self.send_punch_mutex.lock().await;
                     let send_punch = send_punch.as_mut().expect("SendPunch not initialized");
