@@ -7,6 +7,7 @@ on:
       - "nrf-v*"
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -83,6 +84,7 @@ jobs:
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
+        prerelease: ${{ contains(github.ref_name, 'beta') }}
         files: |
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.elf
