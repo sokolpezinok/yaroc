@@ -300,6 +300,17 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             .await
     }
 
+    /// Checks status of the cellular network and MQTT broker connection.
+    pub async fn check_connection(&mut self) {
+        self.connection_supervisor
+            .check_state(
+                &mut self.modem,
+                &mut self.modem_manager,
+                &mut self.mqtt_client,
+            )
+            .await
+    }
+
     /// Executes a `SendPunchCommand`.
     ///
     /// # Arguments

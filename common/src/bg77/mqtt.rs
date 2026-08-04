@@ -304,6 +304,16 @@ impl<M: AtUartTrait> MqttClient<M> {
         Ok(())
     }
 
+    /// Checks whether the MQTT client is connected
+    pub async fn is_connected(&self, bg77: &mut M) -> crate::Result<bool> {
+        let (_, status) = bg77
+            .call_at("+QMTCONN?", None)
+            .await?
+            .parse2::<u8, u8>([0, 1], Some(self.client_id))?;
+        let status = QmtconnStatus::try_from(status).map_err(|_| Error::ModemError)?;
+        Ok(status == QmtconnStatus::Connected)
+    }
+
     /// Connects to the MQTT broker.
     ///
     /// This function first ensures network registration and then opens a TCP connection

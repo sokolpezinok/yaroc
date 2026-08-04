@@ -3,9 +3,9 @@ use embassy_sync::watch::Watch;
 use embassy_time::{Duration, Instant};
 
 #[cfg(feature = "defmt")]
-use defmt::{Format, error, warn};
+use defmt::{Format, error, info, warn};
 #[cfg(not(feature = "defmt"))]
-use log::{error, warn};
+use log::{error, info, warn};
 
 use crate::RawMutex;
 use crate::at::uart::AtUartTrait;
@@ -29,7 +29,7 @@ pub enum ConnectionState {
     ConnectingCellular,
     /// Cellular registration failed
     CellularRegistrationFailed,
-    /// Opening TCP socket and establishing MQTT session (+QIOPEN / +QMTCONN).
+    /// Opening TCP socket and establishing MQTT session (+QMTOPEN / +QMTCONN).
     ConnectingMqtt,
     /// Connection to MQTT failed
     MqttConnectionError,
@@ -61,8 +61,6 @@ pub enum ConnectionEvent {
     /// PDP context deactivation URC (+QIURC: "pdpdeact", <context_id>).
     /// Cellular network packet data connection is deactivated.
     PdpDeactivate,
-    /// Periodic status/keepalive check tick.
-    PeriodicCheck,
 }
 
 /// Supervisor for managing cellular & MQTT connection states, reconnection events, and backoff retries.
@@ -100,6 +98,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.last_connect_attempt = Some(now);
     }
 
+    /// Update the MQTT connection status if changed
     pub fn update_mqtt_status(connected: bool) {
         MQTT_CONNECTION_STATUS.sender().send_if_modified(|cur| {
             if cur.is_some_and(|v| v == connected) {
@@ -121,11 +120,8 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
             ConnectionEvent::PdpDeactivate => {
                 warn!("PDP deactivated");
-                self.state = ConnectionState::Disconnected;
+                self.state = ConnectionState::CellularRegistrationFailed;
                 Self::update_mqtt_status(false);
-            }
-            ConnectionEvent::PeriodicCheck => {
-                // Check if the stored status matches the state of the modem
             }
         }
     }
@@ -172,6 +168,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.ensure_mqtt_connected(bg77, mqtt_client).await
     }
 
+    /// Ensures that the MQTT client is connected.
     pub async fn ensure_mqtt_connected(
         &mut self,
         bg77: &mut M,
@@ -189,6 +186,26 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
                 Self::update_mqtt_status(false);
                 Err(err)
             }
+        }
+    }
+
+    /// Check whether the stored state matches the modem state
+    pub async fn check_state(
+        &mut self,
+        bg77: &mut M,
+        modem_manager: &mut ModemManager<M>,
+        mqtt_client: &mut MqttClient<M>,
+    ) {
+        info!("Checking modem connection status");
+        if modem_manager.is_registered(bg77).await != Ok(true) {
+            self.state = ConnectionState::CellularRegistrationFailed;
+            Self::update_mqtt_status(false);
+        } else if mqtt_client.is_connected(bg77).await != Ok(true) {
+            self.state = ConnectionState::MqttConnectionError;
+            Self::update_mqtt_status(false);
+        } else {
+            self.state = ConnectionState::Connected;
+            Self::update_mqtt_status(true);
         }
     }
 
@@ -234,6 +251,10 @@ mod tests {
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
         supervisor.handle_event(ConnectionEvent::PdpDeactivate);
+        assert_eq!(
+            supervisor.state(),
+            ConnectionState::CellularRegistrationFailed
+        );
 
         supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
         assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
