@@ -197,7 +197,6 @@ impl<M: AtUartTrait> MqttClient<M> {
     ) -> bool {
         match response.command() {
             "QMTSTAT" => {
-                warn!("MQTT disconnected");
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                     error!("Channel full when sending MQTT disconnect notification");
                 }
