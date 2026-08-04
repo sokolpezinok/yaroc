@@ -194,7 +194,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         force_reattach: bool,
     ) -> crate::Result<()> {
         let att_state = if force_reattach {
-            warn!("Will reattach to network because of no messages being sent for a long time");
+            warn!("Will deattach from network because of no messages being sent for a long time");
             bg77.call_at("E0", None).await?;
             let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
@@ -205,6 +205,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         };
 
         if att_state != 1 {
+            info!("Will attach to network");
             let _response = bg77
                 .long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1))
                 .await?;
@@ -212,8 +213,6 @@ impl<M: AtUartTrait> ModemManager<M> {
             if !_response.lines().is_empty() {
                 debug!("Read {=[?]} after CGATT=1", _response.lines());
             }
-        } else {
-            info!("Already registered to network");
         }
 
         let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
@@ -224,6 +223,8 @@ impl<M: AtUartTrait> ModemManager<M> {
             if stat_retry != 1 {
                 return Err(Error::NetworkRegistrationError);
             }
+        } else if att_state == 1 {
+            info!("Already registered to network");
         }
 
         Ok(())
