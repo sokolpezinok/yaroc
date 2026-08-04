@@ -318,16 +318,14 @@ impl AtResponse {
     }
 
     /// Parses one value from the AT response into type `T`.
-    pub fn parse1<T: FromStr + Eq>(
-        self,
-        indices: [usize; 1],
-        filter: Option<T>,
-    ) -> Result<T, Error> {
-        let values = self.pick_values(indices, filter)?;
+    pub fn parse1<T: FromStr + Eq>(self, indices: [usize; 1]) -> Result<T, Error> {
+        let values = self.pick_values::<T, 1>(indices, None)?;
         Self::parse::<T>(&values[0])
     }
 
     /// Parses two values from the AT response into a tuple `(T, U)`.
+    ///
+    /// Optionally applies the filter on the first value.
     pub fn parse2<T: FromStr + Eq, U: FromStr>(
         self,
         indices: [usize; 2],
@@ -338,12 +336,14 @@ impl AtResponse {
     }
 
     /// Parses three values from the AT response into a tuple `(T, U, V)`.
+    ///
+    /// Applies the filter on the first value.
     pub fn parse3<T: FromStr + Eq, U: FromStr, V: FromStr>(
         self,
         indices: [usize; 3],
-        filter: Option<T>,
+        filter: T,
     ) -> Result<(T, U, V), Error> {
-        let values = self.pick_values(indices, filter)?;
+        let values = self.pick_values(indices, Some(filter))?;
         Ok((
             Self::parse::<T>(&values[0])?,
             Self::parse::<U>(&values[1])?,
@@ -362,21 +362,6 @@ impl AtResponse {
             Self::parse::<U>(&values[1])?,
             Self::parse::<V>(&values[2])?,
             Self::parse::<W>(&values[3])?,
-        ))
-    }
-
-    /// Parses five values from the AT response into a tuple `(T, U, V, W, X)`.
-    pub fn parse5<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr, X: FromStr>(
-        self,
-        indices: [usize; 5],
-    ) -> Result<(T, U, V, W, X), Error> {
-        let values = self.pick_values::<T, 5>(indices, None)?;
-        Ok((
-            Self::parse::<T>(&values[0])?,
-            Self::parse::<U>(&values[1])?,
-            Self::parse::<V>(&values[2])?,
-            Self::parse::<W>(&values[3])?,
-            Self::parse::<X>(&values[4])?,
         ))
     }
 }

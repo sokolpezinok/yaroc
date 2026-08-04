@@ -80,7 +80,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
 
     /// Gets modem time from the QLTS command
     async fn get_modem_time(bg77: &mut M) -> crate::Result<DateTime<FixedOffset>> {
-        let modem_clock = bg77.call_at("+QLTS=2", None).await?.parse1::<String<25>>([0], None)?;
+        let modem_clock = bg77.call_at("+QLTS=2", None).await?.parse1::<String<25>>([0])?;
         Self::parse_qlts(&modem_clock)
     }
 
@@ -117,10 +117,8 @@ impl<M: AtUartTrait> SystemInfo<M> {
             response.parse4::<String<10>, i16, u8, i8>([0, 2, 3, 4])?;
         let snr_cb = i16::from(snr_mult) * 2 - 200;
         let network_type = if network == "NBIoT" {
-            let response = bg77
-                .call_at("+QCFG=\"celevel\"", None)
-                .await
-                .and_then(|r| r.parse1::<u8>([1], None));
+            let response =
+                bg77.call_at("+QCFG=\"celevel\"", None).await.and_then(|r| r.parse1::<u8>([1]));
             match response {
                 Ok(0) => CellNetworkType::NbIotEcl0,
                 Ok(1) => CellNetworkType::NbIotEcl1,

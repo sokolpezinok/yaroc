@@ -255,7 +255,7 @@ impl<M: AtUartTrait> MqttClient<M> {
         let opened = bg77
             .call_at("+QMTOPEN?", None)
             .await?
-            .parse3::<u8, heapless::String<40>, u16>([0, 1, 2], Some(cid));
+            .parse3::<u8, heapless::String<40>, u16>([0, 1, 2], cid);
         if let Ok((client_id, url, port)) = opened
             && client_id == cid
         {
@@ -344,7 +344,7 @@ impl<M: AtUartTrait> MqttClient<M> {
                 let (_client_id, res, reason) = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
-                    .parse3::<u8, u8, u8>([0, 1, 2], Some(cid))?;
+                    .parse3::<u8, u8, u8>([0, 1, 2], cid)?;
 
                 if res == 0 && reason == 0 {
                     info!("Successfully connected to MQTT");
