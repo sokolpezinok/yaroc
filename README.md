@@ -15,12 +15,12 @@ It's as if [ROC](https://roc.olresultat.se) and [jSh.radio](http://radio.jsh.de)
 
 * **Very low latency, very low bandwidth**: Wi-Fi or LTE/LTE-M can achieve latencies as low as 100–200ms. Bandwidth usage under 1 MB per day allows the use of cheap IoT SIM cards. Uses Protobuf for data serialization to minimize packet size.
 * **Support for multiple physical layers**: NB-IoT, LTE-M, Radio (LoRa), LTE, Wi-Fi, LAN. Also supports BLE and USB for short-range communication.
-* **Radio mesh**: Seamless integration with **Meshtastic** allows for LoRa-based mesh networks. Punches can be hopped across multiple nodes to reach a gateway, which can then bridge the data to the internet or directly to orienteering software (MeOs, etc.).
+* **Radio mesh**: Seamless integration with **Meshtastic** allows for LoRa-based mesh networks. Data travels across multiple nodes to reach a gateway, which can then bridge the data to the internet or directly to orienteering software (MeOs, etc.).
 * **Simple integration via USB** recognizable by most orienteering software. Plug an ethernet cable into a Raspberry Pi in the finish area, connect it via USB cable to a computer and you are done!
-* **Broad hardware compatibility**: Runs on everything from Linux machines (Raspberry Pi, PC) to specialized microcontrollers like the nRF52840.
+* **Broad hardware compatibility**: Runs on everything from Linux machines (Raspberry Pi, PC), Windows, to specialized microcontrollers like the nRF52840.
 * **Reliability**: Features built-in retries, exponential backoff, and buffering to ensure no punch is lost during network outages.
 * **Multiple output protocols**: Integration with ROC, SIRAP, MQTT, and MeOS (MOP) protocols.
-* **Generator of fake SportIdent punches**: Very useful for load testing of the system, for example to determine the right LoRa settings respecting duty cycle limits.
+* **Generator of fake SportIdent punches**: Very useful for basic testing or for load testing.
 * **Open-source**
 
 
@@ -66,7 +66,7 @@ pip install --pre yaroc
 # Installation on RAK devices
 
 ## RAK Link.One NB-IoT/LTE-M
-Setting up the device is currently quite complex, requiring a working Rust toolchain and a debug probe. A simpler method to flash the firmware without compiling or using a debug probe will be available by late 2026.
+Setting up the device currently requires a debug probe. A simpler method to flash the firmware without a debug probe will be available by late 2026.
 
 1. Connect the [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) to the Link.One (nRF52840) MCU, following [the official docs](https://docs.rakwireless.com/product-categories/accessories/rakdap1/quickstart/). The probe is used to flash the firmware and view logs. Flashing directly over USB is not currently supported, but is in development.
 
@@ -74,17 +74,7 @@ Setting up the device is currently quite complex, requiring a working Rust toolc
 > **Using a Raspberry Pi Debug Probe**
 > If you do not have a RAKDAP1, you can use the Raspberry Pi Debug Probe, too. More information will be added later.
 
-2. Install Rust, `rustup`, and `cargo` if you haven't already:
-   - **Linux**:
-     ```sh
-     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-     ```
-   - **Windows**: Install rustup and Visual Studio build tools using winget
-     ```powershell
-     winget install rustup
-     winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-     ```
-3. Install `probe-rs` to communicate with the debug probe. We recommend installing it using the official script:
+2. Install `probe-rs` to communicate with the debug probe. We recommend installing it using the official script:
    - **Linux**:
      ```sh
      curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
@@ -102,21 +92,23 @@ Setting up the device is currently quite complex, requiring a working Rust toolc
    ```sh
    cargo install probe-rs-tools --locked
    ```
-4. Set up the Rust toolchain target for the nRF52840 (ARM Cortex-M4F):
+
+3. Download the pre-compiled firmware Intel HEX format (`yaroc-nrf52840-X.Y.Z.hex`) and ELF file (`yaroc-nrf52840-X.Y.Z.elf`) from [GitHub Releases](https://github.com/sokolpezinok/yaroc/releases).
+
+> [!NOTE]
+> Substitute `0.1.2` in the commands below with the actual version.
+
+4. Flash the firmware to the device:
    ```sh
-   rustup target add thumbv7em-none-eabihf
-   ```
-5. Clone the repository (if you haven't already), and flash the firmware using Cargo from the `nrf52840` directory:
-   ```sh
-   cd nrf52840
-   DEFMT_LOG=debug cargo run --release
+   probe-rs download --verify --binary-format hex --chip nRF52840_xxAA yaroc-nrf52840-0.1.2.hex
    ```
 
-   Alternatively, you can download the pre-compiled firmware in Intel HEX format (`yaroc-nrf52840-0.1.0.hex`) from the GitHub Actions run artifacts or GitHub Releases, and flash it directly using:
+5. View logs from the MCU (attach to running target):
    ```sh
-   probe-rs download --chip nRF52840_xxAA --binary-format hex yaroc-nrf52840-0.1.0.hex
+   probe-rs attach yaroc-nrf52840-0.1.2.elf --chip nRF52840_xxAA
    ```
-6. This will compile, flash, and run the firmware (or flash it directly), displaying the output logs in your terminal. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
+
+6. Please refer to the [Send punches using RAK Wireless Link.One](#send-punches-using-rak-wireless-linkone) section to configure the device's network and MQTT parameters.
 
 ## LoRa / Meshtastic
 > [!NOTE]
@@ -399,9 +391,15 @@ Note: currently the development instructions are Linux-only. If there's interest
 
 Developing any of the Rust crates, Python bindings, or embedded firmware requires a working Rust toolchain. You can install it via [rustup](https://rustup.rs/):
 
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+   - **Linux**:
+     ```sh
+     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+     ```
+   - **Windows**: Install rustup and Visual Studio build tools using winget
+     ```powershell
+     winget install rustup
+     winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+     ```
 
 The workspace defines its compiler toolchain settings in `rust-toolchain.toml` at the root level, which will be selected automatically by Cargo.
 
@@ -418,6 +416,11 @@ You can develop, build, and test them using standard `cargo` commands from the w
 ## nRF52840 Embedded Firmware
 
 Development for the `nrf52840` embedded firmware requires specific hardware and flashing tools.
+
+Set up the Rust toolchain target for the nRF52840 (ARM Cortex-M4F):
+```sh
+rustup target add thumbv7em-none-eabihf
+```
 
 ### Hardware Requirements
 A [RAKDAP1 debug probe](https://store.rakwireless.com/products/daplink-tool) (or another compatible SWD debug probe) connected to the target board.
