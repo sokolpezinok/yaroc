@@ -69,20 +69,10 @@ pub async fn connect_and_loop(host: String, mesh_packet_tx: UnboundedSender<Serv
 mod tests {
     use super::*;
     use crate::meshtastic::connection::MeshtasticEvent;
+    use crate::test_utils::encode_from_radio;
     use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
-    use prost::Message;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
-
-    fn encode_from_radio(msg: FromRadio) -> Vec<u8> {
-        let mut protobuf_bytes = Vec::new();
-        msg.encode(&mut protobuf_bytes).unwrap();
-        let size = protobuf_bytes.len() as u16;
-        let size_bytes = size.to_be_bytes();
-        let mut header = vec![0x94, 0xc3, size_bytes[0], size_bytes[1]];
-        header.extend_from_slice(&protobuf_bytes);
-        header
-    }
 
     #[tokio::test]
     async fn test_meshtastic_tcp_connection() {

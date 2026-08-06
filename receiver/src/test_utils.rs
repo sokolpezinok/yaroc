@@ -1,6 +1,7 @@
 use meshtastic::protobufs::{
-    Data, MeshPacket, PortNum, ServiceEnvelope, mesh_packet::PayloadVariant,
+    Data, FromRadio, MeshPacket, PortNum, ServiceEnvelope, mesh_packet::PayloadVariant,
 };
+use prost::Message;
 use std::fmt::Display;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
@@ -8,6 +9,17 @@ use crate::meshtastic::connection::MeshtasticEvent;
 use crate::si_uart::SportIdentMessage;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::UsbSerialTrait;
+
+/// Encodes a `FromRadio` protobuf message into a Meshtastic stream packet with magic header `[0x94, 0xc3]`.
+pub fn encode_from_radio(msg: FromRadio) -> Vec<u8> {
+    let mut protobuf_bytes = Vec::new();
+    msg.encode(&mut protobuf_bytes).unwrap();
+    let size = protobuf_bytes.len() as u16;
+    let size_bytes = size.to_be_bytes();
+    let mut header = vec![0x94, 0xc3, size_bytes[0], size_bytes[1]];
+    header.extend_from_slice(&protobuf_bytes);
+    header
+}
 
 pub struct FakeMeshtasticSerial {
     mac_address: MacAddress,

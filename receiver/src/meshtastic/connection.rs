@@ -123,3 +123,103 @@ impl MeshtasticConnection {
         let _ = self.stream_api.disconnect().await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::encode_from_radio;
+    use meshtastic::{
+        api::StreamHandle,
+        protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio},
+    };
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn test_meshtastic_connection_chunked_bytes() {
+        let (client_stream, mut server_stream) = tokio::io::duplex(1024);
+
+        tokio::spawn(async move {
+            let my_info = MyNodeInfo {
+                my_node_num: 100,
+                ..Default::default()
+            };
+            let from_radio_info = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_info)),
+                ..Default::default()
+            };
+            let buf = encode_from_radio(from_radio_info);
+
+            // Write payload byte-by-byte to test chunked AsyncRead framing
+            for byte in buf {
+                server_stream.write_all(&[byte]).await.unwrap();
+                tokio::task::yield_now().await;
+            }
+
+            let mesh_packet = MeshPacket {
+                from: 200,
+                to: 100,
+                ..Default::default()
+            };
+            let from_radio_packet = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::Packet(mesh_packet)),
+                ..Default::default()
+            };
+            let buf2 = encode_from_radio(from_radio_packet);
+
+            // Write second packet in small 2-byte chunks
+            for chunk in buf2.chunks(2) {
+                server_stream.write_all(chunk).await.unwrap();
+                tokio::task::yield_now().await;
+            }
+        });
+
+        let stream_handle = StreamHandle::from_stream(client_stream);
+        let mut connection =
+            MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2))
+                .await
+                .unwrap();
+
+        assert_eq!(connection.mac_address, MacAddress::Meshtastic(100));
+
+        let event = connection.next_message().await;
+        let MeshtasticEvent::MeshPacket(packet) = event else {
+            panic!("Expected MeshPacket");
+        };
+        assert_eq!(packet.from, 200);
+        assert_eq!(packet.to, 100);
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_connection_closed_before_config() {
+        let (client_stream, server_stream) = tokio::io::duplex(1024);
+        drop(server_stream); // Close stream immediately
+
+        let stream_handle = StreamHandle::from_stream(client_stream);
+        let res = MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2)).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_meshtastic_connection_invalid_handshake() {
+        let (client_stream, mut server_stream) = tokio::io::duplex(1024);
+
+        tokio::spawn(async move {
+            // Send MeshPacket instead of MyNodeInfo handshake
+            let mesh_packet = MeshPacket {
+                from: 43,
+                to: 42,
+                ..Default::default()
+            };
+            let from_radio_packet = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::Packet(mesh_packet)),
+                ..Default::default()
+            };
+            let buf = encode_from_radio(from_radio_packet);
+            server_stream.write_all(&buf).await.unwrap();
+        });
+
+        let stream_handle = StreamHandle::from_stream(client_stream);
+        let res = MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2)).await;
+        assert!(res.is_err());
+    }
+}
