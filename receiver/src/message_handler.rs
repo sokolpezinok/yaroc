@@ -522,11 +522,10 @@ mod tests {
         let (mut handler, _punch_tx, _mesh_tx, _mqtt_tx) =
             MessageHandler::new_for_test(Duration::from_secs(60));
 
-        let event = timeout(Duration::from_secs(61), handler.next_event())
-            .await
-            .expect("next_event timed out")
-            .expect("next_event failed");
+        let task = tokio::spawn(async move { handler.next_event().await });
+        tokio::time::advance(Duration::from_secs(60)).await;
 
+        let event = task.await.unwrap().expect("next_event failed");
         match event {
             Event::NodeInfos(_) => {}
             _ => panic!("Expected Event::NodeInfos"),

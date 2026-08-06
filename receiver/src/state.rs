@@ -592,10 +592,7 @@ impl FleetState {
     pub async fn publish_node_infos(&mut self) -> Vec<NodeInfo> {
         let next_node_infos = self.last_node_info_push + self.node_infos_interval;
         tokio::select! {
-            _ = tokio::time::sleep_until(next_node_infos) => {}
-            _ = self.new_node.notified() => {
-                info!("New node discovered!");
-            }
+            biased;
             Some(expired) = self.meshtastic_timeouts.next(), if !self.meshtastic_timeouts.is_empty() => {
                 let mac = expired.into_inner();
                 if let Some(status) = self.meshtastic_statuses.get_mut(&mac) {
@@ -603,6 +600,10 @@ impl FleetState {
                     status.timeout_key = None;
                     info!("Meshtastic node {} timed out", status.name);
                 }
+            }
+            _ = tokio::time::sleep_until(next_node_infos) => {}
+            _ = self.new_node.notified() => {
+                info!("New node discovered!");
             }
         }
         self.last_node_info_push = Instant::now();
