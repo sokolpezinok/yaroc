@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -112,3 +113,61 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
         assert client.send_punch.call_count == 2
         client.send_punch.assert_any_await(punch_log1)
         client.send_punch.assert_any_await(punch_log2)
+
+    async def test_client_group_loop_cancellation(self):
+        client1 = MockClient("Client1")
+        client2 = MockClient("Client2")
+
+        async def endless_loop():
+            await asyncio.sleep(100)
+
+        client1.loop = endless_loop
+        client2.loop = endless_loop
+
+        task_cancelled = False
+
+        async def external_task():
+            nonlocal task_cancelled
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                task_cancelled = True
+                raise
+
+        ext_task = asyncio.create_task(external_task())
+        group = ClientGroup([client1, client2], [ext_task])
+
+        group_task = asyncio.create_task(group.loop())
+        await asyncio.sleep(0.01)
+        group_task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await group_task
+        assert task_cancelled
+
+    async def test_client_group_loop_isolation(self):
+        client1 = MockClient("Client1")
+        client2 = MockClient("Client2")
+
+        client2_cancelled = False
+
+        async def failing_loop():
+            raise RuntimeError("Client 1 failed")
+
+        async def working_loop():
+            nonlocal client2_cancelled
+            try:
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                client2_cancelled = True
+                raise
+
+        client1.loop = failing_loop
+        client2.loop = working_loop
+
+        group = ClientGroup([client1, client2], [])
+        group_task = asyncio.create_task(group.loop())
+        await asyncio.sleep(0.05)
+        # Client 2 should still be running despite Client 1 failing
+        assert not client2_cancelled
+        assert not group_task.done()
+        group_task.cancel()
