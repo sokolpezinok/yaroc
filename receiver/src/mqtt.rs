@@ -280,8 +280,6 @@ impl MqttReceiver {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
 
     #[test]
     fn test_new() {
@@ -381,96 +379,38 @@ mod test {
         );
     }
 
-    /// Encodes an MQTT v3.1.1 (v3) QoS 0 PUBLISH packet with the given topic and payload.
-    /// Used by the mock broker to send simulated messages to the client.
-    fn encode_publish(topic: &str, payload: &[u8]) -> Vec<u8> {
-        let topic_bytes = topic.as_bytes();
-        let topic_len = topic_bytes.len();
-
-        let var_header_len = 2 + topic_len;
-        let remaining_len = var_header_len + payload.len();
-
-        let mut packet = Vec::new();
-        packet.push(0x30); // Control packet type PUBLISH, QoS 0
-
-        // Encode remaining length (variable length byte representation)
-        let mut val = remaining_len;
-        loop {
-            let mut byte = (val & 127) as u8;
-            val /= 128;
-            if val > 0 {
-                byte |= 128;
-            }
-            packet.push(byte);
-            if val == 0 {
-                break;
-            }
-        }
-
-        packet.push((topic_len >> 8) as u8);
-        packet.push((topic_len & 0xFF) as u8);
-        packet.extend_from_slice(topic_bytes);
-        packet.extend_from_slice(payload);
-        packet
-    }
-
-    async fn run_mock_broker(
-        listener: TcpListener,
-        topic: &str,
-        payload: &[u8],
-        rx: tokio::sync::oneshot::Receiver<()>,
-    ) {
-        let (mut socket, _) = listener.accept().await.unwrap();
-
-        // 1. Read CONNECT packet
-        let mut buf = [0u8; 1024];
-        let _raw = socket.read(&mut buf).await.unwrap();
-
-        // 2. Write CONNACK packet
-        socket.write_all(&[0x20, 0x02, 0x00, 0x00]).await.unwrap();
-
-        // 3. Read SUBSCRIBE packet
-        let _raw = socket.read(&mut buf).await.unwrap();
-
-        // 4. Write PUBLISH packet
-        let publish_packet = encode_publish(topic, payload);
-        socket.write_all(&publish_packet).await.unwrap();
-
-        let _ = rx.await;
-    }
-
     #[tokio::test]
-    async fn test_next_message_success() {
-        // Bind TcpListener to a random port
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-
-        // Spawn a background task representing the mock MQTT broker
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let topic = "yar/deadbeef9876/status";
-        let payload = b"cellular status payload";
-        let broker_handle = tokio::spawn(run_mock_broker(listener, topic, payload, rx));
-
+    async fn test_process_mqtt_event_publish() {
         let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let config = MqttConfig {
-            url: "127.0.0.1".to_string(),
-            port,
-            ..Default::default()
-        };
-        let mut receiver = MqttReceiver::new(config, macs.iter());
+        let mut receiver = MqttReceiver::new(Default::default(), macs.iter());
         let exact_time = Local::now();
         receiver.test_now = Some(exact_time);
 
-        // Get the next message with a timeout to prevent hanging
-        let result = tokio::time::timeout(Duration::from_secs(1), receiver.next_message())
-            .await
-            .expect("MQTT next_message() test timed out");
-        assert_eq!(
-            result.unwrap(),
-            Message::CellularStatus(macs[0], exact_time, b"cellular status payload".into())
-        );
+        let publish_event = Event::Incoming(Packet::Publish(Publish {
+            dup: false,
+            qos: QoS::AtMostOnce,
+            retain: false,
+            topic: "yar/deadbeef9876/status".to_string(),
+            pkid: 0,
+            payload: b"cellular status payload".to_vec().into(),
+        }));
 
-        let _ = tx.send(());
-        broker_handle.await.unwrap();
+        let result = receiver.process_mqtt_event(publish_event).await;
+        assert_eq!(
+            result.unwrap().unwrap(),
+            Message::CellularStatus(macs[0], exact_time, b"cellular status payload".to_vec())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_mqtt_event_disconnect_and_ignored() {
+        let macs = [MacAddress::Full(0xdeadbeef9876)];
+        let mut receiver = MqttReceiver::new(Default::default(), macs.iter());
+
+        let disconnect_event = Event::Incoming(Packet::Disconnect);
+        assert!(receiver.process_mqtt_event(disconnect_event).await.is_none());
+
+        let ping_event = Event::Incoming(Packet::PingResp);
+        assert!(receiver.process_mqtt_event(ping_event).await.is_none());
     }
 }
