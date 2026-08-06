@@ -6,8 +6,9 @@ use log::{debug, error, info, trace, warn};
 use meshtastic::Message as _;
 use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Notify;
+use tokio::time::Instant;
 use tokio_util::time::DelayQueue;
 use tokio_util::time::delay_queue::Key;
 
@@ -591,7 +592,7 @@ impl FleetState {
     pub async fn publish_node_infos(&mut self) -> Vec<NodeInfo> {
         let next_node_infos = self.last_node_info_push + self.node_infos_interval;
         tokio::select! {
-            _ = tokio::time::sleep_until(next_node_infos.into()) => {}
+            _ = tokio::time::sleep_until(next_node_infos) => {}
             _ = self.new_node.notified() => {
                 info!("New node discovered!");
             }
@@ -1023,10 +1024,10 @@ mod test_meshtastic {
         ));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_meshtastic_timeout() {
         let mut state = FleetState {
-            meshtastic_timeout: Duration::from_millis(100),
+            meshtastic_timeout: Duration::from_secs(600),
             ..Default::default()
         };
         let host_info = HostInfo::new("msh_node", MacAddress::default());
@@ -1041,8 +1042,8 @@ mod test_meshtastic {
         // Consume the new_node notification
         state.publish_node_infos().await;
 
-        // Wait for the timeout to expire
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        // Advance Tokio's virtual clock by the timeout duration (plus margin)
+        tokio::time::advance(Duration::from_secs(601)).await;
 
         // publish_node_infos will process the timeout
         let node_infos = state.publish_node_infos().await;

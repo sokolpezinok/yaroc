@@ -517,13 +517,12 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_message_handler_node_infos_interval() {
-        // Use a short interval to test the timeout branch
         let (mut handler, _punch_tx, _mesh_tx, _mqtt_tx) =
-            MessageHandler::new_for_test(Duration::from_millis(50));
+            MessageHandler::new_for_test(Duration::from_secs(60));
 
-        let event = timeout(Duration::from_secs(1), handler.next_event())
+        let event = timeout(Duration::from_secs(61), handler.next_event())
             .await
             .expect("next_event timed out")
             .expect("next_event failed");
