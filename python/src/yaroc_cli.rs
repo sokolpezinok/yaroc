@@ -325,6 +325,12 @@ fn configure<S: Read + Write + SetTimeout>(config: PathBuf, mut serial: S) {
 }
 
 #[pyfunction]
+pub fn yaroc_nrf() {
+    eprintln!("WARNING: `yaroc-nrf` is deprecated. Please use `yaroc` instead.");
+    yaroc_cli();
+}
+
+#[pyfunction]
 pub fn yaroc_cli() {
     let args = Args::parse_from(std::env::args().skip(1));
     let _ = Python::attach(|py| {
