@@ -39,6 +39,39 @@ There will be a much more detailed and separate "Hardware recommendation" sectio
 * **Online Controls (LTE/USB Modem or NB-IoT HAT), running `send-punch`**: [Raspberry Pi](https://rpishop.cz/raspberry-pi-2b/5584-recyberry-raspberry-pi-2-model-b-1gb-ram-v11.html) with a USB modem (e.g. Huawei E3372) or a [SIM7020 NB-IoT](https://www.waveshare.com/sim7020e-nb-iot-hat.htm) modem. SportIdent USB SRR dongle in the USB port. We recommend using Raspbery Pi Model 2 (doesn't have Wi-Fi) or Model 3 (has Wi-Fi). Higher models 4 and 5 are unnecessarily power-hungry.
 * **Radio Controls (LoRa / radio), running Meshtastic**: [RAK4631 + RAK19007](https://store.rakwireless.com/products/wisblock-starter-kit?variant=41786685096134) (EU868 variant) inside a [Unify Enclosure 100x75x38mm with solar panel](https://store.rakwireless.com/products/unify-enclosure-ip65-100x75x38-solar?variant=42533523587270), with a SportIdent SRR sensor connected to the RAK19007 base board UART pins. Optionally, include a [RAK12500 GPS module](https://store.rakwireless.com/products/rak12500-wisblock-gnss-location-module) for LoRa signal testing before the competition.
 
+
+# Status Matrix
+
+The tables below summarize the maturity and field-testing status of different components, input sources, and output clients across the YAROC ecosystem.
+
+### Core Executables & Firmware
+
+| Component / Platform | Status | Notes |
+| :--- | :---: | :--- |
+| **`send-punch` (Raspberry Pi)** | 🟢 Stable | Highly tested in the field over 2+ seasons with SIM7020 & SRR dongles. Tested less with USB modems, but they work, too. |
+| **nRF52840 Firmware (Cellular)** | 🟢 Stable | Very stable with LTE-M and NB-IoT networks; field-tested over 1.5+ seasons. |
+| **nRF52840 Flash Logging & `yaroc` CLI** | 🟡 Beta | Logging punches to internal flash and dumping via `yaroc` CLI is new. Flash format & USB protocol subject to change. |
+| **`yarocd` Daemon** | 🟢 Stable | Core daemon and event processing are well tested over 2+ seasons. |
+
+### Input Sources
+
+| Input Source | Supported In | Status | Notes |
+| :--- | :--- | :---: | :--- |
+| **SportIdent USB / SRR** | `send-punch` | 🟢 Stable | Main physical punch receiver; highly tested over 2+ seasons. |
+| **MQTT Broker** | `yarocd` | 🟢 Stable | Receives punches bridged from remote units or Meshtastic; well tested over 2+ seasons. |
+| **Meshtastic (USB)** | `yarocd`, `send-punch` | 🟢 Stable | Direct USB connection to a Meshtastic node; well tested over 1.5+ seasons. |
+| **Meshtastic (TCP)** | `yarocd`, `send-punch` | 🟡 Alpha | Network TCP connection to `meshtasticd` is a new feature and not well tested yet. |
+
+### Output Clients
+
+| Output / Client | Supported In | Status | Notes |
+| :--- | :--- | :---: | :--- |
+| **ROC Client** | `yarocd`, `send-punch` | 🟢 Stable | Sends punches to ROC online service; well tested over 2+ seasons. |
+| **MQTT Client** | `send-punch`, nRF52840 | 🟢 Stable | Publishes punches to MQTT brokers using SIM7020 or Quectel BG77 modems. Well tested over 2+ seasons. |
+| **Serial / USB Output** | `yarocd` | 🟢 Stable | Outputs punches to timing software (MeOS, QuickEvent, etc.) via USB UART. |
+| **SIRAP Output** | `yarocd` | 🟡 Beta | Implemented SIRAP client protocol; not well tested, use with caution. |
+
+
 # Installation on a Raspberry Pi or a PC
 
 Install the `yaroc` package from PyPI, which provides the `send-punch`, `yarocd`, and `yaroc` commands. We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for easy installation:
