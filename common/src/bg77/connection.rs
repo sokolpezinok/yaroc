@@ -117,8 +117,10 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.last_connect_attempt = Some(now);
     }
 
-    /// Update the MQTT connection status if changed
-    pub fn update_mqtt_status(connected: bool) {
+    /// Update the connection state and notify MQTT connection status listeners if changed
+    pub fn update_status(&mut self, state: ConnectionState) {
+        self.state = state;
+        let connected = state.is_mqtt_connected();
         MQTT_CONNECTION_STATUS.sender().send_if_modified(|cur| {
             if cur.is_some_and(|v| v == connected) {
                 false
@@ -135,14 +137,12 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             ConnectionEvent::MqttDisconnect(code) => {
                 warn!("MQTT disconnected (code: {})", code);
                 if self.state == ConnectionState::MqttConnected {
-                    self.state = ConnectionState::MqttConnectionError;
+                    self.update_status(ConnectionState::MqttConnectionError);
                 }
-                Self::update_mqtt_status(false);
             }
             ConnectionEvent::PdpDeactivate => {
                 warn!("PDP deactivated");
-                self.state = ConnectionState::CellularRegistrationFailed;
-                Self::update_mqtt_status(false);
+                self.update_status(ConnectionState::CellularRegistrationFailed);
             }
         }
     }
@@ -177,11 +177,10 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             if force_reattach {
                 self.last_force_reattach = now;
             }
-            self.state = ConnectionState::ConnectingCellular;
+            self.update_status(ConnectionState::ConnectingCellular);
             if let Err(err) = modem_manager.network_registration(bg77, force_reattach).await {
                 error!("Cellular network registration failed: {}", err);
-                self.state = ConnectionState::CellularRegistrationFailed;
-                Self::update_mqtt_status(false);
+                self.update_status(ConnectionState::CellularRegistrationFailed);
                 return Err(err);
             }
         }
@@ -195,7 +194,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         bg77: &mut M,
         mqtt_client: &mut MqttClient<M>,
     ) -> crate::Result<()> {
-        self.state = ConnectionState::ConnectingMqtt;
+        self.update_status(ConnectionState::ConnectingMqtt);
         match mqtt_client.connect(bg77).await {
             Ok(()) => {
                 self.on_connection_success();
@@ -203,8 +202,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
             Err(err) => {
                 error!("MQTT connection failed: {}", err);
-                self.state = ConnectionState::MqttConnectionError;
-                Self::update_mqtt_status(false);
+                self.update_status(ConnectionState::MqttConnectionError);
                 Err(err)
             }
         }
@@ -219,20 +217,16 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
     ) {
         info!("Checking modem connection status");
         if modem_manager.is_registered(bg77).await != Ok(true) {
-            self.state = ConnectionState::CellularRegistrationFailed;
-            Self::update_mqtt_status(false);
+            self.update_status(ConnectionState::CellularRegistrationFailed);
         } else if mqtt_client.is_connected(bg77).await != Ok(true) {
-            self.state = ConnectionState::MqttConnectionError;
-            Self::update_mqtt_status(false);
+            self.update_status(ConnectionState::MqttConnectionError);
         } else {
-            self.state = ConnectionState::MqttConnected;
-            Self::update_mqtt_status(true);
+            self.update_status(ConnectionState::MqttConnected);
         }
     }
 
     fn on_connection_success(&mut self) {
-        self.state = ConnectionState::MqttConnected;
-        Self::update_mqtt_status(true);
+        self.update_status(ConnectionState::MqttConnected);
     }
 }
 
@@ -363,9 +357,11 @@ mod tests {
     }
 
     #[test]
-    fn test_update_mqtt_status() {
-        ConnectionSupervisor::<FakeModem>::update_mqtt_status(true);
+    fn test_update_status() {
+        let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        supervisor.update_status(ConnectionState::MqttConnected);
         let mut rx = MQTT_CONNECTION_STATUS.receiver().unwrap();
         assert_eq!(rx.try_get(), Some(true));
+        assert_eq!(supervisor.state(), ConnectionState::MqttConnected);
     }
 }
