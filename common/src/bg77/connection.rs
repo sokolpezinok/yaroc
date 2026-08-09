@@ -34,14 +34,23 @@ pub enum ConnectionState {
     /// Connection to MQTT failed
     MqttConnectionError,
     /// Fully connected to MQTT broker and ready to transmit payloads.
-    Connected,
+    MqttConnected,
 }
 
 impl ConnectionState {
     /// Returns `true` if currently connected to MQTT.
     #[inline]
-    pub fn is_connected(&self) -> bool {
-        matches!(self, Self::Connected)
+    pub fn is_mqtt_connected(&self) -> bool {
+        matches!(self, Self::MqttConnected)
+    }
+
+    /// Returns `true` if currently connected to the cellular network.
+    #[inline]
+    pub fn is_cellular_connected(&self) -> bool {
+        !matches!(
+            self,
+            Self::Disconnected | Self::ConnectingCellular | Self::CellularRegistrationFailed
+        )
     }
 
     /// Returns `true` if currently in any connecting phase.
@@ -95,7 +104,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
 
     /// Returns `true` if currently connected to MQTT.
     pub fn is_connected(&self) -> bool {
-        self.state.is_connected()
+        self.state.is_mqtt_connected()
     }
 
     #[cfg(test)]
@@ -125,7 +134,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         match event {
             ConnectionEvent::MqttDisconnect(code) => {
                 warn!("MQTT disconnected (code: {})", code);
-                if self.state == ConnectionState::Connected {
+                if self.state == ConnectionState::MqttConnected {
                     self.state = ConnectionState::MqttConnectionError;
                 }
                 Self::update_mqtt_status(false);
@@ -147,7 +156,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         mqtt_client: &mut MqttClient<M>,
     ) -> crate::Result<()> {
         // Short-circuit if already connected
-        if self.state == ConnectionState::Connected {
+        if self.state == ConnectionState::MqttConnected {
             return Ok(());
         }
 
@@ -216,13 +225,13 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             self.state = ConnectionState::MqttConnectionError;
             Self::update_mqtt_status(false);
         } else {
-            self.state = ConnectionState::Connected;
+            self.state = ConnectionState::MqttConnected;
             Self::update_mqtt_status(true);
         }
     }
 
     fn on_connection_success(&mut self) {
-        self.state = ConnectionState::Connected;
+        self.state = ConnectionState::MqttConnected;
         Self::update_mqtt_status(true);
     }
 }
@@ -241,19 +250,19 @@ mod tests {
     fn test_connection_state_default() {
         let state = ConnectionState::default();
         assert_eq!(state, ConnectionState::Disconnected);
-        assert!(!state.is_connected());
+        assert!(!state.is_mqtt_connected());
         assert!(!state.is_connecting());
     }
 
     #[test]
     fn test_connection_state_queries() {
-        assert!(ConnectionState::Connected.is_connected());
-        assert!(!ConnectionState::Connected.is_connecting());
+        assert!(ConnectionState::MqttConnected.is_mqtt_connected());
+        assert!(!ConnectionState::MqttConnected.is_connecting());
 
-        assert!(!ConnectionState::ConnectingCellular.is_connected());
+        assert!(!ConnectionState::ConnectingCellular.is_mqtt_connected());
         assert!(ConnectionState::ConnectingCellular.is_connecting());
 
-        assert!(!ConnectionState::ConnectingMqtt.is_connected());
+        assert!(!ConnectionState::ConnectingMqtt.is_mqtt_connected());
         assert!(ConnectionState::ConnectingMqtt.is_connecting());
     }
 
@@ -262,7 +271,7 @@ mod tests {
         let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
-        supervisor.state = ConnectionState::Connected;
+        supervisor.state = ConnectionState::MqttConnected;
         supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
         assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
 
@@ -305,7 +314,7 @@ mod tests {
             block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
 
         assert!(res.is_ok());
-        assert_eq!(supervisor.state(), ConnectionState::Connected);
+        assert_eq!(supervisor.state(), ConnectionState::MqttConnected);
     }
 
     #[test]
@@ -335,7 +344,7 @@ mod tests {
         let res =
             block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
         assert!(res.is_ok());
-        assert_eq!(supervisor.state(), ConnectionState::Connected);
+        assert_eq!(supervisor.state(), ConnectionState::MqttConnected);
     }
 
     #[test]

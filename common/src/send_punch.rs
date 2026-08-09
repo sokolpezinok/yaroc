@@ -490,7 +490,7 @@ mod tests {
             mqtt_config,
             ModemConfig::default(),
         );
-        send_punch.connection_supervisor.set_state(ConnectionState::Connected);
+        send_punch.connection_supervisor.set_state(ConnectionState::MqttConnected);
 
         FLASH_LOG_CHANNEL.clear();
         let mch = block_on(send_punch.send_mini_call_home()).unwrap();
@@ -572,7 +572,7 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(
             send_punch.connection_supervisor.state(),
-            ConnectionState::Connected
+            ConnectionState::MqttConnected
         );
     }
 }
