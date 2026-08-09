@@ -14,7 +14,7 @@ use sequential_storage::map::PostcardValue;
 use crate::at::response::{AT_RESPONSE_SIZE, FLASH_LOG_CHANNEL, FlashLog};
 use crate::at::uart::UrcHandlerType;
 use crate::backoff::{BatchedPunches, PUNCH_BATCH_SIZE};
-use crate::bg77::connection::{ConnectionEvent, ConnectionState, ConnectionSupervisor};
+use crate::bg77::connection::{ConnectionEvent, ConnectionSupervisor};
 use crate::bg77::modem::Modem;
 use crate::bg77::modem_manager::{ModemConfig, ModemManager};
 use crate::bg77::mqtt::MqttClient;
@@ -199,7 +199,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         qos: MqttQos,
         msg_id: u16,
     ) -> Result<(), Error> {
-        // TODO: send message only if connected to the MQTT broker
+        if !self.connection_supervisor.is_connected() {
+            return Err(Error::NotConnected);
+        }
         let mut buf = [0u8; N];
         msg.encode(&mut buf.as_mut_slice()).map_err(|_| Error::BufferTooSmallError)?;
         let len = msg.encoded_len();
@@ -214,15 +216,20 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         #[cfg(feature = "defmt")]
         info!("MiniCallHome: {}", mini_call_home);
 
-        if self.connection_supervisor.state() != ConnectionState::Connected {
+        if !self.connection_supervisor.is_connected() {
             let _ = self.ensure_connected().await;
         }
 
         let _ = FLASH_LOG_CHANNEL
             .try_send(FlashLog::MiniCallHome(mini_call_home))
             .inspect_err(|e| error!("Error while sending MiniCallHome for logging: {:?}", e));
-        self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
-            .await?;
+
+        if self.connection_supervisor.is_connected() {
+            self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
+                .await?;
+        } else {
+            warn!("MQTT not connected, skipping MiniCallHome publish");
+        }
 
         Ok(mini_call_home)
     }
@@ -472,6 +479,42 @@ mod tests {
         });
 
         TEMPERATURE.sender().send(27.0);
+        BATTERY.sender().send(crate::status::BatteryInfo {
+            mv: 3967,
+            percents: 76,
+        });
+
+        let mut send_punch = SendPunch::new_without_spawning(
+            modem,
+            &FAKE_FLASH_MUTEX,
+            mqtt_config,
+            ModemConfig::default(),
+        );
+        send_punch.connection_supervisor.set_state(ConnectionState::Connected);
+
+        FLASH_LOG_CHANNEL.clear();
+        let mch = block_on(send_punch.send_mini_call_home()).unwrap();
+        let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
+        assert_eq!(logged_item, FlashLog::MiniCallHome(mch));
+    }
+
+    #[test]
+    fn send_mini_call_home_disconnected_test() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        BOOT_TIME.sender().clear();
+        let fake_modem = FakeModem::new(&[
+            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
+            ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
+            ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
+        ]);
+        let modem = Bg77::new(fake_modem, FakePin {});
+        let mqtt_config = MqttClientConfig::default();
+
+        block_on(async {
+            *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
+        });
+
         BATTERY.sender().send(crate::status::BatteryInfo {
             mv: 3967,
             percents: 76,

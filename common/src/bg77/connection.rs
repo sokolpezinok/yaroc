@@ -93,6 +93,16 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.state
     }
 
+    /// Returns `true` if currently connected to MQTT.
+    pub fn is_connected(&self) -> bool {
+        self.state.is_connected()
+    }
+
+    #[cfg(test)]
+    pub fn set_state(&mut self, state: ConnectionState) {
+        self.state = state;
+    }
+
     #[cfg(test)]
     pub fn set_last_connect_attempt(&mut self, now: Instant) {
         self.last_connect_attempt = Some(now);

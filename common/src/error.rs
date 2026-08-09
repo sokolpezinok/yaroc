@@ -52,6 +52,8 @@ pub enum Error {
     MqttConnect(#[from] ConnectError),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
+    #[error("Not connected")]
+    NotConnected,
 }
 
 impl From<core::fmt::Error> for Error {
