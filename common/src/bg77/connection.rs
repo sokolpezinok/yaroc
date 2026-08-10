@@ -10,7 +10,7 @@ use log::{error, info, warn};
 use crate::RawMutex;
 use crate::at::uart::AtUartTrait;
 use crate::bg77::modem_manager::ModemManager;
-use crate::bg77::mqtt::MqttClient;
+use crate::bg77::mqtt::{MqttClient, TcpError};
 
 const MAX_INACTIVE_FORCE_REATTACH: Duration = Duration::from_secs(210);
 const FORCE_REATTACH_RATE_LIMIT: Duration =
@@ -66,7 +66,7 @@ impl ConnectionState {
 pub enum ConnectionEvent {
     /// MQTT session disconnect URC (+QMTSTAT: <client_id>, <err_code>).
     /// MQTT session is lost, but cellular network/PDP context may still be active.
-    MqttDisconnect(u8),
+    MqttDisconnect(TcpError),
     /// PDP context deactivation URC (+QIURC: "pdpdeact", <context_id>).
     /// Cellular network packet data connection is deactivated.
     PdpDeactivate,
@@ -134,8 +134,8 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
     /// Processes an incoming connection event (e.g. URC notification or publish failure).
     pub fn handle_event(&mut self, event: ConnectionEvent) {
         match event {
-            ConnectionEvent::MqttDisconnect(code) => {
-                warn!("MQTT disconnected (code: {})", code);
+            ConnectionEvent::MqttDisconnect(err) => {
+                warn!("MQTT disconnected ({})", err);
                 if self.state == ConnectionState::MqttConnected {
                     self.update_status(ConnectionState::MqttConnectionError);
                 }
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
         supervisor.state = ConnectionState::MqttConnected;
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
+        supervisor.handle_event(ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected));
         assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
 
         supervisor.handle_event(ConnectionEvent::PdpDeactivate);
@@ -276,7 +276,7 @@ mod tests {
         );
 
         // MqttDisconnect must not overwrite CellularRegistrationFailed
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(1));
+        supervisor.handle_event(ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected));
         assert_eq!(
             supervisor.state(),
             ConnectionState::CellularRegistrationFailed

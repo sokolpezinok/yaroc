@@ -39,6 +39,12 @@ pub enum TcpError {
     DomainNameError,
     #[error("Network disconnected")]
     NetworkDisconnected,
+    #[error("Sending CONNECT packet timed out or failed")]
+    ConnectTimeout,
+    #[error("Receiving CONNACK packet timed out or failed")]
+    ConnackTimeout,
+    #[error("Client sent DISCONNECT packet and server closed connection")]
+    ServerDisconnect,
     #[error("Unknown TCP error ({0})")]
     Unknown(i8),
 }
@@ -53,6 +59,19 @@ impl TcpError {
             4 => Self::DomainNameError,
             5 => Self::NetworkDisconnected,
             code => Self::Unknown(code),
+        }
+    }
+
+    pub fn from_qmtstat(code: u8) -> Self {
+        match code {
+            1 => Self::NetworkDisconnected,
+            2 => Self::PdpContextFailed,
+            3 => Self::ConnectTimeout,
+            4 => Self::ConnackTimeout,
+            5 => Self::ServerDisconnect,
+            6 => Self::NetworkDisconnected,
+            7 => Self::NetworkDisconnected,
+            code => Self::Unknown(code as i8),
         }
     }
 }
@@ -197,15 +216,25 @@ impl<M: AtUartTrait> MqttClient<M> {
     ) -> bool {
         match response.command() {
             "QMTSTAT" => {
-                if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
-                    error!("Channel full when sending MQTT disconnect notification");
+                let values = match response.parse_values::<u8>() {
+                    Ok(values) => values,
+                    Err(_) => return false,
+                };
+                if values.len() >= 2 && values[0] == CLIENT_ID {
+                    let err = TcpError::from_qmtstat(values[1]);
+                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
+                        error!("Channel full when sending MQTT disconnect notification");
+                    }
+                    let message = SendPunchCommand::ConnectionSupervisorEvent(
+                        ConnectionEvent::MqttDisconnect(err),
+                    );
+                    if command_sender.try_send(message).is_err() {
+                        error!("Error while sending MQTT connect command, channel full");
+                    }
+                    true
+                } else {
+                    false
                 }
-                let message =
-                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::MqttDisconnect(1));
-                if command_sender.try_send(message).is_err() {
-                    error!("Error while sending MQTT connect command, channel full");
-                }
-                true
             }
             "QMTPUB" => Self::qmtpub_handler::<CLIENT_ID>(response),
             _ => false,
@@ -666,5 +695,48 @@ mod test {
             Err(Error::MqttConnect(ConnectError::RetransmissionTimeout))
         );
         assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_tcp_error_from_qmtstat() {
+        assert_eq!(TcpError::from_qmtstat(1), TcpError::NetworkDisconnected);
+        assert_eq!(TcpError::from_qmtstat(2), TcpError::PdpContextFailed);
+        assert_eq!(TcpError::from_qmtstat(3), TcpError::ConnectTimeout);
+        assert_eq!(TcpError::from_qmtstat(4), TcpError::ConnackTimeout);
+        assert_eq!(TcpError::from_qmtstat(5), TcpError::ServerDisconnect);
+        assert_eq!(TcpError::from_qmtstat(6), TcpError::NetworkDisconnected);
+        assert_eq!(TcpError::from_qmtstat(7), TcpError::NetworkDisconnected);
+        assert_eq!(TcpError::from_qmtstat(0), TcpError::Unknown(0));
+        assert_eq!(TcpError::from_qmtstat(8), TcpError::Unknown(8));
+        assert_eq!(TcpError::from_qmtstat(255), TcpError::Unknown(-1));
+    }
+
+    #[test]
+    fn test_qmtstat_urc_handler() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let sender = CHANNEL.sender();
+        while CMD_FOR_BACKOFF.try_receive().is_ok() {}
+        while CHANNEL.try_receive().is_ok() {}
+
+        let response = CommandResponse::new("+QMTSTAT: 0,2").unwrap();
+        let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
+        assert!(handled);
+
+        assert_eq!(
+            CMD_FOR_BACKOFF.try_receive(),
+            Ok(BackoffCommand::MqttDisconnected)
+        );
+        let cmd = CHANNEL.try_receive().unwrap();
+        assert!(matches!(
+            cmd,
+            SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::MqttDisconnect(
+                TcpError::PdpContextFailed
+            ))
+        ));
+
+        // Wrong client ID
+        let response_wrong_id = CommandResponse::new("+QMTSTAT: 1,2").unwrap();
+        let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response_wrong_id, sender);
+        assert!(!handled);
     }
 }
