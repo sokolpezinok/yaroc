@@ -11,6 +11,7 @@ use crate::RawMutex;
 use crate::at::uart::AtUartTrait;
 use crate::bg77::modem_manager::ModemManager;
 use crate::bg77::mqtt::{MqttClient, TcpError};
+use crate::error::Error;
 
 const MAX_INACTIVE_FORCE_REATTACH: Duration = Duration::from_secs(210);
 const FORCE_REATTACH_RATE_LIMIT: Duration =
@@ -19,7 +20,7 @@ const FORCE_REATTACH_RATE_LIMIT: Duration =
 pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 /// Explicit state of the cellular and MQTT connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub enum ConnectionState {
     /// Completely disconnected from cellular network and MQTT broker.
@@ -32,7 +33,7 @@ pub enum ConnectionState {
     /// Opening TCP socket and establishing MQTT session (+QMTOPEN / +QMTCONN).
     ConnectingMqtt,
     /// Connection to MQTT failed
-    MqttConnectionError,
+    MqttConnectionError(Error),
     /// Fully connected to MQTT broker and ready to transmit payloads.
     MqttConnected,
 }
@@ -97,14 +98,15 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         Self::default()
     }
 
-    /// Returns the current connection state.
-    pub fn state(&self) -> ConnectionState {
-        self.state
-    }
-
     /// Returns `true` if currently connected to MQTT.
     pub fn is_connected(&self) -> bool {
         self.state.is_mqtt_connected()
+    }
+
+    /// Returns the current connection state.
+    #[cfg(test)]
+    pub fn state(&self) -> ConnectionState {
+        self.state.clone()
     }
 
     #[cfg(test)]
@@ -119,8 +121,8 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
 
     /// Update the connection state and notify MQTT connection status listeners if changed
     pub fn update_status(&mut self, state: ConnectionState) {
-        self.state = state;
         let connected = state.is_mqtt_connected();
+        self.state = state;
         MQTT_CONNECTION_STATUS.sender().send_if_modified(|cur| {
             if cur.is_some_and(|v| v == connected) {
                 false
@@ -137,7 +139,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             ConnectionEvent::MqttDisconnect(err) => {
                 warn!("MQTT disconnected ({})", err);
                 if self.state == ConnectionState::MqttConnected {
-                    self.update_status(ConnectionState::MqttConnectionError);
+                    self.update_status(ConnectionState::MqttConnectionError(Error::MqttTcp(err)));
                 }
             }
             ConnectionEvent::PdpDeactivate => {
@@ -173,7 +175,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             && self.last_force_reattach + FORCE_REATTACH_RATE_LIMIT <= now;
         // Step 1: Cellular Registration
         // Short-circuit if cellular attachment already succeeded and no force reattach is required
-        if self.state != ConnectionState::MqttConnectionError || force_reattach {
+        if !matches!(self.state, ConnectionState::MqttConnectionError(_)) || force_reattach {
             if force_reattach {
                 self.last_force_reattach = now;
             }
@@ -202,7 +204,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
             Err(err) => {
                 error!("MQTT connection failed: {}", err);
-                self.update_status(ConnectionState::MqttConnectionError);
+                self.update_status(ConnectionState::MqttConnectionError(err.clone()));
                 Err(err)
             }
         }
@@ -219,7 +221,11 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         if modem_manager.is_registered(bg77).await != Ok(true) {
             self.update_status(ConnectionState::CellularRegistrationFailed);
         } else if mqtt_client.is_connected(bg77).await != Ok(true) {
-            self.update_status(ConnectionState::MqttConnectionError);
+            if !matches!(self.state, ConnectionState::MqttConnectionError(_)) {
+                self.update_status(ConnectionState::MqttConnectionError(
+                    TcpError::ServerDisconnect.into(),
+                ));
+            }
         } else {
             self.update_status(ConnectionState::MqttConnected);
         }
@@ -266,8 +272,13 @@ mod tests {
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
         supervisor.state = ConnectionState::MqttConnected;
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected));
-        assert_eq!(supervisor.state(), ConnectionState::MqttConnectionError);
+        supervisor.handle_event(ConnectionEvent::MqttDisconnect(
+            TcpError::NetworkDisconnected,
+        ));
+        assert_eq!(
+            supervisor.state(),
+            ConnectionState::MqttConnectionError(Error::MqttTcp(TcpError::NetworkDisconnected))
+        );
 
         supervisor.handle_event(ConnectionEvent::PdpDeactivate);
         assert_eq!(
@@ -276,7 +287,9 @@ mod tests {
         );
 
         // MqttDisconnect must not overwrite CellularRegistrationFailed
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected));
+        supervisor.handle_event(ConnectionEvent::MqttDisconnect(
+            TcpError::NetworkDisconnected,
+        ));
         assert_eq!(
             supervisor.state(),
             ConnectionState::CellularRegistrationFailed
@@ -317,7 +330,7 @@ mod tests {
         let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
         let mut mqtt_client = MqttClient::<FakeModem>::new(MqttClientConfig::default(), 1);
 
-        supervisor.state = ConnectionState::MqttConnectionError;
+        supervisor.state = ConnectionState::MqttConnectionError(Error::NotConnected);
         supervisor.last_connect_attempt = None;
 
         // Since state is MqttConnectionError and last_force_reattach is recent (within 420s),

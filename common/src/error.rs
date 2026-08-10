@@ -4,7 +4,7 @@ use crate::at::AtError;
 use crate::bg77::modem_manager::RegistrationError;
 use crate::bg77::mqtt::{ConnectError, TcpError};
 
-#[derive(Debug, Error, Eq, PartialEq)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     #[error("Buffer too small")]
