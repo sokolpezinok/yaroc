@@ -45,8 +45,19 @@ pub enum TcpError {
     ConnackTimeout,
     #[error("Client sent DISCONNECT packet and server closed connection")]
     ServerDisconnect,
+    #[error("AT command error ({0:?})")]
+    At(#[from] AtError),
     #[error("Unknown TCP error ({0})")]
     Unknown(i8),
+}
+
+/// Errors from `format!()` having too small buffer.
+///
+/// TODO: These are bugs and should probably panic instead.
+impl From<core::fmt::Error> for TcpError {
+    fn from(_: core::fmt::Error) -> Self {
+        Self::At(AtError::BufferTooSmallError)
+    }
 }
 
 impl TcpError {
@@ -93,8 +104,16 @@ pub enum ConnectError {
     BadUsernameOrPassword,
     #[error("Connection refused: not authorized")]
     NotAuthorized,
+    #[error("AT command error ({0:?})")]
+    At(#[from] AtError),
     #[error("Unknown connect error ({0})")]
     Unknown(u8),
+}
+
+impl From<core::fmt::Error> for ConnectError {
+    fn from(_: core::fmt::Error) -> Self {
+        Self::At(AtError::BufferTooSmallError)
+    }
 }
 
 impl ConnectError {
@@ -279,7 +298,7 @@ impl<M: AtUartTrait> MqttClient<M> {
     /// If a connection is already open to the correct broker, it does nothing.
     /// If connected to a different broker, it disconnects first.
     /// It also configures MQTT timeouts and keep-alive settings before opening the connection.
-    async fn open(&self, bg77: &mut M) -> crate::Result<()> {
+    pub async fn open(&self, bg77: &mut M) -> Result<(), TcpError> {
         let cid = self.client_id;
         let opened = bg77
             .call_at("+QMTOPEN?", None)
@@ -326,29 +345,17 @@ impl<M: AtUartTrait> MqttClient<M> {
                 "Could not open TCP connection to {}:{}",
                 self.config.url, self.config.port
             );
-            return Err(TcpError::from_code(status).into());
+            return Err(TcpError::from_code(status));
         }
 
         Ok(())
     }
 
-    /// Checks whether the MQTT client is connected
-    pub async fn is_connected(&self, bg77: &mut M) -> crate::Result<bool> {
-        let (_, status) = bg77
-            .call_at("+QMTCONN?", None)
-            .await?
-            .parse2::<u8, u8>([0, 1], Some(self.client_id))?;
-        let status = QmtconnStatus::try_from(status).map_err(|_| AtError::ModemError)?;
-        Ok(status == QmtconnStatus::Connected)
-    }
-
     /// Connects to the MQTT broker.
     ///
-    /// This function first ensures network registration and then opens a TCP connection
-    /// using `Self::open()`. Finally, it attempts to connect to the MQTT broker.
-    pub async fn connect(&mut self, bg77: &mut M) -> crate::Result<()> {
+    /// This function attempts to connect to the MQTT broker (assumes TCP socket is open).
+    pub async fn connect(&mut self, bg77: &mut M) -> Result<(), ConnectError> {
         let cid = self.client_id;
-        self.open(bg77).await?;
 
         let (_, status) =
             bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
@@ -383,14 +390,24 @@ impl<M: AtUartTrait> MqttClient<M> {
                     self.last_successful_send = Instant::now();
                     Ok(())
                 } else {
-                    Err(ConnectError::from_code(res, reason).into())
+                    Err(ConnectError::from_code(res, reason))
                 }
             }
         }
     }
 
+    /// Checks whether the MQTT client is connected
+    pub async fn is_connected(&self, bg77: &mut M) -> crate::Result<bool> {
+        let (_, status) = bg77
+            .call_at("+QMTCONN?", None)
+            .await?
+            .parse2::<u8, u8>([0, 1], Some(self.client_id))?;
+        let status = QmtconnStatus::try_from(status).map_err(|_| AtError::ModemError)?;
+        Ok(status == QmtconnStatus::Connected)
+    }
+
     /// Close the MQTT connection to the MQTT broker.
-    pub async fn disconnect(&self, bg77: &mut M) -> Result<(), Error> {
+    pub async fn disconnect(&self, bg77: &mut M) -> Result<(), TcpError> {
         let cid = self.client_id;
         let cmd = format!(50; "+QMTCLOSE={cid}")?;
         bg77.call_at(&cmd, Some(ACTIVATION_TIMEOUT)).await?;
@@ -483,12 +500,10 @@ mod test {
                 "+QMTCFG: 1,0",
             ),
             ("AT+QMTOPEN=1,\"correct.broker.io\",1883", "+QMTOPEN: 1,0"),
-            ("AT+QMTCONN?", "+QMTCONN: 1,1"),
-            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,0"),
         ]);
 
-        let mut client = MqttClient::<_>::new(client_config, 1);
-        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
+        let client = MqttClient::<_>::new(client_config, 1);
+        assert_eq!(block_on(client.open(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
 
@@ -503,21 +518,17 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",8883"), // Already connected to correct port
-            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
         ]);
 
-        let mut client = MqttClient::<_>::new(client_config, 1);
-        assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
+        let client = MqttClient::<_>::new(client_config, 1);
+        assert_eq!(block_on(client.open(&mut bg77)), Ok(()));
         assert!(bg77.all_done());
     }
 
     #[test]
     fn test_mqtt_already_connected() {
         let _lock = block_on(CHANNEL_MUTEX.lock());
-        let mut bg77 = FakeModem::new(&[
-            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
-            ("AT+QMTCONN?", "+QMTCONN: 1,3"),
-        ]);
+        let mut bg77 = FakeModem::new(&[("AT+QMTCONN?", "+QMTCONN: 1,3")]);
 
         let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 1);
         assert_eq!(block_on(client.connect(&mut bg77)), Ok(()));
@@ -627,10 +638,10 @@ mod test {
             ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,-1"),
         ]);
 
-        let mut client = MqttClient::<_>::new(client_config, 1);
+        let client = MqttClient::<_>::new(client_config, 1);
         assert_eq!(
-            block_on(client.connect(&mut bg77)),
-            Err(Error::MqttTcp(TcpError::FailedToOpenNetwork))
+            block_on(client.open(&mut bg77)),
+            Err(TcpError::FailedToOpenNetwork)
         );
         assert!(bg77.all_done());
     }
@@ -651,10 +662,10 @@ mod test {
             ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,4"),
         ]);
 
-        let mut client = MqttClient::<_>::new(client_config, 1);
+        let client = MqttClient::<_>::new(client_config, 1);
         assert_eq!(
-            block_on(client.connect(&mut bg77)),
-            Err(Error::MqttTcp(TcpError::DomainNameError))
+            block_on(client.open(&mut bg77)),
+            Err(TcpError::DomainNameError)
         );
         assert!(bg77.all_done());
     }
@@ -665,7 +676,6 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,0,2"),
         ]);
@@ -673,7 +683,7 @@ mod test {
         let mut client = MqttClient::<_>::new(client_config, 1);
         assert_eq!(
             block_on(client.connect(&mut bg77)),
-            Err(Error::MqttConnect(ConnectError::IdentifierRejected))
+            Err(ConnectError::IdentifierRejected)
         );
         assert!(bg77.all_done());
     }
@@ -684,7 +694,6 @@ mod test {
         let client_config = MqttClientConfig::default();
 
         let mut bg77 = FakeModem::new(&[
-            ("AT+QMTOPEN?", "+QMTOPEN: 1,\"broker.emqx.io\",1883"),
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
             ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1,0"),
         ]);
@@ -692,7 +701,7 @@ mod test {
         let mut client = MqttClient::<_>::new(client_config, 1);
         assert_eq!(
             block_on(client.connect(&mut bg77)),
-            Err(Error::MqttConnect(ConnectError::RetransmissionTimeout))
+            Err(ConnectError::RetransmissionTimeout)
         );
         assert!(bg77.all_done());
     }

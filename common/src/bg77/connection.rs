@@ -197,6 +197,8 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         mqtt_client: &mut MqttClient<M>,
     ) -> crate::Result<()> {
         self.update_status(ConnectionState::ConnectingMqtt);
+        mqtt_client.open(bg77).await?;
+
         match mqtt_client.connect(bg77).await {
             Ok(()) => {
                 self.on_connection_success();
@@ -204,6 +206,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
             Err(err) => {
                 error!("MQTT connection failed: {}", err);
+                let err: Error = err.into();
                 self.update_status(ConnectionState::MqttConnectionError(err.clone()));
                 Err(err)
             }
