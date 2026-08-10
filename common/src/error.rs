@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::at::AtError;
 use crate::bg77::mqtt::{ConnectError, TcpError};
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -21,13 +22,8 @@ pub enum Error {
     SoftdeviceError,
     #[error("Flash (NVM) error")]
     FlashError,
-    #[error("Inconsistent AT response")]
-    ModemError,
     #[error("UART read error")]
     UartReadError,
-    #[cfg(feature = "nrf")]
-    #[error("UART write error: {0:?}")]
-    UartWriteError(embassy_nrf::uarte::Error),
     #[error("USB read error")]
     UsbReadError,
     #[error("USB disconnected")]
@@ -36,22 +32,18 @@ pub enum Error {
     UsbWriteError,
     #[error("UART unexpectedly closed")]
     UartClosedError,
-    #[error("AT 'ERROR' response")]
-    AtErrorResponse,
-    #[error("CME error: {0}")]
-    CmeError(u16),
-    #[error("Timeout error")]
-    TimeoutError,
-    #[error("String encoding error")]
-    StringEncodingError,
-    #[error("Network registrarion error")]
+    #[error("Network registration error")]
     NetworkRegistrationError,
+    #[error(transparent)]
+    At(#[from] AtError),
     #[error("MQTT TCP error: {0}")]
     MqttTcp(#[from] TcpError),
     #[error("MQTT connect error: {0}")]
     MqttConnect(#[from] ConnectError),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
+    #[error("Mutex timeout error")]
+    MutexTimeoutError,
     #[error("Not connected")]
     NotConnected,
 }
@@ -65,13 +57,6 @@ impl From<core::fmt::Error> for Error {
 impl From<core::convert::Infallible> for Error {
     fn from(_: core::convert::Infallible) -> Self {
         unreachable!()
-    }
-}
-
-#[cfg(feature = "nrf")]
-impl From<embassy_nrf::uarte::Error> for Error {
-    fn from(e: embassy_nrf::uarte::Error) -> Self {
-        Error::UartWriteError(e)
     }
 }
 

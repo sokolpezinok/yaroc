@@ -5,8 +5,7 @@ use embassy_futures::block_on;
 use embassy_time::Duration;
 use heapless::String;
 use mockall::{Predicate, predicate::*};
-
-use yaroc_common::Result;
+use yaroc_common::at::AtError;
 use yaroc_common::at::response::{AT_LINES, AtResponse, CommandResponse, FromModem};
 use yaroc_common::at::uart::{AtUartTrait, UrcHandlerType};
 use yaroc_common::bg77::modem_manager::ACTIVATION_TIMEOUT;
@@ -28,18 +27,18 @@ mockall::mock! {
             command: &str,
             call_timeout: Duration,
             response_timeout: Option<Duration>,
-        ) -> Result<AtResponse>;
+        ) -> core::result::Result<AtResponse, AtError>;
         async fn call_second_read(
             &mut self,
             msg: &[u8],
             command_prefix: &str,
             second_read: bool,
             timeout: Duration,
-        ) -> Result<AtResponse>;
+        ) -> core::result::Result<AtResponse, AtError>;
         async fn read_lines(
             &self,
             timeout: Duration,
-        ) -> Result<heapless::Vec<FromModem, AT_LINES>>;
+        ) -> core::result::Result<heapless::Vec<FromModem, AT_LINES>, AtError>;
     }
 }
 

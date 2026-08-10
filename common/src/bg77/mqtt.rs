@@ -11,7 +11,7 @@ use log::{error, info, warn};
 
 use crate::{
     RawMutex,
-    at::{response::CommandResponse, uart::AtUartTrait},
+    at::{AtError, response::CommandResponse, uart::AtUartTrait},
     backoff::{BackoffCommand, CMD_FOR_BACKOFF},
     bg77::{connection::ConnectionEvent, modem_manager::ACTIVATION_TIMEOUT},
     error::Error,
@@ -309,7 +309,7 @@ impl<M: AtUartTrait> MqttClient<M> {
             .call_at("+QMTCONN?", None)
             .await?
             .parse2::<u8, u8>([0, 1], Some(self.client_id))?;
-        let status = QmtconnStatus::try_from(status).map_err(|_| Error::ModemError)?;
+        let status = QmtconnStatus::try_from(status).map_err(|_| AtError::ModemError)?;
         Ok(status == QmtconnStatus::Connected)
     }
 
@@ -323,7 +323,7 @@ impl<M: AtUartTrait> MqttClient<M> {
 
         let (_, status) =
             bg77.call_at("+QMTCONN?", None).await?.parse2::<u8, u8>([0, 1], Some(cid))?;
-        let status = QmtconnStatus::try_from(status).map_err(|_| Error::ModemError)?;
+        let status = QmtconnStatus::try_from(status).map_err(|_| AtError::ModemError)?;
         match status {
             QmtconnStatus::Connected => {
                 info!("Already connected to MQTT");
@@ -411,7 +411,7 @@ impl<M: AtUartTrait> MqttClient<M> {
                     Ok(())
                 }
                 StatusCode::Retrying(_) => Ok(()),
-                StatusCode::Timeout => Err(Error::TimeoutError),
+                StatusCode::Timeout => Err(AtError::TimeoutError.into()),
                 // TODO: forward the actual error, if possible
                 StatusCode::MqttError => Err(ConnectError::Unknown(0).into()),
                 StatusCode::Unknown => Err(ConnectError::Unknown(1).into()),
@@ -522,7 +522,7 @@ mod test {
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,2")]);
         let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
-        assert_eq!(res, Err(Error::TimeoutError));
+        assert_eq!(res, Err(Error::At(AtError::TimeoutError)));
         assert!(bg77.all_done());
     }
 

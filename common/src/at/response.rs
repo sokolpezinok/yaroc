@@ -7,8 +7,8 @@ use heapless::{String, Vec};
 use log::error;
 use serde::{Deserialize, Serialize};
 
+use super::{Error, Result};
 use crate::RawMutex;
-use crate::error::Error;
 use crate::status::MiniCallHome;
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
@@ -30,7 +30,7 @@ pub struct CommandResponse {
 
 impl CommandResponse {
     /// Creates a new `CommandResponse` by parsing a raw AT response line.
-    pub fn new(line: &str) -> crate::Result<Self> {
+    pub fn new(line: &str) -> Result<Self> {
         let (prefix, rest) = Self::split_at_response(line).ok_or(Error::ParseError)?;
         Self::split_values(rest)?; // TODO: store the result to avoid duplicated parsing
         Ok(Self {
@@ -65,7 +65,7 @@ impl CommandResponse {
     ///
     /// Double quotes for strings are ignored. Numbers are returned as strings. For example,
     /// 1,"google.com",15 is parsed into ["1", "google.com", "15"].
-    fn split_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>, Error> {
+    fn split_values(mut values: &str) -> Result<Vec<&str, AT_VALUE_COUNT>> {
         let mut split = Vec::new();
         while !values.is_empty() {
             let pos = match values.chars().next() {
@@ -96,7 +96,7 @@ impl CommandResponse {
     fn pick_values<const N: usize>(
         &self,
         indices: [usize; N],
-    ) -> crate::Result<Vec<String<AT_VALUE_LEN>, N>> {
+    ) -> Result<Vec<String<AT_VALUE_LEN>, N>> {
         let values = self.values();
         if !indices.iter().all(|idx| *idx < values.len()) {
             return Err(Error::ModemError);
@@ -108,17 +108,17 @@ impl CommandResponse {
     }
 
     /// Parses the values of the command response into a vector of a specified type `T`.
-    pub fn parse_values<T: FromStr>(&self) -> crate::Result<Vec<T, AT_VALUE_COUNT>> {
+    pub fn parse_values<T: FromStr>(&self) -> Result<Vec<T, AT_VALUE_COUNT>> {
         self.values()
             .iter()
             .map(|val| str::parse::<T>(val).map_err(|_| Error::ParseError))
-            .collect::<Result<Vec<_, AT_VALUE_COUNT>, _>>()
+            .collect::<Result<Vec<_, AT_VALUE_COUNT>>>()
     }
 }
 
 impl Display for CommandResponse {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.line)
+        write!(f, "{}", &self.line)
     }
 }
 
@@ -131,13 +131,13 @@ impl defmt::Format for CommandResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// Represents different types of responses received from a modem.
+/// Represents a raw response from the modem.
 pub enum FromModem {
-    Line(String<AT_RESPONSE_SIZE>),
-    CommandResponse(CommandResponse),
     Ok,
     Error,
     CmeError(u16),
+    CommandResponse(CommandResponse),
+    Line(String<AT_RESPONSE_SIZE>),
     Eof,
 }
 
@@ -172,7 +172,7 @@ impl TryFrom<&str> for FromModem {
     type Error = Error;
 
     /// Constructs `FromModem` from a line returned by the modem.
-    fn try_from(line: &str) -> crate::Result<Self> {
+    fn try_from(line: &str) -> Result<Self> {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("+CME ERROR:")
             && let Ok(code) = rest.trim().parse::<u16>()
@@ -183,13 +183,15 @@ impl TryFrom<&str> for FromModem {
         match line {
             "OK" | "RDY" | "APP RDY" | ">" => Ok(FromModem::Ok),
             "ERROR" => Ok(FromModem::Error),
-            // A line such as `+QMTPUB: 0,0,0` is a command response
-            line => match CommandResponse::new(line) {
-                Ok(command_response) => Ok(FromModem::CommandResponse(command_response)),
-                _ => String::from_str(line)
-                    .map(FromModem::Line)
-                    .map_err(|_| Error::BufferTooSmallError),
-            },
+            _ => {
+                if let Ok(command_response) = CommandResponse::new(line) {
+                    Ok(FromModem::CommandResponse(command_response))
+                } else {
+                    Ok(FromModem::Line(
+                        String::from_str(line).map_err(|_| Error::BufferTooSmallError)?,
+                    ))
+                }
+            }
         }
     }
 }
@@ -198,20 +200,20 @@ impl TryFrom<&str> for FromModem {
 impl defmt::Format for FromModem {
     fn format(&self, fmt: defmt::Formatter) {
         match self {
-            FromModem::Line(line) => defmt::write!(fmt, "{}", line),
-            FromModem::CommandResponse(command_response) => {
-                defmt::write!(fmt, "{}", command_response)
-            }
             FromModem::Ok => defmt::write!(fmt, "Ok"),
             FromModem::Error => defmt::write!(fmt, "Error"),
             FromModem::CmeError(code) => defmt::write!(fmt, "CmeError({})", code),
+            FromModem::CommandResponse(cmd_response) => {
+                defmt::write!(fmt, "{}", cmd_response.line.as_str())
+            }
+            FromModem::Line(line) => defmt::write!(fmt, "Line({})", line.as_str()),
             FromModem::Eof => defmt::write!(fmt, "Eof"),
         }
     }
 }
 
+/// Represents a response from the AT command interface.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// Represents a complete AT response, which can consist of multiple lines.
 pub struct AtResponse {
     lines: Vec<FromModem, AT_LINES>,
     /// AT command prefix, e.g. `+QMTPUB`, without the initial `AT` and without anything that comes
@@ -268,10 +270,7 @@ impl AtResponse {
     /// If `filter` is `None`, it returns the first one.
     /// If `filter` is `(x, idx)`, returns the response with value `x` at position `idx`. If no such
     /// response is found, returns `ModemError`.
-    fn response<T: FromStr + Eq>(
-        &self,
-        filter: Option<(T, usize)>,
-    ) -> Result<&CommandResponse, Error> {
+    fn response<T: FromStr + Eq>(&self, filter: Option<(T, usize)>) -> Result<&CommandResponse> {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line
                 && command_response.command() == &self.command_prefix[1..]
@@ -295,7 +294,7 @@ impl AtResponse {
     }
 
     /// Counts the number of values in the first `CommandResponse` that matches the command prefix.
-    pub fn count_response_values(&self) -> Result<usize, Error> {
+    pub fn count_response_values(&self) -> Result<usize> {
         let response = self.response::<u8>(None)?;
         Ok(response.values().len())
     }
@@ -308,17 +307,17 @@ impl AtResponse {
         &self,
         indices: [usize; N],
         filter: Option<T>,
-    ) -> Result<Vec<String<AT_VALUE_LEN>, N>, Error> {
+    ) -> Result<Vec<String<AT_VALUE_LEN>, N>> {
         self.response(filter.map(|t| (t, indices[0])))?.pick_values(indices)
     }
 
     /// Parses a string slice into a specified type `T`.
-    fn parse<T: FromStr>(s: &str) -> Result<T, Error> {
+    fn parse<T: FromStr>(s: &str) -> Result<T> {
         str::parse(s).map_err(|_| Error::ParseError)
     }
 
     /// Parses one value from the AT response into type `T`.
-    pub fn parse1<T: FromStr + Eq>(self, indices: [usize; 1]) -> Result<T, Error> {
+    pub fn parse1<T: FromStr + Eq>(self, indices: [usize; 1]) -> Result<T> {
         let values = self.pick_values::<T, 1>(indices, None)?;
         Self::parse::<T>(&values[0])
     }
@@ -330,7 +329,7 @@ impl AtResponse {
         self,
         indices: [usize; 2],
         filter: Option<T>,
-    ) -> Result<(T, U), Error> {
+    ) -> Result<(T, U)> {
         let values = self.pick_values(indices, filter)?;
         Ok((Self::parse::<T>(&values[0])?, Self::parse::<U>(&values[1])?))
     }
@@ -342,7 +341,7 @@ impl AtResponse {
         self,
         indices: [usize; 3],
         filter: T,
-    ) -> Result<(T, U, V), Error> {
+    ) -> Result<(T, U, V)> {
         let values = self.pick_values(indices, Some(filter))?;
         Ok((
             Self::parse::<T>(&values[0])?,
@@ -355,7 +354,7 @@ impl AtResponse {
     pub fn parse4<T: FromStr + Eq, U: FromStr, V: FromStr, W: FromStr>(
         self,
         indices: [usize; 4],
-    ) -> Result<(T, U, V, W), Error> {
+    ) -> Result<(T, U, V, W)> {
         let values = self.pick_values::<T, 4>(indices, None)?;
         Ok((
             Self::parse::<T>(&values[0])?,
@@ -425,7 +424,7 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_cmd_response_split_values() -> crate::Result<()> {
+    fn test_cmd_response_split_values() -> Result<()> {
         let ans = CommandResponse::split_values("1,\"item1,item2\",\"cellid\",-7,20")?;
         assert_eq!(&ans, &["1", "item1,item2", "cellid", "-7", "20"]);
 
@@ -435,7 +434,7 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_cmd_response_pick_values() -> crate::Result<()> {
+    fn test_cmd_response_pick_values() -> Result<()> {
         let response = CommandResponse::new("+CMD: 1,\"item1,item2\",12")?;
         let vals = response.pick_values([1, 2])?;
         assert_eq!(&vals.as_slice(), &["item1,item2", "12"]);
@@ -443,14 +442,14 @@ mod test_at_utils {
     }
 
     #[test]
-    fn test_cmd_response_parse_values() -> crate::Result<()> {
+    fn test_cmd_response_parse_values() -> Result<()> {
         let response = CommandResponse::new("+CMD: 8,13,21")?;
         assert_eq!(response.parse_values::<u8>()?.as_slice(), &[8, 13, 21]);
         Ok(())
     }
 
     #[test]
-    fn test_at_response() -> crate::Result<()> {
+    fn test_at_response() -> Result<()> {
         let mut from_modem_vec = Vec::new();
         from_modem_vec.push(FromModem::try_from("+CONN: 1,\"disconnected\"")?).unwrap();
         from_modem_vec.push(FromModem::try_from("+CONN: 5,\"connected\"")?).unwrap();

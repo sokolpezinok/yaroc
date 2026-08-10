@@ -18,10 +18,11 @@ use heapless::{Vec, format};
 #[cfg(not(feature = "defmt"))]
 use log::debug;
 
-use crate::{RawMutex, error::Error};
+use super::{Error, Result};
+use crate::RawMutex;
 
 /// A channel for receiving AT-command replies from the modem.
-pub type MainRxChannelType = Channel<RawMutex, Result<FromModem, Error>, 5>;
+pub type MainRxChannelType = Channel<RawMutex, Result<FromModem>, 5>;
 /// A handler for Unsolicited Result Codes (URCs).
 pub type UrcHandlerType = fn(&'_ CommandResponse) -> bool;
 /// The main channel for receiving AT-command replies from the modem.
@@ -107,7 +108,7 @@ impl AtRxBroker {
                 Ok(len) => {
                     let text = core::str::from_utf8(&buf[..len]);
                     match text {
-                        Err(_) => self.main_channel.send(Err(Error::StringEncodingError)).await,
+                        Err(_) => self.main_channel.send(Err(Error::ParseError)).await,
                         Ok(text) => self.parse_lines(text).await,
                     }
                 }
@@ -135,7 +136,7 @@ pub trait RxWithIdle {
     fn read_until_idle(
         &mut self,
         buf: &mut [u8],
-    ) -> impl core::future::Future<Output = crate::Result<usize>>;
+    ) -> impl core::future::Future<Output = Result<usize>>;
 }
 
 #[cfg(feature = "std")]
@@ -173,11 +174,11 @@ impl RxWithIdle for FakeRxWithIdle {
         spawner.spawn(reader(self, at_broker).expect("Failed to spawn AT reader"));
     }
 
-    async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
+    async fn read_until_idle(&mut self, buf: &mut [u8]) -> Result<usize> {
         let mut command_buf = [0u8; AT_COMMAND_SIZE];
         let len = self.pipe.read(&mut command_buf).await;
         let recv_command =
-            core::str::from_utf8(&command_buf[..len]).map_err(|_| Error::StringEncodingError)?;
+            core::str::from_utf8(&command_buf[..len]).map_err(|_| Error::ParseError)?;
         if let Some((command, response)) = self.responses.first() {
             assert_eq!(command, &recv_command);
             let bytes = response.as_bytes();
@@ -213,7 +214,7 @@ pub trait AtUartTrait {
         command: &str,
         call_timeout: Duration,
         response_timeout: Option<Duration>,
-    ) -> impl Future<Output = Result<AtResponse, Error>>;
+    ) -> impl Future<Output = Result<AtResponse>>;
 
     /// Performs an AT call to the modem, optionally also waiting longer for a response.
     ///
@@ -224,7 +225,7 @@ pub trait AtUartTrait {
         &mut self,
         cmd: &str,
         response_timeout: Option<Duration>,
-    ) -> impl Future<Output = crate::Result<AtResponse>> {
+    ) -> impl Future<Output = Result<AtResponse>> {
         self.call_at_timeout(cmd, Self::DEFAULT_TIMEOUT, response_timeout)
     }
 
@@ -235,7 +236,7 @@ pub trait AtUartTrait {
         &mut self,
         cmd: &str,
         timeout: Duration,
-    ) -> impl Future<Output = crate::Result<AtResponse>> {
+    ) -> impl Future<Output = Result<AtResponse>> {
         self.call_at_timeout(cmd, timeout, None)
     }
 
@@ -254,7 +255,7 @@ pub trait AtUartTrait {
         command_prefix: &str,
         second_read: bool,
         timeout: Duration,
-    ) -> impl Future<Output = crate::Result<AtResponse>>;
+    ) -> impl Future<Output = Result<AtResponse>>;
 
     /// Sends a raw message to the modem.
     ///
@@ -265,7 +266,7 @@ pub trait AtUartTrait {
         msg: &[u8],
         command_prefix: &str,
         second_read_timeout: Option<Duration>,
-    ) -> impl Future<Output = crate::Result<AtResponse>> {
+    ) -> impl Future<Output = Result<AtResponse>> {
         match second_read_timeout {
             None => self.call_second_read(msg, command_prefix, false, Self::DEFAULT_TIMEOUT),
             Some(timeout) => self.call_second_read(msg, command_prefix, true, timeout),
@@ -279,10 +280,10 @@ pub trait AtUartTrait {
     fn read_lines(
         &self,
         timeout: Duration,
-    ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>, Error>>;
+    ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>>>;
 
     /// Reads a response from the modem.
-    fn read(&mut self, timeout: Duration) -> impl Future<Output = crate::Result<AtResponse>> {
+    fn read(&mut self, timeout: Duration) -> impl Future<Output = Result<AtResponse>> {
         async move {
             let lines = self.read_lines(timeout).await?;
             Ok(AtResponse::new(lines, ""))
@@ -321,9 +322,10 @@ where
     ///
     /// # Arguments
     /// * `command` - The AT command to write.
-    async fn write_at(&mut self, command: &str) -> Result<(), Error> {
+    async fn write_at(&mut self, command: &str) -> Result<()> {
         self.main_rx_channel.clear();
-        let command = format!(AT_COMMAND_SIZE; "AT{command}\r")?;
+        let command =
+            format!(AT_COMMAND_SIZE; "AT{command}\r").map_err(|_| Error::BufferTooSmallError)?;
         self.write(command.as_bytes()).await
     }
 
@@ -331,7 +333,7 @@ where
     ///
     /// # Arguments
     /// * `message` - The message to write.
-    async fn write(&mut self, message: &[u8]) -> crate::Result<()> {
+    async fn write(&mut self, message: &[u8]) -> Result<()> {
         self.tx.write_all(message).await.map_err(From::from)
     }
 
@@ -344,7 +346,7 @@ where
         &mut self,
         command: &str,
         timeout: Duration,
-    ) -> Result<Vec<FromModem, AT_LINES>, Error> {
+    ) -> Result<Vec<FromModem, AT_LINES>> {
         //debug!("Calling: {}", command);
         self.write_at(command).await?;
         let lines = self.read_lines(timeout).await?;
@@ -384,7 +386,7 @@ where
         command_prefix: &str,
         second_read: bool,
         timeout: Duration,
-    ) -> crate::Result<AtResponse> {
+    ) -> Result<AtResponse> {
         let start = Instant::now();
         self.main_rx_channel.clear();
         self.write(msg).await?;
@@ -417,7 +419,7 @@ where
         command: &str,
         call_timeout: Duration,
         response_timeout: Option<Duration>,
-    ) -> Result<AtResponse, Error> {
+    ) -> Result<AtResponse> {
         let start = Instant::now();
         let mut lines = self.call_at_impl(command, call_timeout).await?;
         if let Some(response_timeout) = response_timeout {
@@ -441,7 +443,7 @@ where
         Ok(response)
     }
 
-    async fn read_lines(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>, Error> {
+    async fn read_lines(&self, timeout: Duration) -> Result<Vec<FromModem, AT_LINES>> {
         let mut res = Vec::new();
         let deadline = Instant::now() + timeout;
         loop {
@@ -477,7 +479,7 @@ mod test_at {
     use heapless::String;
 
     #[test]
-    fn test_at_broker() -> crate::Result<()> {
+    fn test_at_broker() -> Result<()> {
         static MAIN_RX_CHANNEL: MainRxChannelType = Channel::new();
         static URC_CHANNEL: Channel<RawMutex, CommandResponse, 1> = Channel::new();
         let handler: UrcHandlerType = |response: &CommandResponse| match response.command() {

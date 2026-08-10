@@ -8,6 +8,7 @@ use heapless::Vec;
 #[cfg(not(feature = "defmt"))]
 use log::debug;
 
+use crate::at::AtError;
 use crate::at::response::{AT_LINES, AtResponse, FromModem};
 use crate::at::uart::{AtUartTrait, UrcHandlerType};
 use crate::error::Error;
@@ -88,7 +89,7 @@ impl<M: AtUartTrait, P: ModemPin> AtUartTrait for Bg77<M, P> {
         command: &str,
         call_timeout: Duration,
         response_timeout: Option<Duration>,
-    ) -> impl Future<Output = Result<AtResponse, Error>> {
+    ) -> impl Future<Output = Result<AtResponse, AtError>> {
         self.bg77.call_at_timeout(command, call_timeout, response_timeout)
     }
 
@@ -98,14 +99,14 @@ impl<M: AtUartTrait, P: ModemPin> AtUartTrait for Bg77<M, P> {
         command_prefix: &str,
         second_read: bool,
         timeout: Duration,
-    ) -> impl Future<Output = crate::Result<AtResponse>> {
+    ) -> impl Future<Output = Result<AtResponse, AtError>> {
         self.bg77.call_second_read(msg, command_prefix, second_read, timeout)
     }
 
     fn read_lines(
         &self,
         timeout: Duration,
-    ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>, Error>> {
+    ) -> impl Future<Output = Result<Vec<FromModem, AT_LINES>, AtError>> {
         self.bg77.read_lines(timeout)
     }
 }

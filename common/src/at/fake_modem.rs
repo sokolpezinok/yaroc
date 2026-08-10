@@ -1,6 +1,7 @@
 extern crate std;
 
-use crate::at::{
+use super::{
+    Result,
     response::{AT_COMMAND_SIZE, AT_LINES, AtResponse, FromModem},
     uart::{AtUartTrait, UrcHandlerType},
 };
@@ -56,7 +57,7 @@ impl AtUartTrait for FakeModem {
         command: &str,
         _call_timeout: Duration,
         _response_timeout: Option<Duration>,
-    ) -> crate::Result<AtResponse> {
+    ) -> Result<AtResponse> {
         let (at_cmd, at_response_raw) = self.at_responses.remove(0);
         assert_eq!(
             at_cmd.as_str(),
@@ -91,7 +92,7 @@ impl AtUartTrait for FakeModem {
         command_prefix: &str,
         second_read: bool,
         _timeout: Duration,
-    ) -> crate::Result<AtResponse> {
+    ) -> Result<AtResponse> {
         let (expected_cmd, expected_read, at_response) = self.responses.remove(0);
         assert_eq!(expected_cmd, command_prefix);
         assert_eq!(expected_read, second_read);
@@ -102,7 +103,7 @@ impl AtUartTrait for FakeModem {
         ))
     }
 
-    async fn read_lines(&self, _timeout: Duration) -> crate::Result<Vec<FromModem, AT_LINES>> {
+    async fn read_lines(&self, _timeout: Duration) -> Result<Vec<FromModem, AT_LINES>> {
         todo!()
     }
 }

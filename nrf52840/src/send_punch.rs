@@ -86,7 +86,7 @@ impl SendPunchFn for Bg77SendPunchFn {
             .lock()
             .with_timeout(self.packet_timeout)
             .await
-            .map_err(|_| Error::TimeoutError)?;
+            .map_err(|_| Error::MutexTimeoutError)?;
         let send_punch = send_punch_mutex.as_mut().unwrap();
         send_punch.send_punch_impl(&punch.punches, punch.msg_id).await
     }

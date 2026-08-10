@@ -12,6 +12,7 @@ use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
 use crate::RawMutex;
+use crate::at::AtError;
 use crate::at::response::{AT_RESPONSE_SIZE, CommandResponse, FromModem};
 use crate::at::uart::AtUartTrait;
 use crate::bg77::connection::ConnectionEvent;
@@ -172,7 +173,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         bg77.call_at(&cmd, None).await?;
 
         let _ = bg77.long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1)).await;
-        firmware.ok_or(Error::ModemError)
+        firmware.ok_or(AtError::ModemError.into())
     }
 
     /// Checks if the network is attached and PDP activated
@@ -268,7 +269,7 @@ mod test {
         let mut bg77 =
             FakeModem::new(&[("AT+CGATT?", "+CGATT: 0"), ("AT+CGATT=1", "+CME ERROR: 30")]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
-        assert_eq!(res, Err(Error::CmeError(30)));
+        assert_eq!(res, Err(AtError::CmeError(30).into()));
         assert!(bg77.all_done());
     }
 

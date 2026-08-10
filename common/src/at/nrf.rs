@@ -1,8 +1,10 @@
-use crate::error::Error;
 use embassy_executor::Spawner;
 use embassy_nrf::uarte::UarteRxWithIdle;
 
-use super::uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, UrcHandlerType};
+use super::{
+    Error, Result,
+    uart::{AtRxBroker, MAIN_RX_CHANNEL, RxWithIdle, UrcHandlerType},
+};
 
 /// RX broker loop implemented for UarteRxWithIdle.
 #[embassy_executor::task]
@@ -16,7 +18,7 @@ impl RxWithIdle for UarteRxWithIdle<'static> {
         spawner.spawn(reader(self, at_broker).expect("Failed to spawn task"));
     }
 
-    async fn read_until_idle(&mut self, buf: &mut [u8]) -> crate::Result<usize> {
+    async fn read_until_idle(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.read_until_idle(buf).await.map_err(|_| Error::UartReadError)
     }
 }

@@ -6,9 +6,9 @@ use embassy_sync::pipe::Pipe;
 use embassy_time::Duration;
 use heapless::{String, Vec};
 use static_cell::StaticCell;
+use yaroc_common::at::AtError;
 use yaroc_common::at::response::{AT_COMMAND_SIZE, CommandResponse, FromModem};
-use yaroc_common::at::uart::{AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL};
-use yaroc_common::{at::uart::AtUart, error::Error};
+use yaroc_common::at::uart::{AtUart, AtUartTrait, FakeRxWithIdle, MAIN_RX_CHANNEL};
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static URC_CHANNEL: Channel<yaroc_common::RawMutex, CommandResponse, 1> = Channel::new();
@@ -88,16 +88,16 @@ async fn main(spawner: Spawner) {
     );
 
     let error = at_uart.call_at_timeout("+CBC", Duration::from_millis(10), None).await.err();
-    assert_eq!(error, Some(Error::AtErrorResponse));
+    assert_eq!(error, Some(AtError::AtErrorResponse));
 
     let error = at_uart.call_at_timeout("+CSQ", Duration::from_millis(10), None).await.err();
-    assert_eq!(error, Some(Error::CmeError(30)));
+    assert_eq!(error, Some(AtError::CmeError(30)));
 
     let error = at_uart.call_at_timeout("+QCSQ", Duration::from_millis(10), None).await.err();
-    assert_eq!(error, Some(Error::ModemError));
+    assert_eq!(error, Some(AtError::ModemError));
 
     let error = at_uart.call_at_timeout("+CEREG?", Duration::from_millis(10), None).await.err();
-    assert_eq!(error, Some(Error::TimeoutError));
+    assert_eq!(error, Some(AtError::TimeoutError));
 
     assert_eq!(MAIN_RX_CHANNEL.len(), 0);
     DONE.store(true, Ordering::Relaxed);

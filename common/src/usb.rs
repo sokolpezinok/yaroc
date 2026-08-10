@@ -194,7 +194,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
         match command {
             UsbCommand::Handshake => {
                 info!("Handshake request");
-                let magic = String::try_from("YAROC").map_err(|_| Error::StringEncodingError)?;
+                let magic = String::try_from("YAROC").map_err(|_| Error::BufferTooSmallError)?;
                 self.write_response(UsbResponse::Handshake(magic, PROTOCOL_VERSION)).await?;
             }
             UsbCommand::GetConfig => {
