@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::at::AtError;
+use crate::bg77::modem_manager::RegistrationError;
 use crate::bg77::mqtt::{ConnectError, TcpError};
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -32,10 +33,10 @@ pub enum Error {
     UsbWriteError,
     #[error("UART unexpectedly closed")]
     UartClosedError,
-    #[error("Network registration error")]
-    NetworkRegistrationError,
     #[error(transparent)]
     At(#[from] AtError),
+    #[error("Network registration error: {0}")]
+    Registration(#[from] RegistrationError),
     #[error("MQTT TCP error: {0}")]
     MqttTcp(#[from] TcpError),
     #[error("MQTT connect error: {0}")]

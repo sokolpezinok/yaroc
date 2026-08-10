@@ -3,6 +3,7 @@ use core::marker::PhantomData;
 use crate::{
     RawMutex,
     at::uart::AtUartTrait,
+    bg77::modem_manager::RegistrationError,
     error::Error,
     status::{BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE},
 };
@@ -111,7 +112,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
     async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
         let response = bg77.call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
-            return Err(Error::NetworkRegistrationError);
+            return Err(RegistrationError::NoNetworkService.into());
         }
         let (network, rsrp_dbm, snr_mult, _) =
             response.parse4::<String<10>, i16, u8, i8>([0, 2, 3, 4])?;
@@ -147,7 +148,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
         if stat == 1 || stat == 5 {
             u32::from_str_radix(&cell, 16).map_err(|_| Error::ParseError)
         } else {
-            Err(Error::NetworkRegistrationError)
+            Err(RegistrationError::NoNetworkService.into())
         }
     }
 
@@ -305,5 +306,14 @@ mod test {
         let signal_info_invalid =
             block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77_invalid)).unwrap();
         assert_eq!(signal_info_invalid.network_type, CellNetworkType::NbIotEcl0);
+    }
+
+    #[test]
+    fn test_qcsq_noservice() {
+        let _lock = block_on(TEST_MUTEX.lock());
+
+        let mut bg77 = FakeModem::new(&[("AT+QCSQ", "+QCSQ: \"NOSERVICE\"")]);
+        let res = block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77));
+        assert_eq!(res, Err(RegistrationError::NoNetworkService.into()));
     }
 }
