@@ -137,6 +137,35 @@ impl ConnectError {
     }
 }
 
+#[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum PublishError {
+    #[error("Packet retransmission timeout")]
+    RetransmissionTimeout,
+    #[error("Packet send failed")]
+    PacketSendFailed,
+    #[error("AT command error ({0:?})")]
+    At(#[from] AtError),
+    #[error("Unknown publish error ({0})")]
+    Unknown(u8),
+}
+
+impl From<core::fmt::Error> for PublishError {
+    fn from(_: core::fmt::Error) -> Self {
+        Self::At(AtError::BufferTooSmallError)
+    }
+}
+
+impl PublishError {
+    pub fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::RetransmissionTimeout,
+            2 => Self::PacketSendFailed,
+            code => Self::Unknown(code),
+        }
+    }
+}
+
 impl MqttStatus {
     /// Creates an `MqttStatus` from a BG77 `+QMTPUB` URC.
     ///
@@ -429,7 +458,7 @@ impl<M: AtUartTrait> MqttClient<M> {
         msg: &[u8],
         qos: MqttQos,
         msg_id: u16,
-    ) -> Result<(), Error> {
+    ) -> Result<(), PublishError> {
         let cid = self.client_id;
         let cmd = format!(100;
             "+QMTPUB={cid},{},{},0,\"yar/{}/{}\",{}",
@@ -449,18 +478,12 @@ impl<M: AtUartTrait> MqttClient<M> {
         };
         let response = bg77.call(msg, "+QMTPUB", second_read_timeout).await?;
         if qos == MqttQos::Q0 {
-            let (msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
-            let status = MqttStatus::from_bg77_qmtpub(msg_id, status, None);
-            match status.code {
-                StatusCode::Published => {
-                    self.last_successful_send = Instant::now();
-                    Ok(())
-                }
-                StatusCode::Retrying(_) => Ok(()),
-                StatusCode::Timeout => Err(AtError::TimeoutError.into()),
-                // TODO: forward the actual error, if possible
-                StatusCode::MqttError => Err(ConnectError::Unknown(0).into()),
-                StatusCode::Unknown => Err(ConnectError::Unknown(1).into()),
+            let (_msg_id, status) = response.parse2::<u16, u8>([1, 2], None)?;
+            if status == 0 {
+                self.last_successful_send = Instant::now();
+                Ok(())
+            } else {
+                Err(PublishError::from_code(status))
             }
         } else {
             Ok(())
@@ -562,7 +585,7 @@ mod test {
         bg77.add_pure_interactions(&[("+QMTPUB", true, "+QMTPUB: 2,0,2")]);
         let mut client = MqttClient::<_>::new(MqttClientConfig::default(), 2);
         let res = block_on(client.send_message(&mut bg77, "tpc", &[47], MqttQos::Q0, 0));
-        assert_eq!(res, Err(Error::At(AtError::TimeoutError)));
+        assert_eq!(res, Err(PublishError::PacketSendFailed));
         assert!(bg77.all_done());
     }
 
@@ -747,5 +770,15 @@ mod test {
         let response_wrong_id = CommandResponse::new("+QMTSTAT: 1,2").unwrap();
         let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response_wrong_id, sender);
         assert!(!handled);
+    }
+
+    #[test]
+    fn test_publish_error_from_code() {
+        assert_eq!(
+            PublishError::from_code(1),
+            PublishError::RetransmissionTimeout
+        );
+        assert_eq!(PublishError::from_code(2), PublishError::PacketSendFailed);
+        assert_eq!(PublishError::from_code(3), PublishError::Unknown(3));
     }
 }

@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::at::AtError;
 use crate::bg77::modem_manager::RegistrationError;
-use crate::bg77::mqtt::{ConnectError, TcpError};
+use crate::bg77::mqtt::{ConnectError, PublishError, TcpError};
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -41,6 +41,8 @@ pub enum Error {
     MqttTcp(#[from] TcpError),
     #[error("MQTT connect error: {0}")]
     MqttConnect(#[from] ConnectError),
+    #[error("MQTT publish error: {0}")]
+    MqttPublish(#[from] PublishError),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
     #[error("Mutex timeout error")]

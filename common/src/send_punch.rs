@@ -208,6 +208,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         self.mqtt_client
             .send_message(&mut self.modem, topic, &buf[..len], qos, msg_id)
             .await
+            .map_err(From::from)
     }
 
     /// Sends a `MiniCallHome` message, containing system information.
