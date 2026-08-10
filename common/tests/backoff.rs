@@ -9,19 +9,25 @@ use static_cell::StaticCell;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PunchMsg, SendPunchFn},
-    mqtt::{MqttStatus, StatusCode},
+    bg77::mqtt::PublishError,
+    mqtt::MqttStatus,
     punch::RawPunch,
 };
 
 #[derive(Debug, Eq, PartialEq)]
 struct TimedResponse {
+    msg_id: u16,
     time: Instant,
-    status: MqttStatus,
+    result: Result<(), PublishError>,
 }
 
 impl TimedResponse {
-    pub fn new(time: Instant, status: MqttStatus) -> Self {
-        Self { time, status }
+    pub fn new(msg_id: u16, time: Instant, result: Result<(), PublishError>) -> Self {
+        Self {
+            msg_id,
+            time,
+            result,
+        }
     }
 }
 
@@ -72,22 +78,26 @@ impl SendPunchFn for FakeSendPunchFn {
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
         let cnt = punch.punches[0][0];
-        let msg_id = punch.msg_id;
-        let (time, status) = if self.counter == 0 {
+        let (time, res) = if self.counter == 0 {
             // First attempt fails
-            let status = MqttStatus::mqtt_error(msg_id);
             self.counter += 1;
-            (Instant::now() + self.send_timeout, status)
+            (
+                Instant::now() + self.send_timeout,
+                Err(PublishError::PacketSendFailed),
+            )
         } else if self.counter < cnt {
             // Next attempts time out
-            let status = MqttStatus::from_bg77_qmtpub(msg_id, 2, None);
             self.counter += 1;
-            (Instant::now() + self.send_timeout, status)
+            (
+                Instant::now() + self.send_timeout,
+                Err(PublishError::RetransmissionTimeout(self.counter)),
+            )
         } else {
-            let status = MqttStatus::from_bg77_qmtpub(msg_id, 0, None);
-            (Instant::now() + self.successful_send, status)
+            (Instant::now() + self.successful_send, Ok(()))
         };
-        COMMANDS[punch.id as usize].send(TimedResponse::new(time, status)).await;
+        COMMANDS[punch.id as usize]
+            .send(TimedResponse::new(punch.msg_id, time, res))
+            .await;
         Ok(())
     }
 
@@ -117,11 +127,21 @@ async fn respond_to_fake(
             .await
             .is_err()
         {
-            let status_code = timed_response.status.code;
-            CMD_FOR_BACKOFF.send(BackoffCommand::Status(timed_response.status)).await;
+            let is_ok = timed_response.result.is_ok();
+            let status = match timed_response.result {
+                Ok(()) => MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 0, None),
+                Err(PublishError::PacketSendFailed) => {
+                    MqttStatus::mqtt_error(timed_response.msg_id)
+                }
+                Err(PublishError::RetransmissionTimeout(retries)) => {
+                    MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 2, Some(&retries))
+                }
+                Err(_) => MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 2, None),
+            };
+            CMD_FOR_BACKOFF.send(BackoffCommand::Status(status)).await;
             // We actually want the deadline: meaning there was no disconnect during that time
             // We perform no acton for MQTT disconnects.
-            if status_code == StatusCode::Published {
+            if is_ok {
                 // TODO: This should be a notification from BackoffRetries
                 PUBLISH_EVENTS.send((punch_id as u16, Instant::now())).await;
                 break;
