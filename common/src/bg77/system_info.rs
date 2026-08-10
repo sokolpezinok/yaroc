@@ -109,10 +109,10 @@ impl<M: AtUartTrait> SystemInfo<M> {
         })
     }
 
-    async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, Error> {
+    async fn signal_info(bg77: &mut M) -> Result<CellSignalInfo, RegistrationError> {
         let response = bg77.call_at("+QCSQ", None).await?;
         if response.count_response_values() != Ok(5) {
-            return Err(RegistrationError::NoNetworkService.into());
+            return Err(RegistrationError::NoNetworkService);
         }
         let (network, rsrp_dbm, snr_mult, _) =
             response.parse4::<String<10>, i16, u8, i8>([0, 2, 3, 4])?;
@@ -314,6 +314,6 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[("AT+QCSQ", "+QCSQ: \"NOSERVICE\"")]);
         let res = block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77));
-        assert_eq!(res, Err(RegistrationError::NoNetworkService.into()));
+        assert_eq!(res, Err(RegistrationError::NoNetworkService));
     }
 }

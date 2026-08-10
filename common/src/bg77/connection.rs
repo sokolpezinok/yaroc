@@ -183,7 +183,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             if let Err(err) = modem_manager.network_registration(bg77, force_reattach).await {
                 error!("Cellular network registration failed: {}", err);
                 self.update_status(ConnectionState::CellularRegistrationFailed);
-                return Err(err);
+                return Err(err.into());
             }
         }
 

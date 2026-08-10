@@ -107,8 +107,8 @@ pub enum RegistrationError {
     Unknown(u16),
 }
 
-impl RegistrationError {
-    pub fn from_error(err: AtError) -> Self {
+impl From<AtError> for RegistrationError {
+    fn from(err: AtError) -> Self {
         match err {
             AtError::CmeError(code) => match code {
                 0 => Self::PhoneFailure,
@@ -311,7 +311,7 @@ impl<M: AtUartTrait> ModemManager<M> {
     }
 
     /// Checks if the network is attached and PDP activated
-    pub async fn is_registered(&self, bg77: &mut M) -> crate::Result<bool> {
+    pub async fn is_registered(&self, bg77: &mut M) -> Result<bool, RegistrationError> {
         let gatt = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0])?;
         let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         Ok(gatt == 1 && stat == 1)
@@ -327,7 +327,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         &self,
         bg77: &mut M,
         force_reattach: bool,
-    ) -> crate::Result<()> {
+    ) -> Result<(), RegistrationError> {
         let att_state = if force_reattach {
             warn!("Will deattach from network because of no messages being sent for a long time");
             bg77.call_at("E0", None).await?;
@@ -343,8 +343,7 @@ impl<M: AtUartTrait> ModemManager<M> {
             info!("Will attach to network");
             let _response = bg77
                 .long_call_at("+CGATT=1", ACTIVATION_TIMEOUT + Duration::from_secs(1))
-                .await
-                .map_err(RegistrationError::from_error)?;
+                .await?;
             #[cfg(feature = "defmt")]
             if !_response.lines().is_empty() {
                 debug!("Read {=[?]} after CGATT=1", _response.lines());
@@ -353,17 +352,15 @@ impl<M: AtUartTrait> ModemManager<M> {
 
         let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
         if stat != 1 {
-            let _ = bg77
-                .long_call_at("+CGACT=1,1", ACTIVATION_TIMEOUT)
-                .await
-                .map_err(RegistrationError::from_error)?;
-            let res = bg77.call_at("+CGACT?", None).await;
-            let stat_retry = match res {
-                Ok(r) => r.parse2::<u8, u8>([0, 1], Some(1)).map(|(_, s)| s).unwrap_or(0),
-                Err(err) => return Err(RegistrationError::from_error(err).into()),
-            };
+            let _ = bg77.long_call_at("+CGACT=1,1", ACTIVATION_TIMEOUT).await?;
+            let stat_retry = bg77
+                .call_at("+CGACT?", None)
+                .await?
+                .parse2::<u8, u8>([0, 1], Some(1))
+                .map(|(_, s)| s)
+                .unwrap_or(0);
             if stat_retry != 1 {
-                return Err(RegistrationError::PdpContextFailed.into());
+                return Err(RegistrationError::PdpContextFailed);
             }
         } else if att_state == 1 {
             info!("Already registered to network");
@@ -410,7 +407,7 @@ mod test {
         let mut bg77 =
             FakeModem::new(&[("AT+CGATT?", "+CGATT: 0"), ("AT+CGATT=1", "+CME ERROR: 30")]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
-        assert_eq!(res, Err(RegistrationError::NoNetworkService.into()));
+        assert_eq!(res, Err(RegistrationError::NoNetworkService));
         assert!(bg77.all_done());
     }
 
@@ -423,7 +420,7 @@ mod test {
             ("AT+CGACT=1,1", "+CME ERROR: 31"),
         ]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
-        assert_eq!(res, Err(RegistrationError::NetworkTimeout.into()));
+        assert_eq!(res, Err(RegistrationError::NetworkTimeout));
         assert!(bg77.all_done());
     }
 
@@ -438,7 +435,7 @@ mod test {
             ("AT+CGACT?", "+CGACT: 1,0"),
         ]);
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
-        assert_eq!(res, Err(RegistrationError::PdpContextFailed.into()));
+        assert_eq!(res, Err(RegistrationError::PdpContextFailed));
         assert!(bg77.all_done());
     }
 
