@@ -13,7 +13,7 @@
 //! method in a separate task. You can then send punches to the backoff task by sending
 //! `BackoffCommand::PublishPunches` commands to the `CMD_FOR_BACKOFF` channel.
 
-use crate::{RawMutex, mqtt::StatusCode, punch::RawPunch};
+use crate::{RawMutex, bg77::mqtt::PublishError, punch::RawPunch};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -50,7 +50,10 @@ pub enum BackoffCommand {
     /// A notification that the MQTT client has connected.
     MqttConnected,
     /// A status update from the MQTT client.
-    Status { msg_id: u8, status: StatusCode },
+    Status {
+        msg_id: u16,
+        result: Result<(), PublishError>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -138,7 +141,7 @@ pub trait SendPunchFn {
 /// Each message in the `unpublished_msgs` vector has a corresponding signal in this array.
 /// The signal is used to notify the `try_sending_with_retries` function about the status of
 /// the message.
-static STATUS_UPDATES: LazyLock<[Signal<RawMutex, StatusCode>; PUNCH_QUEUE_SIZE]> =
+static STATUS_UPDATES: LazyLock<[Signal<RawMutex, Result<(), PublishError>>; PUNCH_QUEUE_SIZE]> =
     LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
 
 /// An event related to the MQTT client.
@@ -219,8 +222,8 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
     }
 
     /// Handles a status update from the MQTT client.
-    fn handle_status(&mut self, msg_id: u8, status: StatusCode) {
-        STATUS_UPDATES.get()[msg_id as usize].signal(status);
+    fn handle_status(&mut self, msg_id: u16, result: Result<(), PublishError>) {
+        STATUS_UPDATES.get()[msg_id as usize].signal(result);
     }
 
     /// Publishes an MQTT disconnect event.
@@ -245,7 +248,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
                     self.handle_publish_request(punches, punch_id)
                 }
 
-                BackoffCommand::Status { msg_id, status } => self.handle_status(msg_id, status),
+                BackoffCommand::Status { msg_id, result } => self.handle_status(msg_id, result),
                 BackoffCommand::MqttDisconnected => self.mqtt_disconnected(),
                 BackoffCommand::MqttConnected => self.mqtt_connected(),
                 BackoffCommand::PunchPublished(punch_id, msg_id) => {
@@ -270,12 +273,28 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
             )
             .await
             {
-                Either::First(StatusCode::Published) => {
+                Either::First(Ok(())) => {
                     return true;
                 }
-                Either::First(StatusCode::Timeout) | Either::Second(MqttEvent::Disconnect) => {
+                Either::First(Err(PublishError::Retrying(retries))) => {
+                    warn!(
+                        "Sending punch ID={} will be retried by the modem, has been tried {} times",
+                        punch_id, retries
+                    );
+                }
+                Either::First(Err(err)) => {
                     error!(
-                        "Punch ID={} failed to send, trying again after {} s",
+                        "Punch ID={} failed to send ({:?}), trying again after {} s",
+                        punch_id,
+                        err,
+                        punch_msg.backoff.as_millis() as f32 / 1_000.0
+                    );
+
+                    return false;
+                }
+                Either::Second(MqttEvent::Disconnect) => {
+                    error!(
+                        "Punch ID={} failed to send (disconnected), trying again after {} s",
                         punch_id,
                         punch_msg.backoff.as_millis() as f32 / 1_000.0
                     );
@@ -283,15 +302,6 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
                     return false;
                 }
                 Either::Second(MqttEvent::Connect) => {}
-                Either::First(StatusCode::Retrying(retries)) => {
-                    warn!(
-                        "Sending punch ID={} will be retried by the modem, has been tried {} times",
-                        punch_id, retries
-                    );
-                }
-                Either::First(StatusCode::Unknown) => {
-                    error!("Uknown message status");
-                }
             }
         }
     }

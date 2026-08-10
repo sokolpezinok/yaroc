@@ -5,15 +5,6 @@ use heapless::String;
 use sequential_storage::map::PostcardValue;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum StatusCode {
-    Published,
-    Retrying(u8),
-    Timeout,
-    Unknown,
-}
-
 /// Quality of Service for MQTT messages.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

@@ -10,7 +10,6 @@ use yaroc_common::{
     RawMutex,
     backoff::{BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PunchMsg, SendPunchFn},
     bg77::mqtt::PublishError,
-    mqtt::StatusCode,
     punch::RawPunch,
 };
 
@@ -90,7 +89,7 @@ impl SendPunchFn for FakeSendPunchFn {
             self.counter += 1;
             (
                 Instant::now() + self.send_timeout,
-                Err(PublishError::RetransmissionTimeout(self.counter)),
+                Err(PublishError::Retrying(self.counter)),
             )
         } else {
             (Instant::now() + self.successful_send, Ok(()))
@@ -128,18 +127,10 @@ async fn respond_to_fake(
             .is_err()
         {
             let is_ok = timed_response.result.is_ok();
-            let status = match timed_response.result {
-                Ok(()) => StatusCode::from_bg77_qmtpub(0, None),
-                Err(PublishError::PacketSendFailed) => StatusCode::Timeout,
-                Err(PublishError::RetransmissionTimeout(retries)) => {
-                    StatusCode::from_bg77_qmtpub(2, Some(&retries))
-                }
-                Err(_) => StatusCode::from_bg77_qmtpub(2, None),
-            };
             CMD_FOR_BACKOFF
                 .send(BackoffCommand::Status {
-                    msg_id: timed_response.msg_id as u8,
-                    status,
+                    msg_id: timed_response.msg_id,
+                    result: timed_response.result,
                 })
                 .await;
             // We actually want the deadline: meaning there was no disconnect during that time
