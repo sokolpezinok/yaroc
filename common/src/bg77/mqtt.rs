@@ -397,7 +397,7 @@ impl<M: AtUartTrait> MqttClient<M> {
     }
 
     /// Checks whether the MQTT client is connected
-    pub async fn is_connected(&self, bg77: &mut M) -> crate::Result<bool> {
+    pub async fn is_connected(&self, bg77: &mut M) -> Result<bool, ConnectError> {
         let (_, status) = bg77
             .call_at("+QMTCONN?", None)
             .await?

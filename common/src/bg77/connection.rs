@@ -19,7 +19,7 @@ const FORCE_REATTACH_RATE_LIMIT: Duration =
 pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 /// Explicit state of the cellular and MQTT connection.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub enum ConnectionState {
     /// Completely disconnected from cellular network and MQTT broker.
@@ -127,7 +127,7 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
     /// Returns the current connection state.
     #[cfg(test)]
     pub fn state(&self) -> ConnectionState {
-        self.state.clone()
+        self.state
     }
 
     #[cfg(test)]
