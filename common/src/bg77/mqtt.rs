@@ -140,8 +140,8 @@ impl ConnectError {
 #[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PublishError {
-    #[error("Packet retransmission timeout")]
-    RetransmissionTimeout,
+    #[error("Packet retransmission timeout, retry #{0}")]
+    RetransmissionTimeout(u8),
     #[error("Packet send failed")]
     PacketSendFailed,
     #[error("AT command error ({0:?})")]
@@ -157,9 +157,9 @@ impl From<core::fmt::Error> for PublishError {
 }
 
 impl PublishError {
-    pub fn from_code(code: u8) -> Self {
+    pub fn from_code(code: u8, retries: Option<&u8>) -> Self {
         match code {
-            1 => Self::RetransmissionTimeout,
+            1 => Self::RetransmissionTimeout(*retries.unwrap_or(&0)),
             2 => Self::PacketSendFailed,
             code => Self::Unknown(code),
         }
@@ -483,7 +483,7 @@ impl<M: AtUartTrait> MqttClient<M> {
                 self.last_successful_send = Instant::now();
                 Ok(())
             } else {
-                Err(PublishError::from_code(status))
+                Err(PublishError::from_code(status, None))
             }
         } else {
             Ok(())
@@ -775,10 +775,13 @@ mod test {
     #[test]
     fn test_publish_error_from_code() {
         assert_eq!(
-            PublishError::from_code(1),
-            PublishError::RetransmissionTimeout
+            PublishError::from_code(1, Some(&2)),
+            PublishError::RetransmissionTimeout(2)
         );
-        assert_eq!(PublishError::from_code(2), PublishError::PacketSendFailed);
-        assert_eq!(PublishError::from_code(3), PublishError::Unknown(3));
+        assert_eq!(
+            PublishError::from_code(2, None),
+            PublishError::PacketSendFailed
+        );
+        assert_eq!(PublishError::from_code(3, None), PublishError::Unknown(3));
     }
 }
