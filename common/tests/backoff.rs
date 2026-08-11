@@ -77,26 +77,35 @@ impl SendPunchFn for FakeSendPunchFn {
 
     async fn send_punch(&mut self, punch: &PunchMsg) -> yaroc_common::Result<()> {
         let cnt = punch.punches[0][0];
-        let (time, res) = if self.counter == 0 {
+        if self.counter == 0 {
             // First attempt fails
             self.counter += 1;
-            (
-                Instant::now() + self.send_timeout,
-                Err(PublishError::PacketSendFailed),
-            )
-        } else if self.counter < cnt {
-            // Next attempts time out
-            self.counter += 1;
-            (
-                Instant::now() + self.send_timeout,
-                Err(PublishError::Retrying(self.counter)),
-            )
+            let time = Instant::now() + self.send_timeout;
+            COMMANDS[punch.id as usize]
+                .send(TimedResponse::new(
+                    punch.msg_id,
+                    time,
+                    Err(PublishError::PacketSendFailed),
+                ))
+                .await;
         } else {
-            (Instant::now() + self.successful_send, Ok(()))
-        };
-        COMMANDS[punch.id as usize]
-            .send(TimedResponse::new(punch.msg_id, time, res))
-            .await;
+            let mut time = Instant::now();
+            let mut step = self.counter;
+            while step <= cnt {
+                let (dt, res) = if step < cnt {
+                    let retries = step;
+                    step += 1;
+                    (self.send_timeout, Err(PublishError::Retrying(retries)))
+                } else {
+                    step += 1;
+                    (self.successful_send, Ok(()))
+                };
+                time += dt;
+                COMMANDS[punch.id as usize]
+                    .send(TimedResponse::new(punch.msg_id, time, res))
+                    .await;
+            }
+        }
         Ok(())
     }
 
@@ -125,6 +134,8 @@ async fn respond_to_fake(
             .with_deadline(timed_response.time)
             .await
             .is_err()
+        // We actually want the deadline - is_err(): meaning there was no disconnect during that
+        // time We perform no acton for MQTT disconnects.
         {
             let is_ok = timed_response.result.is_ok();
             CMD_FOR_BACKOFF
@@ -133,8 +144,6 @@ async fn respond_to_fake(
                     result: timed_response.result,
                 })
                 .await;
-            // We actually want the deadline: meaning there was no disconnect during that time
-            // We perform no acton for MQTT disconnects.
             if is_ok {
                 // TODO: This should be a notification from BackoffRetries
                 PUBLISH_EVENTS.send((punch_id as u16, Instant::now())).await;
@@ -214,24 +223,28 @@ async fn main(spawner: Spawner) {
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
     Timer::after_millis(600).await;
-    // MQTT disconnect during a backoff wait should have no effect.
     disconnect_publisher.publish_immediate(true);
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
     Timer::after_millis(10).await;
     disconnect_publisher.publish_immediate(true);
+    // MQTT disconnect during a backoff wait should have no effect.
     CMD_FOR_BACKOFF.send(BackoffCommand::MqttDisconnected).await;
 
     for _ in 0..2 {
         let (punch_id, time) = PUBLISH_EVENTS.receive().await;
         match punch_id {
-            // Try 1 is shortened by MQTT disconnect message, so it takes 200 instead of 400 ms.
-            // 100 try 1,  400 try 2 + 3, 200 try 4, and in-between (1 + 2 + 4) * 100 backoff
-            0 => assert!(time.as_millis().abs_diff(1800) <= 15),
-            // 100 try 1,  400 try 2, 200 try 3, and in-between (1 + 2) * 100 backoff
-            1 => assert!(time.as_millis().abs_diff(1000) <= 10),
+            // 100 ms for try 1 (interrupted after 100 by MQTT disconnect), then 1st backoff 100.
+            // 500 ms for try 2 (interrupted after 500 by MQTT disconnect), then 2nd backoff 200.
+            // 1000 ms for try 3, full retry sequence of 400 + 400 + 200.
+            0 => assert!(time.as_millis().abs_diff(1900) <= 25),
+            // 100 ms for try 1 (interrupted after 100 by MQTT disconnect), then 1st backoff 100.
+            // 500 ms for try 2 (interrupted after 500 by MQTT disconnect), then 2nd backoff 200.
+            // 600 ms for try 3, full retry sequence of 400 + 200.
+            1 => assert!(time.as_millis().abs_diff(1500) <= 25),
             _ => panic!("Got wrong message"),
         }
     }
+
     assert!(PUBLISH_EVENTS.is_empty());
     // End of first test
 
@@ -253,7 +266,7 @@ async fn main(spawner: Spawner) {
 
     let (punch_id, time) = PUBLISH_EVENTS.receive().await;
     assert_eq!(punch_id, 3);
-    assert!((time - start).as_millis().abs_diff(1650) <= 15);
+    assert!((time - start).as_millis().abs_diff(1500) <= 25);
     // End of second test
 
     assert!(PUBLISH_EVENTS.is_empty());
