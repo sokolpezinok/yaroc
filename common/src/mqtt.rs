@@ -11,7 +11,6 @@ pub enum StatusCode {
     Published,
     Retrying(u8),
     Timeout,
-    MqttError,
     Unknown,
 }
 

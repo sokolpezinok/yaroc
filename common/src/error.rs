@@ -45,8 +45,8 @@ pub enum Error {
     MqttPublish(#[from] PublishError),
     #[error("Semaphore synchronization error")]
     SemaphoreError,
-    #[error("Mutex timeout error")]
-    MutexTimeoutError,
+    #[error("Timeout error")]
+    TimeoutError,
     #[error("Not connected")]
     NotConnected,
 }

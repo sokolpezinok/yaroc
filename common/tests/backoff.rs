@@ -130,7 +130,7 @@ async fn respond_to_fake(
             let is_ok = timed_response.result.is_ok();
             let status = match timed_response.result {
                 Ok(()) => StatusCode::from_bg77_qmtpub(0, None),
-                Err(PublishError::PacketSendFailed) => StatusCode::MqttError,
+                Err(PublishError::PacketSendFailed) => StatusCode::Timeout,
                 Err(PublishError::RetransmissionTimeout(retries)) => {
                     StatusCode::from_bg77_qmtpub(2, Some(&retries))
                 }

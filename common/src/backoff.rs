@@ -92,12 +92,12 @@ impl PunchMsg {
         }
     }
 
-    /// Muliplies the backoff duration by BACKOFF_MULTIPLIER for the next retry.
+    /// Multiplies the backoff duration by 2 for the next retry.
     pub fn multiply_backoff(&mut self) {
         self.backoff *= BACKOFF_MULTIPLIER;
     }
 
-    /// Reduce backoff by BACKOFF_MULTIPLIER.
+    /// Reduce backoff by 2.
     fn reduce_backoff(&mut self) {
         self.backoff /= BACKOFF_MULTIPLIER;
     }
@@ -165,7 +165,7 @@ pub struct BackoffRetries<S: SendPunchFn> {
     spawner: Spawner,
 }
 
-impl<S: SendPunchFn + Copy> BackoffRetries<S> {
+impl<S: SendPunchFn + Clone> BackoffRetries<S> {
     /// Creates a new `BackoffRetries`.
     pub fn new(
         send_punch_fn: S,
@@ -210,7 +210,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 let msg = PunchMsg::new(punches, punch_id, msg_id as u16, self.initial_backoff);
                 self.unpublished_msgs[msg_id] = true;
                 // Spawn an future that will try to send the punch.
-                self.send_punch_fn.spawn(msg, self.spawner);
+                self.send_punch_fn.clone().spawn(msg, self.spawner);
             }
             _ => {
                 error!("Message queue is full");
@@ -273,8 +273,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                 Either::First(StatusCode::Published) => {
                     return true;
                 }
-                Either::First(StatusCode::Timeout | StatusCode::MqttError)
-                | Either::Second(MqttEvent::Disconnect) => {
+                Either::First(StatusCode::Timeout) | Either::Second(MqttEvent::Disconnect) => {
                     error!(
                         "Punch ID={} failed to send, trying again after {} s",
                         punch_id,
@@ -325,6 +324,22 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         }
     }
 
+    async fn call_send_punch(
+        punch_msg: &PunchMsg,
+        send_punch_fn: &mut S,
+        mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
+        send_punch_timeout: &Duration,
+    ) -> crate::Result<bool> {
+        {
+            let _releaser = send_punch_fn.acquire().await.unwrap();
+            send_punch_fn.send_punch(punch_msg).await?;
+        }
+        Ok(Self::is_message_sent(punch_msg, mqtt_events)
+            .with_timeout(*send_punch_timeout)
+            .await
+            .unwrap_or(false))
+    }
+
     /// Tries to send a punch with retries.
     ///
     /// This function is intended to be used by [`SendPunchFn::spawn`].
@@ -333,23 +348,19 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
         mut send_punch_fn: S,
         send_punch_timeout: Duration,
     ) {
-        // TODO: set expiration deadline
         let msg_idx = punch_msg.msg_id as usize;
         let punch_id = punch_msg.id;
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
         loop {
             STATUS_UPDATES.get()[msg_idx].reset();
-            let res = {
-                let _releaser = send_punch_fn.acquire().await.unwrap();
-                let res = send_punch_fn.send_punch(&punch_msg).await;
-                if res.is_err() {
-                    STATUS_UPDATES.get()[msg_idx].signal(StatusCode::MqttError);
-                }
-                Self::is_message_sent(&punch_msg, &mut mqtt_events)
-                    .with_timeout(send_punch_timeout)
-                    .await
-            };
+            let res = Self::call_send_punch(
+                &punch_msg,
+                &mut send_punch_fn,
+                &mut mqtt_events,
+                &send_punch_timeout,
+            )
+            .await;
 
             match res {
                 Ok(true) => {
@@ -360,8 +371,14 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     break;
                 }
                 Ok(false) => Self::backoff(&mut punch_msg, &mut mqtt_events).await,
-                Err(_) => {
-                    error!("Response from modem timed out for punch ID={}", punch_id);
+                Err(err) => {
+                    error!(
+                        "Punch ID={} failed to send ({}), trying again after {} s",
+                        punch_id,
+                        err,
+                        punch_msg.backoff.as_millis() as f32 / 1_000.0
+                    );
+                    Self::backoff(&mut punch_msg, &mut mqtt_events).await;
                 }
             }
         }
