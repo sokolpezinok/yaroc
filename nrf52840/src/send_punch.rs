@@ -16,6 +16,7 @@ use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
 use yaroc_common::flash::Flash;
+use yaroc_common::bg77::mqtt::MQTT_RETRY_COUNT;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
@@ -56,7 +57,7 @@ impl Bg77SendPunchFn {
 
     /// Returns the timeout for sending a punch.
     pub fn send_punch_timeout(&self) -> Duration {
-        self.packet_timeout * 2
+        self.packet_timeout * (u32::from(MQTT_RETRY_COUNT) + 1)
     }
 }
 

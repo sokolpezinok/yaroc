@@ -19,6 +19,7 @@ use crate::{
     send_punch::SendPunchCommand,
 };
 
+pub const MQTT_RETRY_COUNT: u8 = 2;
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
@@ -332,7 +333,7 @@ impl<M: AtUartTrait> MqttClient<M> {
         }
 
         let cmd = format!(50;
-            "+QMTCFG=\"timeout\",{cid},{},2,1",
+            "+QMTCFG=\"timeout\",{cid},{},{MQTT_RETRY_COUNT},1",
             self.config.packet_timeout.as_secs()
         )?;
         bg77.call_at(&cmd, None).await?;
