@@ -330,10 +330,8 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
         send_punch_timeout: &Duration,
     ) -> crate::Result<bool> {
-        {
-            let _releaser = send_punch_fn.acquire().await.unwrap();
-            send_punch_fn.send_punch(punch_msg).await?;
-        }
+        let _releaser = send_punch_fn.acquire().await?;
+        send_punch_fn.send_punch(punch_msg).await?;
         Ok(Self::is_message_sent(punch_msg, mqtt_events)
             .with_timeout(*send_punch_timeout)
             .await
