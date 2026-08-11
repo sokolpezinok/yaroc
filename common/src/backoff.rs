@@ -13,11 +13,7 @@
 //! method in a separate task. You can then send punches to the backoff task by sending
 //! `BackoffCommand::PublishPunches` commands to the `CMD_FOR_BACKOFF` channel.
 
-use crate::{
-    RawMutex,
-    mqtt::{MqttStatus, StatusCode},
-    punch::RawPunch,
-};
+use crate::{RawMutex, mqtt::StatusCode, punch::RawPunch};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -54,7 +50,7 @@ pub enum BackoffCommand {
     /// A notification that the MQTT client has connected.
     MqttConnected,
     /// A status update from the MQTT client.
-    Status(MqttStatus),
+    Status { msg_id: u8, status: StatusCode },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -223,8 +219,8 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
     }
 
     /// Handles a status update from the MQTT client.
-    fn handle_status(&mut self, status: MqttStatus) {
-        STATUS_UPDATES.get()[status.msg_id as usize].signal(status.code);
+    fn handle_status(&mut self, msg_id: u8, status: StatusCode) {
+        STATUS_UPDATES.get()[msg_id as usize].signal(status);
     }
 
     /// Publishes an MQTT disconnect event.
@@ -249,7 +245,7 @@ impl<S: SendPunchFn + Copy> BackoffRetries<S> {
                     self.handle_publish_request(punches, punch_id)
                 }
 
-                BackoffCommand::Status(status) => self.handle_status(status),
+                BackoffCommand::Status { msg_id, status } => self.handle_status(msg_id, status),
                 BackoffCommand::MqttDisconnected => self.mqtt_disconnected(),
                 BackoffCommand::MqttConnected => self.mqtt_connected(),
                 BackoffCommand::PunchPublished(punch_id, msg_id) => {

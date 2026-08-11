@@ -15,24 +15,6 @@ pub enum StatusCode {
     Unknown,
 }
 
-/// Represents the status of an MQTT message publication.
-#[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct MqttStatus {
-    pub msg_id: u16,
-    pub code: StatusCode,
-}
-
-impl MqttStatus {
-    /// Creates an `MqttStatus` indicating an MQTT error.
-    pub fn mqtt_error(msg_id: u16) -> Self {
-        Self {
-            msg_id,
-            code: StatusCode::MqttError,
-        }
-    }
-}
-
 /// Quality of Service for MQTT messages.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -141,13 +123,6 @@ mod tests {
     use super::*;
     use core::str::FromStr;
     use postcard::{from_bytes, to_slice};
-
-    #[test]
-    fn test_mqtt_status_error() {
-        let status = MqttStatus::mqtt_error(42);
-        assert_eq!(status.msg_id, 42);
-        assert_eq!(status.code, StatusCode::MqttError);
-    }
 
     #[test]
     fn test_mqtt_client_config_update() {

@@ -15,7 +15,7 @@ use crate::{
     backoff::{BackoffCommand, CMD_FOR_BACKOFF},
     bg77::{connection::ConnectionEvent, modem_manager::ACTIVATION_TIMEOUT},
     error::Error,
-    mqtt::{MqttClientConfig, MqttConfig, MqttQos, MqttStatus, StatusCode},
+    mqtt::{MqttClientConfig, MqttConfig, MqttQos, StatusCode},
     send_punch::SendPunchCommand,
 };
 
@@ -166,22 +166,17 @@ impl PublishError {
     }
 }
 
-impl MqttStatus {
-    /// Creates an `MqttStatus` from a BG77 `+QMTPUB` URC.
+impl StatusCode {
+    /// Creates a `StatusCode` from a BG77 `+QMTPUB` URC.
     ///
-    /// `msg_id` is the message ID.
     /// `status` is the status code reported by the modem (0: Published, 1: Retrying, 2: Timeout).
     /// `retries` is an optional number of retries if the status is `Retrying`.
-    pub fn from_bg77_qmtpub(msg_id: u16, status: u8, retries: Option<&u8>) -> Self {
-        let status = match status {
+    pub fn from_bg77_qmtpub(status: u8, retries: Option<&u8>) -> Self {
+        match status {
             0 => StatusCode::Published,
             1 => StatusCode::Retrying(*retries.unwrap_or(&0)),
             2 => StatusCode::Timeout,
             _ => StatusCode::Unknown,
-        };
-        Self {
-            msg_id,
-            code: status,
         }
     }
 }
@@ -304,12 +299,13 @@ impl<M: AtUartTrait> MqttClient<M> {
         };
 
         if values[0] == CLIENT_ID {
-            let status = MqttStatus::from_bg77_qmtpub(values[1] as u16, values[2], values.get(3));
-            if status.code == StatusCode::Published {
+            let msg_id = values[1];
+            let status = StatusCode::from_bg77_qmtpub(values[2], values.get(3));
+            if status == StatusCode::Published {
                 MQTT_MSG_PUBLISHED.get()[usize::from(CLIENT_ID)].signal(Instant::now());
             }
-            if status.msg_id > 0 {
-                if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status(status)).is_err() {
+            if msg_id > 0 {
+                if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status { msg_id, status }).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }
                 true
@@ -604,12 +600,14 @@ mod test {
         assert!(handled);
         assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_some());
 
-        let expected_status = MqttStatus {
-            msg_id: 1,
-            code: StatusCode::Published,
-        };
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
-        assert_eq!(status, BackoffCommand::Status(expected_status));
+        assert_eq!(
+            status,
+            BackoffCommand::Status {
+                msg_id: 1,
+                status: StatusCode::Published,
+            }
+        );
 
         // The same as above, but for client ID 1
         let response = CommandResponse::new("+QMTPUB: 1,1,0").unwrap();
@@ -636,12 +634,14 @@ mod test {
         assert!(handled);
         assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
 
-        let expected_status = MqttStatus {
-            msg_id: 2,
-            code: StatusCode::Timeout,
-        };
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
-        assert_eq!(status, BackoffCommand::Status(expected_status));
+        assert_eq!(
+            status,
+            BackoffCommand::Status {
+                msg_id: 2,
+                status: StatusCode::Timeout,
+            }
+        );
         assert!(CHANNEL.try_receive().is_err());
     }
 

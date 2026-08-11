@@ -10,7 +10,7 @@ use yaroc_common::{
     RawMutex,
     backoff::{BackoffCommand, BackoffRetries, CMD_FOR_BACKOFF, PunchMsg, SendPunchFn},
     bg77::mqtt::PublishError,
-    mqtt::MqttStatus,
+    mqtt::StatusCode,
     punch::RawPunch,
 };
 
@@ -129,16 +129,19 @@ async fn respond_to_fake(
         {
             let is_ok = timed_response.result.is_ok();
             let status = match timed_response.result {
-                Ok(()) => MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 0, None),
-                Err(PublishError::PacketSendFailed) => {
-                    MqttStatus::mqtt_error(timed_response.msg_id)
-                }
+                Ok(()) => StatusCode::from_bg77_qmtpub(0, None),
+                Err(PublishError::PacketSendFailed) => StatusCode::MqttError,
                 Err(PublishError::RetransmissionTimeout(retries)) => {
-                    MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 2, Some(&retries))
+                    StatusCode::from_bg77_qmtpub(2, Some(&retries))
                 }
-                Err(_) => MqttStatus::from_bg77_qmtpub(timed_response.msg_id, 2, None),
+                Err(_) => StatusCode::from_bg77_qmtpub(2, None),
             };
-            CMD_FOR_BACKOFF.send(BackoffCommand::Status(status)).await;
+            CMD_FOR_BACKOFF
+                .send(BackoffCommand::Status {
+                    msg_id: timed_response.msg_id as u8,
+                    status,
+                })
+                .await;
             // We actually want the deadline: meaning there was no disconnect during that time
             // We perform no acton for MQTT disconnects.
             if is_ok {
