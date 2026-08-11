@@ -216,7 +216,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
                 self.send_punch_fn.clone().spawn(msg, self.spawner);
             }
             _ => {
-                error!("Message queue is full");
+                error!("Message queue is full, cannot send punches right now");
             }
         }
     }

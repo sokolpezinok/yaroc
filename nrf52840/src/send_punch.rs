@@ -15,8 +15,8 @@ use embassy_time::{Duration, Ticker, WithTimeout};
 use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
-use yaroc_common::flash::Flash;
 use yaroc_common::bg77::mqtt::MQTT_RETRY_COUNT;
+use yaroc_common::flash::Flash;
 use yaroc_common::{
     RawMutex,
     backoff::{BackoffRetries, PUNCH_QUEUE_SIZE, PunchMsg, SendPunchFn},
