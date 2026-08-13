@@ -19,7 +19,6 @@ pub static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();
 #[derive(Clone, Copy)]
 pub struct BatteryInfo {
     pub mv: u16,
-    pub percents: u8,
 }
 pub static BATTERY: Watch<RawMutex, BatteryInfo, 1> = Watch::new();
 
@@ -190,7 +189,6 @@ impl Position {
 pub struct MiniCallHome {
     pub signal_info: Option<CellSignalInfo>,
     pub batt_mv: Option<u16>,
-    pub batt_percents: Option<u8>,
     pub cpu_temperature: Option<f32>,
     pub cpu_freq: Option<u32>,
     pub timestamp: Option<DateTime<FixedOffset>>,
@@ -214,13 +212,16 @@ impl MiniCallHome {
         }
     }
 
+    pub fn batt_percents(&self) -> Option<u8> {
+        self.batt_mv.map(voltage_to_percent)
+    }
+
     pub fn set_signal_info(&mut self, signal_info: CellSignalInfo) {
         self.signal_info = Some(signal_info);
     }
 
-    pub fn set_battery_info(&mut self, battery_mv: u16, battery_percents: u8) {
+    pub fn set_battery_info(&mut self, battery_mv: u16) {
         self.batt_mv = Some(battery_mv);
-        self.batt_percents = Some(battery_percents);
     }
 
     pub fn set_cpu_temperature(&mut self, cpu_temperature: f32) {
@@ -286,7 +287,6 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
         Ok(Self {
             signal_info: Some(signal_info),
             batt_mv: Some(value.millivolts as u16),
-            batt_percents: Some(voltage_to_percent(value.millivolts as u16)),
             cpu_temperature: Some(value.cpu_temperature),
             cpu_freq: Some(value.freq),
             timestamp,
@@ -324,7 +324,7 @@ mod test {
         assert_eq!(mch.cpu_temperature.unwrap(), 47.2);
         assert_eq!(mch.cpu_freq.unwrap(), 1600);
         assert_eq!(mch.batt_mv.unwrap(), 3782);
-        assert_eq!(mch.batt_percents.unwrap(), 57);
+        assert_eq!(mch.batt_percents().unwrap(), 57);
         assert_eq!(
             mch.signal_info.unwrap(),
             CellSignalInfo {

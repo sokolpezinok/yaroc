@@ -6,7 +6,7 @@ use embassy_time::{Duration, Instant, Ticker};
 use yaroc_common::{
     RawMutex,
     send_punch::{COMMAND_CHANNEL, SendPunchCommand},
-    status::{BATTERY, BatteryInfo, TEMPERATURE, Temp, voltage_to_percent},
+    status::{BATTERY, BatteryInfo, TEMPERATURE, Temp},
 };
 
 use crate::ble::Ble;
@@ -100,9 +100,8 @@ pub async fn battery_update(mut saadc: Saadc<'static, 1>) {
         // The raw value is in buf[0].
         let raw = buf[0].max(0);
         let mv = (f32::from(raw) * 1.2207031) as u16;
-        let percents = voltage_to_percent(mv);
         info!("Battery voltage: {} mV", mv);
-        battery_sender.send(BatteryInfo { mv, percents });
+        battery_sender.send(BatteryInfo { mv });
         ticker.next().await;
     }
 }

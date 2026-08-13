@@ -9,7 +9,7 @@ use yaroc_common::error::Error;
 use yaroc_common::proto::status::Msg;
 use yaroc_common::proto::{DeviceEvent, Disconnected, EventType, Status};
 use yaroc_common::punch::SiPunch;
-use yaroc_common::status::{CellNetworkType, MiniCallHome};
+use yaroc_common::status::{CellNetworkType, MiniCallHome, voltage_to_percent};
 
 #[derive(Debug)]
 pub struct SiPunchLog {
@@ -224,9 +224,8 @@ impl fmt::Display for MiniCallHomeLog {
                 write!(f, ", cell {cellid:X}")?;
             }
         }
-        if let Some(batt_mv) = self.mini_call_home.batt_mv
-            && let Some(batt_p) = self.mini_call_home.batt_percents
-        {
+        if let Some(batt_mv) = self.mini_call_home.batt_mv {
+            let batt_p = voltage_to_percent(batt_mv);
             write!(f, ", {:.2}V {:2}%", f32::from(batt_mv) / 1000.0, batt_p)?;
         }
         let secs = self.latency.num_milliseconds() as f64 / 1000.0;
@@ -302,8 +301,7 @@ mod test_logs {
         let log_message = MiniCallHomeLog {
             mini_call_home: yaroc_common::status::MiniCallHome {
                 signal_info,
-                batt_mv: Some(1260),
-                batt_percents: Some(50),
+                batt_mv: Some(3800),
                 cpu_temperature: Some(51.54),
                 timestamp: Some(timestamp),
                 ..Default::default()
@@ -316,7 +314,7 @@ mod test_logs {
         };
         assert_eq!(
             format!("{log_message}"),
-            "spe01 17:40:43: 51.5°C, RSRP  -87 SNR  7.0 NB ECL0, cell 27606E, 1.26V 50%, lat. 1.39s"
+            "spe01 17:40:43: 51.5°C, RSRP  -87 SNR  7.0 NB ECL0, cell 27606E, 3.80V 60%, lat. 1.39s"
         );
     }
 

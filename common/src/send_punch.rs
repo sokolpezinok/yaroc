@@ -437,10 +437,7 @@ mod tests {
         });
         BOOT_TIME.sender().clear();
         TEMPERATURE.sender().send(27.0);
-        BATTERY.sender().send(crate::status::BatteryInfo {
-            mv: 3967,
-            percents: 76,
-        });
+        BATTERY.sender().send(crate::status::BatteryInfo { mv: 3967 });
 
         let mut send_punch = SendPunch::new_without_spawning(
             modem,
@@ -480,10 +477,7 @@ mod tests {
         });
 
         TEMPERATURE.sender().send(27.0);
-        BATTERY.sender().send(crate::status::BatteryInfo {
-            mv: 3967,
-            percents: 76,
-        });
+        BATTERY.sender().send(crate::status::BatteryInfo { mv: 3967 });
 
         let mut send_punch = SendPunch::new_without_spawning(
             modem,
@@ -516,10 +510,7 @@ mod tests {
             *(FAKE_FLASH_MUTEX.lock().await) = Some(FakeFlash);
         });
 
-        BATTERY.sender().send(crate::status::BatteryInfo {
-            mv: 3967,
-            percents: 76,
-        });
+        BATTERY.sender().send(crate::status::BatteryInfo { mv: 3967 });
 
         let mut send_punch = SendPunch::new_without_spawning(
             modem,

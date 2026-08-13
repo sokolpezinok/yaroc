@@ -227,7 +227,7 @@ fn write_mch_logs_to_csv<W: Write>(
                         .unwrap_or_default();
                     let batt_mv_str = mch.batt_mv.map(|v| v.to_string()).unwrap_or_default();
                     let batt_percents_str =
-                        mch.batt_percents.map(|p| p.to_string()).unwrap_or_default();
+                        mch.batt_percents().map(|p| p.to_string()).unwrap_or_default();
                     let cpu_temp_str =
                         mch.cpu_temperature.map(|t| t.to_string()).unwrap_or_default();
 

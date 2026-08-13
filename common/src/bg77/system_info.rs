@@ -160,8 +160,8 @@ impl<M: AtUartTrait> SystemInfo<M> {
         if let Some(cpu_temperature) = cpu_temperature {
             mini_call_home.set_cpu_temperature(cpu_temperature);
         }
-        if let Some(BatteryInfo { mv, percents }) = self.battery.try_get() {
-            mini_call_home.set_battery_info(mv, percents);
+        if let Some(BatteryInfo { mv }) = self.battery.try_get() {
+            mini_call_home.set_battery_info(mv);
         }
         if let Ok(signal_info) = Self::signal_info(bg77).await {
             mini_call_home.set_signal_info(signal_info);
@@ -185,7 +185,7 @@ mod test {
     static TEST_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
 
     #[test]
-    fn test_basic_system_info() {
+    fn test_mini_call_home() {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
@@ -196,10 +196,7 @@ mod test {
         ]);
 
         TEMPERATURE.sender().send(27.0);
-        BATTERY.sender().send(BatteryInfo {
-            mv: 3967,
-            percents: 76,
-        });
+        BATTERY.sender().send(BatteryInfo { mv: 3967 });
         let mut system_info = SystemInfo::default();
 
         let mch = block_on(system_info.mini_call_home(&mut bg77));
@@ -212,7 +209,7 @@ mod test {
             Some(u32::from_str_radix("2B2078", 16).unwrap())
         );
         assert_eq!(mch.batt_mv, Some(3967));
-        assert_eq!(mch.batt_percents, Some(76));
+        assert_eq!(mch.batt_percents(), Some(77));
         assert_eq!(mch.cpu_temperature, Some(27.0));
         assert_eq!(
             mch.timestamp.unwrap(),

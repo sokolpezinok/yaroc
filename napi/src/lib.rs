@@ -139,7 +139,7 @@ impl MqttClient {
                 };
                 let rsrp = mch.mini_call_home.signal_info.as_ref().map(|s| s.rsrp_dbm as i32);
                 let snr = mch.mini_call_home.signal_info.as_ref().map(|s| s.snr_cb as f64 / 10.0);
-                let battery = mch.mini_call_home.batt_percents.map(|b| b as u32);
+                let battery = mch.mini_call_home.batt_percents().map(|b| b as u32);
                 Some(YarocEvent::CellularLog(CellularLogPayload {
                     mac_address: cell_log.mac_address().to_string(),
                     text: format!("{}", cell_log),
@@ -407,7 +407,7 @@ mod tests {
             snr_cb: 120, // 12.0 dB
             cellid: None,
         });
-        mch.batt_percents = Some(88);
+        mch.batt_mv = Some(4038);
 
         let cell_log_msg = CellularLogMessage::MCH(MiniCallHomeLog {
             mini_call_home: mch,
