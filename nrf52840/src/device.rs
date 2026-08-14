@@ -35,7 +35,8 @@ bind_interrupts!(struct Irqs {
 
 /// A struct containing all the initialized drivers and peripherals of the device
 pub struct Device {
-    _blue_led: Output<'static>,
+    /// Blue LED
+    pub blue_led: Output<'static>,
     /// Green LED
     pub green_led: Output<'static>,
     /// The MAC address of the device
@@ -118,7 +119,7 @@ impl Device {
 
         let mac_address = ble.get_mac_address();
         Self {
-            _blue_led: blue_led,
+            blue_led,
             green_led,
             mac_address,
             bg77,

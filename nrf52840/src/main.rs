@@ -3,11 +3,18 @@
 
 use defmt::{error, info};
 use embassy_executor::Spawner;
+use embassy_nrf::gpio::Output;
+use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Timer};
 use heapless::format;
 use yaroc_common::{
+    RawMutex,
     backoff::{BackoffRetries, PUNCH_QUEUE_SIZE},
-    bg77::{connection::MQTT_CONNECTION_STATUS, modem::Bg77, modem_manager::ModemConfig},
+    bg77::{
+        connection::{CELLULAR_CONNECTION_STATUS, MQTT_CONNECTION_STATUS},
+        modem::Bg77,
+        modem_manager::ModemConfig,
+    },
     flash::Flash,
     mqtt::{MqttClientConfig, MqttConfig},
     send_punch::SendPunch,
@@ -23,11 +30,34 @@ use yaroc_nrf52840::{
     system_info::{SoftdeviceTemp, battery_update, minicallhome_loop, sysinfo_update},
 };
 
+#[embassy_executor::task(pool_size = 2)]
+async fn led_task(mut led: Output<'static>, mut status: Receiver<'static, RawMutex, bool, 1>) {
+    loop {
+        let connected = status.try_get().unwrap_or_default();
+        let delay = if connected {
+            Duration::from_millis(3000)
+        } else {
+            Duration::from_millis(166)
+        };
+        Timer::after(delay).await;
+        led.set_low();
+
+        let delay = if connected {
+            Duration::from_millis(500)
+        } else {
+            Duration::from_millis(166)
+        };
+        Timer::after(delay).await;
+        led.set_high();
+    }
+}
+
 /// The main entry point of the application.
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let device = Device::new().await;
     let Device {
+        mut blue_led,
         mut green_led,
         mac_address,
         bg77,
@@ -38,8 +68,8 @@ async fn main(spawner: Spawner) {
         saadc,
         mut flash,
         device_config,
-        ..
     } = device;
+    blue_led.set_high();
     green_led.set_high();
 
     ble.spawn(spawner);
@@ -102,24 +132,10 @@ async fn main(spawner: Spawner) {
     spawner.spawn(battery_update(saadc).expect("Failed to spawn task"));
     info!("All background tasks are running");
 
-    let mut mqtt_status =
-        MQTT_CONNECTION_STATUS.receiver().expect("Only one watcher of MQTT status");
-    loop {
-        let connected = mqtt_status.try_get().unwrap_or_default();
-        let delay = if connected {
-            Duration::from_millis(3000)
-        } else {
-            Duration::from_millis(166)
-        };
-        Timer::after(delay).await;
-        green_led.set_low();
-
-        let delay = if connected {
-            Duration::from_millis(500)
-        } else {
-            Duration::from_millis(166)
-        };
-        Timer::after(delay).await;
-        green_led.set_high();
-    }
+    let mqtt_status = MQTT_CONNECTION_STATUS.receiver().expect("Only one watcher of MQTT status");
+    let cellular_status = CELLULAR_CONNECTION_STATUS
+        .receiver()
+        .expect("Only one watcher of cellular status");
+    spawner.spawn(led_task(green_led, mqtt_status).expect("Failed to spawn task"));
+    spawner.spawn(led_task(blue_led, cellular_status).expect("Failed to spawn task"));
 }

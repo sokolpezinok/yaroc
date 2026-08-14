@@ -17,6 +17,7 @@ const FORCE_REATTACH_RATE_LIMIT: Duration =
     Duration::from_secs(MAX_INACTIVE_FORCE_REATTACH.as_secs() * 2);
 
 pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
+pub static CELLULAR_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 
 /// Explicit state of the cellular and MQTT connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -140,15 +141,24 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.last_connect_attempt = Some(now);
     }
 
-    /// Update the connection state and notify MQTT connection status listeners if changed
+    /// Update the connection state and notify MQTT and cellular connection status listeners if changed
     pub fn update_status(&mut self, state: ConnectionState) {
-        let connected = state.is_mqtt_connected();
+        let mqtt_connected = state.is_mqtt_connected();
+        let cellular_connected = state.is_cellular_connected();
         self.state = state;
         MQTT_CONNECTION_STATUS.sender().send_if_modified(|cur| {
-            if cur.is_some_and(|v| v == connected) {
+            if cur.is_some_and(|v| v == mqtt_connected) {
                 false
             } else {
-                *cur = Some(connected);
+                *cur = Some(mqtt_connected);
+                true
+            }
+        });
+        CELLULAR_CONNECTION_STATUS.sender().send_if_modified(|cur| {
+            if cur.is_some_and(|v| v == cellular_connected) {
+                false
+            } else {
+                *cur = Some(cellular_connected);
                 true
             }
         });
@@ -397,9 +407,19 @@ mod tests {
     #[test]
     fn test_update_status() {
         let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        supervisor.update_status(ConnectionState::ConnectingMqtt);
+        let mut mqtt_rx = MQTT_CONNECTION_STATUS.receiver().unwrap();
+        let mut cellular_rx = CELLULAR_CONNECTION_STATUS.receiver().unwrap();
+        assert_eq!(mqtt_rx.try_get(), Some(false));
+        assert_eq!(cellular_rx.try_get(), Some(true));
+
         supervisor.update_status(ConnectionState::MqttConnected);
-        let mut rx = MQTT_CONNECTION_STATUS.receiver().unwrap();
-        assert_eq!(rx.try_get(), Some(true));
+        assert_eq!(mqtt_rx.try_get(), Some(true));
+        assert_eq!(cellular_rx.try_get(), Some(true));
         assert_eq!(supervisor.state(), ConnectionState::MqttConnected);
+
+        supervisor.update_status(ConnectionState::CellularRegistrationFailed);
+        assert_eq!(mqtt_rx.try_get(), Some(false));
+        assert_eq!(cellular_rx.try_get(), Some(false));
     }
 }
