@@ -118,22 +118,22 @@ impl From<core::fmt::Error> for ConnectError {
 }
 
 impl ConnectError {
-    pub fn from_code(res: u8, reason: u8) -> Self {
-        if reason != 0 {
-            match reason {
-                1 => Self::UnacceptableProtocolVersion,
-                2 => Self::IdentifierRejected,
-                3 => Self::ServerUnavailable,
-                4 => Self::BadUsernameOrPassword,
-                5 => Self::NotAuthorized,
-                _ => Self::Unknown(reason),
-            }
-        } else {
-            match res {
-                1 => Self::RetransmissionTimeout,
-                2 => Self::PacketSendFailed,
-                code => Self::Unknown(code),
-            }
+    pub fn from_code(res: u8) -> Self {
+        match res {
+            1 => Self::RetransmissionTimeout,
+            2 => Self::PacketSendFailed,
+            code => Self::Unknown(code),
+        }
+    }
+
+    pub fn from_reason(reason: u8) -> Self {
+        match reason {
+            1 => Self::UnacceptableProtocolVersion,
+            2 => Self::IdentifierRejected,
+            3 => Self::ServerUnavailable,
+            4 => Self::BadUsernameOrPassword,
+            5 => Self::NotAuthorized,
+            _ => Self::Unknown(reason),
         }
     }
 }
@@ -391,20 +391,24 @@ impl<M: AtUartTrait> MqttClient<M> {
                     }
                     None => format!(100; "+QMTCONN={cid},\"{}\"", self.config.name)?,
                 };
-                let (_client_id, res, reason) = bg77
+                let values = bg77
                     .call_at(&cmd, Some(self.config.packet_timeout + MQTT_EXTRA_TIMEOUT))
                     .await?
-                    .parse3::<u8, u8, u8>([0, 1, 2], cid)?;
+                    .response(Some((cid, 0)))?
+                    .parse_values::<u8>()?;
 
-                if res == 0 && reason == 0 {
-                    info!("Successfully connected to MQTT");
-                    if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
-                        error!("Error while sending MQTT connect notification, channel full");
+                match values.as_slice() {
+                    [_cid, 0, 0] => {
+                        info!("Successfully connected to MQTT");
+                        if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttConnected).is_err() {
+                            error!("Error while sending MQTT connect notification, channel full");
+                        }
+                        self.last_successful_send = Instant::now();
+                        Ok(())
                     }
-                    self.last_successful_send = Instant::now();
-                    Ok(())
-                } else {
-                    Err(ConnectError::from_code(res, reason))
+                    [_cid, 0, reason] => Err(ConnectError::from_reason(*reason)),
+                    [_cid, res] => Err(ConnectError::from_code(*res)),
+                    _ => Err(AtError::ModemError.into()),
                 }
             }
         }
@@ -707,7 +711,7 @@ mod test {
 
         let mut bg77 = FakeModem::new(&[
             ("AT+QMTCONN?", "+QMTCONN: 1,1"),
-            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1,0"),
+            ("AT+QMTCONN=1,\"test_client\"", "+QMTCONN: 1,1"),
         ]);
 
         let mut client = MqttClient::<_>::new(client_config, 1);

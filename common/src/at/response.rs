@@ -270,7 +270,10 @@ impl AtResponse {
     /// If `filter` is `None`, it returns the first one.
     /// If `filter` is `(x, idx)`, returns the response with value `x` at position `idx`. If no such
     /// response is found, returns `ModemError`.
-    fn response<T: FromStr + Eq>(&self, filter: Option<(T, usize)>) -> Result<&CommandResponse> {
+    pub fn response<T: FromStr + Eq>(
+        &self,
+        filter: Option<(T, usize)>,
+    ) -> Result<&CommandResponse> {
         for line in &self.lines {
             if let FromModem::CommandResponse(command_response) = line
                 && command_response.command() == &self.command_prefix[1..]
@@ -278,7 +281,7 @@ impl AtResponse {
                 let values = command_response.values();
                 match filter.as_ref() {
                     Some((t, idx)) => {
-                        let val: Option<T> = str::parse(values[*idx]).ok();
+                        let val: Option<T> = values.get(*idx).and_then(|v| str::parse(v).ok());
                         if val.as_ref() == Some(t) {
                             return Ok(command_response);
                         }
