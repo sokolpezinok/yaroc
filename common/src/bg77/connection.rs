@@ -239,6 +239,10 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
                 self.on_connection_success();
                 Ok(())
             }
+            Err(ConnectError::InProgress) => {
+                self.update_status(ConnectionState::ConnectingMqtt);
+                Ok(())
+            }
             Err(err) => {
                 error!("MQTT connection failed: {}", err);
                 self.update_status(err.into());
@@ -421,5 +425,33 @@ mod tests {
         supervisor.update_status(ConnectionState::CellularRegistrationFailed);
         assert_eq!(mqtt_rx.try_get(), Some(false));
         assert_eq!(cellular_rx.try_get(), Some(false));
+    }
+
+    #[test]
+    fn test_supervisor_ensure_connected_in_progress() {
+        let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut mqtt_client = MqttClient::<FakeModem>::new(MqttClientConfig::default(), 1);
+
+        let mut bg77 = FakeModem::new(&[
+            ("AT+CGATT?", "+CGATT: 1"),
+            ("AT+CGACT?", "+CGACT: 1,1"),
+            ("AT+QMTOPEN?", ""),
+            ("AT+QMTCFG=\"timeout\",1,35,2,1", ""),
+            ("AT+QMTCFG=\"keepalive\",1,70", ""),
+            (
+                "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
+                "",
+            ),
+            ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,0"),
+            ("AT+QMTCONN?", "+QMTCONN: 1,2"),
+        ]);
+
+        let res =
+            block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
+        assert!(res.is_ok());
+        assert_eq!(supervisor.state(), ConnectionState::ConnectingMqtt);
+        assert!(!supervisor.is_connected());
+        assert!(supervisor.state().is_connecting());
     }
 }

@@ -105,6 +105,8 @@ pub enum ConnectError {
     BadUsernameOrPassword,
     #[error("Connection refused: not authorized")]
     NotAuthorized,
+    #[error("Connecting or disconnecting in progress")]
+    InProgress,
     #[error("AT command error ({0:?})")]
     At(#[from] AtError),
     #[error("Unknown connect error ({0})")]
@@ -380,8 +382,8 @@ impl<M: AtUartTrait> MqttClient<M> {
                 Ok(())
             }
             QmtconnStatus::Disconnecting | QmtconnStatus::Connecting => {
-                info!("Connecting or disconnecting from MQTT in progress");
-                Ok(())
+                warn!("Connecting or disconnecting from MQTT in progress");
+                Err(ConnectError::InProgress)
             }
             QmtconnStatus::Initializing => {
                 info!("Will connect to MQTT");
@@ -718,6 +720,28 @@ mod test {
         assert_eq!(
             block_on(client.connect(&mut bg77)),
             Err(ConnectError::RetransmissionTimeout)
+        );
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_mqtt_qmtconn_in_progress() {
+        let _lock = block_on(CHANNEL_MUTEX.lock());
+        let client_config = MqttClientConfig::default();
+
+        let mut bg77 = FakeModem::new(&[("AT+QMTCONN?", "+QMTCONN: 1,2")]);
+        let mut client = MqttClient::<_>::new(client_config.clone(), 1);
+        assert_eq!(
+            block_on(client.connect(&mut bg77)),
+            Err(ConnectError::InProgress)
+        );
+        assert!(bg77.all_done());
+
+        let mut bg77 = FakeModem::new(&[("AT+QMTCONN?", "+QMTCONN: 1,4")]);
+        let mut client = MqttClient::<_>::new(client_config, 1);
+        assert_eq!(
+            block_on(client.connect(&mut bg77)),
+            Err(ConnectError::InProgress)
         );
         assert!(bg77.all_done());
     }
