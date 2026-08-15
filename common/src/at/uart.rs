@@ -63,9 +63,13 @@ impl AtRxBroker {
     /// # Arguments
     /// * `text` - The text to be parsed.
     async fn parse_lines(&self, text: &str) {
-        let lines = text.lines().filter(|line| !line.is_empty());
         let mut open_stream = false;
-        for line in lines {
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
             let from_modem = FromModem::try_from(line);
             if let Ok(FromModem::CommandResponse(command_response)) = from_modem.as_ref()
                 && self.urc_handler(command_response)
@@ -521,6 +525,18 @@ mod test_at {
         );
         assert_eq!(MAIN_RX_CHANNEL.try_receive().unwrap()?, FromModem::Eof);
         assert_eq!(MAIN_RX_CHANNEL.len(), 0);
+
+        // Blank lines with spaces and newlines should be ignored and not emit anything
+        block_on(broker.parse_lines("\r\n\r\n   \r\n\t\r\n"));
+        assert_eq!(MAIN_RX_CHANNEL.len(), 0);
+
+        // URC with surrounding newlines should not emit Eof or empty Line into MAIN_RX_CHANNEL
+        block_on(broker.parse_lines("\r\n+URC: 99\r\n\r\n"));
+        let urc = URC_CHANNEL.try_receive().unwrap();
+        assert_eq!(urc.command(), "URC");
+        assert_eq!(urc.values().as_slice(), ["99"]);
+        assert_eq!(MAIN_RX_CHANNEL.len(), 0);
+
         Ok(())
     }
 }
