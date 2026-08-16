@@ -11,7 +11,7 @@ use embassy_nrf::gpio::Output;
 use embassy_nrf::uarte::{UarteRxWithIdle, UarteTx};
 use embassy_sync::mutex::Mutex;
 use embassy_sync::semaphore::{FairSemaphore, Semaphore};
-use embassy_time::{Duration, Ticker, WithTimeout};
+use embassy_time::{Duration, Instant, Timer, WithTimeout};
 use yaroc_common::at::response::{FLASH_LOG_CHANNEL, FlashLog};
 use yaroc_common::at::uart::AtUart;
 use yaroc_common::bg77::modem::Bg77;
@@ -150,12 +150,12 @@ pub async fn send_punch_event_handler() {
             .inspect_err(|err| error!("Modem setup failed: {}", err));
     }
 
-    let mut network_check_ticker = Ticker::every(Duration::from_secs(600));
+    let mut next_network_check = Instant::now() + Duration::from_secs(600);
     loop {
         let signal = select3(
             MCH_SIGNAL.wait(),
             COMMAND_CHANNEL.receive(),
-            network_check_ticker.next(),
+            Timer::at(next_network_check),
         )
         .await;
         {
@@ -167,7 +167,10 @@ pub async fn send_punch_event_handler() {
                     Err(err) => error!("Sending of MiniCallHome failed: {}", err),
                 },
                 Either3::Second(command) => send_punch.execute_command(command).await,
-                Either3::Third(_) => send_punch.check_connection().await,
+                Either3::Third(_) => {
+                    next_network_check = Instant::now() + Duration::from_secs(600);
+                    send_punch.check_connection().await;
+                }
             }
         }
     }
