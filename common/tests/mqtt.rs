@@ -161,7 +161,7 @@ fn test_mqtt_send_short_message_ok() {
             eq(message.as_slice()),
             eq("+QMTPUB"),
             eq(true),
-            eq(Duration::from_secs(27)),
+            eq(Duration::from_secs(27) + DEFAULT_TIMEOUT),
         )
         .times(1)
         .returning(|_, _, _, _| {
