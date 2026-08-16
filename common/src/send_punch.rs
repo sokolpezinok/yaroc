@@ -429,7 +429,11 @@ mod tests {
     #[test]
     fn send_punch_instantiation_test() {
         let _lock = block_on(TEST_MUTEX.lock());
-        let fake_modem = FakeModem::new(&[("AT+QLTS=2", "+QLTS: \"2025/11/24,01:40:34+04,0\"")]);
+        let fake_modem = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
+            ("AT+CCLK?", "+CCLK: \"25/11/24,01:40:34+04\""),
+        ]);
         let fake_pin = FakePin {};
         let modem = Bg77::new(fake_modem, fake_pin);
         let mqtt_config = MqttClientConfig::default();
@@ -464,7 +468,9 @@ mod tests {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut fake_modem = FakeModem::new(&[
-            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
+            ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
             ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
@@ -500,7 +506,9 @@ mod tests {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let fake_modem = FakeModem::new(&[
-            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
+            ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
             ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),

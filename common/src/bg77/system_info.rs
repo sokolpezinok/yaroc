@@ -67,49 +67,61 @@ impl<M: AtUartTrait> SystemInfo<M> {
     /// Ensures the PDP context (context ID 1) is activated via `AT+QIACT=1` before sending `AT+QNTP`.
     pub async fn sync_ntp(bg77: &mut M, server: &str) -> crate::Result<()> {
         Self::activate_pdp_context(bg77).await?;
-        let cmd = format!(60; "+QNTP=1,\"{}\"", server)?;
+        let cmd = format!(60; "+QNTP=1,\"{}\",123,1", server)?;
         bg77.call_at(&cmd, None).await?;
         Ok(())
     }
-    /// Parses the date and time from the output of the AT+QLTS=2 command.
+    /// Parses the date and time from the output of AT+CCLK, AT+QLTS=2, or +QNTP.
     ///
-    /// Expected format: `"YYYY/MM/DD,HH:MM:SS±ZZ,D"` (e.g. `"2024/12/24,10:48:23+04,0"`)
-    /// - `[0..4]`: Year (`YYYY`)
-    /// - `[5..7]`: Month (`MM`)
-    /// - `[8..10]`: Day (`DD`)
-    /// - `[11..13]`: Hour (`HH`)
-    /// - `[14..16]`: Minute (`MM`)
-    /// - `[17..19]`: Second (`SS`)
-    /// - `[20..22]`: Timezone offset in 15-minute intervals (`ZZ`)
-    fn parse_qlts(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
-        if modem_clock.len() < 22 {
-            return Err(Error::ParseError);
-        }
-        let year: i32 = str::parse(&modem_clock[0..4]).map_err(|_| Error::ParseError)?;
-        let month: u32 = str::parse(&modem_clock[5..7]).map_err(|_| Error::ParseError)?;
-        let day: u32 = str::parse(&modem_clock[8..10]).map_err(|_| Error::ParseError)?;
-        let hour: u32 = str::parse(&modem_clock[11..13]).map_err(|_| Error::ParseError)?;
-        let min: u32 = str::parse(&modem_clock[14..16]).map_err(|_| Error::ParseError)?;
-        let sec: u32 = str::parse(&modem_clock[17..19]).map_err(|_| Error::ParseError)?;
+    /// Supported formats:
+    /// - 2-digit year (from `+CCLK`): `"YY/MM/DD,HH:MM:SS±ZZ"`
+    /// - 4-digit year (from `+QLTS` or `+QNTP`): `"YYYY/MM/DD,HH:MM:SS±ZZ,D"`
+    pub fn parse_time(modem_clock: &str) -> Result<DateTime<FixedOffset>, Error> {
+        let detect_type = if modem_clock.len() >= 20 && modem_clock.as_bytes().get(2) == Some(&b'/')
+        {
+            let yy: i32 = str::parse(&modem_clock[0..2]).map_err(|_| Error::ParseError)?;
+            Ok((2000 + yy, &modem_clock[3..]))
+        } else if modem_clock.len() >= 22 && modem_clock.as_bytes().get(4) == Some(&b'/') {
+            let year: i32 = str::parse(&modem_clock[0..4]).map_err(|_| Error::ParseError)?;
+            Ok((year, &modem_clock[5..]))
+        } else {
+            Err(Error::ParseError)
+        };
+        let (year, rest) = detect_type?;
 
+        let month: u32 = str::parse(&rest[0..2]).map_err(|_| Error::ParseError)?;
+        let day: u32 = str::parse(&rest[3..5]).map_err(|_| Error::ParseError)?;
+        let hour: u32 = str::parse(&rest[6..8]).map_err(|_| Error::ParseError)?;
+        let min: u32 = str::parse(&rest[9..11]).map_err(|_| Error::ParseError)?;
+        let sec: u32 = str::parse(&rest[12..14]).map_err(|_| Error::ParseError)?;
+        let sign = if &rest[11..15] == "-" { -1 } else { 1 };
+        let offset: i32 = str::parse(&rest[15..17]).map_err(|_| Error::ParseError)?;
         let naive_date = chrono::NaiveDate::from_ymd_opt(year, month, day)
             .ok_or(Error::ParseError)?
             .and_hms_opt(hour, min, sec)
             .ok_or(Error::ParseError)?;
 
-        let offset = str::parse::<u8>(&modem_clock[20..22]).map_err(|_| Error::ParseError)?;
         Ok(naive_date
             .and_local_timezone(
-                FixedOffset::east_opt(i32::from(offset) * 900).ok_or(Error::ParseError)?,
+                FixedOffset::east_opt(sign * offset * 900).ok_or(Error::ParseError)?,
             )
             .unwrap()
             .fixed_offset())
     }
 
-    /// Gets modem time from the QLTS command
+    /// Gets modem time from the CCLK command, falling back to QLTS.
     async fn get_modem_time(bg77: &mut M) -> crate::Result<DateTime<FixedOffset>> {
+        let cclk_time = bg77
+            .call_at("+CCLK?", None)
+            .await
+            .and_then(|resp| resp.parse1::<String<25>>([0]))
+            .map_err(From::from)
+            .and_then(|modem_clock| Self::parse_time(&modem_clock));
+        if let Ok(dt) = cclk_time {
+            return Ok(dt);
+        }
         let modem_clock = bg77.call_at("+QLTS=2", None).await?.parse1::<String<25>>([0])?;
-        Self::parse_qlts(&modem_clock)
+        Self::parse_time(&modem_clock)
     }
 
     /// Returns the current time from the modem.
@@ -120,6 +132,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
     pub async fn current_time(bg77: &mut M, cached: bool) -> Option<DateTime<FixedOffset>> {
         let boot_time = BOOT_TIME.receiver().unwrap().try_get();
         if boot_time.is_none() || !cached {
+            let _ = Self::sync_ntp(bg77, Self::DEFAULT_NTP_SERVER).await;
             let boot_time = Self::get_modem_time(bg77)
                 .await
                 .map(|time| {
@@ -216,7 +229,9 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
-            ("AT+QLTS=2", "+QLTS: \"2024/12/24,10:48:23+04,0\""),
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
+            ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
             ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
@@ -253,6 +268,9 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
+            ("AT+CCLK?", "ERROR"),
             ("AT+QLTS=2", ""),
             ("AT+QCSQ", "+QCSQ: \"eMTC\",-100,-90,110,-120"),
             ("AT+CEREG?", "+CEREG: 2,1,\"2008\",\"2B2078\",9"),
@@ -265,7 +283,7 @@ mod test {
 
     #[test]
     fn test_qlts() {
-        let datetime = SystemInfo::<FakeModem>::parse_qlts("2024/11/25,22:12:11+04extra").unwrap();
+        let datetime = SystemInfo::<FakeModem>::parse_time("2024/11/25,22:12:11+04extra").unwrap();
         let naive_dt = datetime.naive_local();
         assert_eq!(
             naive_dt.date(),
@@ -276,6 +294,9 @@ mod test {
             NaiveTime::from_hms_opt(22, 12, 11).unwrap()
         );
         assert_eq!(datetime.offset().local_minus_utc(), 3600);
+
+        let datetime_cclk = SystemInfo::<FakeModem>::parse_time("24/11/25,22:12:11+04").unwrap();
+        assert_eq!(datetime_cclk, datetime);
     }
 
     #[test]
@@ -346,7 +367,7 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\"", ""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
         ]);
         let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
             &mut bg77,
@@ -362,7 +383,7 @@ mod test {
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,0"),
             ("AT+QIACT=1", ""),
-            ("AT+QNTP=1,\"pool.ntp.org\"", ""),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
         ]);
         let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
             &mut bg77,
@@ -392,7 +413,7 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\"", "ERROR"),
+            ("AT+QNTP=1,\"pool.ntp.org\",123,1", "ERROR"),
         ]);
         let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
             &mut bg77,

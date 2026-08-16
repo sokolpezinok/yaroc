@@ -16,6 +16,7 @@ use crate::at::AtError;
 use crate::at::response::{AT_RESPONSE_SIZE, CommandResponse, FromModem};
 use crate::at::uart::AtUartTrait;
 use crate::bg77::connection::ConnectionEvent;
+use crate::bg77::system_info::SystemInfo;
 use crate::flash::{FlashValue, ValueIndex};
 use crate::send_punch::SendPunchCommand;
 
@@ -269,7 +270,18 @@ impl<M: AtUartTrait> ModemManager<M> {
                 }
                 true
             }
-            "QNTP" => true, // TODO: process answer
+            "QNTP" => {
+                // TODO: this should probably be inside SystemInfo, but right now we don't
+                // want to introduce another URC handler.
+                let values = response.values();
+                if values.len() == 2 && values[0] == "0" {
+                    let time = SystemInfo::<M>::parse_time(values[1]);
+                    if let Ok(time) = time {
+                        info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
+                    }
+                }
+                true
+            }
             "CEREG" => response.values().len() == 4,
             _ => false,
         }
