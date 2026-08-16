@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use crate::{
     RawMutex,
     at::uart::AtUartTrait,
-    bg77::modem_manager::RegistrationError,
+    bg77::modem_manager::{ACTIVATION_TIMEOUT, RegistrationError},
     error::Error,
     status::{BATTERY, BatteryInfo, CellNetworkType, CellSignalInfo, MiniCallHome, TEMPERATURE},
 };
@@ -44,6 +44,33 @@ impl<M: AtUartTrait> Default for SystemInfo<M> {
 }
 
 impl<M: AtUartTrait> SystemInfo<M> {
+    /// Default NTP server used for time synchronization.
+    pub const DEFAULT_NTP_SERVER: &str = "pool.ntp.org";
+
+    /// Activates the PDP context for Quectel's TCP/IP stack (AT+QIACT=1) if not already activated.
+    pub async fn activate_pdp_context(bg77: &mut M) -> crate::Result<()> {
+        let (_id, stat) = bg77.call_at("+QIACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
+        let is_active = stat == 1;
+
+        if !is_active {
+            info!("Activating TCP/IP context via AT+QIACT=1");
+            let response = bg77.long_call_at("+QIACT=1", ACTIVATION_TIMEOUT).await?;
+            if response.is_error() {
+                return Err(RegistrationError::PdpContextFailed.into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Synchronizes the modem time with an NTP server (AT+QNTP).
+    ///
+    /// Ensures the PDP context (context ID 1) is activated via `AT+QIACT=1` before sending `AT+QNTP`.
+    pub async fn sync_ntp(bg77: &mut M, server: &str) -> crate::Result<()> {
+        Self::activate_pdp_context(bg77).await?;
+        let cmd = format!(60; "+QNTP=1,\"{}\"", server)?;
+        bg77.call_at(&cmd, None).await?;
+        Ok(())
+    }
     /// Parses the date and time from the output of the AT+QLTS=2 command.
     ///
     /// Expected format: `"YYYY/MM/DD,HH:MM:SS±ZZ,D"` (e.g. `"2024/12/24,10:48:23+04,0"`)
@@ -312,5 +339,66 @@ mod test {
         let mut bg77 = FakeModem::new(&[("AT+QCSQ", "+QCSQ: \"NOSERVICE\"")]);
         let res = block_on(SystemInfo::<FakeModem>::signal_info(&mut bg77));
         assert_eq!(res, Err(RegistrationError::NoNetworkService));
+    }
+
+    #[test]
+    fn test_sync_ntp_already_active() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\"", ""),
+        ]);
+        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
+            &mut bg77,
+            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
+        ));
+        assert!(res.is_ok());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_sync_ntp_activates_pdp() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,0"),
+            ("AT+QIACT=1", ""),
+            ("AT+QNTP=1,\"pool.ntp.org\"", ""),
+        ]);
+        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
+            &mut bg77,
+            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
+        ));
+        assert!(res.is_ok());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_sync_ntp_pdp_activation_failure() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,0"),
+            ("AT+QIACT=1", "+CME ERROR: 554"),
+        ]);
+        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
+            &mut bg77,
+            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
+        ));
+        assert!(res.is_err());
+        assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_sync_ntp_qntp_failure() {
+        let _lock = block_on(TEST_MUTEX.lock());
+        let mut bg77 = FakeModem::new(&[
+            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
+            ("AT+QNTP=1,\"pool.ntp.org\"", "ERROR"),
+        ]);
+        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
+            &mut bg77,
+            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
+        ));
+        assert!(res.is_err());
+        assert!(bg77.all_done());
     }
 }

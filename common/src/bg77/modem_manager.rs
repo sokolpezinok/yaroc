@@ -269,6 +269,7 @@ impl<M: AtUartTrait> ModemManager<M> {
                 }
                 true
             }
+            "QNTP" => true, // TODO: process answer
             "CEREG" => response.values().len() == 4,
             _ => false,
         }
