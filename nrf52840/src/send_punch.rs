@@ -153,24 +153,24 @@ pub async fn send_punch_event_handler() {
     let mut next_network_check = Instant::now() + Duration::from_secs(600);
     loop {
         let signal = select3(
-            MCH_SIGNAL.wait(),
             COMMAND_CHANNEL.receive(),
             Timer::at(next_network_check),
+            MCH_SIGNAL.wait(), // This needs to be last, it then has the lowest priority.
         )
         .await;
         {
             let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
-                Either3::First(_) => match send_punch.send_mini_call_home().await {
-                    Ok(_mini_call_home) => info!("MiniCallHome sent"),
-                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
-                },
-                Either3::Second(command) => send_punch.execute_command(command).await,
-                Either3::Third(_) => {
+                Either3::First(command) => send_punch.execute_command(command).await,
+                Either3::Second(_) => {
                     next_network_check = Instant::now() + Duration::from_secs(600);
                     send_punch.check_connection().await;
                 }
+                Either3::Third(_) => match send_punch.send_mini_call_home().await {
+                    Ok(_mini_call_home) => info!("MiniCallHome sent"),
+                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
+                },
             }
         }
     }
