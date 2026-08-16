@@ -327,7 +327,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     pub async fn execute_command(&mut self, command: SendPunchCommand) {
         match command {
             SendPunchCommand::ConnectionSupervisorEvent(event) => {
-                self.connection_supervisor.handle_event(event);
+                self.connection_supervisor
+                    .handle_event(&mut self.modem, &mut self.modem_manager, event)
+                    .await;
                 let _ = self.ensure_connected().await;
             }
             SendPunchCommand::SynchronizeTime => {

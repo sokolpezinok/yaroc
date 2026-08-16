@@ -165,7 +165,12 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
     }
 
     /// Processes an incoming connection event (e.g. URC notification or publish failure).
-    pub fn handle_event(&mut self, event: ConnectionEvent) {
+    pub async fn handle_event(
+        &mut self,
+        bg77: &mut M,
+        modem_manager: &mut ModemManager<M>,
+        event: ConnectionEvent,
+    ) {
         match event {
             ConnectionEvent::MqttDisconnect(err) => {
                 warn!("MQTT disconnected ({})", err);
@@ -175,7 +180,9 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
             }
             ConnectionEvent::PdpDeactivate => {
                 warn!("PDP deactivated");
-                self.update_status(ConnectionState::CellularRegistrationFailed);
+                if modem_manager.is_registered(bg77).await != Ok(true) {
+                    self.update_status(ConnectionState::CellularRegistrationFailed);
+                }
             }
         }
     }
@@ -308,26 +315,52 @@ mod tests {
     #[test]
     fn test_supervisor_handle_events() {
         let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
         assert_eq!(supervisor.state(), ConnectionState::Disconnected);
 
         supervisor.state = ConnectionState::MqttConnected;
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(
-            TcpError::NetworkDisconnected,
+        let mut bg77 = FakeModem::new(&[]);
+        block_on(supervisor.handle_event(
+            &mut bg77,
+            &mut modem_manager,
+            ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected),
         ));
         assert_eq!(
             supervisor.state(),
             ConnectionState::TcpError(TcpError::NetworkDisconnected)
         );
 
-        supervisor.handle_event(ConnectionEvent::PdpDeactivate);
+        // When registered, PdpDeactivate is ignored (e.g. stale URC)
+        let mut bg77_registered =
+            FakeModem::new(&[("AT+CGATT?", "+CGATT: 1"), ("AT+CGACT?", "+CGACT: 1,1")]);
+        block_on(supervisor.handle_event(
+            &mut bg77_registered,
+            &mut modem_manager,
+            ConnectionEvent::PdpDeactivate,
+        ));
+        assert_eq!(
+            supervisor.state(),
+            ConnectionState::TcpError(TcpError::NetworkDisconnected)
+        );
+
+        // When not registered, PdpDeactivate transitions to CellularRegistrationFailed
+        let mut bg77_unregistered = FakeModem::new(&[("AT+CGATT?", "+CGATT: 0")]);
+        block_on(supervisor.handle_event(
+            &mut bg77_unregistered,
+            &mut modem_manager,
+            ConnectionEvent::PdpDeactivate,
+        ));
         assert_eq!(
             supervisor.state(),
             ConnectionState::CellularRegistrationFailed
         );
 
         // MqttDisconnect must not overwrite CellularRegistrationFailed
-        supervisor.handle_event(ConnectionEvent::MqttDisconnect(
-            TcpError::NetworkDisconnected,
+        let mut bg77 = FakeModem::new(&[]);
+        block_on(supervisor.handle_event(
+            &mut bg77,
+            &mut modem_manager,
+            ConnectionEvent::MqttDisconnect(TcpError::NetworkDisconnected),
         ));
         assert_eq!(
             supervisor.state(),

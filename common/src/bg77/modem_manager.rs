@@ -313,8 +313,11 @@ impl<M: AtUartTrait> ModemManager<M> {
     /// Checks if the network is attached and PDP activated
     pub async fn is_registered(&self, bg77: &mut M) -> Result<bool, RegistrationError> {
         let gatt = bg77.call_at("+CGATT?", None).await?.parse1::<u8>([0])?;
+        if gatt != 1 {
+            return Ok(false);
+        }
         let (_, stat) = bg77.call_at("+CGACT?", None).await?.parse2::<u8, u8>([0, 1], Some(1))?;
-        Ok(gatt == 1 && stat == 1)
+        Ok(stat == 1)
     }
 
     /// Registers the modem to the network.
