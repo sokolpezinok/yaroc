@@ -462,8 +462,9 @@ impl<M: AtUartTrait> MqttClient<M> {
         bg77.call_at(&cmd, None).await?;
 
         let second_read_timeout = if qos == MqttQos::Q0 {
-            // The response is usually very quick, but we set a longer timeout just in case
-            Some(self.config.packet_timeout)
+            // The response is usually very quick, but we set a longer timeout in case of a network
+            // timeout.
+            Some(self.config.packet_timeout + M::DEFAULT_TIMEOUT)
         } else {
             None
         };
