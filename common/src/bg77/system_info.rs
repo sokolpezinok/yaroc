@@ -65,9 +65,9 @@ impl<M: AtUartTrait> SystemInfo<M> {
     /// Synchronizes the modem time with an NTP server (AT+QNTP).
     ///
     /// Ensures the PDP context (context ID 1) is activated via `AT+QIACT=1` before sending `AT+QNTP`.
-    pub async fn sync_ntp(bg77: &mut M, server: &str) -> crate::Result<()> {
+    pub async fn synchronize_time(bg77: &mut M) -> crate::Result<()> {
         Self::activate_pdp_context(bg77).await?;
-        let cmd = format!(60; "+QNTP=1,\"{}\",123,1", server)?;
+        let cmd = format!(60; "+QNTP=1,\"{}\",123,1", Self::DEFAULT_NTP_SERVER)?;
         bg77.call_at(&cmd, None).await?;
         Ok(())
     }
@@ -124,24 +124,24 @@ impl<M: AtUartTrait> SystemInfo<M> {
         Self::parse_time(&modem_clock)
     }
 
+    /// Sets the boot time based on the current calendar time.
+    pub fn set_boot_time(current_time: DateTime<FixedOffset>) {
+        let booted = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
+        let boot_time = current_time.checked_sub_signed(booted).unwrap();
+        info!("Boot at {}", format!(30; "{}", boot_time).unwrap());
+        BOOT_TIME.sender().send(boot_time);
+    }
+
     /// Returns the current time from the modem.
     ///
     /// The time is fetched from the modem on the first call or when `cached` is false.
     /// Subsequent calls with `cached` as true will return a locally calculated time based on the
     /// boot time and the time elapsed since.
-    pub async fn current_time(bg77: &mut M, cached: bool) -> Option<DateTime<FixedOffset>> {
+    pub async fn current_time(bg77: &mut M) -> Option<DateTime<FixedOffset>> {
         let boot_time = BOOT_TIME.receiver().unwrap().try_get();
-        if boot_time.is_none() || !cached {
-            let _ = Self::sync_ntp(bg77, Self::DEFAULT_NTP_SERVER).await;
-            let boot_time = Self::get_modem_time(bg77)
-                .await
-                .map(|time| {
-                    let booted = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
-                    time.checked_sub_signed(booted).unwrap()
-                })
-                .ok()?;
-            info!("Boot at {}", format!(30; "{}", boot_time).unwrap());
-            BOOT_TIME.sender().send(boot_time);
+        if boot_time.is_none() {
+            let time = Self::get_modem_time(bg77).await.ok()?;
+            Self::set_boot_time(time);
         }
         BOOT_TIME.receiver().unwrap().try_get().map(|boot_time| {
             let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
@@ -194,7 +194,7 @@ impl<M: AtUartTrait> SystemInfo<M> {
 
     /// Gathers various pieces of system information into a `MiniCallHome` struct.
     pub async fn mini_call_home(&mut self, bg77: &mut M) -> MiniCallHome {
-        let timestamp = Self::current_time(bg77, true).await;
+        let timestamp = Self::current_time(bg77).await;
         let cpu_temperature = self.temp.try_get();
         let mut mini_call_home = MiniCallHome::new(timestamp);
         if let Some(cpu_temperature) = cpu_temperature {
@@ -229,8 +229,6 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
-            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
             ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
@@ -268,8 +266,6 @@ mod test {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut bg77 = FakeModem::new(&[
-            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
             ("AT+CCLK?", "ERROR"),
             ("AT+QLTS=2", ""),
             ("AT+QCSQ", "+QCSQ: \"eMTC\",-100,-90,110,-120"),
@@ -363,62 +359,50 @@ mod test {
     }
 
     #[test]
-    fn test_sync_ntp_already_active() {
+    fn test_synchronize_time_already_active() {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
             ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
         ]);
-        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
-            &mut bg77,
-            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
-        ));
+        let res = block_on(SystemInfo::<FakeModem>::synchronize_time(&mut bg77));
         assert!(res.is_ok());
         assert!(bg77.all_done());
     }
 
     #[test]
-    fn test_sync_ntp_activates_pdp() {
+    fn test_synchronize_time_activates_pdp() {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,0"),
             ("AT+QIACT=1", ""),
             ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
         ]);
-        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
-            &mut bg77,
-            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
-        ));
+        let res = block_on(SystemInfo::<FakeModem>::synchronize_time(&mut bg77));
         assert!(res.is_ok());
         assert!(bg77.all_done());
     }
 
     #[test]
-    fn test_sync_ntp_pdp_activation_failure() {
+    fn test_synchronize_time_pdp_activation_failure() {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,0"),
             ("AT+QIACT=1", "+CME ERROR: 554"),
         ]);
-        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
-            &mut bg77,
-            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
-        ));
+        let res = block_on(SystemInfo::<FakeModem>::synchronize_time(&mut bg77));
         assert!(res.is_err());
         assert!(bg77.all_done());
     }
 
     #[test]
-    fn test_sync_ntp_qntp_failure() {
+    fn test_synchronize_time_qntp_failure() {
         let _lock = block_on(TEST_MUTEX.lock());
         let mut bg77 = FakeModem::new(&[
             ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
             ("AT+QNTP=1,\"pool.ntp.org\",123,1", "ERROR"),
         ]);
-        let res = block_on(SystemInfo::<FakeModem>::sync_ntp(
-            &mut bg77,
-            SystemInfo::<FakeModem>::DEFAULT_NTP_SERVER,
-        ));
+        let res = block_on(SystemInfo::<FakeModem>::synchronize_time(&mut bg77));
         assert!(res.is_err());
         assert!(bg77.all_done());
     }

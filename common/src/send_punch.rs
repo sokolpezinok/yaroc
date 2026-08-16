@@ -1,4 +1,3 @@
-use chrono::{DateTime, FixedOffset};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -6,7 +5,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use embassy_time::Duration;
 use femtopb::{Message, repeated};
-use heapless::{String, Vec, format};
+use heapless::{String, Vec};
 #[cfg(not(feature = "defmt"))]
 use log::{error, info, warn};
 use sequential_storage::map::PostcardValue;
@@ -292,11 +291,6 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         Ok(())
     }
 
-    /// Synchronizes the system time with the network time from the modem.
-    async fn synchronize_time(&mut self) -> Option<DateTime<FixedOffset>> {
-        SystemInfo::current_time(&mut self.modem, false).await
-    }
-
     /// Ensures connection to the cellular network and the MQTT broker.
     async fn ensure_connected(&mut self) -> crate::Result<()> {
         self.connection_supervisor
@@ -333,13 +327,9 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
                 let _ = self.ensure_connected().await;
             }
             SendPunchCommand::SynchronizeTime => {
-                let time = self.synchronize_time().await;
-                match time {
-                    None => warn!("Cannot get modem time"),
-                    Some(time) => {
-                        info!("Modem time: {}", format!(40; "{}", time).unwrap())
-                    }
-                }
+                let _ = SystemInfo::synchronize_time(&mut self.modem)
+                    .await
+                    .inspect_err(|e| error!("Error while synchronizing time: {}", e));
             }
         }
     }
@@ -429,11 +419,7 @@ mod tests {
     #[test]
     fn send_punch_instantiation_test() {
         let _lock = block_on(TEST_MUTEX.lock());
-        let fake_modem = FakeModem::new(&[
-            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
-            ("AT+CCLK?", "+CCLK: \"25/11/24,01:40:34+04\""),
-        ]);
+        let fake_modem = FakeModem::new(&[]);
         let fake_pin = FakePin {};
         let modem = Bg77::new(fake_modem, fake_pin);
         let mqtt_config = MqttClientConfig::default();
@@ -445,7 +431,7 @@ mod tests {
         TEMPERATURE.sender().send(27.0);
         BATTERY.sender().send(crate::status::BatteryInfo { mv: 3967 });
 
-        let mut send_punch = SendPunch::new_without_spawning(
+        let send_punch = SendPunch::new_without_spawning(
             modem,
             &FAKE_FLASH_MUTEX,
             mqtt_config,
@@ -455,12 +441,6 @@ mod tests {
             send_punch.connection_supervisor.state(),
             ConnectionState::Disconnected
         );
-
-        let expected_date = DateTime::parse_from_rfc3339("2025-11-24T01:40:34+01:00").unwrap();
-        assert_eq!(
-            block_on(send_punch.synchronize_time()).unwrap(),
-            expected_date
-        );
     }
 
     #[test]
@@ -468,8 +448,6 @@ mod tests {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let mut fake_modem = FakeModem::new(&[
-            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
             ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),
@@ -506,8 +484,6 @@ mod tests {
         let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         let fake_modem = FakeModem::new(&[
-            ("AT+QIACT?", "+QIACT: 1,1,1,\"10.0.0.1\""),
-            ("AT+QNTP=1,\"pool.ntp.org\",123,1", ""),
             ("AT+CCLK?", "+CCLK: \"24/12/24,10:48:23+04\""),
             ("AT+QCSQ", "+QCSQ: \"NBIoT\",-107,-134,35,-20"),
             ("AT+QCFG=\"celevel\"", "+QCFG: \"celevel\",1"),

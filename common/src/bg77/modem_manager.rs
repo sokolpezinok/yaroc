@@ -278,6 +278,7 @@ impl<M: AtUartTrait> ModemManager<M> {
                     let time = SystemInfo::<M>::parse_time(values[1]);
                     if let Ok(time) = time {
                         info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
+                        SystemInfo::<M>::set_boot_time(time);
                     }
                 }
                 true
@@ -389,10 +390,15 @@ impl<M: AtUartTrait> ModemManager<M> {
 #[cfg(feature = "std")]
 #[cfg(test)]
 mod test {
-    use crate::at::fake_modem::FakeModem;
-
     use super::*;
+
+    use chrono::DateTime;
     use embassy_futures::block_on;
+    use embassy_time::Instant;
+
+    use crate::at::fake_modem::FakeModem;
+    use crate::bg77::system_info::{BOOT_TIME, time_from_instant};
+    use crate::send_punch::COMMAND_CHANNEL;
 
     #[test]
     fn test_configure_modem() {
@@ -480,5 +486,18 @@ mod test {
         let res = block_on(modem_manager.network_registration(&mut bg77, false));
         assert!(res.is_ok());
         assert!(bg77.all_done());
+    }
+
+    #[test]
+    fn test_urc_handler_qntp_updates_boot_time() {
+        BOOT_TIME.sender().clear();
+        assert!(BOOT_TIME.receiver().unwrap().try_get().is_none());
+
+        let resp = CommandResponse::new("+QNTP: 0,\"2026/08/16,17:10:41+08\"").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
+        assert!(handled);
+
+        let expected = DateTime::parse_from_rfc3339("2026-08-16T17:10:41+02:00").unwrap();
+        assert_eq!(time_from_instant(Instant::now()), expected);
     }
 }
