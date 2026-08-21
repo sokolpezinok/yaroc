@@ -234,21 +234,30 @@ For more details on available subcommands and options, run `yaroc --help` or `ya
 Follow the official [Meshtastic documentation](https://meshtastic.org/docs/introduction/):
 
 1. [Flash firmware](https://meshtastic.org/docs/getting-started/flashing-firmware)
-2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/). We recommend using a **private encrypted channel** to avoid unnecessary traffic on public meshes.
+2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/). We recommend using a **private encrypted channel** to avoid unnecessary traffic on public meshes. The following shows configuration using the `meshtastic` CLI utility but you can configure the same parameters using [phone apps or the web client](https://meshtastic.org/docs/getting-started/initial-config/).
 
-    1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison).
-    2. Use the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode)
-    3. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT:
-
+    1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison) and the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode):
        ```sh
-       meshtastic --set lora.ok_to_mqtt true
+       meshtastic --set device.role CLIENT --set device.rebroadcast_mode LOCAL_ONLY
+       ```
+     
+    2. Set name and password for the primary channel (index 0), e.g. using your club name or official abbreviation:
+       ```sh
+       meshtastic --ch-set name ClubName --ch-index 0 --ch-set psk base64:your_password_....
        ```
 
-    4. Add a channel named `serial`, it'll be used to transport punches through LoRa. Set **Uplink Enabled** to `true` for the `serial` channel (and any other channel you want to bridge). If your `serial` channel is at index 1:
+    3. Add a channel named `serial`, it'll be used to transport punches through LoRa. Set **Uplink Enabled** to `true` for the `serial` channel (and any other channel you want to bridge). The following will add such a channel at index 1:
 
        ```sh
-       meshtastic --ch-index 1 --ch-set uplink_enabled true
+       meshtastic --ch-set name serial --ch-set uplink_enabled true --ch-index 1
        ```
+
+    4. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT:
+
+       ```sh
+       meshtastic --set lora.config_ok_to_mqtt true
+       ```
+
     5. Enable device telemetry (every 5 minutes) to monitor mesh health and battery status:
        ```sh
        meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
@@ -259,7 +268,7 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
 
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
-4. Gateway/MQTT configuration: At least one node in the mesh needs to be connected to the internet (via Wi-Fi or Ethernet) to bridge the packets to MQTT.
+4. Gateway/MQTT configuration: If you want to forward meshtastic packets over the internet, at least one node in the mesh needs to be connected to the internet (usually via phone using Bluetooth) to bridge the packets to MQTT.
     1. [Enable MQTT](https://meshtastic.org/docs/configuration/module/mqtt/) in the Meshtastic settings, set the broker URL and root topic to `yar`.
 
        ```sh
@@ -278,7 +287,7 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
 To forward SportIdent's SRR punches over LoRa, we need to configure meshtastic to send them over LoRa. First, enable the right serial mode.
 
 ```sh
-meshtastic --set serial.mode SIMPLE --set serial.enabled true -set serial.baud BAUD_38400 \
+meshtastic --set serial.mode SIMPLE --set serial.enabled true --set serial.baud BAUD_38400 \
            --set serial.timeout 100
 ```
 
