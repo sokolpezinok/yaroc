@@ -236,29 +236,33 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
 1. [Flash firmware](https://meshtastic.org/docs/getting-started/flashing-firmware)
 2. [Configure the radio](https://meshtastic.org/docs/configuration/radio/). We recommend using a **private encrypted channel** to avoid unnecessary traffic on public meshes. The following shows configuration using the `meshtastic` CLI utility but you can configure the same parameters using [phone apps or the web client](https://meshtastic.org/docs/getting-started/initial-config/).
 
-    1. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison) and the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode):
+    1. Choose your region, most likely `EU_868` (for Europe). We recommend using the Long Fast setting, it has the best range to bandwidth ratio for orienteering, i.e. 300 to 400 meters in the forest and able to transmit a couple hundred punches per hour. See [the docs](https://meshtastic.org/docs/overview/radio-settings/) for more radio settings.
+       ```sh
+       meshtastic --set lora.region EU_868 --set lora.modem_preset LONG_FAST
+       ```
+    2. Use the [client role](https://meshtastic.org/docs/configuration/radio/device/#role-comparison) and the [LOCAL_ONLY rebroadcast mode](https://meshtastic.org/docs/configuration/radio/device/#rebroadcast-mode):
        ```sh
        meshtastic --set device.role CLIENT --set device.rebroadcast_mode LOCAL_ONLY
        ```
      
-    2. Set name and password for the primary channel (index 0), e.g. using your club name or official abbreviation:
+    3. Set name and password for the primary channel (index 0), e.g. using your club name or official abbreviation:
        ```sh
-       meshtastic --ch-set name ClubName --ch-index 0 --ch-set psk base64:your_password_....
+       meshtastic --ch-index 0 --ch-set name ClubName --ch-set psk base64:your_password_....
        ```
 
-    3. Add a channel named `serial`, it'll be used to transport punches through LoRa. Set **Uplink Enabled** to `true` for the `serial` channel (and any other channel you want to bridge). The following will add such a channel at index 1:
+    4. Add a channel named `serial`, it'll be used to transport punches through LoRa. Set **Uplink Enabled** to `true` for the `serial` channel (and any other channel you want to bridge). The following will add such a channel at index 1:
 
        ```sh
-       meshtastic --ch-set name serial --ch-set uplink_enabled true --ch-index 1
+       meshtastic --ch-index 1 --ch-set name serial --ch-set uplink_enabled true
        ```
 
-    4. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT:
+    5. Set **Ok to MQTT** to `true` in the LoRa configuration to allow your packets to be bridged by MQTT:
 
        ```sh
        meshtastic --set lora.config_ok_to_mqtt true
        ```
 
-    5. Enable device telemetry (every 5 minutes) to monitor mesh health and battery status:
+    6. Enable device telemetry (every 5 minutes) to monitor mesh health and battery status:
        ```sh
        meshtastic --set telemetry.device_telemetry_enabled true --set telemetry.device_update_interval 300
        ```
@@ -268,23 +272,27 @@ Follow the official [Meshtastic documentation](https://meshtastic.org/docs/intro
 
 3. Attach SportIdent's SRR module to a UART pin, a photo will be added later. Configure it using instructions below.
 
-4. Gateway/MQTT configuration: If you want to forward meshtastic packets over the internet, at least one node in the mesh needs to be connected to the internet (usually via phone using Bluetooth) to bridge the packets to MQTT.
+4. Gateway/MQTT configuration: If you want to forward Meshtastic packets over the internet, at least one node in the mesh needs to be connected to the internet (usually via phone using Bluetooth) to bridge the packets to MQTT.
     1. [Enable MQTT](https://meshtastic.org/docs/configuration/module/mqtt/) in the Meshtastic settings, set the broker URL and root topic to `yar`.
 
        ```sh
-       meshtastic --set mqtt.enabled true --set mqtt.root yar
+       meshtastic --set mqtt.enabled true --set mqtt.root yar \
+                  --set mqtt.proxy_to_client_enabled true --set mqtt.encryption_enabled false
        ```
     2. Set the **MQTT server** to the one you use in `yarocd.toml` (e.g., `broker.emqx.io`) and the same username and password. Or set it to empty, if not used.
 
        ```sh
-       meshtastic --set mqtt.address broker.emqx.io --set mqtt.username "" --set mqtt.password "" 
+       meshtastic --set mqtt.address broker.emqx.io --set mqtt.username "" --set mqtt.password ""
+       ```
+    3. Enable uplink from the main channel, in order to monitor the device fleet for battery status, signal strength, etc.
+       ```sh
+       meshtastic --ch-index 0 --ch-set uplink_enabled true
        ```
 
 
+### Configure Meshtastic UART
 
-### Configure meshtastic UART
-
-To forward SportIdent's SRR punches over LoRa, we need to configure meshtastic to send them over LoRa. First, enable the right serial mode.
+To forward SportIdent's SRR punches over LoRa, we need to configure Meshtastic to send them over LoRa. First, enable the right serial mode.
 
 ```sh
 meshtastic --set serial.mode SIMPLE --set serial.enabled true --set serial.baud BAUD_38400 \
