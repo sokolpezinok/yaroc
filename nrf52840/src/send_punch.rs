@@ -4,7 +4,7 @@
 use crate::error::Error;
 use crate::flash::NrfFlash;
 use crate::system_info::MCH_SIGNAL;
-use defmt::{error, info};
+use defmt::error;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either3, select3};
 use embassy_nrf::gpio::Output;
@@ -167,10 +167,12 @@ pub async fn send_punch_event_handler() {
                     next_network_check = Instant::now() + Duration::from_secs(600);
                     send_punch.check_connection().await;
                 }
-                Either3::Third(_) => match send_punch.send_mini_call_home().await {
-                    Ok(_mini_call_home) => info!("MiniCallHome sent"),
-                    Err(err) => error!("Sending of MiniCallHome failed: {}", err),
-                },
+                Either3::Third(_) => {
+                    let _ = send_punch
+                        .send_mini_call_home()
+                        .await
+                        .inspect_err(|err| error!("Sending of MiniCallHome failed: {}", err));
+                }
             }
         }
     }

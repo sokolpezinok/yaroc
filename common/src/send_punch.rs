@@ -227,6 +227,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
         if self.connection_supervisor.is_connected() {
             self.send_message::<250>("status", mini_call_home.to_proto(), MqttQos::Q0, 0)
                 .await?;
+            info!("MiniCallHome sent");
         } else {
             warn!("MQTT not connected, skipping MiniCallHome publish");
         }
