@@ -94,19 +94,15 @@ impl<M: AtUartTrait> SystemInfo<M> {
         let hour: u32 = str::parse(&rest[6..8]).map_err(|_| Error::ParseError)?;
         let min: u32 = str::parse(&rest[9..11]).map_err(|_| Error::ParseError)?;
         let sec: u32 = str::parse(&rest[12..14]).map_err(|_| Error::ParseError)?;
-        let sign = if &rest[11..15] == "-" { -1 } else { 1 };
+        let sign = if &rest[14..15] == "-" { -1 } else { 1 };
         let offset: i32 = str::parse(&rest[15..17]).map_err(|_| Error::ParseError)?;
         let naive_date = chrono::NaiveDate::from_ymd_opt(year, month, day)
             .ok_or(Error::ParseError)?
             .and_hms_opt(hour, min, sec)
             .ok_or(Error::ParseError)?;
 
-        Ok(naive_date
-            .and_local_timezone(
-                FixedOffset::east_opt(sign * offset * 900).ok_or(Error::ParseError)?,
-            )
-            .unwrap()
-            .fixed_offset())
+        let tz = FixedOffset::east_opt(sign * offset * 900).ok_or(Error::ParseError)?;
+        Ok(naive_date.and_utc().with_timezone(&tz))
     }
 
     /// Gets modem time from the CCLK command, falling back to QLTS.
@@ -254,7 +250,7 @@ mod test {
         assert_eq!(
             mch.timestamp.unwrap(),
             DateTime::<FixedOffset>::parse_from_str(
-                "2024-12-24 10:48:23+01:00",
+                "2024-12-24 11:48:23+01:00",
                 "%Y-%m-%d %H:%M:%S%:z"
             )
             .unwrap()
@@ -287,12 +283,19 @@ mod test {
         );
         assert_eq!(
             naive_dt.time(),
-            NaiveTime::from_hms_opt(22, 12, 11).unwrap()
+            NaiveTime::from_hms_opt(23, 12, 11).unwrap()
         );
         assert_eq!(datetime.offset().local_minus_utc(), 3600);
 
         let datetime_cclk = SystemInfo::<FakeModem>::parse_time("24/11/25,22:12:11+04").unwrap();
         assert_eq!(datetime_cclk, datetime);
+
+        let datetime_neg = SystemInfo::<FakeModem>::parse_time("2024/11/25,22:12:11-16").unwrap();
+        assert_eq!(
+            datetime_neg.naive_local().time(),
+            NaiveTime::from_hms_opt(18, 12, 11).unwrap()
+        );
+        assert_eq!(datetime_neg.offset().local_minus_utc(), -14400);
     }
 
     #[test]

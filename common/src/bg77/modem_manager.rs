@@ -497,7 +497,7 @@ mod test {
         let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
         assert!(handled);
 
-        let expected = DateTime::parse_from_rfc3339("2026-08-16T17:10:41+02:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2026-08-16T19:10:41+02:00").unwrap();
         assert_eq!(time_from_instant(Instant::now()), expected);
     }
 }
