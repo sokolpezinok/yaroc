@@ -20,7 +20,7 @@ use yaroc_common::{
     send_punch::SendPunch,
 };
 use yaroc_nrf52840::{
-    self as _,
+    VERSION,
     device::Device,
     send_punch::{
         Bg77SendPunchFn, FLASH_MUTEX, SEND_PUNCH_MUTEX, backoff_retries_loop, flash_log_task,
@@ -79,7 +79,11 @@ async fn main(spawner: Spawner) {
         mac_address,
         ..Default::default()
     };
-    info!("Device initialized: {}", mqtt_config.name.as_str(),);
+    info!(
+        "Device initialized: {}, firmware v{}",
+        mqtt_config.name.as_str(),
+        VERSION
+    );
 
     match flash.read::<MqttConfig>().await {
         Ok(Some(reduced_config)) => {

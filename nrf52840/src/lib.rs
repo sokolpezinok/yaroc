@@ -13,6 +13,9 @@ pub mod usb;
 pub use yaroc_common::error;
 type Result<T> = yaroc_common::Result<T>;
 
+/// The crate version injected at compile time from Cargo.toml.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 use cortex_m_semihosting::debug;
 use defmt_rtt as _;
 use panic_probe as _;
