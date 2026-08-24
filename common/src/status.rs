@@ -301,8 +301,8 @@ impl TryFrom<MiniCallHomeProto<'_>> for MiniCallHome {
         };
         let signal_info = CellSignalInfo {
             network_type,
-            rsrp_dbm: i16::try_from(value.rsrp_dbm).map_err(|_| Error::FormatError)?,
-            snr_cb: i16::try_from(value.signal_snr_cb).map_err(|_| Error::FormatError)?,
+            rsrp_dbm: i16::try_from(value.rsrp_dbm).map_err(|_| Error::ValueError)?,
+            snr_cb: i16::try_from(value.signal_snr_cb).map_err(|_| Error::ValueError)?,
             cellid: if value.cellid > 0 {
                 Some(value.cellid)
             } else {

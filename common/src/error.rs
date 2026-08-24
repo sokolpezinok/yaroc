@@ -10,7 +10,7 @@ pub enum Error {
     #[error("Buffer too small")]
     BufferTooSmallError,
     #[error("Formatting error, usually buffer too small")]
-    FormatError,
+    Format(#[from] core::fmt::Error),
     #[error("Cannot parse string as the given type")]
     ParseError,
     #[error("Protobuf parse error: {0}")]
@@ -49,12 +49,6 @@ pub enum Error {
     TimeoutError,
     #[error("Not connected")]
     NotConnected,
-}
-
-impl From<core::fmt::Error> for Error {
-    fn from(_: core::fmt::Error) -> Self {
-        Error::FormatError
-    }
 }
 
 impl From<core::convert::Infallible> for Error {

@@ -111,7 +111,7 @@ impl CellularLogMessage {
             }
             Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
                 if let EnumValue::Unknown(_) = r#type {
-                    return Err(Error::FormatError.into());
+                    return Err(Error::ParseError.into());
                 }
                 Ok(CellularLogMessage::DeviceEvent {
                     host_info,
@@ -119,7 +119,7 @@ impl CellularLogMessage {
                     added: r#type == EnumValue::Known(EventType::Added),
                 })
             }
-            _ => Err(Error::FormatError.into()),
+            _ => Err(Error::ParseError.into()),
         }
     }
 

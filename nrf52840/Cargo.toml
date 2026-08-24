@@ -17,7 +17,7 @@ cortex-m-semihosting = "0.5.0"
 femtopb = { workspace = true }
 
 defmt = { workspace = true }
-defmt-rtt = { version = "1.0", features = ["disable-blocking-mode"] }
+defmt-rtt = { version = "1.1", features = ["disable-blocking-mode"] }
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-embedded-hal = { workspace = true }
 embassy-executor = { workspace = true, features = ["platform-cortex-m", "defmt", "executor-interrupt"] }
@@ -30,7 +30,7 @@ embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
 embassy-usb-logger = { version = "0.6.0" }
 heapless =  { workspace = true }
 log = { workspace = true }
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "47d6121c6e823120e8b883a7ac75f44ce7daa3aa", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice.git", rev = "b0ac850c0a5a05b8a5aef4f752b48115755b8542", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "critical-section-impl"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 postcard = { workspace = true }
 sequential-storage = { workspace = true }
