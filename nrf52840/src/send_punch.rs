@@ -34,9 +34,11 @@ pub static FLASH_MUTEX: Mutex<RawMutex, Option<NrfFlash<'static>>> = Mutex::new(
 
 /// A mutex for the `SendPunch` struct.
 pub static SEND_PUNCH_MUTEX: Mutex<RawMutex, Option<Bg77SendPunchType>> = Mutex::new(None);
-// Property of the Quectel BG77 hardware. Any more than 5 messages inflight fail to send.
+
+// Property of the Quectel BG77 hardware. More than 5 messages inflight fail to send, so we have a
+// semaphore to limit that.
 const PUNCHES_INFLIGHT: usize = 5;
-static BG77_PUNCH_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
+static BG77_MSG_SEMAPHORE: FairSemaphore<RawMutex, PUNCH_QUEUE_SIZE> =
     FairSemaphore::new(PUNCHES_INFLIGHT);
 
 /// A function that sends a punch using the BG77 modem.
@@ -50,7 +52,7 @@ impl Bg77SendPunchFn {
     /// Creates a new `Bg77SendPunchFn`.
     pub fn new(packet_timeout: Duration) -> Self {
         Self {
-            bg77_punch_semaphore: &BG77_PUNCH_SEMAPHORE,
+            bg77_punch_semaphore: &BG77_MSG_SEMAPHORE,
             packet_timeout,
         }
     }
@@ -168,10 +170,14 @@ pub async fn send_punch_event_handler() {
                     send_punch.check_connection().await;
                 }
                 Either3::Third(_) => {
-                    let _ = send_punch
-                        .send_mini_call_home()
-                        .await
-                        .inspect_err(|err| error!("Sending of MiniCallHome failed: {}", err));
+                    if let Some(_releaser) = BG77_MSG_SEMAPHORE.try_acquire(1) {
+                        let _ = send_punch
+                            .send_mini_call_home()
+                            .await
+                            .inspect_err(|err| error!("Sending of MiniCallHome failed: {}", err));
+                    } else {
+                        defmt::warn!("Modem inflight queue full, skipping MiniCallHome publish");
+                    }
                 }
             }
         }
