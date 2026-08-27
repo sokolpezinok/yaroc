@@ -13,8 +13,8 @@ use crate::bg77::modem_manager::ModemManager;
 use crate::bg77::mqtt::{ConnectError, MqttClient, TcpError};
 
 const MAX_INACTIVE_FORCE_REATTACH: Duration = Duration::from_secs(210);
-const FORCE_REATTACH_RATE_LIMIT: Duration =
-    Duration::from_secs(MAX_INACTIVE_FORCE_REATTACH.as_secs() * 2);
+const INITIAL_FORCE_REATTACH_RATE_LIMIT: Duration = Duration::from_secs(210);
+const MAX_FORCE_REATTACH_RATE_LIMIT: Duration = Duration::from_secs(45 * 60);
 
 pub static MQTT_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
 pub static CELLULAR_CONNECTION_STATUS: Watch<RawMutex, bool, 1> = Watch::new();
@@ -100,6 +100,7 @@ pub struct ConnectionSupervisor<M: AtUartTrait> {
     state: ConnectionState,
     last_connect_attempt: Option<Instant>,
     last_force_reattach: Instant,
+    force_reattach_rate_limit: Duration,
     _phantom: PhantomData<M>,
 }
 
@@ -109,6 +110,7 @@ impl<M: AtUartTrait> Default for ConnectionSupervisor<M> {
             state: ConnectionState::Disconnected,
             last_connect_attempt: None,
             last_force_reattach: Instant::now(),
+            force_reattach_rate_limit: INITIAL_FORCE_REATTACH_RATE_LIMIT,
             _phantom: PhantomData,
         }
     }
@@ -139,6 +141,16 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
     #[cfg(test)]
     pub fn set_last_connect_attempt(&mut self, now: Instant) {
         self.last_connect_attempt = Some(now);
+    }
+
+    #[cfg(test)]
+    pub fn force_reattach_rate_limit(&self) -> Duration {
+        self.force_reattach_rate_limit
+    }
+
+    #[cfg(test)]
+    pub fn set_force_reattach_rate_limit(&mut self, limit: Duration) {
+        self.force_reattach_rate_limit = limit;
     }
 
     /// Update the connection state and notify MQTT and cellular connection status listeners if changed
@@ -195,12 +207,22 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         modem_manager: &mut ModemManager<M>,
         mqtt_client: &mut MqttClient<M>,
     ) -> crate::Result<()> {
+        self.ensure_connected_at(bg77, modem_manager, mqtt_client, Instant::now()).await
+    }
+
+    /// Ensures that cellular attachment and MQTT connection are established at the given instant.
+    pub async fn ensure_connected_at(
+        &mut self,
+        bg77: &mut M,
+        modem_manager: &mut ModemManager<M>,
+        mqtt_client: &mut MqttClient<M>,
+        now: Instant,
+    ) -> crate::Result<()> {
         // Short-circuit if already connected
         if self.state == ConnectionState::MqttConnected {
             return Ok(());
         }
 
-        let now = Instant::now();
         // Rate-limiting check for connection attempts
         if let Some(last_attempt) = self.last_connect_attempt
             && last_attempt + mqtt_client.packet_timeout() * 2 > now
@@ -210,12 +232,14 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
         self.last_connect_attempt = Some(now);
 
         let force_reattach = mqtt_client.last_successful_send() + MAX_INACTIVE_FORCE_REATTACH < now
-            && self.last_force_reattach + FORCE_REATTACH_RATE_LIMIT <= now;
+            && self.last_force_reattach + self.force_reattach_rate_limit <= now;
         // Step 1: Cellular Registration
         // Short-circuit if cellular attachment already succeeded and no force reattach is required
         if !self.state.is_mqtt_error() || force_reattach {
             if force_reattach {
                 self.last_force_reattach = now;
+                self.force_reattach_rate_limit =
+                    (self.force_reattach_rate_limit * 2).min(MAX_FORCE_REATTACH_RATE_LIMIT);
             }
             self.update_status(ConnectionState::ConnectingCellular);
             if let Err(err) = modem_manager.network_registration(bg77, force_reattach).await {
@@ -273,12 +297,13 @@ impl<M: AtUartTrait> ConnectionSupervisor<M> {
                 self.update_status(TcpError::ServerDisconnect.into());
             }
         } else {
-            self.update_status(ConnectionState::MqttConnected);
+            self.on_connection_success();
         }
     }
 
     fn on_connection_success(&mut self) {
         self.update_status(ConnectionState::MqttConnected);
+        self.force_reattach_rate_limit = INITIAL_FORCE_REATTACH_RATE_LIMIT;
     }
 }
 
@@ -405,7 +430,7 @@ mod tests {
         supervisor.state = ConnectionState::TcpError(TcpError::FailedToOpenNetwork);
         supervisor.last_connect_attempt = None;
 
-        // Since state is TcpError and last_force_reattach is recent (within 420s),
+        // Since state is TcpError and last_force_reattach is recent (within 210s),
         // force_reattach evaluates to false, skipping cellular reattachment.
         let mut bg77 = FakeModem::new(&[
             ("AT+QMTOPEN?", ""),
@@ -424,6 +449,87 @@ mod tests {
             block_on(supervisor.ensure_connected(&mut bg77, &mut modem_manager, &mut mqtt_client));
         assert!(res.is_ok());
         assert_eq!(supervisor.state(), ConnectionState::MqttConnected);
+    }
+
+    #[test]
+    fn test_supervisor_force_reattach_exponential_backoff() {
+        let start = Instant::now();
+        let mut supervisor = ConnectionSupervisor::<FakeModem>::new();
+        let mut modem_manager = ModemManager::<FakeModem>::new(ModemConfig::default());
+        let mut mqtt_client = MqttClient::<FakeModem>::new(MqttClientConfig::default(), 1);
+
+        assert_eq!(
+            supervisor.force_reattach_rate_limit(),
+            Duration::from_secs(210)
+        );
+
+        supervisor.set_state(ConnectionState::TcpError(TcpError::NetworkDisconnected));
+
+        const REATTACH_RESPONSES: &[(&str, &str)] = &[
+            ("ATE0", ""),
+            ("AT+CGATT=0", ""),
+            ("AT+CGACT=0,1", ""),
+            ("AT+CGATT=1", ""),
+            ("AT+CGACT?", "+CGACT: 1,1"),
+            ("AT+QMTOPEN?", ""),
+            ("AT+QMTCFG=\"timeout\",1,35,2,1", ""),
+            ("AT+QMTCFG=\"keepalive\",1,70", ""),
+            (
+                "AT+QMTCFG=\"will\",1,1,1,0,\"yar/deadbeef/will\",\"test_client\"",
+                "",
+            ),
+            ("AT+QMTOPEN=1,\"broker.emqx.io\",1883", "+QMTOPEN: 1,-1"),
+        ];
+
+        // 1st force reattach (at 211s): rate limit doubles from 210s to 420s
+        let mut bg77 = FakeModem::new(REATTACH_RESPONSES);
+        let t1 = start + Duration::from_secs(211);
+        let _ = block_on(supervisor.ensure_connected_at(
+            &mut bg77,
+            &mut modem_manager,
+            &mut mqtt_client,
+            t1,
+        ));
+        assert_eq!(
+            supervisor.force_reattach_rate_limit(),
+            Duration::from_secs(420)
+        );
+
+        // 2nd force reattach (after 421s): doubles to 840s
+        let mut bg77 = FakeModem::new(REATTACH_RESPONSES);
+        let t2 = t1 + Duration::from_secs(421);
+        let _ = block_on(supervisor.ensure_connected_at(
+            &mut bg77,
+            &mut modem_manager,
+            &mut mqtt_client,
+            t2,
+        ));
+        assert_eq!(
+            supervisor.force_reattach_rate_limit(),
+            Duration::from_secs(840)
+        );
+
+        // Test capping: set rate limit near max and verify it is capped at 45 minutes
+        supervisor.set_force_reattach_rate_limit(Duration::from_secs(30 * 60));
+        let mut bg77 = FakeModem::new(REATTACH_RESPONSES);
+        let t3 = t2 + Duration::from_secs(30 * 60 + 1);
+        let _ = block_on(supervisor.ensure_connected_at(
+            &mut bg77,
+            &mut modem_manager,
+            &mut mqtt_client,
+            t3,
+        ));
+        assert_eq!(
+            supervisor.force_reattach_rate_limit(),
+            Duration::from_secs(45 * 60)
+        );
+
+        // Connection success resets back to initial 210s
+        supervisor.on_connection_success();
+        assert_eq!(
+            supervisor.force_reattach_rate_limit(),
+            Duration::from_secs(210)
+        );
     }
 
     #[test]
