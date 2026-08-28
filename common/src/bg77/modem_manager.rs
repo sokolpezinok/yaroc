@@ -274,12 +274,33 @@ impl<M: AtUartTrait> ModemManager<M> {
                 // TODO: this should probably be inside SystemInfo, but right now we don't
                 // want to introduce another URC handler.
                 let values = response.values();
-                if values.len() == 2 && values[0] == "0" {
-                    let time = SystemInfo::<M>::parse_time(values[1]);
-                    if let Ok(time) = time {
-                        info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
-                        SystemInfo::<M>::set_boot_time(time);
+                if values.len() == 2 {
+                    if values[0] == "0" {
+                        match SystemInfo::<M>::parse_time(values[1]) {
+                            Ok(time) => {
+                                info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
+                                SystemInfo::<M>::set_boot_time(time);
+                            }
+                            Err(e) => {
+                                warn!("Failed to parse NTP time: {}", e);
+                            }
+                        }
                     }
+                } else if values.len() == 1 {
+                    if let Some(&err_code) = values.first() {
+                        let err_msg = match err_code {
+                            "558" => "unknown error",
+                            "565" => "DNS resolution failed or operation timeout",
+                            "568" => "server error",
+                            _ => "modem error",
+                        };
+                        warn!(
+                            "NTP synchronization failed (code {}: {})",
+                            err_code, err_msg
+                        );
+                    }
+                } else {
+                    warn!("NTP synchronization failed: invalid QNTP response");
                 }
                 true
             }
@@ -499,5 +520,15 @@ mod test {
 
         let expected = DateTime::parse_from_rfc3339("2026-08-16T19:10:41+02:00").unwrap();
         assert_eq!(time_from_instant(Instant::now()), expected);
+    }
+
+    #[test]
+    fn test_urc_handler_qntp_error_handled() {
+        BOOT_TIME.sender().clear();
+
+        let resp = CommandResponse::new("+QNTP: 565").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
+        assert!(handled);
+        assert!(BOOT_TIME.receiver().unwrap().try_get().is_none());
     }
 }
