@@ -304,7 +304,27 @@ impl<M: AtUartTrait> ModemManager<M> {
                 }
                 true
             }
-            "CEREG" => response.values().len() == 4,
+            "CEREG" => {
+                let values = response.values();
+                match values.len() {
+                    1 => {
+                        let stat_str = match values[0] {
+                            "0" => "not registered",
+                            "2" => "searching for operator",
+                            "3" => "registration denied",
+                            "4" => "unknown",
+                            _ => "unknown registration status",
+                        };
+                        info!(
+                            "Cellular network registration status: {} (code {})",
+                            stat_str, values[0]
+                        );
+                        true
+                    }
+                    4 => true,
+                    _ => false,
+                }
+            }
             _ => false,
         }
     }
@@ -530,5 +550,36 @@ mod test {
         let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
         assert!(handled);
         assert!(BOOT_TIME.receiver().unwrap().try_get().is_none());
+    }
+
+    #[test]
+    fn test_urc_handler_cereg() {
+        // Unsolicited registration URC with 4 values
+        let resp = CommandResponse::new("+CEREG: 1,\"2008\",\"2B2078\",9").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
+        assert!(handled);
+
+        // Unsolicited roaming registration URC with 4 values
+        let resp = CommandResponse::new("+CEREG: 5,\"2008\",\"2B2078\",9").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
+        assert!(handled);
+
+        // Unsolicited deregistration / searching URCs with 1 value
+        for code in ["0", "2", "3", "4"] {
+            let resp = CommandResponse::new(&format!(20; "+CEREG: {}", code).unwrap()).unwrap();
+            let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
+            assert!(handled);
+        }
+
+        // Query command responses (e.g. AT+CEREG? -> +CEREG: 2,1,"2008","2B2078",9 or +CEREG: 2,0)
+        // must NOT be consumed as URCs.
+        let query_resp = CommandResponse::new("+CEREG: 2,1,\"2008\",\"2B2078\",9").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&query_resp, COMMAND_CHANNEL.sender());
+        assert!(!handled);
+
+        let query_resp_dereg = CommandResponse::new("+CEREG: 2,0").unwrap();
+        let handled =
+            ModemManager::<FakeModem>::urc_handler(&query_resp_dereg, COMMAND_CHANNEL.sender());
+        assert!(!handled);
     }
 }
