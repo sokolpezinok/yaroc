@@ -26,6 +26,8 @@ use crate::status::MiniCallHome;
 use crate::{PUNCH_EXTRA_LEN, RawMutex};
 
 /// Commands to be sent to the `send_punch_event_handler`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SendPunchCommand {
     /// Instructs the modem to synchronize its time with the network.
     SynchronizeTime,

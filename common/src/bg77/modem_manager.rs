@@ -263,12 +263,17 @@ impl<M: AtUartTrait> ModemManager<M> {
     ) -> bool {
         match response.command() {
             "QIURC" => {
-                let message =
-                    SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate);
-                if command_sender.try_send(message).is_err() {
-                    error!("Channel full when sending PDP deactivation event");
+                let values = response.values();
+                if values.first() == Some(&"pdpdeact") {
+                    let message =
+                        SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate);
+                    if command_sender.try_send(message).is_err() {
+                        error!("Channel full when sending PDP deactivation event");
+                    }
+                    true
+                } else {
+                    false
                 }
-                true
             }
             "QNTP" => {
                 // TODO: this should probably be inside SystemInfo, but right now we don't
@@ -387,7 +392,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         force_reattach: bool,
     ) -> Result<(), RegistrationError> {
         let att_state = if force_reattach {
-            warn!("Will deattach from network because of no messages being sent for a long time");
+            warn!("Will detach from network because of no messages being sent for a long time");
             bg77.call_at("E0", None).await?;
             let _ = bg77.long_call_at("+CGATT=0", ACTIVATION_TIMEOUT).await;
             Timer::after_secs(2).await;
@@ -581,5 +586,32 @@ mod test {
         let handled =
             ModemManager::<FakeModem>::urc_handler(&query_resp_dereg, COMMAND_CHANNEL.sender());
         assert!(!handled);
+    }
+
+    #[test]
+    fn test_urc_handler_qiurc() {
+        while COMMAND_CHANNEL.try_receive().is_ok() {}
+
+        let resp_pdpdeact = CommandResponse::new("+QIURC: \"pdpdeact\",1").unwrap();
+        let handled =
+            ModemManager::<FakeModem>::urc_handler(&resp_pdpdeact, COMMAND_CHANNEL.sender());
+        assert!(handled);
+        assert_eq!(
+            COMMAND_CHANNEL.try_receive(),
+            Ok(SendPunchCommand::ConnectionSupervisorEvent(
+                ConnectionEvent::PdpDeactivate
+            ))
+        );
+
+        let resp_recv = CommandResponse::new("+QIURC: \"recv\",0,10").unwrap();
+        let handled = ModemManager::<FakeModem>::urc_handler(&resp_recv, COMMAND_CHANNEL.sender());
+        assert!(!handled);
+        assert!(COMMAND_CHANNEL.try_receive().is_err());
+
+        let resp_closed = CommandResponse::new("+QIURC: \"closed\",0").unwrap();
+        let handled =
+            ModemManager::<FakeModem>::urc_handler(&resp_closed, COMMAND_CHANNEL.sender());
+        assert!(!handled);
+        assert!(COMMAND_CHANNEL.try_receive().is_err());
     }
 }
