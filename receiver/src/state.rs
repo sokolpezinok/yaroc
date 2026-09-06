@@ -112,7 +112,7 @@ impl CellularNodeStatus {
 
     /// Updates punch-related metrics, storing the punch time and recording the code.
     pub fn punch(&mut self, punch: &SiPunch) {
-        self.last_punch = Some(punch.time);
+        self.last_punch = self.last_punch.max(Some(punch.time));
         self.codes.insert(punch.code);
     }
 
@@ -203,7 +203,7 @@ impl MeshtasticNodeStatus {
     /// Registers a punch event, updating the last punch timestamp and adding the station code.
     pub fn punch(&mut self, punch: &SiPunch) {
         self.connected = true;
-        self.last_punch = Some(punch.time);
+        self.last_punch = self.last_punch.max(Some(punch.time));
         self.codes.insert(punch.code);
     }
 
@@ -786,6 +786,29 @@ mod test_punch {
     }
 
     #[test]
+    fn test_cellular_punch_monotonicity() {
+        let mut status = CellularNodeStatus::default();
+        let t1 = DateTime::parse_from_rfc3339("2024-01-01T12:00:00+00:00").unwrap();
+        let t2 = DateTime::parse_from_rfc3339("2024-01-01T12:05:00+00:00").unwrap();
+        let t0 = DateTime::parse_from_rfc3339("2024-01-01T11:55:00+00:00").unwrap();
+
+        let punch1 = SiPunch::new_send_last_record(1715004, 47, t1, 2);
+        let punch2 = SiPunch::new_send_last_record(1715004, 47, t2, 2);
+        let punch0 = SiPunch::new_send_last_record(1715004, 47, t0, 2);
+
+        status.punch(&punch1);
+        assert_eq!(status.serialize().last_punch, Some(t1));
+
+        // Older punch should not move last_punch backwards
+        status.punch(&punch0);
+        assert_eq!(status.serialize().last_punch, Some(t1));
+
+        // Newer punch moves last_punch forward
+        status.punch(&punch2);
+        assert_eq!(status.serialize().last_punch, Some(t2));
+    }
+
+    #[test]
     fn test_process_mqtt_message_timezone() {
         let finland_tz = FixedOffset::east_opt(3 * 3600).unwrap();
         let mut state = FleetState::default().with_timezone(finland_tz);
@@ -1051,5 +1074,28 @@ mod test_meshtastic {
 
         assert_eq!(node_infos.len(), 1);
         assert_eq!(node_infos[0].signal_info, SignalInfo::Unknown);
+    }
+
+    #[test]
+    fn test_meshtastic_punch_monotonicity() {
+        let mut status = MeshtasticNodeStatus::new("test".to_string());
+        let t1 = DateTime::parse_from_rfc3339("2024-01-01T12:00:00+00:00").unwrap();
+        let t2 = DateTime::parse_from_rfc3339("2024-01-01T12:05:00+00:00").unwrap();
+        let t0 = DateTime::parse_from_rfc3339("2024-01-01T11:55:00+00:00").unwrap();
+
+        let punch1 = SiPunch::new_send_last_record(1715004, 47, t1, 2);
+        let punch2 = SiPunch::new_send_last_record(1715004, 47, t2, 2);
+        let punch0 = SiPunch::new_send_last_record(1715004, 47, t0, 2);
+
+        status.punch(&punch1);
+        assert_eq!(status.serialize().last_punch, Some(t1));
+
+        // Older punch should not move last_punch backwards
+        status.punch(&punch0);
+        assert_eq!(status.serialize().last_punch, Some(t1));
+
+        // Newer punch moves last_punch forward
+        status.punch(&punch2);
+        assert_eq!(status.serialize().last_punch, Some(t2));
     }
 }
