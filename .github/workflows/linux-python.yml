@@ -64,7 +64,7 @@ jobs:
   linux-cross:
     name: linux-cross (${{ matrix.target }})
     runs-on: ubuntu-latest
-    container: rust:bullseye
+    container: rust:bookworm
     strategy:
       matrix:
         include:
