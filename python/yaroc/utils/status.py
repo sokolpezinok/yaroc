@@ -55,6 +55,7 @@ class StatusDrawer:
             self.epd.Clear()
         else:
             self.epd = None
+        self.ignore: set[str] = set(display_config.get("ignore", []))
 
     def generate_info_table(self, node_infos: list[NodeInfo]) -> list[list[str]]:
         def human_time(timestamp: datetime | None) -> str:
@@ -70,6 +71,8 @@ class StatusDrawer:
 
         table = []
         for node_info in node_infos:
+            if node_info.name in self.ignore:
+                continue
             node_info.codes.sort()
             if len(node_info.codes) > 3:
                 # At most 3 codes, otherwise the column is too long

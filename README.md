@@ -367,6 +367,7 @@ log_level = "info"
 [display]
 # You can use a Waveshare e-ink display to show a status table of all YAROC units.
 model = "epd2in66"
+# ignore = ["radio-gateway"]  # List of device names to ignore on the display
 
 [mqtt]
 broker_url = "broker.emqx.io"

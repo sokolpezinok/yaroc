@@ -59,6 +59,30 @@ class TestStatus(unittest.TestCase):
         self.assertEqual(table[1][4], "1h ago")
         self.assertEqual(table[1][5], "")
 
+    def test_generate_info_table_ignore(self):
+        now = datetime.now().astimezone()
+        ni1 = MockNodeInfo(
+            name="Node1",
+            signal_strength="-80",
+            battery_percentage=95,
+            codes=[100],
+            last_update=now,
+            last_punch=now,
+        )
+        ni2 = MockNodeInfo(
+            name="Node2",
+            signal_strength="-90",
+            battery_percentage=None,
+            codes=[50],
+            last_update=now,
+            last_punch=None,
+        )
+
+        drawer = StatusDrawer({"ignore": ["Node2"]})
+        table = drawer.generate_info_table([ni1, ni2])
+        self.assertEqual(len(table), 1)
+        self.assertEqual(table[0][0], "Node1")
+
     def test_draw_table(self):
         drawer = StatusDrawer({})
         table = [
