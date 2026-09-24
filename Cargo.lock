@@ -3667,7 +3667,7 @@ dependencies = [
 
 [[package]]
 name = "yaroc-python"
-version = "0.1.24-beta.1"
+version = "0.1.24-beta.2"
 dependencies = [
  "bytes",
  "chrono",
