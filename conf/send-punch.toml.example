@@ -19,6 +19,7 @@ enable = false
 # Use the Waveshare SIM7020 NB-IoT Raspbery Pi HAT
 enable = false
 port = "/dev/serial0"
+# apn = "lpwa.vodafone.com"
 
 [meshtastic]
 # You can connect a Meshtastic device via USB or TCP and use it as a punch source.

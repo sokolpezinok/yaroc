@@ -17,6 +17,7 @@ from ..utils.retries import BackoffBatchedRetries
 from ..utils.sim7020 import SIM7020Interface
 from .client import Client
 
+DEFAULT_APN = "lpwa.vodafone.com"
 BROKER_URL = "broker.emqx.io"
 BROKER_PORT = 1883
 CONNECT_TIMEOUT = 35
@@ -135,6 +136,7 @@ class SIM7020MqttClient(Client):
             connect_timeout,
             config.get("broker_url", BROKER_URL),
             config.get("broker_port", BROKER_PORT),
+            config.get("apn", DEFAULT_APN),
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(

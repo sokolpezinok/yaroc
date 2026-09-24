@@ -339,6 +339,7 @@ broker_port = 1883
 # Use the Waveshare SIM7020 NB-IoT HAT (linked in Hardware Recommendations) connected via serial UART
 enable = false
 port = "/dev/serial0"
+# apn = "lpwa.vodafone.com"
 
 [meshtastic]
 # You can connect a Meshtastic device via USB or TCP and use it as a punch source.

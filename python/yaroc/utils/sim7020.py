@@ -38,6 +38,7 @@ class SIM7020Interface:
         connect_timeout: float,
         broker_url: str,
         broker_port: int,
+        apn: str,
     ):
         self._client_name = client_name
         self._connect_timeout = connect_timeout
@@ -47,6 +48,7 @@ class SIM7020Interface:
         self._last_success = datetime.now()
         self._broker_url = broker_url
         self._broker_port = broker_port
+        self._apn = apn
         self._state_lock = asyncio.Lock()
 
         self.async_at = async_at
@@ -75,7 +77,7 @@ class SIM7020Interface:
         await self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
         await self.async_at.call("AT+CLTS=1")  # Synchronize time from network
         response = await self.async_at.call(
-            'AT*MCGDEFCONT="IP","internet.iot"', timeout=self._connect_timeout
+            f'AT*MCGDEFCONT="IP","{self._apn}"', timeout=self._connect_timeout
         )
 
         if not response.success:
