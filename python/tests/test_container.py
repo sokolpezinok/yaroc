@@ -2,10 +2,10 @@ import unittest
 from datetime import timedelta
 from unittest.mock import patch
 
-from yaroc.utils.container import Container
+from yaroc.utils.container import Container, create_clients
 
 
-class TestContainer(unittest.TestCase):
+class TestContainer(unittest.IsolatedAsyncioTestCase):
     @patch("yaroc.utils.container.MessageHandlerBuilder")
     def test_container_meshtastic_disabled(self, mock_builder_cls):
         mock_builder = mock_builder_cls.return_value
@@ -123,3 +123,28 @@ class TestContainer(unittest.TestCase):
         handler = container.message_handler()
         self.assertEqual(handler, mock_builder.build.return_value)
         mock_builder.with_fake_punch.assert_called_with(timedelta(seconds=10), 46283, 47)
+
+    @patch("yaroc.utils.container.logging.error")
+    async def test_create_clients_roc_unknown_device(self, mock_logging_error):
+        container = Container()
+        config = {
+            "roc": {
+                "enable": True,
+                "override": {
+                    "spr01": "b827eba22867",
+                    "spr05": "b827eba22868",
+                },
+            },
+        }
+        mac_addresses = {
+            "spr01": "112233445566",
+        }
+        client_group = await create_clients(
+            container.client_factories, mac_addresses, config=config
+        )
+        self.assertEqual(client_group.len(), 1)
+        roc_client = client_group.clients[0]
+        self.assertEqual(roc_client.mac_override_map, {"112233445566": "b827eba22867"})
+        mock_logging_error.assert_called_once_with(
+            "Cannot override MAC for spr05: device not found in mac-addresses"
+        )

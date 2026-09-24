@@ -123,7 +123,14 @@ async def create_clients(
         if config.get("roc", {}).get("enable", False):
             logging.info("Enabled ROC client")
             override_map = config.get("roc", {}).get("override", {})
-            mac_override_map = {mac_addresses[k]: v for k, v in override_map.items()}
+            mac_override_map = {}
+            for name, mac_address in override_map.items():
+                if name not in mac_addresses:
+                    logging.error(
+                        f"Cannot override MAC for {name}: device not found in mac-addresses"
+                    )
+                    continue
+                mac_override_map[mac_addresses[name]] = mac_address
             clients.append(client_factories.roc(mac_override_map))
         if config.get("mop", {}).get("enable", False):
             clients.append(client_factories.mop())
