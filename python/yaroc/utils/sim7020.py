@@ -17,6 +17,7 @@ def time_since(t: datetime, delta: timedelta) -> bool:
     return datetime.now() - t > delta
 
 
+DEFAULT_BANDS = [3, 8, 20]
 RESTART_TIME = timedelta(minutes=40)
 
 
@@ -39,6 +40,7 @@ class SIM7020Interface:
         broker_url: str,
         broker_port: int,
         apn: str,
+        bands: list[int] = DEFAULT_BANDS,
     ):
         self._client_name = client_name
         self._connect_timeout = connect_timeout
@@ -49,6 +51,7 @@ class SIM7020Interface:
         self._broker_url = broker_url
         self._broker_port = broker_port
         self._apn = apn
+        self._bands = bands
         self._state_lock = asyncio.Lock()
 
         self.async_at = async_at
@@ -76,6 +79,11 @@ class SIM7020Interface:
         await self.async_at.call("AT+CREVHEX=1")  # Hex messages
         await self.async_at.call("AT+CMQTSYNC=1")  # Synchronous MQTT
         await self.async_at.call("AT+CLTS=1")  # Synchronize time from network
+        if len(self._bands) > 0:
+            bands = ",".join(map(str, self._bands))
+            response = await self.async_at.call(f"AT+CBAND={bands}")
+            if not response.success:
+                logging.warning(f"Can not set band(s) {bands}")
         response = await self.async_at.call(
             f'AT*MCGDEFCONT="IP","{self._apn}"', timeout=self._connect_timeout
         )

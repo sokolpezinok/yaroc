@@ -340,6 +340,7 @@ broker_port = 1883
 enable = false
 port = "/dev/serial0"
 # apn = "lpwa.vodafone.com"
+# bands = [3, 8, 20]
 
 [meshtastic]
 # You can connect a Meshtastic device via USB or TCP and use it as a punch source.

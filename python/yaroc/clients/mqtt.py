@@ -14,7 +14,7 @@ from ..pb.status_pb2 import CellNetworkType, Disconnected, Status
 from ..rs import MeshtasticLog, MeshtasticPunches, SiPunchLog, current_timestamp_millis
 from ..utils.async_serial import AsyncATCom
 from ..utils.retries import BackoffBatchedRetries
-from ..utils.sim7020 import SIM7020Interface
+from ..utils.sim7020 import DEFAULT_BANDS, SIM7020Interface
 from .client import Client
 
 DEFAULT_APN = "lpwa.vodafone.com"
@@ -129,6 +129,7 @@ class SIM7020MqttClient(Client):
     ):
         self.topics = Topics.from_mac(mac_address)
         self._name = f"SIM7020-{hostname}"
+        bands = config.get("bands", DEFAULT_BANDS)
         self._sim7020 = SIM7020Interface(
             async_at,
             self.topics.status,
@@ -137,6 +138,7 @@ class SIM7020MqttClient(Client):
             config.get("broker_url", BROKER_URL),
             config.get("broker_port", BROKER_PORT),
             config.get("apn", DEFAULT_APN),
+            bands,
         )
         self._include_sending_timestamp = False
         self._retries = BackoffBatchedRetries(
