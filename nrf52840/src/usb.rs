@@ -29,13 +29,6 @@ fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
     let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
     config.manufacturer = Some("Sokol Pezinok");
     config.product = Some("Yaroc USB Serial");
-    config.max_packet_size_0 = 64;
-
-    // Required for dual CDC ACM (composite device with Interface Association Descriptors)
-    config.device_class = 0xef;
-    config.device_sub_class = 0x02;
-    config.device_protocol = 0x01;
-    config.composite_with_iads = true;
 
     Builder::new(
         driver,
