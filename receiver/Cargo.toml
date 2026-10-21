@@ -16,7 +16,7 @@ log = { workspace = true }
 meshtastic = { workspace = true }
 nusb = { workspace = true }
 prost = "0.14"
-rumqttc = "0.25"
+rumqttc = { version = "0.25", default-features = false }
 serialport = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
