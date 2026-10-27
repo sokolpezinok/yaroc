@@ -156,46 +156,33 @@ impl UsbSerialManager {
         }
 
         let udev_monitor = tokio_udev::MonitorBuilder::new()?.match_subsystem("tty")?.listen()?;
-        let udev_stream = tokio_udev::AsyncMonitorSocket::new(udev_monitor)?;
-
-        let mut udev_stream = udev_stream.filter_map(|res| {
-            futures::future::ready(match res {
-                Ok(event) => extract_add_event(event).map(Ok),
-                Err(err) => Some(Err(err)),
-            })
-        });
+        let mut udev_stream =
+            tokio_udev::AsyncMonitorSocket::new(udev_monitor)?.filter_map(|res| {
+                futures::future::ready(
+                    res.inspect_err(|err| error!("Udev stream error: {err:?}"))
+                        .ok()
+                        .and_then(extract_add_event),
+                )
+            });
 
         let mut watcher = nusb::watch_devices()?;
         loop {
             tokio::select! {
-                event = watcher.next() => {
-                    match event {
-                        Some(event) => self.handle_hotplug_event(event),
-                        None => {
-                            error!("USB watcher stream ended unexpectedly");
-                            break;
-                        }
+                Some(event) = watcher.next() => self.handle_hotplug_event(event),
+                Some(udev_event) = udev_stream.next() => {
+                    debug!("TTY subsystem device added: {:?}", udev_event.devnode);
+                    if let Some(idx) = self
+                        .pending_connections
+                        .iter()
+                        .position(|dev| dev.sysfs_path() == udev_event.usb_sysfs_path)
+                    {
+                        let dev = self.pending_connections.remove(idx);
+                        self.detect_device(&dev).await;
                     }
                 }
-                res = udev_stream.next() => {
-                    match res {
-                        Some(Ok(udev_event)) => {
-                            let devnode = &udev_event.devnode;
-                            debug!("TTY subsystem device added: {:?}", devnode);
-                            let usb_path = &udev_event.usb_sysfs_path;
-                            if let Some(idx) = self.pending_connections.iter().position(|dev| dev.sysfs_path() == usb_path) {
-                                let dev = self.pending_connections.remove(idx);
-                                self.detect_device(&dev).await;
-                            }
-                        }
-                        Some(Err(err)) => {
-                            error!("Udev stream error: {:?}", err);
-                        }
-                        None => {
-                            error!("Udev monitor stream ended unexpectedly");
-                            break;
-                        }
-                    }
+                else => {
+                    error!("USB or udev monitor stream ended unexpectedly");
+                    break;
                 }
             }
         }
