@@ -36,7 +36,7 @@ pub struct MessageHandlerInitializer {
 pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_stream: BoxStream<'static, ServiceEnvelope>,
-    _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
+    mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_stream: BoxStream<'static, Event>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     /// Multiplexed streams of inbound MQTT messages
@@ -68,7 +68,7 @@ impl MessageHandler {
     pub async fn init(&mut self) {
         if let Some(init) = self.initializer.take() {
             if let Some(host) = init.meshtastic_tcp {
-                let mesh_packet_tx = self._mesh_packet_tx.clone();
+                let mesh_packet_tx = self.mesh_packet_tx.clone();
                 self.tasks.spawn(async move {
                     tcp::connect_and_loop(host, mesh_packet_tx).await;
                 });
@@ -110,9 +110,10 @@ impl MessageHandler {
 
     /// Converts an `UnboundedReceiver` into a `Stream`.
     fn rx_into_stream<T>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
-        futures::stream::unfold(rx, |mut rx| async move {
-            rx.recv().await.map(|msg| (msg, rx))
-        })
+        futures::stream::unfold(
+            rx,
+            |mut rx| async move { rx.recv().await.map(|msg| (msg, rx)) },
+        )
     }
 
     /// Creates a stream of Meshtastic `ServiceEnvelope` messages, filtering out encrypted packets.
@@ -372,7 +373,7 @@ impl MessageHandlerBuilder {
                 self.meshtastic_timeout,
             ),
             mesh_stream,
-            _mesh_packet_tx: mesh_packet_tx,
+            mesh_packet_tx,
             si_stream,
             si_tx,
             mqtt_streams,
@@ -421,7 +422,7 @@ mod tests {
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_stream,
-                _mesh_packet_tx: mesh_packet_tx.clone(),
+                mesh_packet_tx: mesh_packet_tx.clone(),
                 si_stream,
                 si_tx: punch_tx.clone(),
                 mqtt_streams,
