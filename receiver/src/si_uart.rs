@@ -8,7 +8,7 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::DropGuard;
 use yaroc_common::punch::RawPunch;
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
@@ -97,7 +97,7 @@ pub const SILABS_VID: u16 = 0x10c4;
 
 /// A factory for creating and managing background tasks for SportIdent serial devices.
 pub struct SportIdentFactory {
-    devices: HashMap<String, (CancellationToken, String)>,
+    devices: HashMap<String, (DropGuard, String)>,
     si_tx: UnboundedSender<SportIdentMessage>,
 }
 
@@ -133,14 +133,14 @@ impl SportIdentFactory {
     }
 
     /// Spawns the serial reading background loop for the given SportIdent serial device and
-    /// registers its cancellation token.
+    /// registers its drop guard.
     pub fn add_sportident_device_inner<S>(&mut self, si_serial: S, device_node: &str, port: &str)
     where
         S: UsbSerialTrait<Output = SportIdentMessage> + std::fmt::Display + Send + 'static,
     {
-        let token = si_serial.spawn_serial(self.si_tx.clone());
+        let drop_guard = si_serial.spawn_serial(self.si_tx.clone());
 
-        self.devices.insert(device_node.to_owned(), (token, port.to_owned()));
+        self.devices.insert(device_node.to_owned(), (drop_guard, port.to_owned()));
         let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
             added: true,
             device: port.to_owned(),
@@ -155,7 +155,7 @@ impl UsbSerialFactory for SportIdentFactory {
     }
 
     /// Asynchronously connects to a SportIdent serial device at the given port, spawns its
-    /// connection background task, and registers its cancellation token.
+    /// connection background task, and registers its drop guard.
     fn add_device<'a>(
         &'a mut self,
         port: &'a str,
@@ -171,11 +171,10 @@ impl UsbSerialFactory for SportIdentFactory {
         .boxed()
     }
 
-    /// Removes a SportIdent serial device by triggering its background task cancellation and
+    /// Removes a SportIdent serial device, cancelling its background task via its drop guard and
     /// sending a device-removed event.
     fn remove_device(&mut self, device_node: &str) -> bool {
-        if let Some((token, port)) = self.devices.remove(device_node) {
-            token.cancel();
+        if let Some((_guard, port)) = self.devices.remove(device_node) {
             let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
                 added: false,
                 device: port,

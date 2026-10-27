@@ -5,13 +5,9 @@ use nusb::hotplug::HotplugEvent;
 use std::fmt::Display;
 #[cfg(all(target_os = "linux", feature = "udev"))]
 use std::path::PathBuf;
-#[cfg(all(target_os = "linux", feature = "udev"))]
-use std::pin::Pin;
-#[cfg(all(target_os = "linux", feature = "udev"))]
-use std::task::{Context, Poll};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::{CancellationToken, DropGuard};
 
 pub trait UsbSerialTrait {
     type Output;
@@ -20,13 +16,13 @@ pub trait UsbSerialTrait {
     fn into_stream(self) -> impl futures::Stream<Item = Self::Output> + Send;
 
     /// Spawns a task to read messages from a serial connection.
-    fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> CancellationToken
+    fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> DropGuard
     where
         Self: Sized + Send + Display + 'static,
         Self::Output: Send,
     {
         let cancellation_token = CancellationToken::new();
-        let cancellation_token_clone = cancellation_token.clone();
+        let drop_guard = cancellation_token.clone().drop_guard();
         tokio::spawn(async move {
             let description = format!("{self}");
             let description_ref = &description;
@@ -45,7 +41,7 @@ pub trait UsbSerialTrait {
             }
         });
 
-        cancellation_token_clone
+        drop_guard
     }
 }
 
@@ -72,27 +68,6 @@ pub struct UsbSerialManager {
     factories: Vec<Box<dyn UsbSerialFactory>>,
     #[cfg(all(target_os = "linux", feature = "udev"))]
     pending_connections: Vec<nusb::DeviceInfo>,
-}
-
-#[cfg(all(target_os = "linux", feature = "udev"))]
-struct SendAsyncMonitorSocket(tokio_udev::AsyncMonitorSocket);
-#[cfg(all(target_os = "linux", feature = "udev"))]
-// SAFETY: tokio_udev::AsyncMonitorSocket wraps a raw file descriptor (netlink socket)
-// which can be safely transferred to another thread. The underlying tokio async registration
-// and standard system calls are thread-safe.
-unsafe impl Send for SendAsyncMonitorSocket {}
-#[cfg(all(target_os = "linux", feature = "udev"))]
-// SAFETY: Access to the socket is synchronized via standard mut references and async polling
-// in tokio, making concurrent access thread-safe.
-unsafe impl Sync for SendAsyncMonitorSocket {}
-
-#[cfg(all(target_os = "linux", feature = "udev"))]
-impl futures::Stream for SendAsyncMonitorSocket {
-    type Item = std::io::Result<tokio_udev::Event>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.0).poll_next(cx)
-    }
 }
 
 #[cfg(all(target_os = "linux", feature = "udev"))]
@@ -181,8 +156,7 @@ impl UsbSerialManager {
         }
 
         let udev_monitor = tokio_udev::MonitorBuilder::new()?.match_subsystem("tty")?.listen()?;
-        let udev_stream =
-            SendAsyncMonitorSocket(tokio_udev::AsyncMonitorSocket::new(udev_monitor)?);
+        let udev_stream = tokio_udev::AsyncMonitorSocket::new(udev_monitor)?;
 
         let mut udev_stream = udev_stream.filter_map(|res| {
             futures::future::ready(match res {

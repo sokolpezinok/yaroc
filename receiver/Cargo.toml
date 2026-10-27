@@ -27,7 +27,7 @@ yaroc-common = { workspace = true, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-udev = { version = "0.10.0", optional = true }
-udev = { version = "0.9", optional = true }
+udev = { version = "0.9", features = ["send"], optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }

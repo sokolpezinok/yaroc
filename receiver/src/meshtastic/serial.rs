@@ -8,7 +8,7 @@ use log::info;
 use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::DropGuard;
 
 use super::connection::MeshtasticConnection;
 pub use super::connection::MeshtasticEvent;
@@ -64,7 +64,7 @@ impl Display for MeshtasticSerial {
 
 /// A factory for creating and managing background tasks for Meshtastic serial devices.
 pub struct MeshtasticFactory {
-    devices: HashMap<String, CancellationToken>,
+    devices: HashMap<String, DropGuard>,
     mesh_tx: UnboundedSender<ServiceEnvelope>,
 }
 
@@ -78,13 +78,13 @@ impl MeshtasticFactory {
     }
 
     /// Spawns the serial reading background loop for the given Meshtastic serial device and
-    /// registers its cancellation token.
+    /// registers its drop guard.
     pub fn add_meshtastic_device_inner<M>(&mut self, msh_serial: M, device_node: &str)
     where
         M: UsbSerialTrait<Output = ServiceEnvelope> + Send + Display + 'static,
     {
-        let token = msh_serial.spawn_serial(self.mesh_tx.clone());
-        self.devices.insert(device_node.to_owned(), token);
+        let drop_guard = msh_serial.spawn_serial(self.mesh_tx.clone());
+        self.devices.insert(device_node.to_owned(), drop_guard);
     }
 
     /// Inner logic for device detection that can be unit tested without a `nusb::DeviceInfo`.
@@ -128,14 +128,9 @@ impl UsbSerialFactory for MeshtasticFactory {
         .boxed()
     }
 
-    /// Removes a Meshtastic serial device by triggering its background task cancellation.
+    /// Removes a Meshtastic serial device, cancelling its background task via its drop guard.
     fn remove_device(&mut self, device_node: &str) -> bool {
-        if let Some(token) = self.devices.remove(device_node) {
-            token.cancel();
-            true
-        } else {
-            false
-        }
+        self.devices.remove(device_node).is_some()
     }
 
     /// Checks if a connection background task is currently running for the given device node.
