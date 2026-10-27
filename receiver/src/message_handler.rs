@@ -8,7 +8,7 @@ use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 use std::collections::HashSet;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinSet;
 
 use yaroc_common::punch::SiPunch;
@@ -35,8 +35,7 @@ pub struct MessageHandlerInitializer {
 pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_streams: SelectAll<BoxStream<'static, ServiceEnvelope>>,
-    si_stream: SelectAll<BoxStream<'static, Event>>,
-    _si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
+    si_streams: SelectAll<BoxStream<'static, Event>>,
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
     /// Senders for meshtastic messages
@@ -66,7 +65,7 @@ impl MessageHandler {
     pub fn init(&mut self) {
         if let Some(init) = self.initializer.take() {
             if let Some(fake_punch_config) = init.fake_punch_config {
-                self.si_stream.push(fake_punch_config.into_stream(self.timezone).boxed());
+                self.si_streams.push(fake_punch_config.into_stream(self.timezone).boxed());
             }
 
             if let Some(mut usb_manager) = init.usb_serial_manager {
@@ -77,14 +76,6 @@ impl MessageHandler {
                 });
             }
         }
-    }
-
-    /// Converts an `UnboundedReceiver` into a `Stream`.
-    fn rx_into_stream<T>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
-        futures::stream::unfold(
-            rx,
-            |mut rx| async move { rx.recv().await.map(|msg| (msg, rx)) },
-        )
     }
 
     /// Filters out encrypted packets from a stream of Meshtastic `ServiceEnvelope` messages.
@@ -109,10 +100,10 @@ impl MessageHandler {
 
     /// Creates a stream of SportIdent `Event`s from raw punches and device events.
     fn create_si_stream(
-        rx: UnboundedReceiver<SportIdentMessage>,
+        stream: impl Stream<Item = SportIdentMessage> + Send + 'static,
         timezone: FixedOffset,
     ) -> BoxStream<'static, Event> {
-        Self::rx_into_stream(rx)
+        stream
             .map(move |msg| match msg {
                 SportIdentMessage::RawPunch(raw_punch) => {
                     let now = Local::now().with_timezone(&timezone);
@@ -175,7 +166,7 @@ impl MessageHandler {
                         return Ok(event);
                     }
                 }
-                Some(event) = self.si_stream.next() => {
+                Some(event) = self.si_streams.next(), if !self.si_streams.is_empty() => {
                     return Ok(event);
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
@@ -331,21 +322,24 @@ impl MessageHandlerBuilder {
             mesh_txs.push(receiver.mesh_tx());
             mqtt_streams.push(receiver.into_stream());
         }
+
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         let mut mesh_streams = SelectAll::new();
         if let Some(host) = self.meshtastic_tcp {
             mesh_streams.push(MessageHandler::create_mesh_stream(tcp::into_stream(host)));
         }
-        let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
-
-        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         if self.config.enable_meshtastic {
             let (factory, stream) = MeshtasticFactory::new();
             factories.push(Box::new(factory));
             mesh_streams.push(MessageHandler::create_mesh_stream(stream));
         }
+
+        let mut si_streams = SelectAll::new();
         match self.config.sportident {
             SportIdentConfig::Passive => {
-                factories.push(Box::new(SportIdentFactory::new(si_tx.clone())));
+                let (factory, stream) = SportIdentFactory::new();
+                factories.push(Box::new(factory));
+                si_streams.push(MessageHandler::create_si_stream(stream, self.timezone));
             }
             SportIdentConfig::Active(factory) => {
                 factories.push(factory);
@@ -359,9 +353,6 @@ impl MessageHandlerBuilder {
             Some(UsbSerialManager::new(factories))
         };
 
-        let si_stream =
-            SelectAll::from_iter([MessageHandler::create_si_stream(si_rx, self.timezone)]);
-
         MessageHandler {
             fleet_state: FleetState::new(
                 self.dns,
@@ -369,8 +360,7 @@ impl MessageHandlerBuilder {
                 self.meshtastic_timeout,
             ),
             mesh_streams,
-            si_stream,
-            _si_tx: si_tx,
+            si_streams,
             mqtt_streams,
             mesh_txs,
             tasks: JoinSet::new(),
@@ -391,6 +381,7 @@ mod tests {
     use chrono::{DateTime, Local};
     use femtopb::{Message as _, Repeated};
     use meshtastic::protobufs::PortNum;
+    use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
     use tokio::time::timeout;
     use yaroc_common::proto::Punches;
     use yaroc_common::punch::RawPunch;
@@ -403,6 +394,14 @@ mod tests {
     );
 
     impl MessageHandler {
+        /// Converts an `UnboundedReceiver` into a `Stream`.
+        fn rx_into_stream<T>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
+            futures::stream::unfold(
+                rx,
+                |mut rx| async move { rx.recv().await.map(|msg| (msg, rx)) },
+            )
+        }
+
         /// Creates a handler tailored for testing, bypassing factories and exposing senders directly.
         pub fn new_for_test(node_infos_interval: Duration) -> TestChannels {
             let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel();
@@ -414,12 +413,14 @@ mod tests {
             let mesh_streams = SelectAll::from_iter([Self::create_mesh_stream(
                 Self::rx_into_stream(mesh_packet_rx),
             )]);
-            let si_stream = SelectAll::from_iter([Self::create_si_stream(punch_rx, timezone)]);
+            let si_streams = SelectAll::from_iter([Self::create_si_stream(
+                Self::rx_into_stream(punch_rx),
+                timezone,
+            )]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_streams,
-                si_stream,
-                _si_tx: punch_tx.clone(),
+                si_streams,
                 mqtt_streams,
                 mesh_txs: Vec::new(),
                 tasks: JoinSet::new(),

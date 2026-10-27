@@ -5,7 +5,7 @@ use futures::future::BoxFuture;
 use futures::future::FutureExt as _;
 use log::{error, info, warn};
 use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 use tokio_util::sync::DropGuard;
@@ -102,12 +102,19 @@ pub struct SportIdentFactory {
 }
 
 impl SportIdentFactory {
-    /// Creates a new `SportIdentFactory` that forwards SportIdent messages through the given sender.
-    pub fn new(si_tx: UnboundedSender<SportIdentMessage>) -> Self {
-        Self {
-            devices: HashMap::new(),
-            si_tx,
-        }
+    /// Creates a new `SportIdentFactory` and a stream of incoming `SportIdentMessage`s.
+    pub fn new() -> (Self, impl futures::Stream<Item = SportIdentMessage> + Send) {
+        let (si_tx, si_rx) = unbounded_channel();
+        let stream = futures::stream::unfold(si_rx, |mut rx| async move {
+            rx.recv().await.map(|msg| (msg, rx))
+        });
+        (
+            Self {
+                devices: HashMap::new(),
+                si_tx,
+            },
+            stream,
+        )
     }
 
     /// Checks if a USB device matches a SportIdent device by checking serial numbers and ensuring
@@ -238,8 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sportident_factory_management() {
-        let (si_tx, mut _si_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut factory = SportIdentFactory::new(si_tx);
+        let (mut factory, _si_stream) = SportIdentFactory::new();
 
         let (_rx_tx, rx_rx) = tokio::sync::mpsc::channel(1);
         let fake_serial =

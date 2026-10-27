@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 
-use futures::{FutureExt as _, Stream};
 use futures::future::BoxFuture;
+use futures::{FutureExt as _, Stream};
 use log::info;
 use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
