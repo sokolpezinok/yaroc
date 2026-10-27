@@ -520,6 +520,18 @@ The Python package uses **[maturin](https://www.maturin.rs/)** as its build syst
   uv run maturin develop -r
   ```
 
+## TypeScript / Node.js Bindings
+
+The TypeScript/JavaScript bindings are published to npm as [`@lukasp47/yaroc`](https://www.npmjs.com/package/@lukasp47/yaroc) and built using [NAPI-RS](https://napi.rs/).
+
+See the [TypeScript README](typescript/README.md) for installation, usage guide, event types, and examples:
+
+```sh
+cd typescript
+npm install
+npm run mqtt_example
+```
+
 # Other projects
 
 * [ROC](https://roc.olresultat.se)

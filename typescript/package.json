@@ -1,6 +1,8 @@
 {
   "name": "@lukasp47/yaroc",
   "version": "0.1.3",
+  "description": "TypeScript/JavaScript bindings for YAROC",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sokolpezinok/yaroc.git"
@@ -10,6 +12,7 @@
   "files": [
     "index.js",
     "index.d.ts",
+    "README.md",
     "*.node"
   ],
   "scripts": {
