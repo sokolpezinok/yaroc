@@ -120,6 +120,24 @@ impl UsbSerialManager {
         self.factories.iter_mut().any(|f| f.remove_device(device_node))
     }
 
+    /// Spawns a background task to monitor USB hotplug events and returns a `DropGuard` that
+    /// cancels the task when dropped.
+    pub fn spawn(mut self) -> DropGuard {
+        let cancellation_token = CancellationToken::new();
+        let drop_guard = cancellation_token.clone().drop_guard();
+        tokio::spawn(async move {
+            let fut = async move {
+                if let Err(e) = self.monitor_usb_devices().await {
+                    error!("USB device manager failed: {e}");
+                }
+            };
+            if fut.with_cancellation_token_owned(cancellation_token).await.is_none() {
+                info!("Stopping USB device manager");
+            }
+        });
+        drop_guard
+    }
+
     #[cfg(all(target_os = "linux", feature = "udev"))]
     fn handle_hotplug_event(&mut self, event: HotplugEvent) {
         match event {

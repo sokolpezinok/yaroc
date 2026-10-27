@@ -9,7 +9,7 @@ use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinSet;
+use tokio_util::sync::DropGuard;
 
 use yaroc_common::punch::SiPunch;
 
@@ -35,8 +35,8 @@ pub struct MessageHandler {
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
     /// Senders for forwarding local Meshtastic messages to MQTT
     mesh_to_mqtt_txs: Vec<UnboundedSender<ServiceEnvelope>>,
-    tasks: JoinSet<()>,
     usb_serial_manager: Option<UsbSerialManager>,
+    _usb_drop_guard: Option<DropGuard>,
     timezone: FixedOffset,
     local_macs: HashSet<MacAddress>,
 }
@@ -58,12 +58,8 @@ pub struct UsbSerialConfig {
 impl MessageHandler {
     /// Spawn async background tasks when Self::next_event() is ran for the first time.
     pub fn init(&mut self) {
-        if let Some(mut usb_manager) = self.usb_serial_manager.take() {
-            self.tasks.spawn(async move {
-                if let Err(e) = usb_manager.monitor_usb_devices().await {
-                    error!("USB device manager failed: {e}");
-                }
-            });
+        if let Some(usb_manager) = self.usb_serial_manager.take() {
+            self._usb_drop_guard = Some(usb_manager.spawn());
         }
     }
 
@@ -160,11 +156,6 @@ impl MessageHandler {
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
-                }
-                task_res = self.tasks.join_next(), if !self.tasks.is_empty() => {
-                    if let Some(Err(e)) = task_res {
-                        error!("Background task failed: {e}");
-                    }
                 }
                 else => {
                     error!("Channel closed unexpectedly, this is a bug and it shouldn't happen.");
@@ -351,8 +342,8 @@ impl MessageHandlerBuilder {
             si_streams,
             mqtt_streams,
             mesh_to_mqtt_txs,
-            tasks: JoinSet::new(),
             usb_serial_manager,
+            _usb_drop_guard: None,
             timezone: self.timezone,
             local_macs: HashSet::new(),
         }
@@ -408,8 +399,8 @@ mod tests {
                 si_streams,
                 mqtt_streams,
                 mesh_to_mqtt_txs: Vec::new(),
-                tasks: JoinSet::new(),
                 usb_serial_manager: None,
+                _usb_drop_guard: None,
                 timezone,
                 local_macs: HashSet::new(),
             };
