@@ -23,11 +23,6 @@ use crate::{
     system_info::MacAddress,
 };
 
-pub struct MessageHandlerInitializer {
-    pub fake_punch_config: Option<FakePunchConfig>,
-    pub usb_serial_manager: Option<UsbSerialManager>,
-}
-
 /// Orchestrates the overall message flow.
 ///
 /// This struct is responsible for receiving messages from MQTT, SportIdent and Meshtastic devices,
@@ -41,7 +36,7 @@ pub struct MessageHandler {
     /// Senders for forwarding local Meshtastic messages to MQTT
     mesh_to_mqtt_txs: Vec<UnboundedSender<ServiceEnvelope>>,
     tasks: JoinSet<()>,
-    initializer: Option<MessageHandlerInitializer>,
+    usb_serial_manager: Option<UsbSerialManager>,
     timezone: FixedOffset,
     local_macs: HashSet<MacAddress>,
 }
@@ -63,18 +58,12 @@ pub struct UsbSerialConfig {
 impl MessageHandler {
     /// Spawn async background tasks when Self::next_event() is ran for the first time.
     pub fn init(&mut self) {
-        if let Some(init) = self.initializer.take() {
-            if let Some(fake_punch_config) = init.fake_punch_config {
-                self.si_streams.push(fake_punch_config.into_stream(self.timezone).boxed());
-            }
-
-            if let Some(mut usb_manager) = init.usb_serial_manager {
-                self.tasks.spawn(async move {
-                    if let Err(e) = usb_manager.monitor_usb_devices().await {
-                        error!("USB device manager failed: {e}");
-                    }
-                });
-            }
+        if let Some(mut usb_manager) = self.usb_serial_manager.take() {
+            self.tasks.spawn(async move {
+                if let Err(e) = usb_manager.monitor_usb_devices().await {
+                    error!("USB device manager failed: {e}");
+                }
+            });
         }
     }
 
@@ -208,16 +197,12 @@ impl FakePunchConfig {
             "Starting a fake SportIdent worker, sending a punch every {:?} with card {} and code {}",
             self.interval, self.card, self.code
         );
-        futures::stream::unfold(
-            tokio::time::interval(self.interval),
-            move |mut interval| async move {
-                // The first tick of tokio::time::interval completes immediately.
-                interval.tick().await;
-                let now = Local::now().with_timezone(&timezone);
-                let punch = SiPunch::new_send_last_record(self.card, self.code, now, 18);
-                Some((Event::SiPunch(punch), interval))
-            },
-        )
+        futures::stream::unfold(self, move |config| async move {
+            tokio::time::sleep(config.interval).await;
+            let now = Local::now().with_timezone(&timezone);
+            let punch = SiPunch::new_send_last_record(config.card, config.code, now, 18);
+            Some((Event::SiPunch(punch), config))
+        })
     }
 }
 
@@ -335,6 +320,9 @@ impl MessageHandlerBuilder {
         }
 
         let mut si_streams = SelectAll::new();
+        if let Some(fake_punch_config) = self.fake_punch_config {
+            si_streams.push(fake_punch_config.into_stream(self.timezone).boxed());
+        }
         match self.config.sportident {
             SportIdentConfig::Passive => {
                 let (factory, stream) = SportIdentFactory::new();
@@ -364,10 +352,7 @@ impl MessageHandlerBuilder {
             mqtt_streams,
             mesh_to_mqtt_txs,
             tasks: JoinSet::new(),
-            initializer: Some(MessageHandlerInitializer {
-                fake_punch_config: self.fake_punch_config,
-                usb_serial_manager,
-            }),
+            usb_serial_manager,
             timezone: self.timezone,
             local_macs: HashSet::new(),
         }
@@ -424,10 +409,7 @@ mod tests {
                 mqtt_streams,
                 mesh_to_mqtt_txs: Vec::new(),
                 tasks: JoinSet::new(),
-                initializer: Some(MessageHandlerInitializer {
-                    fake_punch_config: None,
-                    usb_serial_manager: None,
-                }),
+                usb_serial_manager: None,
                 timezone,
                 local_macs: HashSet::new(),
             };
