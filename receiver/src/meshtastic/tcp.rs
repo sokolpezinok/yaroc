@@ -17,9 +17,7 @@ impl MeshtasticTcp {
         host: &str,
         timeout: Duration,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let tcp_stream = stream::build_tcp_stream(host.to_owned()).await.map_err(
-            |err| -> Box<dyn std::error::Error + Send + Sync> { err.to_string().into() },
-        )?;
+        let tcp_stream = stream::build_tcp_stream(host.to_owned()).await?;
         let connection =
             MeshtasticConnection::connect_stream(tcp_stream, timeout, host.to_owned()).await?;
         info!(

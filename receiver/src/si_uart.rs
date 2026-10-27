@@ -121,12 +121,7 @@ impl SportIdentFactory {
         port: &serialport::SerialPortInfo,
     ) -> bool {
         if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = match (dev_serial, &usb_info.serial_number) {
-                (Some(dev_serial_n), Some(usb_serial_n)) => dev_serial_n == usb_serial_n,
-                (None, None) => true,
-                _ => false,
-            };
-            sn_matches && usb_info.vid == SILABS_VID
+            dev_serial == usb_info.serial_number.as_deref() && usb_info.vid == SILABS_VID
         } else {
             false
         }

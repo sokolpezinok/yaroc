@@ -35,10 +35,6 @@ impl FakeMeshtasticSerial {
     pub fn new(mac_address: MacAddress, rx: Receiver<MeshPacket>) -> Self {
         Self { mac_address, rx }
     }
-
-    pub async fn next_message(&mut self) -> Option<MeshPacket> {
-        self.rx.recv().await
-    }
 }
 
 impl UsbSerialTrait for FakeMeshtasticSerial {
@@ -46,7 +42,7 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
 
     fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
         futures::stream::unfold(self, |mut serial| async move {
-            let mesh_packet = serial.next_message().await?;
+            let mesh_packet = serial.rx.recv().await?;
             let service_envelope = ServiceEnvelope {
                 packet: Some(mesh_packet),
                 channel_id: String::new(),
@@ -72,10 +68,6 @@ impl FakeSportIdentSerial {
     pub fn new(port: String, rx: Receiver<SportIdentMessage>) -> Self {
         Self { port, rx }
     }
-
-    pub async fn next_message(&mut self) -> Option<SportIdentMessage> {
-        self.rx.recv().await
-    }
 }
 
 impl UsbSerialTrait for FakeSportIdentSerial {
@@ -83,7 +75,7 @@ impl UsbSerialTrait for FakeSportIdentSerial {
 
     fn into_stream(self) -> impl futures::Stream<Item = SportIdentMessage> + Send {
         futures::stream::unfold(self, |mut serial| async move {
-            serial.next_message().await.map(|msg| (msg, serial))
+            serial.rx.recv().await.map(|msg| (msg, serial))
         })
     }
 }

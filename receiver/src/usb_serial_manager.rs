@@ -116,8 +116,8 @@ impl UsbSerialManager {
     ///
     /// This function cancels the task that handles messages from the device and returns true if
     /// the device was connected.
-    pub fn remove_device(&mut self, device_node: String) -> bool {
-        self.factories.iter_mut().any(|f| f.remove_device(&device_node))
+    pub fn remove_device(&mut self, device_node: &str) -> bool {
+        self.factories.iter_mut().any(|f| f.remove_device(device_node))
     }
 
     #[cfg(all(target_os = "linux", feature = "udev"))]
@@ -135,7 +135,7 @@ impl UsbSerialManager {
             }
             HotplugEvent::Disconnected(dev_id) => {
                 let device_node = format!("{:?}", dev_id);
-                if self.remove_device(device_node.clone()) {
+                if self.remove_device(&device_node) {
                     debug!("Disconnected USB device {device_node}");
                 }
                 self.pending_connections.retain(|d| d.id() != dev_id);
@@ -211,7 +211,7 @@ impl UsbSerialManager {
                 }
                 HotplugEvent::Disconnected(dev_id) => {
                     let device_node = format!("{:?}", dev_id);
-                    if self.remove_device(device_node.clone()) {
+                    if self.remove_device(&device_node) {
                         debug!("Disconnected USB device {device_node}");
                     }
                 }
@@ -226,19 +226,17 @@ impl UsbSerialManager {
         let Ok(ports) = serialport::available_ports() else {
             return;
         };
+        let dev_id = format!("{:?}", dev.id());
         for port in ports {
             for factory in &mut self.factories {
                 if factory.detect_device(dev, &port) {
-                    let _ = factory
-                        .add_device(&port.port_name, &format!("{:?}", dev.id()))
-                        .await
-                        .inspect_err(|err| {
-                            error!(
-                                "Failed to connect to {} device at {}: {err}",
-                                factory.name(),
-                                port.port_name
-                            )
-                        });
+                    let _ = factory.add_device(&port.port_name, &dev_id).await.inspect_err(|err| {
+                        error!(
+                            "Failed to connect to {} device at {}: {err}",
+                            factory.name(),
+                            port.port_name
+                        )
+                    });
                 }
             }
         }
@@ -276,7 +274,7 @@ mod tests {
         assert_eq!(recv_mac, MacAddress::default());
         assert_eq!(recv_envelope.packet.unwrap(), packet);
 
-        handler.remove_device("/some".to_owned());
+        handler.remove_device("/some");
         assert!(!handler.is_running("/some"));
     }
 }

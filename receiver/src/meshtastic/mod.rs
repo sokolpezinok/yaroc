@@ -313,15 +313,6 @@ impl MeshtasticLog {
     }
 }
 
-/// Unpacks `ServiceEnvelope` into a `MeshPacket`, if possible.
-pub fn unpack_envelope(payload: &[u8]) -> crate::Result<MeshPacket> {
-    let service_envelope = ServiceEnvelope::decode(payload)?;
-    service_envelope
-        .packet
-        .ok_or(yaroc_common::error::Error::ValueError)
-        .map_err(From::from)
-}
-
 /// Parse SiPunchLog from a MeshPacket proto.
 ///
 /// # Arguments

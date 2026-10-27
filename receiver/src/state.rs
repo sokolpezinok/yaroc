@@ -16,7 +16,7 @@ use crate::error::Error;
 use crate::logs::{CellularLogMessage, SiPunchLog};
 use crate::meshtastic::{
     MeshtasticLog, MshMetrics, POSITION_APP, PositionName, RssiSnr, SERIAL_APP, TELEMETRY_APP,
-    punches_from_mesh_packet, unpack_envelope,
+    punches_from_mesh_packet,
 };
 use crate::mqtt::Message as MqttMessage;
 use crate::system_info::{HostInfo, MacAddress};
@@ -339,10 +339,7 @@ impl FleetState {
                 .map(|msg| Some(Event::SiPunches(msg))),
             MqttMessage::MeshtasticSerial(_, now, payload) => self
                 .msh_serial_service_envelope(&payload, now.with_timezone(&self.timezone))
-                .and_then(|msg| {
-                    let envelope = ServiceEnvelope::decode(payload.as_slice())?;
-                    Ok(Some(Event::SiPunchesMeshtastic(msg, envelope)))
-                }),
+                .map(|(msg, envelope)| Some(Event::SiPunchesMeshtastic(msg, envelope))),
             MqttMessage::MeshtasticStatus(recv_mac_address, now, payload) => {
                 self.msh_status_service_envelope(
                     &payload,
@@ -549,9 +546,12 @@ impl FleetState {
         &mut self,
         payload: &[u8],
         now: DateTime<FixedOffset>,
-    ) -> crate::Result<Vec<SiPunchLog>> {
-        let packet = unpack_envelope(payload)?;
-        self.msh_serial_mesh_packet(packet, now)
+    ) -> crate::Result<(Vec<SiPunchLog>, ServiceEnvelope)> {
+        let service_envelope = ServiceEnvelope::decode(payload)?;
+        let packet =
+            service_envelope.packet.clone().ok_or(yaroc_common::error::Error::ValueError)?;
+        let punches = self.msh_serial_mesh_packet(packet, now)?;
+        Ok((punches, service_envelope))
     }
 
     /// Processes a serial module message from Meshtastic given as a `MeshPacket`.
@@ -896,7 +896,8 @@ mod test_meshtastic {
         let message = envelope.encode_to_vec();
 
         let mut state = FleetState::default();
-        let punch_logs = state.msh_serial_service_envelope(&message, Local::now().into()).unwrap();
+        let (punch_logs, _) =
+            state.msh_serial_service_envelope(&message, Local::now().into()).unwrap();
         assert_eq!(punch_logs.len(), 1);
         assert_eq!(punch_logs[0].punch.code, 47);
         assert_eq!(punch_logs[0].punch.card, 1715004);
