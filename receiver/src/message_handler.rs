@@ -37,8 +37,8 @@ pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_stream: BoxStream<'static, ServiceEnvelope>,
     mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
-    si_stream: BoxStream<'static, Event>,
-    si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
+    si_stream: SelectAll<BoxStream<'static, Event>>,
+    _si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
     /// Senders for meshtastic messages
@@ -65,7 +65,7 @@ pub struct UsbSerialConfig {
 
 impl MessageHandler {
     /// Spawn async background tasks when Self:;next_message() is ran for the first time.
-    pub async fn init(&mut self) {
+    pub fn init(&mut self) {
         if let Some(init) = self.initializer.take() {
             if let Some(host) = init.meshtastic_tcp {
                 let mesh_packet_tx = self.mesh_packet_tx.clone();
@@ -75,27 +75,7 @@ impl MessageHandler {
             }
 
             if let Some(fake_punch_config) = init.fake_punch_config {
-                let si_tx = self.si_tx.clone();
-                let card = fake_punch_config.card;
-                let code = fake_punch_config.code;
-                let interval = fake_punch_config.interval;
-                info!(
-                    "Starting a fake SportIdent worker, sending a punch every {interval:?} with card {card} and code {code}"
-                );
-                let timezone = self.timezone;
-                self.tasks.spawn(async move {
-                    let mut interval_timer = tokio::time::interval(interval);
-                    // The first tick of tokio::time::interval completes immediately.
-                    loop {
-                        interval_timer.tick().await;
-                        let now = Local::now().with_timezone(&timezone);
-                        let punch = SiPunch::new_send_last_record(card, code, now, 18);
-                        if let Err(e) = si_tx.send(SportIdentMessage::RawPunch(punch.raw)) {
-                            error!("Failed to send fake punch: {e}");
-                            break;
-                        }
-                    }
-                });
+                self.si_stream.push(fake_punch_config.into_stream(self.timezone).boxed());
             }
 
             if let Some(mut usb_manager) = init.usb_serial_manager {
@@ -185,7 +165,7 @@ impl MessageHandler {
     ///
     /// Returns an error if any of the underlying event parsing or state updates fail.
     pub async fn next_event(&mut self) -> crate::Result<Event> {
-        self.init().await;
+        self.init();
         loop {
             tokio::select! {
                 Some(mqtt_message) = self.mqtt_streams.next(), if !self.mqtt_streams.is_empty() => {
@@ -236,6 +216,26 @@ impl Default for FakePunchConfig {
             card: 46283,
             code: 47,
         }
+    }
+}
+
+impl FakePunchConfig {
+    /// Converts this configuration into a periodic stream of fake `Event::SiPunch` events.
+    pub fn into_stream(self, timezone: FixedOffset) -> impl Stream<Item = Event> {
+        info!(
+            "Starting a fake SportIdent worker, sending a punch every {:?} with card {} and code {}",
+            self.interval, self.card, self.code
+        );
+        futures::stream::unfold(
+            tokio::time::interval(self.interval),
+            move |mut interval| async move {
+                // The first tick of tokio::time::interval completes immediately.
+                interval.tick().await;
+                let now = Local::now().with_timezone(&timezone);
+                let punch = SiPunch::new_send_last_record(self.card, self.code, now, 18);
+                Some((Event::SiPunch(punch), interval))
+            },
+        )
     }
 }
 
@@ -364,7 +364,8 @@ impl MessageHandlerBuilder {
         };
 
         let mesh_stream = MessageHandler::create_mesh_stream(mesh_packet_rx);
-        let si_stream = MessageHandler::create_si_stream(si_rx, self.timezone);
+        let si_stream =
+            SelectAll::from_iter([MessageHandler::create_si_stream(si_rx, self.timezone)]);
 
         MessageHandler {
             fleet_state: FleetState::new(
@@ -375,7 +376,7 @@ impl MessageHandlerBuilder {
             mesh_stream,
             mesh_packet_tx,
             si_stream,
-            si_tx,
+            _si_tx: si_tx,
             mqtt_streams,
             mesh_txs,
             tasks: JoinSet::new(),
@@ -418,13 +419,13 @@ mod tests {
             mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
             let timezone = *Local::now().fixed_offset().offset();
             let mesh_stream = Self::create_mesh_stream(mesh_packet_rx);
-            let si_stream = Self::create_si_stream(punch_rx, timezone);
+            let si_stream = SelectAll::from_iter([Self::create_si_stream(punch_rx, timezone)]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_stream,
                 mesh_packet_tx: mesh_packet_tx.clone(),
                 si_stream,
-                si_tx: punch_tx.clone(),
+                _si_tx: punch_tx.clone(),
                 mqtt_streams,
                 mesh_txs: Vec::new(),
                 tasks: JoinSet::new(),
