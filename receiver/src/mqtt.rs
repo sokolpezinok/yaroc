@@ -65,6 +65,18 @@ pub enum Message {
     MeshtasticStatus(MacAddress, DateTime<Local>, Vec<u8>),
 }
 
+impl Message {
+    /// Returns the sender/gateway MAC address of this message.
+    pub fn mac_address(&self) -> MacAddress {
+        match self {
+            Message::CellularStatus(mac, _, _)
+            | Message::Punches(mac, _, _)
+            | Message::MeshtasticSerial(mac, _, _)
+            | Message::MeshtasticStatus(mac, _, _) => *mac,
+        }
+    }
+}
+
 /// An MQTT receiver that handles subscriptions and listens for incoming messages.
 pub struct MqttReceiver {
     client: AsyncClient,

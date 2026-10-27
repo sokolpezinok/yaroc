@@ -1,6 +1,6 @@
 use chrono::{FixedOffset, Local};
 use futures::{
-    StreamExt,
+    Stream, StreamExt,
     stream::{BoxStream, SelectAll},
 };
 use log::{debug, error, info};
@@ -35,9 +35,9 @@ pub struct MessageHandlerInitializer {
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    mesh_packet_rx: UnboundedReceiver<ServiceEnvelope>,
+    mesh_stream: BoxStream<'static, ServiceEnvelope>,
     _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
-    si_rx: UnboundedReceiver<SportIdentMessage>,
+    si_stream: BoxStream<'static, Event>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
@@ -108,6 +108,52 @@ impl MessageHandler {
         }
     }
 
+    /// Converts an `UnboundedReceiver` into a `Stream`.
+    fn rx_into_stream<T>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
+        futures::stream::unfold(rx, |mut rx| async move {
+            rx.recv().await.map(|msg| (msg, rx))
+        })
+    }
+
+    /// Creates a stream of Meshtastic `ServiceEnvelope` messages, filtering out encrypted packets.
+    fn create_mesh_stream(
+        rx: UnboundedReceiver<ServiceEnvelope>,
+    ) -> BoxStream<'static, ServiceEnvelope> {
+        Self::rx_into_stream(rx)
+            .filter(|envelope| {
+                if let Some(MeshPacket {
+                    from,
+                    payload_variant: Some(PayloadVariant::Encrypted(_)),
+                    ..
+                }) = &envelope.packet
+                {
+                    debug!("Ignoring encrypted message. From node ID={from:x}.");
+                    return std::future::ready(false);
+                }
+                std::future::ready(true)
+            })
+            .boxed()
+    }
+
+    /// Creates a stream of SportIdent `Event`s from raw punches and device events.
+    fn create_si_stream(
+        rx: UnboundedReceiver<SportIdentMessage>,
+        timezone: FixedOffset,
+    ) -> BoxStream<'static, Event> {
+        Self::rx_into_stream(rx)
+            .map(move |msg| match msg {
+                SportIdentMessage::RawPunch(raw_punch) => {
+                    let now = Local::now().with_timezone(&timezone);
+                    let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
+                    Event::SiPunch(punch)
+                }
+                SportIdentMessage::DeviceEvent { added, device } => {
+                    Event::DeviceEvent { added, device }
+                }
+            })
+            .boxed()
+    }
+
     /// Process ServiceEnvelope proto
     fn process_service_envelope(
         &mut self,
@@ -131,7 +177,7 @@ impl MessageHandler {
     /// Returns the next processed event from the active event sources.
     ///
     /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
-    /// packet receiver channel, SportIdent punch receiver channel, and node info publication interval)
+    /// packet receiver stream, SportIdent event stream, and node info publication interval)
     /// using `tokio::select!`. It returns the first successfully decoded and processed `Event`.
     ///
     /// # Errors
@@ -143,48 +189,22 @@ impl MessageHandler {
             tokio::select! {
                 Some(mqtt_message) = self.mqtt_streams.next(), if !self.mqtt_streams.is_empty() => {
                     let mqtt_message = mqtt_message?;
-                    let gateway_mac = match &mqtt_message {
-                        Message::CellularStatus(mac, _, _)
-                        | Message::Punches(mac, _, _)
-                        | Message::MeshtasticSerial(mac, _, _)
-                        | Message::MeshtasticStatus(mac, _, _) => *mac,
-                    };
                     // Instead of ignoring these packets, we could consider unsubscribing from
                     // these topics.
-                    if self.local_macs.contains(&gateway_mac) {
+                    if self.local_macs.contains(&mqtt_message.mac_address()) {
                         continue;
                     }
                     if let Some(message) = self.fleet_state.process_mqtt_message(mqtt_message)? {
                         return Ok(message);
                     }
                 }
-                Some(service_envelope) = self.mesh_packet_rx.recv() => {
-                    if let Some(MeshPacket {
-                        from,
-                        payload_variant: Some(PayloadVariant::Encrypted(_)),
-                        ..
-                    }) = service_envelope.packet
-                    {
-                        debug!("Ignoring encrypted message. From node ID={from:x}.");
-                        continue;
-                    };
-                    let maybe_event = self.process_service_envelope(service_envelope).transpose();
-                    if let Some(event) = maybe_event {
-                        return event;
+                Some(service_envelope) = self.mesh_stream.next() => {
+                    if let Some(event) = self.process_service_envelope(service_envelope)? {
+                        return Ok(event);
                     }
-                },
-                punch_recv = self.si_rx.recv() => {
-                    match punch_recv {
-                        Some(SportIdentMessage::RawPunch(raw_punch)) => {
-                            let now = Local::now().with_timezone(&self.timezone);
-                            let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
-                            return Ok(Event::SiPunch(punch));
-                        }
-                        Some(SportIdentMessage::DeviceEvent { added, device }) => {
-                            return Ok(Event::DeviceEvent { added, device });
-                        }
-                        None => {} // Can't happen since self has self._si_tx
-                    }
+                }
+                Some(event) = self.si_stream.next() => {
+                    return Ok(event);
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
@@ -342,15 +362,18 @@ impl MessageHandlerBuilder {
             Some(UsbSerialManager::new(factories))
         };
 
+        let mesh_stream = MessageHandler::create_mesh_stream(mesh_packet_rx);
+        let si_stream = MessageHandler::create_si_stream(si_rx, self.timezone);
+
         MessageHandler {
             fleet_state: FleetState::new(
                 self.dns,
                 self.node_infos_interval,
                 self.meshtastic_timeout,
             ),
-            mesh_packet_rx,
+            mesh_stream,
             _mesh_packet_tx: mesh_packet_tx,
-            si_rx,
+            si_stream,
             si_tx,
             mqtt_streams,
             mesh_txs,
@@ -391,17 +414,15 @@ mod tests {
             let (punch_tx, punch_rx) = unbounded_channel();
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
             let mut mqtt_streams = SelectAll::new();
-            mqtt_streams.push(
-                futures::stream::unfold(mqtt_rx, |mut rx| async move {
-                    rx.recv().await.map(|msg| (msg, rx))
-                })
-                .boxed(),
-            );
+            mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
+            let timezone = *Local::now().fixed_offset().offset();
+            let mesh_stream = Self::create_mesh_stream(mesh_packet_rx);
+            let si_stream = Self::create_si_stream(punch_rx, timezone);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
-                mesh_packet_rx,
+                mesh_stream,
                 _mesh_packet_tx: mesh_packet_tx.clone(),
-                si_rx: punch_rx,
+                si_stream,
                 si_tx: punch_tx.clone(),
                 mqtt_streams,
                 mesh_txs: Vec::new(),
@@ -411,7 +432,7 @@ mod tests {
                     fake_punch_config: None,
                     usb_serial_manager: None,
                 }),
-                timezone: *Local::now().fixed_offset().offset(),
+                timezone,
                 local_macs: HashSet::new(),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
