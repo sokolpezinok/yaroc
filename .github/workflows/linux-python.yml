@@ -27,7 +27,7 @@ jobs:
       - name: Install uv with all available options
         uses: astral-sh/setup-uv@v7
         with:
-          version: '0.10.12'
+          version: '0.13.6'
           python-version: ${{ matrix.python_version }}
           enable-cache: false
       - name: Setup QEMU
@@ -90,7 +90,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: '0.10.12'
+          version: '0.13.6'
       - name: Build wheel
         working-directory: "python"
         env:
