@@ -1,11 +1,10 @@
 use std::time::Duration;
 
-use futures::StreamExt;
-use log::{error, warn};
+use log::warn;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio};
 use meshtastic::utils;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::error::Error;
 use crate::system_info::MacAddress;
@@ -89,17 +88,6 @@ impl MeshtasticConnection {
                 None
             }
         })
-    }
-
-    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(self, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
-        let mut stream = std::pin::pin!(self.into_stream());
-        while let Some(service_envelope) = stream.next().await {
-            if let Err(err) = mesh_packet_tx.send(service_envelope) {
-                error!("Failed to forward packet: {err}");
-                break;
-            }
-        }
     }
 }
 

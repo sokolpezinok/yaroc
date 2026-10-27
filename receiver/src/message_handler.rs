@@ -24,7 +24,6 @@ use crate::{
 };
 
 pub struct MessageHandlerInitializer {
-    pub meshtastic_tcp: Option<String>,
     pub fake_punch_config: Option<FakePunchConfig>,
     pub usb_serial_manager: Option<UsbSerialManager>,
 }
@@ -36,7 +35,7 @@ pub struct MessageHandlerInitializer {
 pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_stream: BoxStream<'static, ServiceEnvelope>,
-    mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
+    _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_stream: SelectAll<BoxStream<'static, Event>>,
     _si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     /// Multiplexed streams of inbound MQTT messages
@@ -64,16 +63,9 @@ pub struct UsbSerialConfig {
 }
 
 impl MessageHandler {
-    /// Spawn async background tasks when Self:;next_message() is ran for the first time.
+    /// Spawn async background tasks when Self::next_event() is ran for the first time.
     pub fn init(&mut self) {
         if let Some(init) = self.initializer.take() {
-            if let Some(host) = init.meshtastic_tcp {
-                let mesh_packet_tx = self.mesh_packet_tx.clone();
-                self.tasks.spawn(async move {
-                    tcp::connect_and_loop(host, mesh_packet_tx).await;
-                });
-            }
-
             if let Some(fake_punch_config) = init.fake_punch_config {
                 self.si_stream.push(fake_punch_config.into_stream(self.timezone).boxed());
             }
@@ -96,11 +88,11 @@ impl MessageHandler {
         )
     }
 
-    /// Creates a stream of Meshtastic `ServiceEnvelope` messages, filtering out encrypted packets.
+    /// Filters out encrypted packets from a stream of Meshtastic `ServiceEnvelope` messages.
     fn create_mesh_stream(
-        rx: UnboundedReceiver<ServiceEnvelope>,
+        stream: impl Stream<Item = ServiceEnvelope> + Send + 'static,
     ) -> BoxStream<'static, ServiceEnvelope> {
-        Self::rx_into_stream(rx)
+        stream
             .filter(|envelope| {
                 if let Some(MeshPacket {
                     from,
@@ -363,7 +355,14 @@ impl MessageHandlerBuilder {
             Some(UsbSerialManager::new(factories))
         };
 
-        let mesh_stream = MessageHandler::create_mesh_stream(mesh_packet_rx);
+        let rx_stream = MessageHandler::rx_into_stream(mesh_packet_rx);
+        let mesh_stream = match self.meshtastic_tcp {
+            Some(host) => MessageHandler::create_mesh_stream(futures::stream::select(
+                rx_stream,
+                tcp::into_stream(host),
+            )),
+            None => MessageHandler::create_mesh_stream(rx_stream),
+        };
         let si_stream =
             SelectAll::from_iter([MessageHandler::create_si_stream(si_rx, self.timezone)]);
 
@@ -374,14 +373,13 @@ impl MessageHandlerBuilder {
                 self.meshtastic_timeout,
             ),
             mesh_stream,
-            mesh_packet_tx,
+            _mesh_packet_tx: mesh_packet_tx,
             si_stream,
             _si_tx: si_tx,
             mqtt_streams,
             mesh_txs,
             tasks: JoinSet::new(),
             initializer: Some(MessageHandlerInitializer {
-                meshtastic_tcp: self.meshtastic_tcp,
                 fake_punch_config: self.fake_punch_config,
                 usb_serial_manager,
             }),
@@ -418,19 +416,18 @@ mod tests {
             let mut mqtt_streams = SelectAll::new();
             mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
             let timezone = *Local::now().fixed_offset().offset();
-            let mesh_stream = Self::create_mesh_stream(mesh_packet_rx);
+            let mesh_stream = Self::create_mesh_stream(Self::rx_into_stream(mesh_packet_rx));
             let si_stream = SelectAll::from_iter([Self::create_si_stream(punch_rx, timezone)]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_stream,
-                mesh_packet_tx: mesh_packet_tx.clone(),
+                _mesh_packet_tx: mesh_packet_tx.clone(),
                 si_stream,
                 _si_tx: punch_tx.clone(),
                 mqtt_streams,
                 mesh_txs: Vec::new(),
                 tasks: JoinSet::new(),
                 initializer: Some(MessageHandlerInitializer {
-                    meshtastic_tcp: None,
                     fake_punch_config: None,
                     usb_serial_manager: None,
                 }),
