@@ -34,8 +34,7 @@ pub struct MessageHandlerInitializer {
 /// processing them, and maintaining the state of the fleet.
 pub struct MessageHandler {
     fleet_state: FleetState,
-    mesh_stream: BoxStream<'static, ServiceEnvelope>,
-    _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
+    mesh_streams: SelectAll<BoxStream<'static, ServiceEnvelope>>,
     si_stream: SelectAll<BoxStream<'static, Event>>,
     _si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
     /// Multiplexed streams of inbound MQTT messages
@@ -171,7 +170,7 @@ impl MessageHandler {
                         return Ok(message);
                     }
                 }
-                Some(service_envelope) = self.mesh_stream.next() => {
+                Some(service_envelope) = self.mesh_streams.next(), if !self.mesh_streams.is_empty() => {
                     if let Some(event) = self.process_service_envelope(service_envelope)? {
                         return Ok(event);
                     }
@@ -332,12 +331,17 @@ impl MessageHandlerBuilder {
             mesh_txs.push(receiver.mesh_tx());
             mqtt_streams.push(receiver.into_stream());
         }
-        let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<ServiceEnvelope>();
+        let mut mesh_streams = SelectAll::new();
+        if let Some(host) = self.meshtastic_tcp {
+            mesh_streams.push(MessageHandler::create_mesh_stream(tcp::into_stream(host)));
+        }
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         if self.config.enable_meshtastic {
-            factories.push(Box::new(MeshtasticFactory::new(mesh_packet_tx.clone())));
+            let (factory, stream) = MeshtasticFactory::new();
+            factories.push(Box::new(factory));
+            mesh_streams.push(MessageHandler::create_mesh_stream(stream));
         }
         match self.config.sportident {
             SportIdentConfig::Passive => {
@@ -355,14 +359,6 @@ impl MessageHandlerBuilder {
             Some(UsbSerialManager::new(factories))
         };
 
-        let rx_stream = MessageHandler::rx_into_stream(mesh_packet_rx);
-        let mesh_stream = match self.meshtastic_tcp {
-            Some(host) => MessageHandler::create_mesh_stream(futures::stream::select(
-                rx_stream,
-                tcp::into_stream(host),
-            )),
-            None => MessageHandler::create_mesh_stream(rx_stream),
-        };
         let si_stream =
             SelectAll::from_iter([MessageHandler::create_si_stream(si_rx, self.timezone)]);
 
@@ -372,8 +368,7 @@ impl MessageHandlerBuilder {
                 self.node_infos_interval,
                 self.meshtastic_timeout,
             ),
-            mesh_stream,
-            _mesh_packet_tx: mesh_packet_tx,
+            mesh_streams,
             si_stream,
             _si_tx: si_tx,
             mqtt_streams,
@@ -416,12 +411,13 @@ mod tests {
             let mut mqtt_streams = SelectAll::new();
             mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
             let timezone = *Local::now().fixed_offset().offset();
-            let mesh_stream = Self::create_mesh_stream(Self::rx_into_stream(mesh_packet_rx));
+            let mesh_streams = SelectAll::from_iter([Self::create_mesh_stream(
+                Self::rx_into_stream(mesh_packet_rx),
+            )]);
             let si_stream = SelectAll::from_iter([Self::create_si_stream(punch_rx, timezone)]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
-                mesh_stream,
-                _mesh_packet_tx: mesh_packet_tx.clone(),
+                mesh_streams,
                 si_stream,
                 _si_tx: punch_tx.clone(),
                 mqtt_streams,

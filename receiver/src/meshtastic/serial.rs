@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 
-use futures::FutureExt as _;
+use futures::{FutureExt as _, Stream};
 use futures::future::BoxFuture;
 use log::info;
 use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_util::sync::DropGuard;
 
 use super::connection::MeshtasticConnection;
@@ -65,12 +65,19 @@ pub struct MeshtasticFactory {
 }
 
 impl MeshtasticFactory {
-    /// Creates a new `MeshtasticFactory` that forwards mesh packets through the given sender.
-    pub fn new(mesh_tx: UnboundedSender<ServiceEnvelope>) -> Self {
-        Self {
-            devices: HashMap::new(),
-            mesh_tx,
-        }
+    /// Creates a new `MeshtasticFactory` and a stream of incoming `ServiceEnvelope` messages.
+    pub fn new() -> (Self, impl Stream<Item = ServiceEnvelope> + Send) {
+        let (mesh_tx, mesh_rx) = unbounded_channel();
+        let stream = futures::stream::unfold(mesh_rx, |mut rx| async move {
+            rx.recv().await.map(|msg| (msg, rx))
+        });
+        (
+            Self {
+                devices: HashMap::new(),
+                mesh_tx,
+            },
+            stream,
+        )
     }
 
     /// Spawns the serial reading background loop for the given Meshtastic serial device and
@@ -144,8 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_meshtastic_factory_management() {
-        let (mesh_tx, mut _mesh_rx) = mpsc::unbounded_channel();
-        let mut factory = MeshtasticFactory::new(mesh_tx);
+        let (mut factory, _mesh_stream) = MeshtasticFactory::new();
 
         let (_rx_tx, rx_rx) = mpsc::channel(1);
         let fake_serial = FakeMeshtasticSerial::new(MacAddress::default(), rx_rx);

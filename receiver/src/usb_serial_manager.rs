@@ -254,8 +254,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_meshtastic_serial() {
-        let (proto_tx, mut proto_rx) = mpsc::unbounded_channel();
-        let mut factory = MeshtasticFactory::new(proto_tx);
+        let (mut factory, proto_stream) = MeshtasticFactory::new();
+        let mut proto_stream = std::pin::pin!(proto_stream);
         let (tx, rx) = mpsc::channel(1);
         let fake_serial = FakeMeshtasticSerial::new(MacAddress::default(), rx);
         factory.add_meshtastic_device_inner(fake_serial, "/some");
@@ -267,7 +267,7 @@ mod tests {
             ..Default::default()
         };
         tx.send(packet.clone()).await.unwrap();
-        let recv_envelope = proto_rx.recv().await.unwrap();
+        let recv_envelope = proto_stream.next().await.unwrap();
         let gateway_id =
             recv_envelope.gateway_id.strip_prefix('!').unwrap_or(&recv_envelope.gateway_id);
         let recv_mac = MacAddress::try_from(gateway_id).unwrap();
