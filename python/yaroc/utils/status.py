@@ -2,9 +2,10 @@ import logging
 import sys
 from datetime import datetime
 from itertools import accumulate
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from PIL import Image, ImageDraw, ImageFont
+if TYPE_CHECKING:
+    from PIL import Image
 
 from ..rs import NodeInfo
 
@@ -97,8 +98,15 @@ class StatusDrawer:
     @staticmethod
     def draw_table(
         table: list[list[str]], width: int, height: int, horiz_pad: int = 1
-    ) -> Image.Image:
+    ) -> "Image.Image":
         """Draws a table as an image of size width x height from the given text in `table`."""
+
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ImportError as err:
+            raise ImportError(
+                "Pillow is required for display support. Install with 'pip install yaroc[display]'"
+            ) from err
 
         image = Image.new("1", (width, height), 0xFF)
         draw = ImageDraw.Draw(image)

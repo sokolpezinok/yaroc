@@ -1,8 +1,11 @@
+import importlib.util
 import unittest
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from yaroc.utils.status import StatusDrawer
+
+HAS_PILLOW = importlib.util.find_spec("PIL") is not None
 
 
 @dataclass
@@ -83,6 +86,7 @@ class TestStatus(unittest.TestCase):
         self.assertEqual(len(table), 1)
         self.assertEqual(table[0][0], "Node1")
 
+    @unittest.skipUnless(HAS_PILLOW, "Pillow is not installed")
     def test_draw_table(self):
         drawer = StatusDrawer({})
         table = [
