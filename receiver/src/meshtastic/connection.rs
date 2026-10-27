@@ -1,8 +1,10 @@
 use std::time::Duration;
 
-use log::warn;
+use log::{debug, warn};
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
-use meshtastic::protobufs::{FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio};
+use meshtastic::protobufs::{
+    FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio, mesh_packet,
+};
 use meshtastic::utils;
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -57,7 +59,17 @@ impl MeshtasticConnection {
     pub async fn next_message(&mut self) -> Option<MeshPacket> {
         loop {
             match self.listener.recv().await?.payload_variant {
-                Some(from_radio::PayloadVariant::Packet(packet)) => return Some(packet),
+                Some(from_radio::PayloadVariant::Packet(packet)) => {
+                    if let Some(mesh_packet::PayloadVariant::Encrypted(_)) = &packet.payload_variant
+                    {
+                        debug!(
+                            "Ignoring encrypted message. From node ID={:x}.",
+                            packet.from
+                        );
+                    } else {
+                        return Some(packet);
+                    }
+                }
                 Some(from_radio::PayloadVariant::Channel(channel)) => {
                     if channel.role != channel::Role::Disabled.into()
                         && let Some(settings) = channel.settings
@@ -121,6 +133,19 @@ mod tests {
                 server_stream.write_all(&[byte]).await.unwrap();
                 tokio::task::yield_now().await;
             }
+
+            // Send an encrypted packet first; it should be ignored by next_message()
+            let encrypted_packet = MeshPacket {
+                from: 0xdeadbeef,
+                to: 100,
+                payload_variant: Some(mesh_packet::PayloadVariant::Encrypted(vec![1, 2, 3])),
+                ..Default::default()
+            };
+            let from_radio_encrypted = FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::Packet(encrypted_packet)),
+                ..Default::default()
+            };
+            server_stream.write_all(&encode_from_radio(from_radio_encrypted)).await.unwrap();
 
             let mesh_packet = MeshPacket {
                 from: 200,

@@ -1,11 +1,10 @@
 use chrono::{FixedOffset, Local};
 use futures::{
-    Stream, StreamExt,
+    StreamExt,
     stream::{BoxStream, SelectAll},
 };
-use log::{debug, error};
-use meshtastic::protobufs::mesh_packet::PayloadVariant;
-use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
+use log::error;
+use meshtastic::protobufs::ServiceEnvelope;
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
@@ -60,26 +59,6 @@ impl MessageHandler {
         if let Some(usb_manager) = self.usb_serial_manager.take() {
             self._usb_drop_guard = Some(usb_manager.spawn());
         }
-    }
-
-    /// Filters out encrypted packets from a stream of Meshtastic `ServiceEnvelope` messages.
-    fn create_mesh_stream(
-        stream: impl Stream<Item = ServiceEnvelope> + Send + 'static,
-    ) -> BoxStream<'static, ServiceEnvelope> {
-        stream
-            .filter(|envelope| {
-                if let Some(MeshPacket {
-                    from,
-                    payload_variant: Some(PayloadVariant::Encrypted(_)),
-                    ..
-                }) = &envelope.packet
-                {
-                    debug!("Ignoring encrypted message. From node ID={from:x}.");
-                    return std::future::ready(false);
-                }
-                std::future::ready(true)
-            })
-            .boxed()
     }
 
     /// Process ServiceEnvelope proto
@@ -250,12 +229,12 @@ impl MessageHandlerBuilder {
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         let mut mesh_streams = SelectAll::new();
         if let Some(host) = self.meshtastic_tcp {
-            mesh_streams.push(MessageHandler::create_mesh_stream(tcp::into_stream(host)));
+            mesh_streams.push(tcp::into_stream(host).boxed());
         }
         if self.config.enable_meshtastic {
             let (factory, stream) = MeshtasticFactory::new();
             factories.push(Box::new(factory));
-            mesh_streams.push(MessageHandler::create_mesh_stream(stream));
+            mesh_streams.push(stream.boxed());
         }
 
         let mut si_streams = SelectAll::new();
@@ -305,6 +284,7 @@ mod tests {
     use crate::si_uart::SportIdentMessage;
     use chrono::{DateTime, Local};
     use femtopb::{Message as _, Repeated};
+    use futures::Stream;
     use meshtastic::protobufs::PortNum;
     use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
     use tokio::time::timeout;
@@ -335,9 +315,7 @@ mod tests {
             let mut mqtt_streams = SelectAll::new();
             mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
             let timezone = *Local::now().fixed_offset().offset();
-            let mesh_streams = SelectAll::from_iter([Self::create_mesh_stream(
-                Self::rx_into_stream(mesh_packet_rx),
-            )]);
+            let mesh_streams = SelectAll::from_iter([Self::rx_into_stream(mesh_packet_rx).boxed()]);
             let si_streams = SelectAll::from_iter([Self::rx_into_stream(punch_rx)
                 .map(move |msg: SportIdentMessage| msg.into_event(timezone))
                 .boxed()]);
