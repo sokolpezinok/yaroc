@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1340,7 +1340,7 @@ dependencies = [
     { name = "waveshare-epaper", marker = "platform_machine == 'aarch64' or platform_machine == 'armv7l'" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "mypy" },
     { name = "pytest" },
@@ -1362,22 +1362,27 @@ requires-dist = [
     { name = "dbus-next", marker = "sys_platform == 'linux'", specifier = "==0.2.*" },
     { name = "dependency-injector", specifier = "==4.48.*" },
     { name = "gpiozero", specifier = "==2.0.*" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "pillow", specifier = "==12.2.*" },
     { name = "protobuf", specifier = "==7.35.*" },
     { name = "psutil", specifier = "==7.2.*" },
-    { name = "pylsp-mypy", marker = "extra == 'lsp'" },
     { name = "pyserial-asyncio", specifier = "==0.6" },
-    { name = "pytest", marker = "extra == 'dev'" },
     { name = "rpi-gpio", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'armv6l' and sys_platform == 'linux') or (platform_machine == 'armv7l' and sys_platform == 'linux')", specifier = "==0.7.1" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "ruff-lsp", marker = "extra == 'lsp'" },
-    { name = "types-pillow", marker = "extra == 'dev'" },
-    { name = "types-protobuf", marker = "extra == 'dev'" },
-    { name = "types-psutil", marker = "extra == 'dev'" },
     { name = "waveshare-epaper", marker = "platform_machine == 'aarch64' or platform_machine == 'armv7l'", specifier = "==1.4.0" },
 ]
-provides-extras = ["dev", "lsp"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "types-pillow" },
+    { name = "types-protobuf" },
+    { name = "types-psutil" },
+]
+lsp = [
+    { name = "pylsp-mypy" },
+    { name = "ruff-lsp" },
+]
 
 [[package]]
 name = "zipp"

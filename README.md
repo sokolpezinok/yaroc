@@ -503,10 +503,10 @@ In order to start developing the Python parts, install the dependencies using `u
 
 ```sh
 cd python
-uv sync --all-extras
+uv sync --all-groups
 ```
 
-This will create a `.venv` and install all extras including `dev` and `lsp`.
+This will create a `.venv` and install all dependency groups including `dev` and `lsp`.
 
 ### Compiling Rust Bindings (Maturin)
 The Python package uses **[maturin](https://www.maturin.rs/)** as its build system to compile the Rust parts (under `python/src/`) into Python modules (specifically `yaroc.rs`).
