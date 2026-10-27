@@ -1,4 +1,8 @@
 use chrono::{FixedOffset, Local};
+use futures::{
+    StreamExt,
+    stream::{BoxStream, SelectAll},
+};
 use log::{debug, error, info};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
@@ -21,7 +25,6 @@ use crate::{
 
 pub struct MessageHandlerInitializer {
     pub meshtastic_tcp: Option<String>,
-    pub mqtt_receivers: Vec<MqttReceiver>,
     pub fake_punch_config: Option<FakePunchConfig>,
     pub usb_serial_manager: Option<UsbSerialManager>,
 }
@@ -36,10 +39,8 @@ pub struct MessageHandler {
     _mesh_packet_tx: UnboundedSender<ServiceEnvelope>, // Kept to prevent channel from closing
     si_rx: UnboundedReceiver<SportIdentMessage>,
     si_tx: UnboundedSender<SportIdentMessage>, // Kept to prevent channel from closing
-    /// TX side of inbound MQTT messages
-    inbound_mqtt_tx: UnboundedSender<crate::Result<Message>>,
-    /// RX side of inbound MQTT messages
-    inbound_mqtt_rx: UnboundedReceiver<crate::Result<Message>>,
+    /// Multiplexed streams of inbound MQTT messages
+    mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
     /// Senders for meshtastic messages
     mesh_txs: Vec<UnboundedSender<ServiceEnvelope>>,
     tasks: JoinSet<()>,
@@ -97,24 +98,6 @@ impl MessageHandler {
                 });
             }
 
-            for mut receiver in init.mqtt_receivers {
-                self.mesh_txs.push(receiver.mesh_tx());
-                let mqtt_tx = self.inbound_mqtt_tx.clone();
-                self.tasks.spawn(async move {
-                    loop {
-                        let msg = receiver.next_message().await;
-                        let res =
-                            mqtt_tx.send(msg).map_err(|_| crate::error::Error::ChannelSendError);
-                        if let Err(e) = res {
-                            error!(
-                                "Error while receiving and forwarding MQTT message from {}: {e}",
-                                receiver.url()
-                            );
-                        }
-                    }
-                });
-            }
-
             if let Some(mut usb_manager) = init.usb_serial_manager {
                 self.tasks.spawn(async move {
                     if let Err(e) = usb_manager.monitor_usb_devices().await {
@@ -158,7 +141,7 @@ impl MessageHandler {
         self.init().await;
         loop {
             tokio::select! {
-                Some(mqtt_message) = self.inbound_mqtt_rx.recv() => {
+                Some(mqtt_message) = self.mqtt_streams.next(), if !self.mqtt_streams.is_empty() => {
                     let mqtt_message = mqtt_message?;
                     let gateway_mac = match &mqtt_message {
                         Message::CellularStatus(mac, _, _)
@@ -329,14 +312,15 @@ impl MessageHandlerBuilder {
     /// Builds the `MessageHandler`.
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
-        let mqtt_receivers: Vec<MqttReceiver> = self
-            .mqtt_configs
-            .into_iter()
-            .map(|config| MqttReceiver::new(config, macs.clone()))
-            .collect();
+        let mut mqtt_streams = SelectAll::new();
+        let mut mesh_txs = Vec::with_capacity(self.mqtt_configs.len());
+        for config in self.mqtt_configs {
+            let receiver = MqttReceiver::new(config, macs.clone());
+            mesh_txs.push(receiver.mesh_tx());
+            mqtt_streams.push(receiver.into_stream());
+        }
         let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel::<ServiceEnvelope>();
         let (si_tx, si_rx) = unbounded_channel::<SportIdentMessage>();
-        let (mqtt_tx, mqtt_rx) = unbounded_channel::<crate::Result<Message>>();
 
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         if self.config.enable_meshtastic {
@@ -368,13 +352,11 @@ impl MessageHandlerBuilder {
             _mesh_packet_tx: mesh_packet_tx,
             si_rx,
             si_tx,
-            inbound_mqtt_tx: mqtt_tx,
-            inbound_mqtt_rx: mqtt_rx,
-            mesh_txs: Vec::new(),
+            mqtt_streams,
+            mesh_txs,
             tasks: JoinSet::new(),
             initializer: Some(MessageHandlerInitializer {
                 meshtastic_tcp: self.meshtastic_tcp,
-                mqtt_receivers,
                 fake_punch_config: self.fake_punch_config,
                 usb_serial_manager,
             }),
@@ -408,19 +390,24 @@ mod tests {
             let (mesh_packet_tx, mesh_packet_rx) = unbounded_channel();
             let (punch_tx, punch_rx) = unbounded_channel();
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
+            let mut mqtt_streams = SelectAll::new();
+            mqtt_streams.push(
+                futures::stream::unfold(mqtt_rx, |mut rx| async move {
+                    rx.recv().await.map(|msg| (msg, rx))
+                })
+                .boxed(),
+            );
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_packet_rx,
                 _mesh_packet_tx: mesh_packet_tx.clone(),
                 si_rx: punch_rx,
                 si_tx: punch_tx.clone(),
-                inbound_mqtt_tx: mqtt_tx.clone(),
-                inbound_mqtt_rx: mqtt_rx,
+                mqtt_streams,
                 mesh_txs: Vec::new(),
                 tasks: JoinSet::new(),
                 initializer: Some(MessageHandlerInitializer {
                     meshtastic_tcp: None,
-                    mqtt_receivers: Vec::new(),
                     fake_punch_config: None,
                     usb_serial_manager: None,
                 }),

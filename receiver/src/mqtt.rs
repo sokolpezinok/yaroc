@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Local};
 use femtopb::Message as _;
+use futures::{StreamExt, stream::BoxStream};
 use log::{error, info, warn};
 use meshtastic::protobufs::ServiceEnvelope;
 use prost::Message as _;
@@ -264,6 +265,15 @@ impl MqttReceiver {
                 return msg;
             }
         }
+    }
+
+    /// Converts this `MqttReceiver` into a stream of incoming MQTT messages.
+    pub fn into_stream(self) -> BoxStream<'static, crate::Result<Message>> {
+        futures::stream::unfold(self, |mut receiver| async move {
+            let msg = receiver.next_message().await;
+            Some((msg, receiver))
+        })
+        .boxed()
     }
 
     /// Returns the URL of the MQTT broker this receiver is connected to.
