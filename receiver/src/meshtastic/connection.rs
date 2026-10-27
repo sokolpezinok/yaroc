@@ -6,8 +6,6 @@ use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio};
 use meshtastic::utils;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::time::Instant;
-use tokio_util::future::FutureExt as _;
 
 use crate::error::Error;
 use crate::system_info::MacAddress;
@@ -31,32 +29,29 @@ impl MeshtasticConnection {
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
-        let deadline = Instant::now() + timeout;
-        let stream_api = StreamApi::new();
-        let (mut listener, stream_api) = stream_api.connect(stream).timeout_at(deadline).await?;
-        let config_id = utils::generate_rand_id();
-        let stream_api = stream_api.configure(config_id).await?;
+        tokio::time::timeout(timeout, async {
+            let stream_api = StreamApi::new();
+            let (mut listener, stream_api) = stream_api.connect(stream).await;
+            let stream_api = stream_api.configure(utils::generate_rand_id()).await?;
 
-        let packet = listener.recv().timeout_at(deadline).await?.ok_or_else(
-            || -> Box<dyn std::error::Error + Send + Sync> {
-                "Stream closed before configuration".into()
-            },
-        )?;
-        let FromRadio {
-            payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
-            ..
-        } = packet
-        else {
-            return Err(Box::new(Error::ConnectionError));
-        };
+            let packet = listener.recv().await.ok_or("Stream closed before configuration")?;
+            let FromRadio {
+                payload_variant: Some(from_radio::PayloadVariant::MyInfo(my_node_info)),
+                ..
+            } = packet
+            else {
+                return Err(Error::ConnectionError.into());
+            };
 
-        Ok(Self {
-            stream_api,
-            listener,
-            mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
-            channels: Vec::new(),
-            device_name,
+            Ok(Self {
+                stream_api,
+                listener,
+                mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
+                channels: Vec::new(),
+                device_name,
+            })
         })
+        .await?
     }
 
     /// Waits for the next mesh packet from the device, or returns `None` if disconnected.
