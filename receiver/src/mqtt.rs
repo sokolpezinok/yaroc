@@ -84,7 +84,7 @@ pub struct MqttReceiver {
     event_loop: EventLoop,
     url: String,
     /// Meshtastic packet receiver
-    mesh_rx: Option<UnboundedReceiver<ServiceEnvelope>>,
+    mesh_rx: UnboundedReceiver<ServiceEnvelope>,
     /// Meshtastic packet sender
     mesh_tx: UnboundedSender<ServiceEnvelope>,
     #[cfg(test)]
@@ -124,7 +124,7 @@ impl MqttReceiver {
             client,
             event_loop,
             topics,
-            mesh_rx: Some(mesh_rx),
+            mesh_rx,
             mesh_tx,
             #[cfg(test)]
             test_now: None,
@@ -253,28 +253,26 @@ impl MqttReceiver {
     /// Retrieves the next incoming MQTT message by polling the event loop.
     /// Reconnects and resubscribes automatically upon connection errors.
     pub async fn next_message(&mut self) -> crate::Result<Message> {
-        if let Some(mut mesh_rx) = self.mesh_rx.take() {
-            let client = self.client.clone();
-            tokio::spawn(async move {
-                while let Some(service_envelope) = mesh_rx.recv().await {
-                    let _ = Self::publish_meshtastic_service_envelope(&client, service_envelope)
+        loop {
+            tokio::select! {
+                event = self.event_loop.poll() => {
+                    let Ok(event) = event else {
+                        error!("MQTT Connection error");
+                        // TODO: consider also exponential backoff up to the "keep alive" value.
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        continue;
+                    };
+                    if let Some(msg) = self.process_mqtt_event(event).await {
+                        return msg;
+                    }
+                }
+                Some(service_envelope) = self.mesh_rx.recv() => {
+                    let _ = Self::publish_meshtastic_service_envelope(&self.client, service_envelope)
                         .await
                         .inspect_err(|e| {
                             error!("Error while forwarding a meshtastic packet to MQTT: {e}")
                         });
                 }
-            });
-        }
-
-        loop {
-            let Ok(event) = self.event_loop.poll().await else {
-                error!("MQTT Connection error");
-                // TODO: consider also exponential backoff up to the "keep alive" value.
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                continue;
-            };
-            if let Some(msg) = self.process_mqtt_event(event).await {
-                return msg;
             }
         }
     }
@@ -286,11 +284,6 @@ impl MqttReceiver {
             Some((msg, receiver))
         })
         .boxed()
-    }
-
-    /// Returns the URL of the MQTT broker this receiver is connected to.
-    pub fn url(&self) -> &str {
-        &self.url
     }
 
     /// Returns a clone of a meshtastic event sender.
