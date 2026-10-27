@@ -10,11 +10,10 @@ use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::DropGuard;
 
-use crate::meshtastic::serial::MeshtasticFactory;
 use crate::meshtastic::tcp;
 pub use crate::si_uart::FakePunchConfig;
-use crate::si_uart::SportIdentFactory;
-use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
+use crate::usb_serial_manager::UsbSerialManager;
+pub use crate::usb_serial_manager::{SportIdentConfig, UsbSerialConfig};
 use crate::{
     mqtt::{Message, MqttConfig, MqttReceiver},
     state::{Event, FleetState},
@@ -37,20 +36,6 @@ pub struct MessageHandler {
     _usb_drop_guard: Option<DropGuard>,
     timezone: FixedOffset,
     local_macs: HashSet<MacAddress>,
-}
-
-#[derive(Default)]
-pub enum SportIdentConfig {
-    #[default]
-    None,
-    Passive,
-    Active(Box<dyn UsbSerialFactory>),
-}
-
-#[derive(Default)]
-pub struct UsbSerialConfig {
-    pub enable_meshtastic: bool,
-    pub sportident: SportIdentConfig,
 }
 
 impl MessageHandler {
@@ -226,14 +211,14 @@ impl MessageHandlerBuilder {
             mqtt_streams.push(receiver.into_stream());
         }
 
-        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        let (usb_serial_manager, usb_mesh_stream, usb_si_stream) =
+            UsbSerialManager::from_config(self.config, self.timezone);
+
         let mut mesh_streams = SelectAll::new();
         if let Some(host) = self.meshtastic_tcp {
             mesh_streams.push(tcp::into_stream(host).boxed());
         }
-        if self.config.enable_meshtastic {
-            let (factory, stream) = MeshtasticFactory::new();
-            factories.push(Box::new(factory));
+        if let Some(stream) = usb_mesh_stream {
             mesh_streams.push(stream.boxed());
         }
 
@@ -241,23 +226,9 @@ impl MessageHandlerBuilder {
         if let Some(fake_punch_config) = self.fake_punch_config {
             si_streams.push(fake_punch_config.into_stream(self.timezone).boxed());
         }
-        match self.config.sportident {
-            SportIdentConfig::Passive => {
-                let (factory, stream) = SportIdentFactory::new(self.timezone);
-                factories.push(Box::new(factory));
-                si_streams.push(stream.boxed());
-            }
-            SportIdentConfig::Active(factory) => {
-                factories.push(factory);
-            }
-            SportIdentConfig::None => {}
+        if let Some(stream) = usb_si_stream {
+            si_streams.push(stream.boxed());
         }
-
-        let usb_serial_manager = if factories.is_empty() {
-            None
-        } else {
-            Some(UsbSerialManager::new(factories))
-        };
 
         MessageHandler {
             fleet_state: FleetState::new(

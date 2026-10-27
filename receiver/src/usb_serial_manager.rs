@@ -1,6 +1,8 @@
+use chrono::FixedOffset;
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use log::{debug, error, info};
+use meshtastic::protobufs::ServiceEnvelope;
 use nusb::hotplug::HotplugEvent;
 use std::fmt::Display;
 #[cfg(all(target_os = "linux", feature = "udev"))]
@@ -8,6 +10,10 @@ use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::future::FutureExt;
 use tokio_util::sync::{CancellationToken, DropGuard};
+
+use crate::meshtastic::serial::MeshtasticFactory;
+use crate::si_uart::SportIdentFactory;
+use crate::state::Event;
 
 pub trait UsbSerialTrait {
     type Output;
@@ -61,6 +67,20 @@ pub trait UsbSerialFactory: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
+#[derive(Default)]
+pub enum SportIdentConfig {
+    #[default]
+    None,
+    Passive,
+    Active(Box<dyn UsbSerialFactory>),
+}
+
+#[derive(Default)]
+pub struct UsbSerialConfig {
+    pub enable_meshtastic: bool,
+    pub sportident: SportIdentConfig,
+}
+
 /// Serial device manager
 ///
 /// Handles connecting and disconnecting of serial devices (Meshtastic and SportIdent).
@@ -105,6 +125,43 @@ impl UsbSerialManager {
             #[cfg(all(target_os = "linux", feature = "udev"))]
             pending_connections: Vec::new(),
         }
+    }
+
+    /// Creates a `UsbSerialManager` and optional Meshtastic and SportIdent streams from a [`UsbSerialConfig`].
+    pub fn from_config(
+        config: UsbSerialConfig,
+        timezone: FixedOffset,
+    ) -> (
+        Option<Self>,
+        Option<impl futures::Stream<Item = ServiceEnvelope> + Send>,
+        Option<impl futures::Stream<Item = Event> + Send>,
+    ) {
+        let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
+        let mesh_stream = if config.enable_meshtastic {
+            let (factory, stream) = MeshtasticFactory::new();
+            factories.push(Box::new(factory));
+            Some(stream)
+        } else {
+            None
+        };
+        let si_stream = match config.sportident {
+            SportIdentConfig::Passive => {
+                let (factory, stream) = SportIdentFactory::new(timezone);
+                factories.push(Box::new(factory));
+                Some(stream)
+            }
+            SportIdentConfig::Active(factory) => {
+                factories.push(factory);
+                None
+            }
+            SportIdentConfig::None => None,
+        };
+        let manager = if factories.is_empty() {
+            None
+        } else {
+            Some(Self::new(factories))
+        };
+        (manager, mesh_stream, si_stream)
     }
 
     /// Indicates whether the device is connected and running.
@@ -264,7 +321,7 @@ impl UsbSerialManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{meshtastic::serial::MeshtasticFactory, system_info::MacAddress};
+    use crate::system_info::MacAddress;
     use meshtastic::protobufs::MeshPacket;
     use tokio::sync::mpsc;
 
