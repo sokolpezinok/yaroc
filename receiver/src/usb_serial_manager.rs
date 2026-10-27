@@ -16,8 +16,8 @@ use tokio_util::sync::CancellationToken;
 pub trait UsbSerialTrait {
     type Output;
 
-    /// An inner loop that reads messages from the serial device and sends them to a channel.
-    fn inner_loop(self, tx: UnboundedSender<Self::Output>) -> impl Future<Output = ()> + Send;
+    /// Converts this serial device into a stream of messages.
+    fn into_stream(self) -> impl futures::Stream<Item = Self::Output> + Send;
 
     /// Spawns a task to read messages from a serial connection.
     fn spawn_serial(self, tx: UnboundedSender<Self::Output>) -> CancellationToken
@@ -29,7 +29,17 @@ pub trait UsbSerialTrait {
         let cancellation_token_clone = cancellation_token.clone();
         tokio::spawn(async move {
             let description = format!("{self}");
-            let res = self.inner_loop(tx).with_cancellation_token_owned(cancellation_token).await;
+            let description_ref = &description;
+            let fut = async move {
+                let mut stream = std::pin::pin!(self.into_stream());
+                while let Some(item) = stream.next().await {
+                    if let Err(err) = tx.send(item) {
+                        error!("Failed to forward message from {description_ref}: {err}");
+                        break;
+                    }
+                }
+            };
+            let res = fut.with_cancellation_token_owned(cancellation_token).await;
             if res.is_none() {
                 info!("Stopping {}", description);
             }

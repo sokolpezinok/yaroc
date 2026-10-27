@@ -50,9 +50,9 @@ impl MeshtasticSerial {
 impl UsbSerialTrait for MeshtasticSerial {
     type Output = ServiceEnvelope;
 
-    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(self, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
-        self.connection.inner_loop(mesh_packet_tx, &self.port).await;
+    /// Converts the Meshtastic device into a stream of `ServiceEnvelope` messages.
+    fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
+        self.connection.into_stream(self.port)
     }
 }
 

@@ -1,10 +1,11 @@
 use std::time::Duration;
 
+use futures::StreamExt;
 use log::{error, warn};
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::{FromRadio, MeshPacket, ServiceEnvelope, channel, from_radio};
 use meshtastic::utils;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::Instant;
 use tokio_util::future::FutureExt as _;
 
@@ -94,33 +95,43 @@ impl MeshtasticConnection {
         }
     }
 
-    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(
-        mut self,
-        mesh_packet_tx: tokio::sync::mpsc::UnboundedSender<ServiceEnvelope>,
-        device_name: &str,
-    ) {
-        loop {
-            let event = self.next_message().await;
-            match event {
+    /// Converts this connection into a stream of `ServiceEnvelope` messages.
+    pub fn into_stream(
+        self,
+        device_name: String,
+    ) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
+        futures::stream::unfold((self, device_name), |(mut conn, device_name)| async move {
+            match conn.next_message().await {
                 MeshtasticEvent::MeshPacket(mesh_packet) => {
                     let service_envelope = ServiceEnvelope {
                         packet: Some(mesh_packet),
-                        channel_id: self.channels.first().cloned().unwrap_or_default(),
-                        gateway_id: format!("!{}", self.mac_address),
+                        channel_id: conn.channels.first().cloned().unwrap_or_default(),
+                        gateway_id: format!("!{}", conn.mac_address),
                     };
-                    if let Err(err) = mesh_packet_tx.send(service_envelope) {
-                        error!("Failed to forward packet: {err}");
-                        break;
-                    }
+                    Some((service_envelope, (conn, device_name)))
                 }
                 MeshtasticEvent::Disconnected => {
-                    warn!("Disconnected from Meshtastic device: {}", device_name);
-                    break;
+                    warn!("Disconnected from Meshtastic device: {device_name}");
+                    let _ = conn.stream_api.disconnect().await;
+                    None
                 }
             }
+        })
+    }
+
+    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
+    pub async fn inner_loop(
+        self,
+        mesh_packet_tx: UnboundedSender<ServiceEnvelope>,
+        device_name: &str,
+    ) {
+        let mut stream = std::pin::pin!(self.into_stream(device_name.to_owned()));
+        while let Some(service_envelope) = stream.next().await {
+            if let Err(err) = mesh_packet_tx.send(service_envelope) {
+                error!("Failed to forward packet: {err}");
+                break;
+            }
         }
-        let _ = self.stream_api.disconnect().await;
     }
 }
 

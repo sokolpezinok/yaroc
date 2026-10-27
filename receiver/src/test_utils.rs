@@ -3,7 +3,7 @@ use meshtastic::protobufs::{
 };
 use prost::Message;
 use std::fmt::Display;
-use tokio::sync::mpsc::{Receiver, UnboundedSender};
+use tokio::sync::mpsc::Receiver;
 
 use crate::meshtastic::connection::MeshtasticEvent;
 use crate::si_uart::SportIdentMessage;
@@ -49,24 +49,20 @@ impl FakeMeshtasticSerial {
 impl UsbSerialTrait for FakeMeshtasticSerial {
     type Output = ServiceEnvelope;
 
-    /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    async fn inner_loop(mut self, mesh_proto_tx: UnboundedSender<ServiceEnvelope>) {
-        loop {
-            let event = self.next_message().await;
-            match event {
+    fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
+        futures::stream::unfold(self, |mut serial| async move {
+            match serial.next_message().await {
                 MeshtasticEvent::MeshPacket(mesh_packet) => {
                     let service_envelope = ServiceEnvelope {
                         packet: Some(mesh_packet),
                         channel_id: String::new(),
-                        gateway_id: format!("!{}", self.mac_address),
+                        gateway_id: format!("!{}", serial.mac_address),
                     };
-                    mesh_proto_tx.send(service_envelope).expect("Channel unexpectedly closed");
+                    Some((service_envelope, serial))
                 }
-                MeshtasticEvent::Disconnected => {
-                    break;
-                }
+                MeshtasticEvent::Disconnected => None,
             }
-        }
+        })
     }
 }
 
@@ -94,18 +90,10 @@ impl FakeSportIdentSerial {
 impl UsbSerialTrait for FakeSportIdentSerial {
     type Output = SportIdentMessage;
 
-    async fn inner_loop(mut self, tx: UnboundedSender<SportIdentMessage>) {
-        loop {
-            let event = self.next_message().await;
-            match event {
-                Some(msg) => {
-                    tx.send(msg).expect("Channel unexpectedly closed");
-                }
-                None => {
-                    break;
-                }
-            }
-        }
+    fn into_stream(self) -> impl futures::Stream<Item = SportIdentMessage> + Send {
+        futures::stream::unfold(self, |mut serial| async move {
+            serial.next_message().await.map(|msg| (msg, serial))
+        })
     }
 }
 

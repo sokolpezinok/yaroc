@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use futures::StreamExt as _;
 use futures::future::BoxFuture;
 use futures::future::FutureExt as _;
 use log::{error, info, warn};
@@ -58,28 +59,21 @@ impl RxWithIdle for TokioSerial {
 impl UsbSerialTrait for SiUart<TokioSerial> {
     type Output = SportIdentMessage;
 
-    /// Read loop that consumes punches from the SI UART device and sends them as
-    /// `SportIdentMessage::RawPunch` through the channel until the serial connection is closed.
-    async fn inner_loop(mut self, tx: UnboundedSender<Self::Output>) {
-        loop {
-            let punch = self.read().await;
-            match punch {
-                Ok(punches) => {
-                    for punch in punches {
-                        tx.send(punch.into()).expect("Channel unexpectedly closed");
-                    }
-                }
-                Err(err) => match err {
-                    Error::UartClosedError => {
-                        warn!("Removed SI UART device: {}", self.rx.port());
-                        break;
-                    }
-                    e => {
-                        error!("Failed to read punch: {e}");
-                    }
-                },
+    /// Converts the SI UART device into a stream of `SportIdentMessage::RawPunch` items
+    /// until the serial connection is closed.
+    fn into_stream(self) -> impl futures::Stream<Item = Self::Output> + Send {
+        futures::stream::unfold(self, |mut si_uart| async move {
+            let res = si_uart.read().await;
+            if let Err(Error::UartClosedError) = res {
+                warn!("Removed SI UART device: {}", si_uart.rx.port());
+                return None;
             }
-        }
+            let punches =
+                res.inspect_err(|e| error!("Failed to read punch: {e}")).unwrap_or_default();
+            let msgs = futures::stream::iter(punches.into_iter().map(Into::into));
+            Some((msgs, si_uart))
+        })
+        .flatten()
     }
 }
 
