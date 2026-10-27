@@ -38,8 +38,8 @@ pub struct MessageHandler {
     si_streams: SelectAll<BoxStream<'static, Event>>,
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
-    /// Senders for meshtastic messages
-    mesh_txs: Vec<UnboundedSender<ServiceEnvelope>>,
+    /// Senders for forwarding local Meshtastic messages to MQTT
+    mesh_to_mqtt_txs: Vec<UnboundedSender<ServiceEnvelope>>,
     tasks: JoinSet<()>,
     initializer: Option<MessageHandlerInitializer>,
     timezone: FixedOffset,
@@ -129,8 +129,8 @@ impl MessageHandler {
             .unwrap_or(&service_envelope.gateway_id);
         let mac_address = MacAddress::try_from(gateway_id)?;
         self.local_macs.insert(mac_address);
-        for mesh_tx in &self.mesh_txs {
-            let _ = mesh_tx
+        for mesh_to_mqtt_tx in &self.mesh_to_mqtt_txs {
+            let _ = mesh_to_mqtt_tx
                 .send(service_envelope.clone())
                 .inspect_err(|e| error!("Error while forwarding meshtastic packets: {}", e));
         }
@@ -316,10 +316,10 @@ impl MessageHandlerBuilder {
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
         let mut mqtt_streams = SelectAll::new();
-        let mut mesh_txs = Vec::with_capacity(self.mqtt_configs.len());
+        let mut mesh_to_mqtt_txs = Vec::with_capacity(self.mqtt_configs.len());
         for config in self.mqtt_configs {
             let receiver = MqttReceiver::new(config, macs.clone());
-            mesh_txs.push(receiver.mesh_tx());
+            mesh_to_mqtt_txs.push(receiver.mesh_tx());
             mqtt_streams.push(receiver.into_stream());
         }
 
@@ -362,7 +362,7 @@ impl MessageHandlerBuilder {
             mesh_streams,
             si_streams,
             mqtt_streams,
-            mesh_txs,
+            mesh_to_mqtt_txs,
             tasks: JoinSet::new(),
             initializer: Some(MessageHandlerInitializer {
                 fake_punch_config: self.fake_punch_config,
@@ -422,7 +422,7 @@ mod tests {
                 mesh_streams,
                 si_streams,
                 mqtt_streams,
-                mesh_txs: Vec::new(),
+                mesh_to_mqtt_txs: Vec::new(),
                 tasks: JoinSet::new(),
                 initializer: Some(MessageHandlerInitializer {
                     fake_punch_config: None,
