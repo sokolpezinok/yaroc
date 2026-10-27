@@ -5,7 +5,6 @@ use prost::Message;
 use std::fmt::Display;
 use tokio::sync::mpsc::Receiver;
 
-use crate::meshtastic::connection::MeshtasticEvent;
 use crate::si_uart::SportIdentMessage;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::UsbSerialTrait;
@@ -37,12 +36,8 @@ impl FakeMeshtasticSerial {
         Self { mac_address, rx }
     }
 
-    pub async fn next_message(&mut self) -> MeshtasticEvent {
-        let packet = self.rx.recv().await;
-        match packet {
-            Some(pkt) => MeshtasticEvent::MeshPacket(pkt),
-            None => MeshtasticEvent::Disconnected,
-        }
+    pub async fn next_message(&mut self) -> Option<MeshPacket> {
+        self.rx.recv().await
     }
 }
 
@@ -51,17 +46,13 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
 
     fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
         futures::stream::unfold(self, |mut serial| async move {
-            match serial.next_message().await {
-                MeshtasticEvent::MeshPacket(mesh_packet) => {
-                    let service_envelope = ServiceEnvelope {
-                        packet: Some(mesh_packet),
-                        channel_id: String::new(),
-                        gateway_id: format!("!{}", serial.mac_address),
-                    };
-                    Some((service_envelope, serial))
-                }
-                MeshtasticEvent::Disconnected => None,
-            }
+            let mesh_packet = serial.next_message().await?;
+            let service_envelope = ServiceEnvelope {
+                packet: Some(mesh_packet),
+                channel_id: String::new(),
+                gateway_id: format!("!{}", serial.mac_address),
+            };
+            Some((service_envelope, serial))
         })
     }
 }

@@ -12,21 +12,13 @@ use tokio_util::future::FutureExt as _;
 use crate::error::Error;
 use crate::system_info::MacAddress;
 
-/// An enum representing a message from a Meshtastic device.
-#[derive(Debug, Clone, PartialEq)]
-pub enum MeshtasticEvent {
-    /// A mesh packet.
-    MeshPacket(MeshPacket),
-    /// The device was disconnected.
-    Disconnected,
-}
-
 /// A connection to a Meshtastic device, wrapping both the stream API and the packet listener.
 pub struct MeshtasticConnection {
     pub stream_api: ConnectedStreamApi,
     pub listener: UnboundedReceiver<FromRadio>,
     pub mac_address: MacAddress,
     pub channels: Vec<String>,
+    pub device_name: String,
 }
 
 impl MeshtasticConnection {
@@ -34,6 +26,7 @@ impl MeshtasticConnection {
     pub async fn connect_stream<S>(
         stream: meshtastic::api::StreamHandle<S>,
         timeout: Duration,
+        device_name: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
@@ -62,31 +55,21 @@ impl MeshtasticConnection {
             listener,
             mac_address: MacAddress::Meshtastic(my_node_info.my_node_num),
             channels: Vec::new(),
+            device_name,
         })
     }
 
-    /// Waits for the next message from the device.
-    pub async fn next_message(&mut self) -> MeshtasticEvent {
+    /// Waits for the next mesh packet from the device, or returns `None` if disconnected.
+    pub async fn next_message(&mut self) -> Option<MeshPacket> {
         loop {
-            match self.listener.recv().await {
-                Some(FromRadio {
-                    payload_variant: Some(from_radio::PayloadVariant::Packet(packet)),
-                    ..
-                }) => {
-                    return MeshtasticEvent::MeshPacket(packet);
-                }
-                Some(FromRadio {
-                    payload_variant: Some(from_radio::PayloadVariant::Channel(channel)),
-                    ..
-                }) => {
+            match self.listener.recv().await?.payload_variant {
+                Some(from_radio::PayloadVariant::Packet(packet)) => return Some(packet),
+                Some(from_radio::PayloadVariant::Channel(channel)) => {
                     if channel.role != channel::Role::Disabled.into()
                         && let Some(settings) = channel.settings
                     {
                         self.channels.push(settings.name);
                     }
-                }
-                None => {
-                    return MeshtasticEvent::Disconnected;
                 }
                 _ => {
                     // Unimportant packet, do nothing.
@@ -96,36 +79,26 @@ impl MeshtasticConnection {
     }
 
     /// Converts this connection into a stream of `ServiceEnvelope` messages.
-    pub fn into_stream(
-        self,
-        device_name: String,
-    ) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
-        futures::stream::unfold((self, device_name), |(mut conn, device_name)| async move {
-            match conn.next_message().await {
-                MeshtasticEvent::MeshPacket(mesh_packet) => {
-                    let service_envelope = ServiceEnvelope {
-                        packet: Some(mesh_packet),
-                        channel_id: conn.channels.first().cloned().unwrap_or_default(),
-                        gateway_id: format!("!{}", conn.mac_address),
-                    };
-                    Some((service_envelope, (conn, device_name)))
-                }
-                MeshtasticEvent::Disconnected => {
-                    warn!("Disconnected from Meshtastic device: {device_name}");
-                    let _ = conn.stream_api.disconnect().await;
-                    None
-                }
+    pub fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
+        futures::stream::unfold(self, |mut conn| async move {
+            if let Some(mesh_packet) = conn.next_message().await {
+                let service_envelope = ServiceEnvelope {
+                    packet: Some(mesh_packet),
+                    channel_id: conn.channels.first().cloned().unwrap_or_default(),
+                    gateway_id: format!("!{}", conn.mac_address),
+                };
+                Some((service_envelope, conn))
+            } else {
+                warn!("Disconnected from Meshtastic device: {}", conn.device_name);
+                let _ = conn.stream_api.disconnect().await;
+                None
             }
         })
     }
 
     /// An inner loop that reads messages from the Meshtastic device and sends them to a channel.
-    pub async fn inner_loop(
-        self,
-        mesh_packet_tx: UnboundedSender<ServiceEnvelope>,
-        device_name: &str,
-    ) {
-        let mut stream = std::pin::pin!(self.into_stream(device_name.to_owned()));
+    pub async fn inner_loop(self, mesh_packet_tx: UnboundedSender<ServiceEnvelope>) {
+        let mut stream = std::pin::pin!(self.into_stream());
         while let Some(service_envelope) = stream.next().await {
             if let Err(err) = mesh_packet_tx.send(service_envelope) {
                 error!("Failed to forward packet: {err}");
@@ -185,17 +158,17 @@ mod tests {
         });
 
         let stream_handle = StreamHandle::from_stream(client_stream);
-        let mut connection =
-            MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2))
-                .await
-                .unwrap();
+        let mut connection = MeshtasticConnection::connect_stream(
+            stream_handle,
+            Duration::from_secs(2),
+            "test".to_owned(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(connection.mac_address, MacAddress::Meshtastic(100));
 
-        let event = connection.next_message().await;
-        let MeshtasticEvent::MeshPacket(packet) = event else {
-            panic!("Expected MeshPacket");
-        };
+        let packet = connection.next_message().await.expect("Expected MeshPacket");
         assert_eq!(packet.from, 200);
         assert_eq!(packet.to, 100);
     }
@@ -206,7 +179,12 @@ mod tests {
         drop(server_stream); // Close stream immediately
 
         let stream_handle = StreamHandle::from_stream(client_stream);
-        let res = MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2)).await;
+        let res = MeshtasticConnection::connect_stream(
+            stream_handle,
+            Duration::from_secs(2),
+            "test".to_owned(),
+        )
+        .await;
         assert!(res.is_err());
     }
 
@@ -230,7 +208,12 @@ mod tests {
         });
 
         let stream_handle = StreamHandle::from_stream(client_stream);
-        let res = MeshtasticConnection::connect_stream(stream_handle, Duration::from_secs(2)).await;
+        let res = MeshtasticConnection::connect_stream(
+            stream_handle,
+            Duration::from_secs(2),
+            "test".to_owned(),
+        )
+        .await;
         assert!(res.is_err());
     }
 }

@@ -11,14 +11,12 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::DropGuard;
 
 use super::connection::MeshtasticConnection;
-pub use super::connection::MeshtasticEvent;
 use crate::si_uart::SILABS_VID;
 use crate::system_info::MacAddress;
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};
 
 /// A connection to a Meshtastic device.
 pub struct MeshtasticSerial {
-    port: String,
     connection: MeshtasticConnection,
 }
 
@@ -29,16 +27,14 @@ impl MeshtasticSerial {
         timeout: Duration,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let serial_stream = stream::build_serial_stream(port.to_owned(), None, None, None)?;
-        let connection = MeshtasticConnection::connect_stream(serial_stream, timeout).await?;
+        let connection =
+            MeshtasticConnection::connect_stream(serial_stream, timeout, port.to_owned()).await?;
         info!(
             "Connected to Meshtastic device: {} at {port}",
             connection.mac_address
         );
 
-        Ok(Self {
-            port: port.to_owned(),
-            connection,
-        })
+        Ok(Self { connection })
     }
 
     /// Returns the MAC address of the device.
@@ -52,7 +48,7 @@ impl UsbSerialTrait for MeshtasticSerial {
 
     /// Converts the Meshtastic device into a stream of `ServiceEnvelope` messages.
     fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
-        self.connection.into_stream(self.port)
+        self.connection.into_stream()
     }
 }
 
