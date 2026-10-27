@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
+use chrono::{FixedOffset, Local};
 use futures::StreamExt as _;
 use futures::future::BoxFuture;
 use futures::future::FutureExt as _;
@@ -9,10 +11,11 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 use tokio_util::sync::DropGuard;
-use yaroc_common::punch::RawPunch;
+use yaroc_common::punch::{RawPunch, SiPunch};
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
 
+use crate::state::Event;
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialTrait};
 
 pub struct TokioSerial {
@@ -92,6 +95,54 @@ impl From<RawPunch> for SportIdentMessage {
     }
 }
 
+impl SportIdentMessage {
+    /// Converts this message into an `Event` using the current time in the given timezone.
+    pub fn into_event(self, timezone: FixedOffset) -> Event {
+        match self {
+            SportIdentMessage::RawPunch(raw_punch) => {
+                let now = Local::now().with_timezone(&timezone);
+                let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
+                Event::SiPunch(punch)
+            }
+            SportIdentMessage::DeviceEvent { added, device } => {
+                Event::DeviceEvent { added, device }
+            }
+        }
+    }
+}
+
+pub struct FakePunchConfig {
+    pub interval: Duration,
+    pub card: u32,
+    pub code: u16,
+}
+
+impl Default for FakePunchConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(30),
+            card: 46283,
+            code: 47,
+        }
+    }
+}
+
+impl FakePunchConfig {
+    /// Converts this configuration into a periodic stream of fake `Event::SiPunch` events.
+    pub fn into_stream(self, timezone: FixedOffset) -> impl futures::Stream<Item = Event> + Send {
+        info!(
+            "Starting a fake SportIdent worker, sending a punch every {:?} with card {} and code {}",
+            self.interval, self.card, self.code
+        );
+        futures::stream::unfold(self, move |config| async move {
+            tokio::time::sleep(config.interval).await;
+            let now = Local::now().with_timezone(&timezone);
+            let punch = SiPunch::new_send_last_record(config.card, config.code, now, 18);
+            Some((Event::SiPunch(punch), config))
+        })
+    }
+}
+
 /// The Vendor ID for Silicon Labs, commonly used by SportIdent USB adapters.
 pub const SILABS_VID: u16 = 0x10c4;
 
@@ -102,11 +153,11 @@ pub struct SportIdentFactory {
 }
 
 impl SportIdentFactory {
-    /// Creates a new `SportIdentFactory` and a stream of incoming `SportIdentMessage`s.
-    pub fn new() -> (Self, impl futures::Stream<Item = SportIdentMessage> + Send) {
+    /// Creates a new `SportIdentFactory` and a stream of incoming SportIdent `Event`s.
+    pub fn new(timezone: FixedOffset) -> (Self, impl futures::Stream<Item = Event> + Send) {
         let (si_tx, si_rx) = unbounded_channel();
-        let stream = futures::stream::unfold(si_rx, |mut rx| async move {
-            rx.recv().await.map(|msg| (msg, rx))
+        let stream = futures::stream::unfold(si_rx, move |mut rx| async move {
+            rx.recv().await.map(|msg: SportIdentMessage| (msg.into_event(timezone), rx))
         });
         (
             Self {
@@ -245,7 +296,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sportident_factory_management() {
-        let (mut factory, _si_stream) = SportIdentFactory::new();
+        let timezone = *Local::now().fixed_offset().offset();
+        let (mut factory, _si_stream) = SportIdentFactory::new(timezone);
 
         let (_rx_tx, rx_rx) = tokio::sync::mpsc::channel(1);
         let fake_serial =

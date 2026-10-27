@@ -3,7 +3,7 @@ use futures::{
     Stream, StreamExt,
     stream::{BoxStream, SelectAll},
 };
-use log::{debug, error, info};
+use log::{debug, error};
 use meshtastic::protobufs::mesh_packet::PayloadVariant;
 use meshtastic::protobufs::{MeshPacket, ServiceEnvelope};
 use std::collections::HashSet;
@@ -11,11 +11,10 @@ use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::DropGuard;
 
-use yaroc_common::punch::SiPunch;
-
 use crate::meshtastic::serial::MeshtasticFactory;
 use crate::meshtastic::tcp;
-use crate::si_uart::{SportIdentFactory, SportIdentMessage};
+pub use crate::si_uart::FakePunchConfig;
+use crate::si_uart::SportIdentFactory;
 use crate::usb_serial_manager::{UsbSerialFactory, UsbSerialManager};
 use crate::{
     mqtt::{Message, MqttConfig, MqttReceiver},
@@ -83,25 +82,6 @@ impl MessageHandler {
             .boxed()
     }
 
-    /// Creates a stream of SportIdent `Event`s from raw punches and device events.
-    fn create_si_stream(
-        stream: impl Stream<Item = SportIdentMessage> + Send + 'static,
-        timezone: FixedOffset,
-    ) -> BoxStream<'static, Event> {
-        stream
-            .map(move |msg| match msg {
-                SportIdentMessage::RawPunch(raw_punch) => {
-                    let now = Local::now().with_timezone(&timezone);
-                    let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
-                    Event::SiPunch(punch)
-                }
-                SportIdentMessage::DeviceEvent { added, device } => {
-                    Event::DeviceEvent { added, device }
-                }
-            })
-            .boxed()
-    }
-
     /// Process ServiceEnvelope proto
     fn process_service_envelope(
         &mut self,
@@ -162,38 +142,6 @@ impl MessageHandler {
                 }
             }
         }
-    }
-}
-
-pub struct FakePunchConfig {
-    pub interval: Duration,
-    pub card: u32,
-    pub code: u16,
-}
-
-impl Default for FakePunchConfig {
-    fn default() -> Self {
-        Self {
-            interval: Duration::from_secs(30),
-            card: 46283,
-            code: 47,
-        }
-    }
-}
-
-impl FakePunchConfig {
-    /// Converts this configuration into a periodic stream of fake `Event::SiPunch` events.
-    pub fn into_stream(self, timezone: FixedOffset) -> impl Stream<Item = Event> {
-        info!(
-            "Starting a fake SportIdent worker, sending a punch every {:?} with card {} and code {}",
-            self.interval, self.card, self.code
-        );
-        futures::stream::unfold(self, move |config| async move {
-            tokio::time::sleep(config.interval).await;
-            let now = Local::now().with_timezone(&timezone);
-            let punch = SiPunch::new_send_last_record(config.card, config.code, now, 18);
-            Some((Event::SiPunch(punch), config))
-        })
     }
 }
 
@@ -316,9 +264,9 @@ impl MessageHandlerBuilder {
         }
         match self.config.sportident {
             SportIdentConfig::Passive => {
-                let (factory, stream) = SportIdentFactory::new();
+                let (factory, stream) = SportIdentFactory::new(self.timezone);
                 factories.push(Box::new(factory));
-                si_streams.push(MessageHandler::create_si_stream(stream, self.timezone));
+                si_streams.push(stream.boxed());
             }
             SportIdentConfig::Active(factory) => {
                 factories.push(factory);
@@ -354,13 +302,14 @@ impl MessageHandlerBuilder {
 mod tests {
     use super::*;
 
+    use crate::si_uart::SportIdentMessage;
     use chrono::{DateTime, Local};
     use femtopb::{Message as _, Repeated};
     use meshtastic::protobufs::PortNum;
     use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
     use tokio::time::timeout;
     use yaroc_common::proto::Punches;
-    use yaroc_common::punch::RawPunch;
+    use yaroc_common::punch::{RawPunch, SiPunch};
 
     type TestChannels = (
         MessageHandler,
@@ -389,10 +338,9 @@ mod tests {
             let mesh_streams = SelectAll::from_iter([Self::create_mesh_stream(
                 Self::rx_into_stream(mesh_packet_rx),
             )]);
-            let si_streams = SelectAll::from_iter([Self::create_si_stream(
-                Self::rx_into_stream(punch_rx),
-                timezone,
-            )]);
+            let si_streams = SelectAll::from_iter([Self::rx_into_stream(punch_rx)
+                .map(move |msg: SportIdentMessage| msg.into_event(timezone))
+                .boxed()]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_streams,
