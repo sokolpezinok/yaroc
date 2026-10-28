@@ -321,22 +321,22 @@ fn parse_timezone(tz: &str) -> std::result::Result<FixedOffset, String> {
 
     // Try parsing ISO 8601 offset format: +HH:MM or -HH:MM
     let chars: Vec<char> = tz.chars().collect();
-    if chars.len() == 6 && (chars[0] == '+' || chars[0] == '-') && chars[3] == ':' {
-        if let (Ok(hours), Ok(minutes)) = (
+    if chars.len() == 6
+        && (chars[0] == '+' || chars[0] == '-')
+        && chars[3] == ':'
+        && let (Ok(hours), Ok(minutes)) = (
             chars[1..3].iter().collect::<String>().parse::<i32>(),
             chars[4..6].iter().collect::<String>().parse::<i32>(),
-        ) {
-            if (0..24).contains(&hours) && (0..60).contains(&minutes) {
-                let offset_secs = hours * 3600 + minutes * 60;
-                return if chars[0] == '+' {
-                    FixedOffset::east_opt(offset_secs)
-                        .ok_or_else(|| "Offset out of bounds".to_string())
-                } else {
-                    FixedOffset::west_opt(offset_secs)
-                        .ok_or_else(|| "Offset out of bounds".to_string())
-                };
-            }
-        }
+        )
+        && (0..24).contains(&hours)
+        && (0..60).contains(&minutes)
+    {
+        let offset_secs = hours * 3600 + minutes * 60;
+        return if chars[0] == '+' {
+            FixedOffset::east_opt(offset_secs).ok_or_else(|| "Offset out of bounds".to_string())
+        } else {
+            FixedOffset::west_opt(offset_secs).ok_or_else(|| "Offset out of bounds".to_string())
+        };
     }
 
     // Try parsing as integer seconds offset (e.g. 7200 for UTC+2)
@@ -400,14 +400,16 @@ mod tests {
         };
 
         // Case 1: MCH CellularLog
-        let mut mch = MiniCallHome::default();
-        mch.signal_info = Some(CellSignalInfo {
-            network_type: CellNetworkType::Lte,
-            rsrp_dbm: -85,
-            snr_cb: 120, // 12.0 dB
-            cellid: None,
-        });
-        mch.batt_mv = Some(4038);
+        let mch = MiniCallHome {
+            signal_info: Some(CellSignalInfo {
+                network_type: CellNetworkType::Lte,
+                rsrp_dbm: -85,
+                snr_cb: 120, // 12.0 dB
+                cellid: None,
+            }),
+            batt_mv: Some(4038),
+            ..Default::default()
+        };
 
         let cell_log_msg = CellularLogMessage::MCH(MiniCallHomeLog {
             mini_call_home: mch,

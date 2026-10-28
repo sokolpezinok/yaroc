@@ -520,9 +520,11 @@ mod tests {
 
     #[test]
     fn test_config_serialization() {
-        let mut modem = ModemConfig::default();
-        modem.apn = HString::try_from("internet.iot").unwrap();
-        modem.rat = RAT::NbIot;
+        let mut modem = ModemConfig {
+            apn: HString::try_from("internet.iot").unwrap(),
+            rat: RAT::NbIot,
+            ..Default::default()
+        };
         modem.bands.set_ltem_bands(&[3, 8, 20]);
         modem.bands.set_nbiot_bands(&[3, 8, 20]);
 
