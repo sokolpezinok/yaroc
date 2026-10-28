@@ -1,6 +1,5 @@
 use crate::error::Error;
 use core::fmt;
-use std::borrow::ToOwned;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum MacAddress {

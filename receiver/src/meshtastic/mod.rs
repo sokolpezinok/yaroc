@@ -426,8 +426,6 @@ impl fmt::Display for MeshtasticLog {
 mod test_meshtastic {
     use super::*;
     use meshtastic::protobufs::{DeviceMetrics, EnvironmentMetrics, telemetry::Variant};
-    use std::format;
-    use std::vec::Vec;
 
     fn telemetry_service_envelope(
         from: u32,
@@ -734,9 +732,6 @@ mod test_meshtastic {
 #[cfg(test)]
 mod test_time {
     use super::*;
-
-    extern crate alloc;
-    use alloc::string::ToString;
 
     #[test]
     fn test_timestamp() {

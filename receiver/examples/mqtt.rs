@@ -1,5 +1,3 @@
-extern crate yaroc_common;
-
 use clap::Parser;
 use log::{error, info};
 use yaroc_receiver::message_handler::MessageHandlerBuilder;

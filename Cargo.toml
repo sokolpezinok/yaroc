@@ -46,6 +46,7 @@ yaroc-common = { path = "common", version = "^0.1.0" }
 yaroc-receiver = { path = "receiver", version = "^0.1.0", default-features = false }
 
 [workspace.package]
+edition = "2024"
 rust-version = "1.96.0"
 
 [profile.release]

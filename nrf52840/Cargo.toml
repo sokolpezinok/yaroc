@@ -2,7 +2,7 @@
 name = "yaroc-nrf52840"
 version = "0.1.4"
 authors = ["Lukáš Poláček <lukas@polacek.email>"]
-edition = "2024"
+edition = { workspace = true }
 rust-version = { workspace = true }
 
 [features]
