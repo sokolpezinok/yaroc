@@ -430,16 +430,14 @@ impl SiPunch {
         let position = raw.windows(HEADER.len()).position(|w| w == HEADER);
         match position {
             Some(position) => {
-                if position + LEN <= raw.len() {
+                let after = &raw[position..];
+                if let Some((chunk, rest)) = after.split_first_chunk::<LEN>() {
                     // TODO: Also check for footer
-                    Some((
-                        raw[position..position + LEN].try_into().unwrap(),
-                        &raw[position + LEN..],
-                    ))
-                } else if position + LEN == raw.len() + 1 {
+                    Some((*chunk, rest))
+                } else if after.len() == LEN - 1 {
                     // Add footer
                     let mut res: RawPunch = Default::default();
-                    res[..LEN - 1].copy_from_slice(&raw[position..]);
+                    res[..LEN - 1].copy_from_slice(after);
                     res[LEN - 1] = FOOTER;
                     Some((res, &raw[position + LEN - 1..]))
                 } else {
@@ -448,7 +446,7 @@ impl SiPunch {
             }
             None => {
                 // Check for missing first header character
-                if raw.len() >= LEN - 1 && HEADER[1..] == raw[..HEADER.len() - 1] {
+                if raw.len() >= LEN - 1 && raw.starts_with(&HEADER[1..]) {
                     let mut new_raw: RawPunch = Default::default();
                     new_raw[0] = HEADER[0];
                     new_raw[1..].copy_from_slice(&raw[..LEN - 1]);

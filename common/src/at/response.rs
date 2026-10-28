@@ -51,14 +51,7 @@ impl CommandResponse {
 
     /// Splits an AT response line into its prefix and the rest of the line containing values.
     fn split_at_response(line: &str) -> Option<(&str, &str)> {
-        if line.starts_with('+')
-            && let Some(prefix_len) = line.find(": ")
-        {
-            let prefix = &line[1..prefix_len];
-            let rest = &line[prefix_len + 2..];
-            return Some((prefix, rest));
-        }
-        None
+        line.strip_prefix('+')?.split_once(": ")
     }
 
     /// Parse values from an AT command response.
