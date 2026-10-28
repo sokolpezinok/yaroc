@@ -1,4 +1,3 @@
-use chrono::FixedOffset;
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use log::{debug, error, info};
@@ -12,8 +11,7 @@ use tokio_util::future::FutureExt;
 use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::meshtastic::serial::MeshtasticFactory;
-use crate::si_uart::SportIdentFactory;
-use crate::state::Event;
+use crate::si_uart::{SportIdentFactory, SportIdentMessage};
 
 pub trait UsbSerialTrait {
     type Output;
@@ -130,11 +128,10 @@ impl UsbSerialManager {
     /// Creates a `UsbSerialManager` and optional Meshtastic and SportIdent streams from a [`UsbSerialConfig`].
     pub fn from_config(
         config: UsbSerialConfig,
-        timezone: FixedOffset,
     ) -> (
         Option<Self>,
         Option<impl futures::Stream<Item = ServiceEnvelope> + Send>,
-        Option<impl futures::Stream<Item = Event> + Send>,
+        Option<impl futures::Stream<Item = SportIdentMessage> + Send>,
     ) {
         let mut factories: Vec<Box<dyn UsbSerialFactory>> = Vec::new();
         let mesh_stream = if config.enable_meshtastic {
@@ -146,7 +143,7 @@ impl UsbSerialManager {
         };
         let si_stream = match config.sportident {
             SportIdentConfig::Passive => {
-                let (factory, stream) = SportIdentFactory::new(timezone);
+                let (factory, stream) = SportIdentFactory::new();
                 factories.push(Box::new(factory));
                 Some(stream)
             }

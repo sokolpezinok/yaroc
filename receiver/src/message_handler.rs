@@ -12,6 +12,7 @@ use tokio_util::sync::DropGuard;
 
 use crate::meshtastic::tcp;
 pub use crate::si_uart::FakePunchConfig;
+use crate::si_uart::SportIdentMessage;
 use crate::usb_serial_manager::UsbSerialManager;
 pub use crate::usb_serial_manager::{SportIdentConfig, UsbSerialConfig};
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
     state::{Event, FleetState},
     system_info::MacAddress,
 };
+use yaroc_common::punch::SiPunch;
 
 /// Orchestrates the overall message flow.
 ///
@@ -27,7 +29,7 @@ use crate::{
 pub struct MessageHandler {
     fleet_state: FleetState,
     mesh_streams: SelectAll<BoxStream<'static, ServiceEnvelope>>,
-    si_streams: SelectAll<BoxStream<'static, Event>>,
+    si_streams: SelectAll<BoxStream<'static, SportIdentMessage>>,
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
     /// Senders for forwarding local Meshtastic messages to MQTT
@@ -66,6 +68,20 @@ impl MessageHandler {
         self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)
     }
 
+    /// Converts a `SportIdentMessage` into an `Event` using the handler's configured timezone.
+    fn process_si_message(&self, msg: SportIdentMessage) -> Event {
+        match msg {
+            SportIdentMessage::RawPunch(raw_punch) => {
+                let now = Local::now().with_timezone(&self.timezone);
+                let punch = SiPunch::from_raw(raw_punch, now.date_naive(), now.offset());
+                Event::SiPunch(punch)
+            }
+            SportIdentMessage::DeviceEvent { added, device } => {
+                Event::DeviceEvent { added, device }
+            }
+        }
+    }
+
     /// Returns the next processed event from the active event sources.
     ///
     /// This function asynchronously polls multiple message streams (MQTT background tasks, Meshtastic
@@ -95,8 +111,8 @@ impl MessageHandler {
                         return Ok(event);
                     }
                 }
-                Some(event) = self.si_streams.next(), if !self.si_streams.is_empty() => {
-                    return Ok(event);
+                Some(si_msg) = self.si_streams.next(), if !self.si_streams.is_empty() => {
+                    return Ok(self.process_si_message(si_msg));
                 }
                 node_infos = self.fleet_state.publish_node_infos() => {
                     return Ok(Event::NodeInfos(node_infos));
@@ -212,7 +228,7 @@ impl MessageHandlerBuilder {
         }
 
         let (usb_serial_manager, usb_mesh_stream, usb_si_stream) =
-            UsbSerialManager::from_config(self.config, self.timezone);
+            UsbSerialManager::from_config(self.config);
 
         let mut mesh_streams = SelectAll::new();
         if let Some(host) = self.meshtastic_tcp {
@@ -224,7 +240,7 @@ impl MessageHandlerBuilder {
 
         let mut si_streams = SelectAll::new();
         if let Some(fake_punch_config) = self.fake_punch_config {
-            si_streams.push(fake_punch_config.into_stream(self.timezone).boxed());
+            si_streams.push(fake_punch_config.into_stream().boxed());
         }
         if let Some(stream) = usb_si_stream {
             si_streams.push(stream.boxed());
@@ -252,7 +268,6 @@ impl MessageHandlerBuilder {
 mod tests {
     use super::*;
 
-    use crate::si_uart::SportIdentMessage;
     use chrono::{DateTime, Local};
     use femtopb::{Message as _, Repeated};
     use futures::Stream;
@@ -260,7 +275,7 @@ mod tests {
     use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
     use tokio::time::timeout;
     use yaroc_common::proto::Punches;
-    use yaroc_common::punch::{RawPunch, SiPunch};
+    use yaroc_common::punch::RawPunch;
 
     type TestChannels = (
         MessageHandler,
@@ -285,11 +300,8 @@ mod tests {
             let (mqtt_tx, mqtt_rx) = unbounded_channel();
             let mut mqtt_streams = SelectAll::new();
             mqtt_streams.push(Self::rx_into_stream(mqtt_rx).boxed());
-            let timezone = *Local::now().fixed_offset().offset();
             let mesh_streams = SelectAll::from_iter([Self::rx_into_stream(mesh_packet_rx).boxed()]);
-            let si_streams = SelectAll::from_iter([Self::rx_into_stream(punch_rx)
-                .map(move |msg: SportIdentMessage| msg.into_event(timezone))
-                .boxed()]);
+            let si_streams = SelectAll::from_iter([Self::rx_into_stream(punch_rx).boxed()]);
             let handler = Self {
                 fleet_state: FleetState::new(vec![], node_infos_interval, Duration::from_secs(600)),
                 mesh_streams,
@@ -298,7 +310,7 @@ mod tests {
                 mesh_to_mqtt_txs: Vec::new(),
                 usb_serial_manager: None,
                 _usb_drop_guard: None,
-                timezone,
+                timezone: *Local::now().fixed_offset().offset(),
                 local_macs: HashSet::new(),
             };
             (handler, punch_tx, mesh_packet_tx, mqtt_tx)
