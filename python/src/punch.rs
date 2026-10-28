@@ -9,7 +9,7 @@ use yaroc_receiver::meshtastic::RssiSnr;
 use crate::status::HostInfo;
 
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass(module = "yaroc.rs", get_all, from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, get_all, from_py_object)]
 pub struct SiPunch {
     pub card: u32,
     pub code: u16,
@@ -44,7 +44,7 @@ impl SiPunch {
     }
 }
 
-#[pyclass(module = "yaroc.rs", from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, str, from_py_object)]
 #[derive(Clone)]
 pub struct SiPunchLog {
     #[pyo3(get)]
@@ -81,10 +81,6 @@ impl SiPunchLog {
 
     pub fn is_meshtastic(&self) -> bool {
         self.host_info.mac_address().is_meshtastic()
-    }
-
-    pub fn __repr__(&self) -> String {
-        format!("{}", self)
     }
 }
 

@@ -20,7 +20,7 @@ use crate::punch::{SiPunch, SiPunchLog};
 use crate::serial_client::PyUsbSerialFactory;
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
-#[pyclass(module = "yaroc.rs", from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, from_py_object)]
 #[derive(Clone)]
 pub struct MeshtasticPunches {
     #[pyo3(get)]
@@ -121,7 +121,7 @@ impl From<MqttConfig> for MqttConfigRs {
 /// Central handler for aggregating and dispatching messages.
 ///
 /// Handles communication between various sources (Serial, Meshtastic) and sinks (MQTT).
-#[pyclass(module = "yaroc.rs")]
+#[pyclass(module = "yaroc.rs", frozen)]
 pub struct MessageHandler {
     inner: Arc<Mutex<MessageHandlerRs>>,
 }

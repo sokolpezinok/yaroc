@@ -10,7 +10,7 @@ use yaroc_receiver::state::NodeInfo as NodeInfoRs;
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass(module = "yaroc.rs", from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, skip_from_py_object)]
 pub struct HostInfo {
     inner: HostInfoRs,
 }
@@ -52,7 +52,7 @@ impl From<HostInfo> for HostInfoRs {
     }
 }
 
-#[pyclass(module = "yaroc.rs", from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, str = "{inner}", from_py_object)]
 #[derive(Clone)]
 pub struct CellularLog {
     inner: CellularLogMessageRs,
@@ -66,10 +66,6 @@ impl From<CellularLogMessageRs> for CellularLog {
 
 #[pymethods]
 impl CellularLog {
-    pub fn __repr__(&self) -> String {
-        format!("{}", self.inner)
-    }
-
     pub fn to_proto(&self) -> Option<Vec<u8>> {
         self.inner.to_proto()
     }
@@ -79,7 +75,7 @@ impl CellularLog {
     }
 }
 
-#[pyclass(module = "yaroc.rs", from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, str = "{inner}", from_py_object)]
 #[derive(Clone)]
 pub struct MeshtasticLog {
     inner: MeshtasticLogRs,
@@ -88,10 +84,6 @@ pub struct MeshtasticLog {
 
 #[pymethods]
 impl MeshtasticLog {
-    pub fn __repr__(&self) -> String {
-        format!("{}", self.inner)
-    }
-
     #[getter]
     pub fn service_envelope(&self) -> Vec<u8> {
         self.service_envelope.encode_to_vec()
@@ -117,7 +109,7 @@ impl MeshtasticLog {
     }
 }
 
-#[pyclass(module = "yaroc.rs", get_all, from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, get_all, from_py_object)]
 #[derive(Clone)]
 pub struct NodeInfo {
     pub name: String,

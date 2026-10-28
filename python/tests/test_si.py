@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime
 
-from yaroc.rs import SiPunch
+from yaroc.rs import HostInfo, SiPunch, SiPunchLog
 
 
 class TestSportident(unittest.TestCase):
@@ -38,3 +38,18 @@ class TestSportident(unittest.TestCase):
         self.assertEqual(punch.time.minute, 29)
         self.assertEqual(punch.time.second, 14)
         self.assertEqual(punch.time.microsecond, 722656)
+
+    def test_punch_log(self):
+        now = datetime(2023, 11, 26, 18, 0)
+        punch = SiPunch.from_raw(
+            b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03", now
+        )
+        self.assertIsNotNone(punch)
+        host_info = HostInfo.new("ROC1", "123456789012")
+        log = SiPunchLog.new(punch, host_info, punch.time)
+        self.assertIn("ROC1 1715004 punched 47 at", str(log))
+        self.assertIn("latency 0.00s", str(log))
+        with self.assertRaises(AttributeError):
+            punch.card = 123
+        with self.assertRaises(AttributeError):
+            host_info.mac_address = "foo"
