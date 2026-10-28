@@ -49,7 +49,7 @@ impl MessageHandler {
     }
 
     /// Process ServiceEnvelope proto
-    fn process_service_envelope(
+    async fn process_service_envelope(
         &mut self,
         service_envelope: ServiceEnvelope,
     ) -> crate::Result<Option<Event>> {
@@ -107,7 +107,7 @@ impl MessageHandler {
                     }
                 }
                 Some(service_envelope) = self.mesh_streams.next(), if !self.mesh_streams.is_empty() => {
-                    if let Some(event) = self.process_service_envelope(service_envelope)? {
+                    if let Some(event) = self.process_service_envelope(service_envelope).await? {
                         return Ok(event);
                     }
                 }
