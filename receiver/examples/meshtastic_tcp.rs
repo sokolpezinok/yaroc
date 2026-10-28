@@ -24,14 +24,14 @@ async fn main() {
     let args = Args::parse();
     let mut dns = Vec::new();
     for entry in &args.dns {
-        if let Some((name, mac)) = entry.split_once(',') {
-            dns.push((
-                name.to_owned(),
-                MacAddress::try_from(mac).expect("MAC address in the wrong format"),
-            ));
-        } else {
+        let Some((name, mac)) = entry.split_once(',') else {
             error!("DNS record in the wrong format, it should be <name>,<MAC_address>");
-        }
+            continue;
+        };
+        dns.push((
+            name.to_owned(),
+            MacAddress::try_from(mac).expect("MAC address in the wrong format"),
+        ));
     }
 
     let mut msg_handler = MessageHandlerBuilder::new().with_dns(dns).with_tcp(args.host).build();

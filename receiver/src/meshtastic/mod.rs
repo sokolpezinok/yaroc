@@ -137,10 +137,10 @@ impl MeshtasticLog {
         recv_position: Option<PositionName>,
     ) -> crate::Result<Option<Self>> {
         let service_envelope = ServiceEnvelope::decode(payload)?;
-        match service_envelope.packet {
-            Some(packet) => Self::from_mesh_packet(packet, now, dns, recv_position),
-            None => Ok(None),
-        }
+        let Some(packet) = service_envelope.packet else {
+            return Ok(None);
+        };
+        Self::from_mesh_packet(packet, now, dns, recv_position)
     }
 
     /// Parse MeshtasticLog from a MeshPacket proto.

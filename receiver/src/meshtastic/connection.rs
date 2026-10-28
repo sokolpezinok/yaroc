@@ -87,18 +87,17 @@ impl MeshtasticConnection {
     /// Converts this connection into a stream of `ServiceEnvelope` messages.
     pub fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
         futures::stream::unfold(self, |mut conn| async move {
-            if let Some(mesh_packet) = conn.next_message().await {
-                let service_envelope = ServiceEnvelope {
-                    packet: Some(mesh_packet),
-                    channel_id: conn.channels.first().cloned().unwrap_or_default(),
-                    gateway_id: format!("!{}", conn.mac_address),
-                };
-                Some((service_envelope, conn))
-            } else {
+            let Some(mesh_packet) = conn.next_message().await else {
                 warn!("Disconnected from Meshtastic device: {}", conn.device_name);
                 let _ = conn.stream_api.disconnect().await;
-                None
-            }
+                return None;
+            };
+            let service_envelope = ServiceEnvelope {
+                packet: Some(mesh_packet),
+                channel_id: conn.channels.first().cloned().unwrap_or_default(),
+                gateway_id: format!("!{}", conn.mac_address),
+            };
+            Some((service_envelope, conn))
         })
     }
 }

@@ -440,14 +440,14 @@ impl FleetState {
         let mut result = Vec::with_capacity(punches.punches.len());
         for punch in punches.punches.into_iter().flatten() {
             let si_punch_log = SiPunchLog::from_bytes(punch, host_info.clone(), now);
-            if let Some((si_punch_log, rest)) = si_punch_log {
-                status.punch(&si_punch_log.punch);
-                result.push(si_punch_log);
-                if !rest.is_empty() {
-                    warn!("Residual bytes after parsing punch: {rest:?}");
-                }
-            } else {
+            let Some((si_punch_log, rest)) = si_punch_log else {
                 error!("Wrong punch format: {:?}", punch);
+                continue;
+            };
+            status.punch(&si_punch_log.punch);
+            result.push(si_punch_log);
+            if !rest.is_empty() {
+                warn!("Residual bytes after parsing punch: {rest:?}");
             }
         }
 
@@ -518,26 +518,23 @@ impl FleetState {
         log_message: &Option<MeshtasticLog>,
         now: DateTime<FixedOffset>,
     ) {
-        match log_message {
-            Some(log_message) => {
-                let status = self.msh_node_status(&log_message.host_info);
-                match log_message.metrics {
-                    MshMetrics::Battery { percent, .. } => {
-                        status.update_battery(percent as u8, now);
-                    }
-                    MshMetrics::Position(position) => status.position = Some(position),
-                    // TODO: handle temperature
-                    _ => {}
-                }
-                if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
-                    status.update_rssi_snr(rssi_snr.clone(), now);
-                } else {
-                    status.clear_rssi_snr(now);
-                }
+        let Some(log_message) = log_message else {
+            trace!("Ignored meshtastic proto");
+            return;
+        };
+        let status = self.msh_node_status(&log_message.host_info);
+        match log_message.metrics {
+            MshMetrics::Battery { percent, .. } => {
+                status.update_battery(percent as u8, now);
             }
-            _ => {
-                trace!("Ignored meshtastic proto");
-            }
+            MshMetrics::Position(position) => status.position = Some(position),
+            // TODO: handle temperature
+            _ => {}
+        }
+        if let Some(rssi_snr) = log_message.rssi_snr.as_ref() {
+            status.update_rssi_snr(rssi_snr.clone(), now);
+        } else {
+            status.clear_rssi_snr(now);
         }
     }
 

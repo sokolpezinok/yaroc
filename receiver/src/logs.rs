@@ -98,25 +98,28 @@ impl CellularLogMessage {
         host_info: HostInfo,
         now: DateTime<FixedOffset>,
     ) -> crate::Result<Self> {
-        match status.msg {
-            Some(Msg::Disconnected(Disconnected { client_name, .. })) => {
+        let Some(msg) = status.msg else {
+            return Err(Error::ParseError.into());
+        };
+        match msg {
+            Msg::Disconnected(Disconnected { client_name, .. }) => {
                 Ok(CellularLogMessage::Disconnected {
                     host_info,
                     client: client_name.to_owned(),
                 })
             }
-            Some(Msg::MiniCallHome(mch)) => {
+            Msg::MiniCallHome(mch) => {
                 let log_message = MiniCallHomeLog::new(host_info, now, mch)?;
                 Ok(CellularLogMessage::MCH(log_message))
             }
-            Some(Msg::DevEvent(DeviceEvent { port, r#type, .. })) => {
-                if let EnumValue::Unknown(_) = r#type {
+            Msg::DevEvent(DeviceEvent { port, r#type, .. }) => {
+                let EnumValue::Known(event_type) = r#type else {
                     return Err(Error::ParseError.into());
-                }
+                };
                 Ok(CellularLogMessage::DeviceEvent {
                     host_info,
                     device_port: port.to_owned(),
-                    added: r#type == EnumValue::Known(EventType::Added),
+                    added: event_type == EventType::Added,
                 })
             }
             _ => Err(Error::ParseError.into()),

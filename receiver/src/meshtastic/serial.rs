@@ -92,15 +92,14 @@ impl MeshtasticFactory {
 
     /// Inner logic for device detection that can be unit tested without a `nusb::DeviceInfo`.
     fn detect_device_inner(dev_serial: Option<&str>, port: &serialport::SerialPortInfo) -> bool {
-        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            let sn_matches = dev_serial == usb_info.serial_number.as_deref();
-            let is_sportident = usb_info.vid == SILABS_VID;
-            sn_matches
-                && !is_sportident
-                && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
-        } else {
-            false
-        }
+        let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type else {
+            return false;
+        };
+        let sn_matches = dev_serial == usb_info.serial_number.as_deref();
+        let is_sportident = usb_info.vid == SILABS_VID;
+        sn_matches
+            && !is_sportident
+            && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
     }
 }
 

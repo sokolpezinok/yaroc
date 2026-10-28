@@ -165,11 +165,10 @@ impl SportIdentFactory {
         dev_serial: Option<&str>,
         port: &serialport::SerialPortInfo,
     ) -> bool {
-        if let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type {
-            dev_serial == usb_info.serial_number.as_deref() && usb_info.vid == SILABS_VID
-        } else {
-            false
-        }
+        let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type else {
+            return false;
+        };
+        dev_serial == usb_info.serial_number.as_deref() && usb_info.vid == SILABS_VID
     }
 
     /// Spawns the serial reading background loop for the given SportIdent serial device and
@@ -214,15 +213,14 @@ impl UsbSerialFactory for SportIdentFactory {
     /// Removes a SportIdent serial device, cancelling its background task via its drop guard and
     /// sending a device-removed event.
     fn remove_device(&mut self, device_node: &str) -> bool {
-        if let Some((_guard, port)) = self.devices.remove(device_node) {
-            let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
-                added: false,
-                device: port,
-            });
-            true
-        } else {
-            false
-        }
+        let Some((_guard, port)) = self.devices.remove(device_node) else {
+            return false;
+        };
+        let _ = self.si_tx.send(SportIdentMessage::DeviceEvent {
+            added: false,
+            device: port,
+        });
+        true
     }
 
     /// Checks if a connection background task is currently running for the given device node.
