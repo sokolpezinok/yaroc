@@ -53,3 +53,16 @@ class TestSportident(unittest.TestCase):
             punch.card = 123
         with self.assertRaises(AttributeError):
             host_info.mac_address = "foo"
+
+    def test_equality(self):
+        now = datetime(2023, 11, 26, 18, 0)
+        raw = b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03"
+        punch1 = SiPunch.from_raw(raw, now)
+        punch2 = SiPunch.from_raw(raw, now)
+        self.assertEqual(punch1, punch2)
+
+        h1 = HostInfo.new("ROC1", "123456789012")
+        h2 = HostInfo.new("ROC1", "123456789012")
+        h3 = HostInfo.new("ROC2", "123456789012")
+        self.assertEqual(h1, h2)
+        self.assertNotEqual(h1, h3)

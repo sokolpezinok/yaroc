@@ -10,7 +10,7 @@ use yaroc_receiver::state::NodeInfo as NodeInfoRs;
 use yaroc_receiver::system_info::{HostInfo as HostInfoRs, MacAddress};
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[pyclass(module = "yaroc.rs", frozen, skip_from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, eq, skip_from_py_object)]
 pub struct HostInfo {
     inner: HostInfoRs,
 }

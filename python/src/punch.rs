@@ -9,7 +9,7 @@ use yaroc_receiver::meshtastic::RssiSnr;
 use crate::status::HostInfo;
 
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass(module = "yaroc.rs", frozen, get_all, from_py_object)]
+#[pyclass(module = "yaroc.rs", frozen, eq, get_all, from_py_object)]
 pub struct SiPunch {
     pub card: u32,
     pub code: u16,

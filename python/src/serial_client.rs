@@ -318,7 +318,8 @@ impl SerialClient {
     /// # Returns
     /// A `PyResult` containing a `SerialClient` instance.
     #[staticmethod]
-    pub async fn create(computer_port: String, retry: Option<bool>) -> PyResult<SerialClient> {
+    #[pyo3(signature = (computer_port, retry = false))]
+    pub async fn create(computer_port: String, retry: bool) -> PyResult<SerialClient> {
         crate::python::run_on_tokio(async move {
             let builder = tokio_serial::new(&computer_port, BAUD_RATE);
             let computer_serial = builder.open_native_async().map_err(|e| {
@@ -329,7 +330,7 @@ impl SerialClient {
             let rx = BufReader::new(rx);
             let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
 
-            let retry_times = if retry.unwrap_or_default() {
+            let retry_times = if retry {
                 vec![
                     Duration::ZERO,
                     Duration::from_mins(1),
