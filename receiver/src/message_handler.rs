@@ -7,7 +7,6 @@ use log::error;
 use meshtastic::protobufs::ServiceEnvelope;
 use std::collections::HashSet;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::DropGuard;
 
 use crate::meshtastic::tcp;
@@ -32,8 +31,8 @@ pub struct MessageHandler {
     si_streams: SelectAll<BoxStream<'static, SportIdentMessage>>,
     /// Multiplexed streams of inbound MQTT messages
     mqtt_streams: SelectAll<BoxStream<'static, crate::Result<Message>>>,
-    /// Senders for forwarding local Meshtastic messages to MQTT
-    mesh_to_mqtt_txs: Vec<UnboundedSender<ServiceEnvelope>>,
+    /// MQTT receivers for forwarding local Meshtastic messages to MQTT
+    mqtt_receivers: Vec<MqttReceiver>,
     usb_serial_manager: Option<UsbSerialManager>,
     _usb_drop_guard: Option<DropGuard>,
     timezone: FixedOffset,
@@ -60,9 +59,10 @@ impl MessageHandler {
             .unwrap_or(&service_envelope.gateway_id);
         let mac_address = MacAddress::try_from(gateway_id)?;
         self.local_macs.insert(mac_address);
-        for mesh_to_mqtt_tx in &self.mesh_to_mqtt_txs {
-            let _ = mesh_to_mqtt_tx
-                .send(service_envelope.clone())
+        for mqtt_receiver in &self.mqtt_receivers {
+            let _ = mqtt_receiver
+                .publish_meshtastic_service_envelope(service_envelope.clone())
+                .await
                 .inspect_err(|e| error!("Error while forwarding meshtastic packets: {}", e));
         }
         self.fleet_state.process_mesh_packet(service_envelope, mac_address, now)
@@ -220,11 +220,11 @@ impl MessageHandlerBuilder {
     pub fn build(self) -> MessageHandler {
         let macs = self.dns.iter().map(|(_, mac)| mac);
         let mut mqtt_streams = SelectAll::new();
-        let mut mesh_to_mqtt_txs = Vec::with_capacity(self.mqtt_configs.len());
+        let mut mqtt_receivers = Vec::with_capacity(self.mqtt_configs.len());
         for config in self.mqtt_configs {
-            let receiver = MqttReceiver::new(config, macs.clone());
-            mesh_to_mqtt_txs.push(receiver.mesh_tx());
-            mqtt_streams.push(receiver.into_stream());
+            let (receiver, stream) = MqttReceiver::new(config, macs.clone());
+            mqtt_receivers.push(receiver);
+            mqtt_streams.push(stream.boxed());
         }
 
         let (usb_serial_manager, usb_mesh_stream, usb_si_stream) =
@@ -255,7 +255,7 @@ impl MessageHandlerBuilder {
             mesh_streams,
             si_streams,
             mqtt_streams,
-            mesh_to_mqtt_txs,
+            mqtt_receivers,
             usb_serial_manager,
             _usb_drop_guard: None,
             timezone: self.timezone,
@@ -272,7 +272,7 @@ mod tests {
     use femtopb::{Message as _, Repeated};
     use futures::Stream;
     use meshtastic::protobufs::PortNum;
-    use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+    use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
     use tokio::time::timeout;
     use yaroc_common::proto::Punches;
     use yaroc_common::punch::RawPunch;
@@ -307,7 +307,7 @@ mod tests {
                 mesh_streams,
                 si_streams,
                 mqtt_streams,
-                mesh_to_mqtt_txs: Vec::new(),
+                mqtt_receivers: Vec::new(),
                 usb_serial_manager: None,
                 _usb_drop_guard: None,
                 timezone: *Local::now().fixed_offset().offset(),

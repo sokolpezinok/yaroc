@@ -2,12 +2,11 @@ use std::time::Duration;
 
 use chrono::{DateTime, Local};
 use femtopb::Message as _;
-use futures::{StreamExt, stream::BoxStream};
+use futures::Stream;
 use log::{error, info, warn};
 use meshtastic::protobufs::ServiceEnvelope;
 use prost::Message as _;
-use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, Publish, QoS};
 use uuid::Uuid;
 
 use yaroc_common::{
@@ -78,24 +77,26 @@ impl Message {
 }
 
 /// An MQTT receiver that handles subscriptions and listens for incoming messages.
+#[derive(Clone)]
 pub struct MqttReceiver {
     client: AsyncClient,
-    topics: Vec<String>,
-    event_loop: EventLoop,
+    pub topics: Vec<String>,
     url: String,
-    /// Meshtastic packet receiver
-    mesh_rx: UnboundedReceiver<ServiceEnvelope>,
-    /// Meshtastic packet sender
-    mesh_tx: UnboundedSender<ServiceEnvelope>,
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
     test_now: Option<DateTime<Local>>,
 }
 
 impl MqttReceiver {
-    /// Creates a new `MqttReceiver` instance by connecting to the broker specified in `config`
-    /// and subscribing to topics corresponding to the provided MAC addresses.
-    pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(config: MqttConfig, macs: I) -> Self {
+    /// Creates a new `MqttReceiver` instance and an incoming message stream by connecting to the
+    /// broker specified in `config` and subscribing to topics corresponding to the provided MAC addresses.
+    pub fn new<'a, I: Iterator<Item = &'a MacAddress>>(
+        config: MqttConfig,
+        macs: I,
+    ) -> (
+        Self,
+        impl Stream<Item = crate::Result<Message>> + Send + 'static,
+    ) {
         let client_id = format!("yaroc-{}", Uuid::new_v4());
         let mut mqttoptions = MqttOptions::new(client_id, &config.url, config.port);
         mqttoptions.set_keep_alive(config.keep_alive);
@@ -118,17 +119,33 @@ impl MqttReceiver {
             }
         }
 
-        let (mesh_tx, mesh_rx) = unbounded_channel::<ServiceEnvelope>();
-        Self {
+        let receiver = Self {
             url: config.url,
             client,
-            event_loop,
             topics,
-            mesh_rx,
-            mesh_tx,
             #[cfg(test)]
             test_now: None,
-        }
+        };
+
+        let stream_receiver = receiver.clone();
+        let stream = futures::stream::unfold(
+            (event_loop, stream_receiver),
+            |(mut event_loop, mut receiver)| async move {
+                loop {
+                    let Ok(event) = event_loop.poll().await else {
+                        error!("MQTT Connection error");
+                        // TODO: consider also exponential backoff up to the "keep alive" value.
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        continue;
+                    };
+                    if let Some(msg) = receiver.process_mqtt_event(event).await {
+                        return Some((msg, (event_loop, receiver)));
+                    }
+                }
+            },
+        );
+
+        (receiver, stream)
     }
 
     /// Extracts the cellular MAC address from the topic name.
@@ -234,13 +251,6 @@ impl MqttReceiver {
         &self,
         service_envelope: ServiceEnvelope,
     ) -> crate::Result<()> {
-        Self::publish_envelope(&self.client, service_envelope).await
-    }
-
-    async fn publish_envelope(
-        client: &AsyncClient,
-        service_envelope: ServiceEnvelope,
-    ) -> crate::Result<()> {
         let channel = if let Some(packet) = &service_envelope.packet
             && MeshtasticLog::get_mesh_packet_portnum(packet).is_ok_and(|p| p == SERIAL_APP)
         {
@@ -253,49 +263,13 @@ impl MqttReceiver {
             service_envelope.gateway_id
         );
         let payload = service_envelope.encode_to_vec();
-        client.publish(topic, QoS::AtMostOnce, false, payload).await?;
+        self.client.publish(topic, QoS::AtMostOnce, false, payload).await?;
         Ok(())
     }
 
-    /// Retrieves the next incoming MQTT message by polling the event loop.
-    /// Reconnects and resubscribes automatically upon connection errors.
-    pub async fn next_message(&mut self) -> crate::Result<Message> {
-        loop {
-            tokio::select! {
-                event = self.event_loop.poll() => {
-                    let Ok(event) = event else {
-                        error!("MQTT Connection error");
-                        // TODO: consider also exponential backoff up to the "keep alive" value.
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                        continue;
-                    };
-                    if let Some(msg) = self.process_mqtt_event(event).await {
-                        return msg;
-                    }
-                }
-                Some(service_envelope) = self.mesh_rx.recv() => {
-                    let _ = Self::publish_envelope(&self.client, service_envelope)
-                        .await
-                        .inspect_err(|e| {
-                            error!("Error while forwarding a meshtastic packet to MQTT: {e}")
-                        });
-                }
-            }
-        }
-    }
-
-    /// Converts this `MqttReceiver` into a stream of incoming MQTT messages.
-    pub fn into_stream(self) -> BoxStream<'static, crate::Result<Message>> {
-        futures::stream::unfold(self, |mut receiver| async move {
-            let msg = receiver.next_message().await;
-            Some((msg, receiver))
-        })
-        .boxed()
-    }
-
-    /// Returns a clone of a meshtastic event sender.
-    pub fn mesh_tx(&self) -> UnboundedSender<ServiceEnvelope> {
-        self.mesh_tx.clone()
+    /// Returns the URL of the MQTT broker this receiver is connected to.
+    pub fn url(&self) -> &str {
+        &self.url
     }
 }
 
@@ -313,7 +287,7 @@ mod test {
             meshtastic_channel: Some("cha".to_owned()),
             ..Default::default()
         };
-        let receiver = MqttReceiver::new(config, macs.iter());
+        let (receiver, _stream) = MqttReceiver::new(config, macs.iter());
         assert_eq!(
             receiver.topics,
             vec![
@@ -330,7 +304,7 @@ mod test {
     fn test_new_without_msh() {
         let macs = [MacAddress::Meshtastic(0x12345678)];
         let config = MqttConfig::default();
-        let receiver = MqttReceiver::new(config, macs.iter());
+        let (receiver, _stream) = MqttReceiver::new(config, macs.iter());
         assert_eq!(receiver.topics, vec!["yar/2/e/serial/!12345678"]);
     }
 
@@ -404,7 +378,7 @@ mod test {
     #[tokio::test]
     async fn test_process_mqtt_event_publish() {
         let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let mut receiver = MqttReceiver::new(Default::default(), macs.iter());
+        let (mut receiver, _stream) = MqttReceiver::new(Default::default(), macs.iter());
         let exact_time = Local::now();
         receiver.test_now = Some(exact_time);
 
@@ -427,7 +401,7 @@ mod test {
     #[tokio::test]
     async fn test_process_mqtt_event_disconnect_and_ignored() {
         let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let mut receiver = MqttReceiver::new(Default::default(), macs.iter());
+        let (mut receiver, _stream) = MqttReceiver::new(Default::default(), macs.iter());
 
         let disconnect_event = Event::Incoming(Packet::Disconnect);
         assert!(receiver.process_mqtt_event(disconnect_event).await.is_none());
@@ -435,10 +409,9 @@ mod test {
         let ping_event = Event::Incoming(Packet::PingResp);
         assert!(receiver.process_mqtt_event(ping_event).await.is_none());
     }
-
     #[tokio::test]
     async fn test_publish_meshtastic_service_envelope() {
-        let receiver = MqttReceiver::new(Default::default(), [].iter());
+        let (receiver, _stream) = MqttReceiver::new(Default::default(), [].iter());
         let envelope = ServiceEnvelope {
             packet: None,
             channel_id: "test_chan".to_string(),
