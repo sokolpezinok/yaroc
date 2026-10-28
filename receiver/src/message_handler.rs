@@ -40,13 +40,12 @@ pub struct MessageHandler {
 }
 
 impl MessageHandler {
-    /// Spawn async background tasks when Self::next_event() is ran for the first time.
+    /// Spawns background tasks for USB serial device management if not already started.
     pub fn init(&mut self) {
         if let Some(usb_manager) = self.usb_serial_manager.take() {
             self._usb_drop_guard = Some(usb_manager.spawn());
         }
     }
-
     /// Process ServiceEnvelope proto
     async fn process_service_envelope(
         &mut self,
@@ -264,6 +263,19 @@ impl MessageHandlerBuilder {
     }
 }
 
+impl IntoFuture for MessageHandlerBuilder {
+    type Output = MessageHandler;
+    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = MessageHandler> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            let mut handler = self.build();
+            handler.init();
+            handler
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,7 +353,7 @@ mod tests {
     async fn test_message_handler_fake_punch() {
         let mut handler = MessageHandlerBuilder::new()
             .with_fake_punch(Duration::from_millis(10), None, None)
-            .build();
+            .await;
 
         let event = timeout(Duration::from_secs(1), handler.next_event())
             .await
@@ -361,7 +373,7 @@ mod tests {
     async fn test_message_handler_fake_punch_custom() {
         let mut handler = MessageHandlerBuilder::new()
             .with_fake_punch(Duration::from_millis(10), Some(12345), Some(56))
-            .build();
+            .await;
 
         let event = timeout(Duration::from_secs(1), handler.next_event())
             .await

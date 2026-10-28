@@ -49,7 +49,7 @@ async fn main() {
     let mut handler = MessageHandlerBuilder::new()
         .with_dns(dns)
         .with_mqtt_configs(vec![mqtt_config, mqtt_config2])
-        .build();
+        .await;
 
     info!("Everything initialized, starting the loop");
     loop {

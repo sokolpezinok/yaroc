@@ -34,7 +34,7 @@ async fn main() {
         ));
     }
 
-    let mut msg_handler = MessageHandlerBuilder::new().with_dns(dns).with_tcp(args.host).build();
+    let mut msg_handler = MessageHandlerBuilder::new().with_dns(dns).with_tcp(args.host).await;
 
     info!("Everything initialized, listening for Meshtastic TCP events...");
     loop {

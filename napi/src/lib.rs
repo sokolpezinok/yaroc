@@ -230,7 +230,7 @@ impl MqttClient {
                 }
             }
 
-            let mut handler = builder.build();
+            let mut handler = builder.await;
             let init_status = serde_json::json!({
                 "status": "initialized"
             });

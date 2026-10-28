@@ -42,7 +42,7 @@ async fn main() {
     let mut msg_handler = MessageHandlerBuilder::new()
         .with_dns(dns)
         .with_usb_serial_config(usb_serial_config)
-        .build();
+        .await;
 
     info!(
         "Everything initialized, listening for any connected Meshtastic or SportIdent devices..."

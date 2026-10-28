@@ -309,7 +309,7 @@ impl MessageHandlerBuilder {
                 builder.with_fake_punch(config.interval, Some(config.card), Some(config.code));
         }
 
-        let message_handler_rs = builder.build();
+        let message_handler_rs = crate::python::get_tokio_rt().block_on(builder.into_future());
         let inner = Arc::new(Mutex::new(message_handler_rs));
         Ok(MessageHandler { inner })
     }
