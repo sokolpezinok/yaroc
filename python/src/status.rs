@@ -124,8 +124,8 @@ pub struct NodeInfo {
     pub signal_strength: String,
     pub battery_percentage: Option<u8>,
     codes: Vec<u16>,
-    last_update: Option<DateTime<FixedOffset>>,
-    pub last_punch: Option<DateTime<FixedOffset>>,
+    last_update: Option<DateTime<Local>>,
+    pub last_punch: Option<DateTime<Local>>,
 }
 
 impl From<NodeInfoRs> for NodeInfo {
@@ -143,8 +143,8 @@ impl From<NodeInfoRs> for NodeInfo {
             signal_strength,
             battery_percentage: node_info.battery_percentage,
             codes: node_info.codes,
-            last_update: node_info.last_update,
-            last_punch: node_info.last_punch,
+            last_update: node_info.last_update.map(Into::into),
+            last_punch: node_info.last_punch.map(Into::into),
         }
     }
 }

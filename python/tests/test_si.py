@@ -6,7 +6,7 @@ from yaroc.rs import SiPunch
 
 class TestSportident(unittest.TestCase):
     def test_new(self):
-        t = datetime(2023, 11, 23, 10, 0, 3, 792969).astimezone()
+        t = datetime(2023, 11, 23, 10, 0, 3, 792969)
         punch = SiPunch.new(1715004, 47, t, 2)
         self.assertEqual(
             bytes(punch.raw),
@@ -15,7 +15,7 @@ class TestSportident(unittest.TestCase):
 
     def test_decode(self):
         bsf8_msg = b"\xff\x02\xd3\r\x00\x2f\x00\x1a\x2b\x3c\x18\x8c\xa3\xcb\x02\tPZ\x86\x03"
-        now = datetime.now().astimezone()
+        now = datetime(2023, 11, 26, 18, 0)
         punch = SiPunch.from_raw(bsf8_msg, now)
         self.assertEqual(punch.card, 1715004)
         self.assertEqual(punch.code, 47)

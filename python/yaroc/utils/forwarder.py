@@ -56,14 +56,15 @@ class Forwarder:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_punch(self, punch: SiPunch):
-        now = datetime.datetime.now().astimezone()
-        latency = (now - punch.time).total_seconds()
+        now = datetime.datetime.now()
+        punch_log = SiPunchLog.new(punch, self.host_info, now)
+        latency = punch_log.latency.total_seconds()
         logging.info(
             f"{punch.card} punched {punch.code} at {punch.time:%H:%M:%S.%f}, latency "
             f"{latency:3.2f}s"
         )
         self._codes.add(punch.code)
-        await self.client_group.send_punch(SiPunchLog.new(punch, self.host_info, now))
+        await self.client_group.send_punch(punch_log)
 
     async def _handle_cellular_log(self, log: CellularLog):
         logging.info(log)

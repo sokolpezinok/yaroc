@@ -13,7 +13,7 @@ use crate::status::HostInfo;
 pub struct SiPunch {
     pub card: u32,
     pub code: u16,
-    pub time: DateTime<FixedOffset>,
+    pub time: DateTime<Local>,
     mode: u8,
     pub raw: RawPunch,
 }
@@ -23,7 +23,7 @@ impl From<SiPunchRs> for SiPunch {
         Self {
             card: punch.card,
             code: punch.code,
-            time: punch.time,
+            time: punch.time.into(),
             mode: punch.mode,
             raw: punch.raw,
         }
@@ -33,12 +33,12 @@ impl From<SiPunchRs> for SiPunch {
 #[pymethods]
 impl SiPunch {
     #[staticmethod]
-    pub fn new(card: u32, code: u16, time: DateTime<FixedOffset>, mode: u8) -> Self {
-        SiPunchRs::new_send_last_record(card, code, time, mode).into()
+    pub fn new(card: u32, code: u16, time: DateTime<Local>, mode: u8) -> Self {
+        SiPunchRs::new_send_last_record(card, code, time.into(), mode).into()
     }
 
     #[staticmethod]
-    pub fn from_raw(raw: &[u8], now: DateTime<FixedOffset>) -> Option<Self> {
+    pub fn from_raw(raw: &[u8], now: DateTime<Local>) -> Option<Self> {
         let (punch, _rest) = SiPunchRs::from_bytes(raw, now.date_naive(), now.offset())?;
         Some(punch.into())
     }
@@ -70,7 +70,7 @@ impl From<SiPunchLogRs> for SiPunchLog {
 #[pymethods]
 impl SiPunchLog {
     #[staticmethod]
-    pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<FixedOffset>) -> Self {
+    pub fn new(punch: SiPunch, host_info: &HostInfo, now: DateTime<Local>) -> Self {
         Self {
             latency: now - punch.time,
             punch,
@@ -117,7 +117,8 @@ mod test_punch {
 
     #[test]
     fn test_display() {
-        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap();
+        let time: DateTime<Local> =
+            DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap().into();
         let host_info = HostInfo::new("ROC1", MacAddress::Full(0x123456789012));
         let log = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),

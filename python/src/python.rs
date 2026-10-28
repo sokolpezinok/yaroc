@@ -67,7 +67,7 @@ impl RaspberryModel {
 
 #[pyfunction]
 pub fn current_timestamp_millis() -> i64 {
-    Local::now().fixed_offset().timestamp_millis()
+    Local::now().timestamp_millis()
 }
 
 #[pyfunction]
