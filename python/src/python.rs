@@ -16,7 +16,7 @@ where
     get_tokio_rt().spawn(f).await.unwrap()
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(module = "yaroc.rs", eq, eq_int)]
 #[derive(PartialEq)]
 pub enum RaspberryModel {
     Unknown = 0,

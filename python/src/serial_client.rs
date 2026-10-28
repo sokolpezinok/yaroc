@@ -29,7 +29,7 @@ type MiniReaderConnectRx = Arc<Mutex<UnboundedReceiver<String>>>;
 ///
 /// This struct manages the reading from and writing to a serial port,
 /// allowing communication with SI devices and responding as a blue SRR (SportIdent Reader).
-#[pyclass(skip_from_py_object)]
+#[pyclass(module = "yaroc.rs", skip_from_py_object)]
 #[derive(Clone)]
 pub struct SerialClient {
     computer_rx: ReadMutex<SerialStream>,
@@ -479,7 +479,7 @@ impl SerialClient {
 ///
 /// This factory is passed to Python to listen for connection/disconnection events
 /// of USB serial devices.
-#[pyclass(from_py_object)]
+#[pyclass(module = "yaroc.rs", from_py_object)]
 #[derive(Clone)]
 pub struct PyUsbSerialFactory {
     mini_reader_connect_tx: UnboundedSender<String>,

@@ -20,7 +20,7 @@ use crate::punch::{SiPunch, SiPunchLog};
 use crate::serial_client::PyUsbSerialFactory;
 use crate::status::{CellularLog, MeshtasticLog, NodeInfo};
 
-#[pyclass(from_py_object)]
+#[pyclass(module = "yaroc.rs", from_py_object)]
 #[derive(Clone)]
 pub struct MeshtasticPunches {
     #[pyo3(get)]
@@ -45,7 +45,7 @@ impl MeshtasticPunches {
 }
 
 /// Events that can be processed by the Python application.
-#[pyclass]
+#[pyclass(module = "yaroc.rs")]
 pub enum Event {
     CellularLog(CellularLog),
     SiPunchLogs(Vec<SiPunchLog>),
@@ -69,7 +69,7 @@ impl From<CellularLogMessage> for Event {
 }
 
 /// Configuration for the MQTT client.
-#[pyclass(get_all, set_all, from_py_object)]
+#[pyclass(module = "yaroc.rs", get_all, set_all, from_py_object)]
 #[derive(Clone)]
 pub struct MqttConfig {
     url: String,
@@ -121,7 +121,7 @@ impl From<MqttConfig> for MqttConfigRs {
 /// Central handler for aggregating and dispatching messages.
 ///
 /// Handles communication between various sources (Serial, Meshtastic) and sinks (MQTT).
-#[pyclass]
+#[pyclass(module = "yaroc.rs")]
 pub struct MessageHandler {
     inner: Arc<Mutex<MessageHandlerRs>>,
 }
@@ -160,7 +160,7 @@ impl MessageHandler {
 }
 
 /// A builder to construct `MessageHandler` and `UsbSerialManager`.
-#[pyclass]
+#[pyclass(module = "yaroc.rs")]
 pub struct MessageHandlerBuilder {
     dns: Vec<(String, MacAddress)>,
     mqtt_configs: Vec<MqttConfig>,
