@@ -230,7 +230,14 @@ impl MqttReceiver {
     }
 
     /// Publish meshtastic service envelope protobuf.
-    async fn publish_meshtastic_service_envelope(
+    pub async fn publish_meshtastic_service_envelope(
+        &self,
+        service_envelope: ServiceEnvelope,
+    ) -> crate::Result<()> {
+        Self::publish_envelope(&self.client, service_envelope).await
+    }
+
+    async fn publish_envelope(
         client: &AsyncClient,
         service_envelope: ServiceEnvelope,
     ) -> crate::Result<()> {
@@ -267,7 +274,7 @@ impl MqttReceiver {
                     }
                 }
                 Some(service_envelope) = self.mesh_rx.recv() => {
-                    let _ = Self::publish_meshtastic_service_envelope(&self.client, service_envelope)
+                    let _ = Self::publish_envelope(&self.client, service_envelope)
                         .await
                         .inspect_err(|e| {
                             error!("Error while forwarding a meshtastic packet to MQTT: {e}")
@@ -427,5 +434,16 @@ mod test {
 
         let ping_event = Event::Incoming(Packet::PingResp);
         assert!(receiver.process_mqtt_event(ping_event).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_publish_meshtastic_service_envelope() {
+        let receiver = MqttReceiver::new(Default::default(), [].iter());
+        let envelope = ServiceEnvelope {
+            packet: None,
+            channel_id: "test_chan".to_string(),
+            gateway_id: "!12345678".to_string(),
+        };
+        assert!(receiver.publish_meshtastic_service_envelope(envelope).await.is_ok());
     }
 }
