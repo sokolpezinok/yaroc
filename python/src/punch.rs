@@ -117,8 +117,11 @@ mod test_punch {
 
     #[test]
     fn test_display() {
-        let time: DateTime<Local> =
-            DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+01:00").unwrap().into();
+        let naive = NaiveDate::from_ymd_opt(2023, 11, 23)
+            .unwrap()
+            .and_hms_milli_opt(10, 0, 3, 793)
+            .unwrap();
+        let time: DateTime<Local> = naive.and_local_timezone(Local).unwrap();
         let host_info = HostInfo::new("ROC1", MacAddress::Full(0x123456789012));
         let log = SiPunchLog::new(
             SiPunch::new(46283, 47, time, 1),
