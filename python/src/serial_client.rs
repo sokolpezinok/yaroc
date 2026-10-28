@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 use std::{future, sync::Arc};
 
+use either::Either;
 use futures::FutureExt as _;
 use futures::future::BoxFuture;
 use log::{debug, error, info, warn};
@@ -16,7 +17,9 @@ use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 use yaroc_receiver::error::Error;
 
+use crate::message_handler::MeshtasticPunches;
 use crate::punch::SiPunchLog;
+use crate::status::MeshtasticLog;
 use yaroc_common::si_uart::BAUD_RATE;
 use yaroc_receiver::si_uart::SportIdentFactory;
 use yaroc_receiver::usb_serial_manager::UsbSerialFactory;
@@ -418,27 +421,22 @@ impl SerialClient {
     /// Sends Meshtastic punches via the serial port if the log contains punches.
     ///
     /// # Arguments
-    /// * `log` - The Meshtastic log/punches object.
+    /// * `msg` - The Meshtastic log/punches object.
     ///
     /// # Returns
     /// A `PyResult` indicating success or failure.
-    pub async fn send_meshtastic_noexcept(&self, log: Py<PyAny>) -> PyResult<bool> {
-        let punch_logs = pyo3::Python::attach(|py| {
-            if let Ok(punches) = log.extract::<crate::message_handler::MeshtasticPunches>(py) {
-                Some(punches.punch_logs.clone())
-            } else {
-                None
-            }
-        });
-
-        if let Some(punch_logs) = punch_logs {
+    pub async fn send_meshtastic_noexcept(
+        &self,
+        msg: Either<MeshtasticLog, MeshtasticPunches>,
+    ) -> PyResult<bool> {
+        if let Either::Right(punches) = msg {
             let computer_tx = self.computer_tx.clone();
             let retry_times = self.retry_times.clone();
             crate::python::run_on_tokio(async move {
                 for (i, wait_time) in retry_times.iter().enumerate() {
                     tokio::time::sleep(*wait_time).await;
                     let mut tx = computer_tx.lock().await;
-                    for punch_log in &punch_logs {
+                    for punch_log in &punches.punch_logs {
                         Self::send_punch_raw(punch_log, &mut tx, i + 1).await;
                     }
                 }

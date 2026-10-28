@@ -17,6 +17,7 @@ bytes = { workspace = true }
 chrono = { workspace = true, default-features = true }
 clap = { workspace = true }
 critical-section = { version = "1", features = ["std"] }
+either = { workspace = true }
 embassy-time = { workspace = true }
 env_logger = { workspace = true }
 femtopb = { workspace = true }
@@ -26,7 +27,7 @@ log = { workspace = true }
 meshtastic = { workspace = true }
 nusb = { workspace = true, features = ["tokio"] }
 postcard = { workspace = true, features = ["use-std"] }
-pyo3 = { version = "0.29", features = ["chrono", "chrono-local", "abi3-py311", "experimental-async"] }
+pyo3 = { version = "0.29", features = ["chrono", "chrono-local", "either", "abi3-py311", "experimental-async"] }
 
 pyo3-log = "0.13.0"
 regex = "1.11"
