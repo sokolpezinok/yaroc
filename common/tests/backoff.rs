@@ -1,3 +1,4 @@
+use core::num::NonZero;
 use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_executor::{Executor, Spawner};
 use embassy_sync::{
@@ -15,13 +16,13 @@ use yaroc_common::{
 
 #[derive(Debug, Eq, PartialEq)]
 struct TimedResponse {
-    msg_id: u16,
+    msg_id: NonZero<u16>,
     time: Instant,
     result: Result<(), PublishError>,
 }
 
 impl TimedResponse {
-    pub fn new(msg_id: u16, time: Instant, result: Result<(), PublishError>) -> Self {
+    pub fn new(msg_id: NonZero<u16>, time: Instant, result: Result<(), PublishError>) -> Self {
         Self {
             msg_id,
             time,

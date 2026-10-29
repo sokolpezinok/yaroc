@@ -13,6 +13,8 @@
 //! method in a separate task. You can then send punches to the backoff task by sending
 //! `BackoffCommand::PublishPunches` commands to the `CMD_FOR_BACKOFF` channel.
 
+use core::num::NonZero;
+
 use crate::{RawMutex, bg77::mqtt::PublishError, punch::RawPunch};
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
@@ -43,14 +45,14 @@ pub enum BackoffCommand {
     /// Encapsulates a batch of punches to be sent.
     PublishPunches(BatchedPunches, u16),
     /// A confirmation that a punch has been published.
-    PunchPublished(u16, u16),
+    PunchPublished(u16, NonZero<u16>),
     /// A notification that the MQTT client has disconnected.
     MqttDisconnected,
     /// A notification that the MQTT client has connected.
     MqttConnected,
     /// A status update from the MQTT client.
     Status {
-        msg_id: u16,
+        msg_id: NonZero<u16>,
         result: Result<(), PublishError>,
     },
 }
@@ -64,28 +66,18 @@ pub struct PunchMsg {
     /// The ID of the punch.
     pub id: u16,
     /// The ID of the message.
-    pub msg_id: u16,
+    pub msg_id: NonZero<u16>,
 }
 
-impl Default for PunchMsg {
-    fn default() -> Self {
-        Self {
-            punches: Vec::from_array([RawPunch::default()]),
-            backoff: Duration::from_secs(1),
-            id: 0,
-            msg_id: 0,
-        }
-    }
-}
 
 impl PunchMsg {
     /// Creates a new `PunchMsg`.
-    ///
-    /// # Panics
-    ///
-    /// This function panics in debug builds if `msg_id` is 0.
-    pub fn new(punches: BatchedPunches, id: u16, msg_id: u16, initial_backoff: Duration) -> Self {
-        debug_assert!(msg_id > 0, "msg_id must be greater than 0");
+    pub fn new(
+        punches: BatchedPunches,
+        id: u16,
+        msg_id: NonZero<u16>,
+        initial_backoff: Duration,
+    ) -> Self {
         Self {
             punches,
             id,
@@ -199,18 +191,18 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
     ///
     /// This function marks the message at the given index as published, so the index can be
     /// reused for a new message.
-    fn delete_msg(&mut self, idx: u16) {
+    fn delete_msg(&mut self, idx: NonZero<u16>) {
         // The `vacant_idx` function will consider this spot empty.
-        self.unpublished_msgs[idx as usize] = false;
+        self.unpublished_msgs[idx.get() as usize] = false;
     }
 
     /// Handles a request to publish a punch.
     fn handle_publish_request(&mut self, punches: BatchedPunches, punch_id: u16) {
-        match self.vacant_idx() {
+        match self.vacant_idx().and_then(|msg_id| NonZero::new(msg_id as u16)) {
             // We skip the first element corresponding to ID=0
-            Some(msg_id) if msg_id > 0 => {
-                let msg = PunchMsg::new(punches, punch_id, msg_id as u16, self.initial_backoff);
-                self.unpublished_msgs[msg_id] = true;
+            Some(msg_id) => {
+                let msg = PunchMsg::new(punches, punch_id, msg_id, self.initial_backoff);
+                self.unpublished_msgs[msg_id.get() as usize] = true;
                 // Spawn an future that will try to send the punch.
                 self.send_punch_fn.clone().spawn(msg, self.spawner);
             }
@@ -221,8 +213,8 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
     }
 
     /// Handles a status update from the MQTT client.
-    fn handle_status(&mut self, msg_id: u16, result: Result<(), PublishError>) {
-        STATUS_UPDATES[msg_id as usize].signal(result);
+    fn handle_status(&mut self, msg_id: NonZero<u16>, result: Result<(), PublishError>) {
+        STATUS_UPDATES[msg_id.get() as usize].signal(result);
     }
 
     /// Publishes an MQTT disconnect event.
@@ -263,7 +255,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
         punch_msg: &PunchMsg,
         mqtt_events: &mut Subscriber<'static, RawMutex, MqttEvent, 1, PUNCH_QUEUE_SIZE, 1>,
     ) -> bool {
-        let msg_idx = punch_msg.msg_id as usize;
+        let msg_idx = punch_msg.msg_id.get() as usize;
         let punch_id = punch_msg.id;
         loop {
             match select(
@@ -355,7 +347,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
         mut send_punch_fn: S,
         send_punch_timeout: Duration,
     ) {
-        let msg_idx = punch_msg.msg_id as usize;
+        let msg_idx = punch_msg.msg_id.get() as usize;
         let punch_id = punch_msg.id;
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 

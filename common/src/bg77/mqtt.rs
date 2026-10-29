@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use core::num::NonZero;
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_sync::channel::Sender;
@@ -293,7 +294,7 @@ impl<M: AtUartTrait> MqttClient<M> {
             } else {
                 Err(PublishError::from_code(status, values.get(3)))
             };
-            if msg_id > 0 {
+            if let Some(msg_id) = NonZero::new(msg_id) {
                 if CMD_FOR_BACKOFF.try_send(BackoffCommand::Status { msg_id, result }).is_err() {
                     error!("Error while sending MQTT message notification, channel full");
                 }
@@ -598,7 +599,7 @@ mod test {
         assert_eq!(
             status,
             BackoffCommand::Status {
-                msg_id: 1,
+                msg_id: NonZero::new(1).unwrap(),
                 result: Ok(())
             }
         );
@@ -632,7 +633,7 @@ mod test {
         assert_eq!(
             status,
             BackoffCommand::Status {
-                msg_id: 2,
+                msg_id: NonZero::new(2).unwrap(),
                 result: Err(PublishError::PacketSendFailed)
             }
         );

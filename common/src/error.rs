@@ -52,8 +52,8 @@ pub enum Error {
 }
 
 impl From<core::convert::Infallible> for Error {
-    fn from(_: core::convert::Infallible) -> Self {
-        unreachable!()
+    fn from(x: core::convert::Infallible) -> Self {
+        match x {}
     }
 }
 

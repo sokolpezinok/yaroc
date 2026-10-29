@@ -1,3 +1,5 @@
+use core::num::NonZero;
+
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
@@ -246,7 +248,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
     pub async fn send_punch_impl(
         &mut self,
         punches: &BatchedPunches,
-        msg_id: u16,
+        msg_id: NonZero<u16>,
     ) -> crate::Result<()> {
         let mut punch_messages = Vec::<&[u8], PUNCH_BATCH_SIZE>::new();
         for punch in punches {
@@ -258,7 +260,7 @@ impl<M: Modem + 'static, F: Flash + 'static> SendPunch<M, F> {
             ..Default::default()
         };
         const PROTO_LEN: usize = (crate::punch::LEN + PUNCH_EXTRA_LEN) * PUNCH_BATCH_SIZE;
-        self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id).await
+        self.send_message::<PROTO_LEN>("p", punches_proto, MqttQos::Q1, msg_id.get()).await
     }
 
     /// Performs the basic setup of the modem.
