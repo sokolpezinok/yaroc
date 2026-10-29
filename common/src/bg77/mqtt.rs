@@ -487,6 +487,7 @@ impl<M: AtUartTrait> MqttClient<M> {
 mod test {
     use super::*;
     use crate::at::fake_modem::FakeModem;
+    use core::assert_matches;
     use core::str::FromStr;
     use embassy_futures::block_on;
     use embassy_sync::channel::Channel;
@@ -776,12 +777,12 @@ mod test {
             Ok(BackoffCommand::MqttDisconnected)
         );
         let cmd = CHANNEL.try_receive().unwrap();
-        assert!(matches!(
+        assert_matches!(
             cmd,
             SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::MqttDisconnect(
                 TcpError::PdpContextFailed
             ))
-        ));
+        );
 
         // Wrong client ID
         let response_wrong_id = CommandResponse::new("+QMTSTAT: 1,2").unwrap();

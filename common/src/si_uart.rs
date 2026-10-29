@@ -43,7 +43,7 @@ pub trait RxWithIdle {
     fn read_until_idle(
         &mut self,
         buf: &mut [u8],
-    ) -> impl core::future::Future<Output = crate::Result<usize>>;
+    ) -> impl Future<Output = crate::Result<usize>>;
 
     /// Return the port this UART is associated with
     fn port(&self) -> &str;

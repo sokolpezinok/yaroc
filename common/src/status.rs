@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub trait Temp {
-    fn cpu_temperature(&mut self) -> impl core::future::Future<Output = crate::Result<f32>>;
+    fn cpu_temperature(&mut self) -> impl Future<Output = crate::Result<f32>>;
 }
 
 pub static TEMPERATURE: Watch<RawMutex, f32, 1> = Watch::new();

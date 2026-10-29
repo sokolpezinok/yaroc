@@ -404,6 +404,7 @@ mod test_at_utils {
     use super::*;
 
     extern crate std;
+    use core::assert_matches;
 
     #[test]
     fn test_split_at_response() {
@@ -533,7 +534,7 @@ mod test_at_utils {
         let line = std::format!("+{:A<10}: {:B<47}", "", "");
         assert_eq!(line.len(), AT_RESPONSE_SIZE);
         let cmd_resp = FromModem::try_from(&line[..])?;
-        assert!(matches!(cmd_resp, FromModem::CommandResponse(_)));
+        assert_matches!(cmd_resp, FromModem::CommandResponse(_));
 
         let from_modem_vec = Vec::from_array([
             cmd_resp.clone(),

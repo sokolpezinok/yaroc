@@ -113,13 +113,10 @@ pub trait SendPunchFn {
     /// or error) via `STATUS_UPDATES`.
     fn acquire(
         &mut self,
-    ) -> impl core::future::Future<Output = crate::Result<Self::SemaphoreReleaser>>;
+    ) -> impl Future<Output = crate::Result<Self::SemaphoreReleaser>>;
 
     /// Sends a punch. The result of the operation is received via `STATUS_UPDATES`.
-    fn send_punch(
-        &mut self,
-        punch: &PunchMsg,
-    ) -> impl core::future::Future<Output = crate::Result<()>>;
+    fn send_punch(&mut self, punch: &PunchMsg) -> impl Future<Output = crate::Result<()>>;
 
     /// Spawns a task to send a punch message with a total timeout.
     ///

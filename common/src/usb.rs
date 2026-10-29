@@ -1,4 +1,3 @@
-use core::future::Future;
 #[cfg(feature = "nrf")]
 use embassy_nrf::usb::{Driver, vbus_detect::SoftwareVbusDetect};
 use embassy_sync::mutex::Mutex;

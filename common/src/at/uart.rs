@@ -140,7 +140,7 @@ pub trait RxWithIdle {
     fn read_until_idle(
         &mut self,
         buf: &mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize>>;
+    ) -> impl Future<Output = Result<usize>>;
 }
 
 #[cfg(feature = "std")]

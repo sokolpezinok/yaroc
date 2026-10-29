@@ -1,5 +1,3 @@
-use core::future::Future;
-
 #[cfg(feature = "defmt")]
 use defmt::debug;
 use embassy_executor::Spawner;
