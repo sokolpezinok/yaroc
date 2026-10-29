@@ -286,6 +286,7 @@ mod tests {
     use meshtastic::protobufs::PortNum;
     use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
     use tokio::time::timeout;
+    use tokio_stream::wrappers::UnboundedReceiverStream;
     use yaroc_common::proto::Punches;
     use yaroc_common::punch::RawPunch;
 
@@ -298,11 +299,8 @@ mod tests {
 
     impl MessageHandler {
         /// Converts an `UnboundedReceiver` into a `Stream`.
-        fn rx_into_stream<T>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
-            futures::stream::unfold(
-                rx,
-                |mut rx| async move { rx.recv().await.map(|msg| (msg, rx)) },
-            )
+        fn rx_into_stream<T: Send + 'static>(rx: UnboundedReceiver<T>) -> impl Stream<Item = T> {
+            UnboundedReceiverStream::new(rx)
         }
 
         /// Creates a handler tailored for testing, bypassing factories and exposing senders directly.

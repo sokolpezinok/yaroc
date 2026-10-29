@@ -3506,6 +3506,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-serial",
+ "tokio-stream",
  "tokio-udev",
  "tokio-util",
  "udev",

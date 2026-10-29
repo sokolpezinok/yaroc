@@ -11,6 +11,7 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 use tokio_util::sync::DropGuard;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use yaroc_common::punch::{RawPunch, SiPunch};
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
@@ -143,15 +144,12 @@ impl SportIdentFactory {
     /// Creates a new `SportIdentFactory` and a stream of incoming `SportIdentMessage`s.
     pub fn new() -> (Self, impl futures::Stream<Item = SportIdentMessage> + Send) {
         let (si_tx, si_rx) = unbounded_channel();
-        let stream = futures::stream::unfold(si_rx, |mut rx| async move {
-            rx.recv().await.map(|msg| (msg, rx))
-        });
         (
             Self {
                 devices: HashMap::new(),
                 si_tx,
             },
-            stream,
+            UnboundedReceiverStream::new(si_rx),
         )
     }
 

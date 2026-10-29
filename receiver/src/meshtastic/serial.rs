@@ -8,6 +8,7 @@ use log::info;
 use meshtastic::protobufs::ServiceEnvelope;
 use meshtastic::utils::stream;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_util::sync::DropGuard;
 
 use super::connection::MeshtasticConnection;
@@ -68,15 +69,12 @@ impl MeshtasticFactory {
     /// Creates a new `MeshtasticFactory` and a stream of incoming `ServiceEnvelope` messages.
     pub fn new() -> (Self, impl Stream<Item = ServiceEnvelope> + Send) {
         let (mesh_tx, mesh_rx) = unbounded_channel();
-        let stream = futures::stream::unfold(mesh_rx, |mut rx| async move {
-            rx.recv().await.map(|msg| (msg, rx))
-        });
         (
             Self {
                 devices: HashMap::new(),
                 mesh_tx,
             },
-            stream,
+            UnboundedReceiverStream::new(mesh_rx),
         )
     }
 

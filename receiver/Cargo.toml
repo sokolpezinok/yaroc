@@ -21,6 +21,7 @@ serialport = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-serial = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["time"] }
 uuid = { version = "1.17.0", features = ["v4"] }
 yaroc-common = { workspace = true, features = ["std"] }

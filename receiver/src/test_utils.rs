@@ -4,6 +4,7 @@ use meshtastic::protobufs::{
 use prost::Message;
 use std::fmt::Display;
 use tokio::sync::mpsc::Receiver;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::si_uart::SportIdentMessage;
 use crate::system_info::MacAddress;
@@ -41,14 +42,12 @@ impl UsbSerialTrait for FakeMeshtasticSerial {
     type Output = ServiceEnvelope;
 
     fn into_stream(self) -> impl futures::Stream<Item = ServiceEnvelope> + Send {
-        futures::stream::unfold(self, |mut serial| async move {
-            let mesh_packet = serial.rx.recv().await?;
-            let service_envelope = ServiceEnvelope {
-                packet: Some(mesh_packet),
-                channel_id: String::new(),
-                gateway_id: format!("!{}", serial.mac_address),
-            };
-            Some((service_envelope, serial))
+        use futures::StreamExt as _;
+
+        ReceiverStream::new(self.rx).map(move |mesh_packet| ServiceEnvelope {
+            packet: Some(mesh_packet),
+            channel_id: String::new(),
+            gateway_id: format!("!{}", self.mac_address),
         })
     }
 }
@@ -74,9 +73,7 @@ impl UsbSerialTrait for FakeSportIdentSerial {
     type Output = SportIdentMessage;
 
     fn into_stream(self) -> impl futures::Stream<Item = SportIdentMessage> + Send {
-        futures::stream::unfold(self, |mut serial| async move {
-            serial.rx.recv().await.map(|msg| (msg, serial))
-        })
+        ReceiverStream::new(self.rx)
     }
 }
 
