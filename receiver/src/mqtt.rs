@@ -76,15 +76,76 @@ impl Message {
     }
 }
 
+/// Builds the list of MQTT topics to subscribe to for the given MAC addresses.
+fn topics<'a, I: Iterator<Item = &'a MacAddress>>(
+    macs: I,
+    meshtastic_channel: Option<&str>,
+) -> Vec<String> {
+    let mut topics = Vec::new();
+    for mac in macs {
+        if mac.is_full() {
+            topics.push(format!("yar/{mac}/status"));
+            topics.push(format!("yar/{mac}/p"));
+            topics.push(format!("yar/{mac}/will"));
+        } else {
+            topics.push(format!("yar/2/e/serial/!{mac}"));
+            if let Some(meshtastic_channel) = meshtastic_channel {
+                topics.push(format!("yar/2/e/{meshtastic_channel}/!{mac}"));
+            }
+        }
+    }
+    topics
+}
+
 /// An MQTT receiver that handles subscriptions and listens for incoming messages.
 #[derive(Clone)]
 pub struct MqttReceiver {
     client: AsyncClient,
-    pub topics: Vec<String>,
+}
+
+/// Internal state for processing MQTT events in the incoming message stream.
+struct MqttStreamHandler {
+    client: AsyncClient,
+    topics: Vec<String>,
     url: String,
     #[cfg(test)]
     /// An optional fixed timestamp to override `Local::now()` for deterministic testing.
     test_now: Option<DateTime<Local>>,
+}
+
+impl MqttStreamHandler {
+    /// Processes rumqttc::Event.
+    async fn process_mqtt_event(
+        &mut self,
+        event: rumqttc::Event,
+    ) -> Option<crate::Result<Message>> {
+        let now = {
+            #[cfg(test)]
+            {
+                self.test_now.unwrap_or_else(Local::now)
+            }
+            #[cfg(not(test))]
+            {
+                Local::now()
+            }
+        };
+        match event {
+            Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
+                return Some(MqttReceiver::process_incoming(now, &topic, &payload));
+            }
+            Event::Incoming(Packet::Disconnect) => {
+                warn!("MQTT Disconnected");
+            }
+            Event::Incoming(Packet::ConnAck(_)) => {
+                info!("Connected to MQTT server {}", self.url);
+                for topic in &self.topics {
+                    self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
+                }
+            }
+            _ => {} // Ignored
+        }
+        None
+    }
 }
 
 impl MqttReceiver {
@@ -105,32 +166,22 @@ impl MqttReceiver {
         }
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 128);
-        let mut topics = Vec::new();
-        for mac in macs {
-            if mac.is_full() {
-                topics.push(format!("yar/{mac}/status"));
-                topics.push(format!("yar/{mac}/p"));
-                topics.push(format!("yar/{mac}/will"));
-            } else {
-                topics.push(format!("yar/2/e/serial/!{mac}"));
-                if let Some(meshtastic_channel) = config.meshtastic_channel.as_ref() {
-                    topics.push(format!("yar/2/e/{meshtastic_channel}/!{mac}"));
-                }
-            }
-        }
+        let topics = topics(macs, config.meshtastic_channel.as_deref());
 
         let receiver = Self {
-            url: config.url,
+            client: client.clone(),
+        };
+
+        let stream_handler = MqttStreamHandler {
             client,
+            url: config.url,
             topics,
             #[cfg(test)]
             test_now: None,
         };
-
-        let stream_receiver = receiver.clone();
         let stream = futures::stream::unfold(
-            (event_loop, stream_receiver),
-            |(mut event_loop, mut receiver)| async move {
+            (event_loop, stream_handler),
+            |(mut event_loop, mut handler)| async move {
                 loop {
                     let Ok(event) = event_loop.poll().await else {
                         error!("MQTT Connection error");
@@ -138,8 +189,8 @@ impl MqttReceiver {
                         tokio::time::sleep(Duration::from_secs(5)).await;
                         continue;
                     };
-                    if let Some(msg) = receiver.process_mqtt_event(event).await {
-                        return Some((msg, (event_loop, receiver)));
+                    if let Some(msg) = handler.process_mqtt_event(event).await {
+                        return Some((msg, (event_loop, handler)));
                     }
                 }
             },
@@ -213,39 +264,6 @@ impl MqttReceiver {
         }
     }
 
-    /// Processes rumqttc::Event.
-    async fn process_mqtt_event(
-        &mut self,
-        event: rumqttc::Event,
-    ) -> Option<crate::Result<Message>> {
-        let now = {
-            #[cfg(test)]
-            {
-                self.test_now.unwrap_or_else(Local::now)
-            }
-            #[cfg(not(test))]
-            {
-                Local::now()
-            }
-        };
-        match event {
-            Event::Incoming(Packet::Publish(Publish { payload, topic, .. })) => {
-                return Some(Self::process_incoming(now, &topic, &payload));
-            }
-            Event::Incoming(Packet::Disconnect) => {
-                warn!("MQTT Disconnected");
-            }
-            Event::Incoming(Packet::ConnAck(_)) => {
-                info!("Connected to MQTT server {}", self.url);
-                for topic in &self.topics {
-                    self.client.subscribe(topic, QoS::AtMostOnce).await.unwrap();
-                }
-            }
-            _ => {} // Ignored
-        }
-        None
-    }
-
     /// Publish meshtastic service envelope protobuf.
     pub async fn publish_meshtastic_service_envelope(
         &self,
@@ -266,11 +284,6 @@ impl MqttReceiver {
         self.client.publish(topic, QoS::AtMostOnce, false, payload).await?;
         Ok(())
     }
-
-    /// Returns the URL of the MQTT broker this receiver is connected to.
-    pub fn url(&self) -> &str {
-        &self.url
-    }
 }
 
 #[cfg(test)]
@@ -278,18 +291,13 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_new() {
+    fn test_topics() {
         let macs = [
             MacAddress::Meshtastic(0x12345678),
             MacAddress::Full(0xdeadbeef9876),
         ];
-        let config = MqttConfig {
-            meshtastic_channel: Some("cha".to_owned()),
-            ..Default::default()
-        };
-        let (receiver, _stream) = MqttReceiver::new(config, macs.iter());
         assert_eq!(
-            receiver.topics,
+            topics(macs.iter(), Some("cha")),
             vec![
                 "yar/2/e/serial/!12345678",
                 "yar/2/e/cha/!12345678",
@@ -301,11 +309,12 @@ mod test {
     }
 
     #[test]
-    fn test_new_without_msh() {
+    fn test_topics_without_msh() {
         let macs = [MacAddress::Meshtastic(0x12345678)];
-        let config = MqttConfig::default();
-        let (receiver, _stream) = MqttReceiver::new(config, macs.iter());
-        assert_eq!(receiver.topics, vec!["yar/2/e/serial/!12345678"]);
+        assert_eq!(
+            topics(macs.iter(), None),
+            vec!["yar/2/e/serial/!12345678"]
+        );
     }
 
     #[test]
@@ -378,9 +387,14 @@ mod test {
     #[tokio::test]
     async fn test_process_mqtt_event_publish() {
         let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let (mut receiver, _stream) = MqttReceiver::new(Default::default(), macs.iter());
+        let (client, _) = AsyncClient::new(MqttOptions::new("test", "localhost", 1883), 1);
         let exact_time = Local::now();
-        receiver.test_now = Some(exact_time);
+        let mut handler = MqttStreamHandler {
+            client,
+            topics: vec![],
+            url: "localhost".to_string(),
+            test_now: Some(exact_time),
+        };
 
         let publish_event = Event::Incoming(Packet::Publish(Publish {
             dup: false,
@@ -391,7 +405,7 @@ mod test {
             payload: b"cellular status payload".to_vec().into(),
         }));
 
-        let result = receiver.process_mqtt_event(publish_event).await;
+        let result = handler.process_mqtt_event(publish_event).await;
         assert_eq!(
             result.unwrap().unwrap(),
             Message::CellularStatus(macs[0], exact_time, b"cellular status payload".to_vec())
@@ -400,15 +414,21 @@ mod test {
 
     #[tokio::test]
     async fn test_process_mqtt_event_disconnect_and_ignored() {
-        let macs = [MacAddress::Full(0xdeadbeef9876)];
-        let (mut receiver, _stream) = MqttReceiver::new(Default::default(), macs.iter());
+        let (client, _) = AsyncClient::new(MqttOptions::new("test", "localhost", 1883), 1);
+        let mut handler = MqttStreamHandler {
+            client,
+            topics: vec![],
+            url: "localhost".to_string(),
+            test_now: None,
+        };
 
         let disconnect_event = Event::Incoming(Packet::Disconnect);
-        assert!(receiver.process_mqtt_event(disconnect_event).await.is_none());
+        assert!(handler.process_mqtt_event(disconnect_event).await.is_none());
 
         let ping_event = Event::Incoming(Packet::PingResp);
-        assert!(receiver.process_mqtt_event(ping_event).await.is_none());
+        assert!(handler.process_mqtt_event(ping_event).await.is_none());
     }
+
     #[tokio::test]
     async fn test_publish_meshtastic_service_envelope() {
         let (receiver, _stream) = MqttReceiver::new(Default::default(), [].iter());
