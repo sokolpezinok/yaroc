@@ -11,7 +11,7 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 use tokio_util::sync::DropGuard;
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::wrappers::{IntervalStream, UnboundedReceiverStream};
 use yaroc_common::punch::{RawPunch, SiPunch};
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
@@ -118,15 +118,16 @@ impl FakePunchConfig {
             "Starting a fake SportIdent worker, sending a punch every {:?} with card {} and code {}",
             self.interval, self.card, self.code
         );
-        futures::stream::unfold(self, |config| async move {
-            tokio::time::sleep(config.interval).await;
+        let mut interval = tokio::time::interval(self.interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        IntervalStream::new(interval).skip(1).map(move |_| {
             let punch = SiPunch::new_send_last_record(
-                config.card,
-                config.code,
+                self.card,
+                self.code,
                 Local::now().fixed_offset(),
                 18,
             );
-            Some((SportIdentMessage::RawPunch(punch.raw), config))
+            SportIdentMessage::RawPunch(punch.raw)
         })
     }
 }
