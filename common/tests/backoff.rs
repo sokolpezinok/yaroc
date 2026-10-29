@@ -44,12 +44,8 @@ impl Ord for TimedResponse {
 
 const PUNCH_COUNT: usize = 4;
 
-static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] = [
-    Channel::new(),
-    Channel::new(),
-    Channel::new(),
-    Channel::new(),
-];
+static COMMANDS: [Channel<RawMutex, TimedResponse, PUNCH_COUNT>; PUNCH_COUNT] =
+    [const { Channel::new() }; PUNCH_COUNT];
 static MQTT_DISCONNECT: PubSubChannel<RawMutex, bool, 3, PUNCH_COUNT, 1> = PubSubChannel::new();
 static PUBLISH_EVENTS: Channel<RawMutex, (u16, Instant), PUNCH_COUNT> = Channel::new();
 static DONE: AtomicBool = AtomicBool::new(false);

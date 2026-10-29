@@ -2,7 +2,6 @@ use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
 use defmt::{error, info, warn};
 use embassy_sync::channel::Sender;
-use embassy_sync::lazy_lock::LazyLock;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant};
 use heapless::format;
@@ -22,8 +21,7 @@ use crate::{
 pub const MQTT_RETRY_COUNT: u8 = 2;
 static MQTT_EXTRA_TIMEOUT: Duration = Duration::from_millis(300);
 
-pub static MQTT_MSG_PUBLISHED: LazyLock<[Signal<RawMutex, Instant>; 3]> =
-    LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
+pub static MQTT_MSG_PUBLISHED: [Signal<RawMutex, Instant>; 3] = [const { Signal::new() }; 3];
 
 #[derive(Debug, thiserror::Error, Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -224,7 +222,7 @@ impl<M: AtUartTrait> MqttClient<M> {
 
     /// Returns the time of the last successful sent message
     pub fn last_successful_send(&mut self) -> Instant {
-        if let Some(publish_time) = MQTT_MSG_PUBLISHED.get()[self.client_id as usize].try_take() {
+        if let Some(publish_time) = MQTT_MSG_PUBLISHED[self.client_id as usize].try_take() {
             self.last_successful_send = self.last_successful_send.max(publish_time);
         }
         self.last_successful_send
@@ -290,7 +288,7 @@ impl<M: AtUartTrait> MqttClient<M> {
             let msg_id = values[1] as u16;
             let status = values[2];
             let result = if status == 0 {
-                MQTT_MSG_PUBLISHED.get()[usize::from(CLIENT_ID)].signal(Instant::now());
+                MQTT_MSG_PUBLISHED[usize::from(CLIENT_ID)].signal(Instant::now());
                 Ok(())
             } else {
                 Err(PublishError::from_code(status, values.get(3)))
@@ -589,12 +587,12 @@ mod test {
         let sender = CHANNEL.sender();
 
         // Ensure the signal is not set initially
-        MQTT_MSG_PUBLISHED.get()[0].reset();
+        MQTT_MSG_PUBLISHED[0].reset();
         while CMD_FOR_BACKOFF.try_receive().is_ok() {}
 
         let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
         assert!(handled);
-        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_some());
+        assert!(MQTT_MSG_PUBLISHED[0].try_take().is_some());
 
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
         assert_eq!(
@@ -610,7 +608,7 @@ mod test {
         // Return false, because it's for a different client
         let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
         assert!(!handled);
-        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
+        assert!(MQTT_MSG_PUBLISHED[0].try_take().is_none());
         assert!(CMD_FOR_BACKOFF.try_receive().is_err());
         assert!(CHANNEL.try_receive().is_err());
     }
@@ -623,12 +621,12 @@ mod test {
         let _lock = block_on(CHANNEL_MUTEX.lock());
         let sender = CHANNEL.sender();
 
-        MQTT_MSG_PUBLISHED.get()[0].reset();
+        MQTT_MSG_PUBLISHED[0].reset();
         while CMD_FOR_BACKOFF.try_receive().is_ok() {}
 
         let handled = MqttClient::<FakeModem>::urc_handler::<0>(&response, sender);
         assert!(handled);
-        assert!(MQTT_MSG_PUBLISHED.get()[0].try_take().is_none());
+        assert!(MQTT_MSG_PUBLISHED[0].try_take().is_none());
 
         let status = CMD_FOR_BACKOFF.try_receive().unwrap();
         assert_eq!(

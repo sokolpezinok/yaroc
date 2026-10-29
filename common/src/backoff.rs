@@ -20,7 +20,6 @@ use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_sync::{
     channel::Channel,
-    lazy_lock::LazyLock,
     pubsub::{ImmediatePublisher, PubSubChannel, Subscriber},
     signal::Signal,
 };
@@ -141,8 +140,8 @@ pub trait SendPunchFn {
 /// Each message in the `unpublished_msgs` vector has a corresponding signal in this array.
 /// The signal is used to notify the `try_sending_with_retries` function about the status of
 /// the message.
-static STATUS_UPDATES: LazyLock<[Signal<RawMutex, Result<(), PublishError>>; PUNCH_QUEUE_SIZE]> =
-    LazyLock::new(|| core::array::from_fn(|_| Signal::new()));
+static STATUS_UPDATES: [Signal<RawMutex, Result<(), PublishError>>; PUNCH_QUEUE_SIZE] =
+    [const { Signal::new() }; PUNCH_QUEUE_SIZE];
 
 /// An event related to the MQTT client.
 #[derive(Copy, Clone)]
@@ -223,7 +222,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
 
     /// Handles a status update from the MQTT client.
     fn handle_status(&mut self, msg_id: u16, result: Result<(), PublishError>) {
-        STATUS_UPDATES.get()[msg_id as usize].signal(result);
+        STATUS_UPDATES[msg_id as usize].signal(result);
     }
 
     /// Publishes an MQTT disconnect event.
@@ -268,7 +267,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
         let punch_id = punch_msg.id;
         loop {
             match select(
-                STATUS_UPDATES.get()[msg_idx].wait(),
+                STATUS_UPDATES[msg_idx].wait(),
                 mqtt_events.next_message_pure(),
             )
             .await
@@ -361,7 +360,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
         let mut mqtt_events = MQTT_EVENTS.subscriber().unwrap();
 
         loop {
-            STATUS_UPDATES.get()[msg_idx].reset();
+            STATUS_UPDATES[msg_idx].reset();
             let res = Self::call_send_punch(
                 &punch_msg,
                 &mut send_punch_fn,
