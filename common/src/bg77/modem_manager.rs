@@ -264,7 +264,7 @@ impl<M: AtUartTrait> ModemManager<M> {
         match response.command() {
             "QIURC" => {
                 let values = response.values();
-                if values.first() == Some(&"pdpdeact") {
+                if let ["pdpdeact", ..] = values.as_slice() {
                     let message =
                         SendPunchCommand::ConnectionSupervisorEvent(ConnectionEvent::PdpDeactivate);
                     if command_sender.try_send(message).is_err() {
@@ -279,21 +279,18 @@ impl<M: AtUartTrait> ModemManager<M> {
                 // TODO: this should probably be inside SystemInfo, but right now we don't
                 // want to introduce another URC handler.
                 let values = response.values();
-                if values.len() == 2 {
-                    if values[0] == "0" {
-                        match SystemInfo::<M>::parse_time(values[1]) {
-                            Ok(time) => {
-                                info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
-                                SystemInfo::<M>::set_boot_time(time);
-                            }
-                            Err(e) => {
-                                warn!("Failed to parse NTP time: {}", e);
-                            }
+                match values.as_slice() {
+                    ["0", time_str] => match SystemInfo::<M>::parse_time(time_str) {
+                        Ok(time) => {
+                            info!("Time from NTP: {}", format!(30; "{}", time).unwrap());
+                            SystemInfo::<M>::set_boot_time(time);
                         }
-                    }
-                } else if values.len() == 1 {
-                    if let Some(&err_code) = values.first() {
-                        let err_msg = match err_code {
+                        Err(e) => {
+                            warn!("Failed to parse NTP time: {}", e);
+                        }
+                    },
+                    [err_code] => {
+                        let err_msg = match *err_code {
                             "558" => "unknown error",
                             "565" => "DNS resolution failed or operation timeout",
                             "568" => "server error",
@@ -304,16 +301,17 @@ impl<M: AtUartTrait> ModemManager<M> {
                             err_code, err_msg
                         );
                     }
-                } else {
-                    warn!("NTP synchronization failed: invalid QNTP response");
+                    _ => {
+                        warn!("NTP synchronization failed: invalid QNTP response");
+                    }
                 }
                 true
             }
             "CEREG" => {
                 let values = response.values();
-                match values.len() {
-                    1 => {
-                        let stat_str = match values[0] {
+                match values.as_slice() {
+                    [stat] => {
+                        let stat_str = match *stat {
                             "0" => "not registered",
                             "2" => "searching for operator",
                             "3" => "registration denied",
@@ -322,11 +320,11 @@ impl<M: AtUartTrait> ModemManager<M> {
                         };
                         info!(
                             "Cellular network registration status: {} (code {})",
-                            stat_str, values[0]
+                            stat_str, stat
                         );
                         true
                     }
-                    4 => true,
+                    [_, _, _, _] => true,
                     _ => false,
                 }
             }

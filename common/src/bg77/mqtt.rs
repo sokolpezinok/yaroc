@@ -250,8 +250,10 @@ impl<M: AtUartTrait> MqttClient<M> {
                     Ok(values) => values,
                     Err(_) => return false,
                 };
-                if values.len() >= 2 && values[0] == CLIENT_ID {
-                    let err = TcpError::from_qmtstat(values[1]);
+                if let [client_id, err_code, ..] = values.as_slice()
+                    && *client_id == CLIENT_ID
+                {
+                    let err = TcpError::from_qmtstat(*err_code);
                     if CMD_FOR_BACKOFF.try_send(BackoffCommand::MqttDisconnected).is_err() {
                         error!("Channel full when sending MQTT disconnect notification");
                     }
@@ -285,9 +287,11 @@ impl<M: AtUartTrait> MqttClient<M> {
             }
         };
 
-        if values[0] == CLIENT_ID {
-            let msg_id = values[1] as u16;
-            let status = values[2];
+        if let [client_id, msg_id, status, ..] = values.as_slice()
+            && *client_id == CLIENT_ID
+        {
+            let msg_id = *msg_id as u16;
+            let status = *status;
             let result = if status == 0 {
                 MQTT_MSG_PUBLISHED[usize::from(CLIENT_ID)].signal(Instant::now());
                 Ok(())
