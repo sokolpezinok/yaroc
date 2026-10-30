@@ -101,3 +101,9 @@ class TestStatus(unittest.TestCase):
         table_bad = [["name", "signal", "bat", "code", "last info", "last punch"], ["Node1", "-80"]]
         with self.assertRaises(Exception):
             drawer.draw_table(table_bad, 200, 100)
+
+    def test_init_display_warning(self):
+        with self.assertLogs("root", level="WARNING") as cm:
+            drawer = StatusDrawer({"model": "epd2in13_V2"})
+            self.assertIsNone(drawer.epd)
+        self.assertTrue(any("yaroc[display]" in msg for msg in cm.output))

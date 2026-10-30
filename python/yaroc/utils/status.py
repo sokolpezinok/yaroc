@@ -11,12 +11,24 @@ from ..rs import NodeInfo
 
 
 def _init_epd(model: str, busy_pin: int | None) -> Any:
-    import epaper
+    try:
+        import epaper
+    except ImportError as err:
+        raise ImportError(
+            "waveshare-epaper is required for display support. "
+            "Install with 'uv tool install \"yaroc[display]\"' or 'pip install \"yaroc[display]\"'"
+        ) from err
 
     # This is a hack to override the BUSY_PIN constant in epaper, as it's not possible with its
     # current API.
     if busy_pin is not None:
-        import gpiozero
+        try:
+            import gpiozero
+        except ImportError as err:
+            raise ImportError(
+                "gpiozero is required when busy_pin is set. "
+                "Install with 'uv tool install \"yaroc[rpi]\"' or 'pip install \"yaroc[rpi]\"'"
+            ) from err
 
         original_button = gpiozero.Button
 
@@ -50,12 +62,21 @@ class StatusDrawer:
 
     def __init__(self, display_config: dict[str, Any]):
         model = display_config.get("model", None)
+        self.epd = None
         if model is not None:
-            self.epd = _init_epd(model, display_config.get("busy_pin", None))
-            self.epd.init(0)
-            self.epd.Clear()
-        else:
-            self.epd = None
+            try:
+                try:
+                    from PIL import Image  # noqa: F401
+                except ImportError as err:
+                    raise ImportError(
+                        "Pillow is required for display support. "
+                        "Install with 'uv tool install \"yaroc[display]\"' or 'pip install \"yaroc[display]\"'"
+                    ) from err
+                self.epd = _init_epd(model, display_config.get("busy_pin", None))
+                self.epd.init(0)
+                self.epd.Clear()
+            except ImportError as err:
+                logging.warning(f"Failed to initialize display: {err}")
         self.ignore: set[str] = set(display_config.get("ignore", []))
 
     def generate_info_table(self, node_infos: list[NodeInfo]) -> list[list[str]]:
@@ -105,7 +126,8 @@ class StatusDrawer:
             from PIL import Image, ImageDraw, ImageFont
         except ImportError as err:
             raise ImportError(
-                "Pillow is required for display support. Install with 'pip install yaroc[display]'"
+                "Pillow is required for display support. "
+                "Install with 'uv tool install \"yaroc[display]\"' or 'pip install \"yaroc[display]\"'"
             ) from err
 
         image = Image.new("1", (width, height), 0xFF)
