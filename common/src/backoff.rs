@@ -69,7 +69,6 @@ pub struct PunchMsg {
     pub msg_id: NonZero<u16>,
 }
 
-
 impl PunchMsg {
     /// Creates a new `PunchMsg`.
     pub fn new(
@@ -111,9 +110,7 @@ pub trait SendPunchFn {
     ///
     /// The returned releaser should be dropped after receiving a response (publish, timeout,
     /// or error) via `STATUS_UPDATES`.
-    fn acquire(
-        &mut self,
-    ) -> impl Future<Output = crate::Result<Self::SemaphoreReleaser>>;
+    fn acquire(&mut self) -> impl Future<Output = crate::Result<Self::SemaphoreReleaser>>;
 
     /// Sends a punch. The result of the operation is received via `STATUS_UPDATES`.
     fn send_punch(&mut self, punch: &PunchMsg) -> impl Future<Output = crate::Result<()>>;

@@ -40,10 +40,7 @@ pub trait RxWithIdle {
     /// # Returns
     ///
     /// A `Result` containing the number of bytes read, or an error if reading fails.
-    fn read_until_idle(
-        &mut self,
-        buf: &mut [u8],
-    ) -> impl Future<Output = crate::Result<usize>>;
+    fn read_until_idle(&mut self, buf: &mut [u8]) -> impl Future<Output = crate::Result<usize>>;
 
     /// Return the port this UART is associated with
     fn port(&self) -> &str;

@@ -1348,7 +1348,9 @@ dependencies = [
 
 [package.optional-dependencies]
 display = [
+    { name = "gpiozero" },
     { name = "pillow" },
+    { name = "rpi-gpio", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'armv6l' and sys_platform == 'linux') or (platform_machine == 'armv7l' and sys_platform == 'linux')" },
     { name = "waveshare-epaper", marker = "platform_machine == 'aarch64' or platform_machine == 'armv7l'" },
 ]
 rpi = [
@@ -1386,6 +1388,7 @@ requires-dist = [
     { name = "rpi-gpio", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'rpi') or (platform_machine == 'armv6l' and sys_platform == 'linux' and extra == 'rpi') or (platform_machine == 'armv7l' and sys_platform == 'linux' and extra == 'rpi')", specifier = "==0.7.1" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "waveshare-epaper", marker = "(platform_machine == 'aarch64' and extra == 'display') or (platform_machine == 'armv7l' and extra == 'display')", specifier = "==1.4.0" },
+    { name = "yaroc", extras = ["rpi"], marker = "extra == 'display'", editable = "." },
 ]
 provides-extras = ["display", "rpi"]
 

@@ -80,10 +80,12 @@ Install the `yaroc` package from PyPI, which provides the `send-punch`, `yarocd`
 uv tool install yaroc
 ```
 
-If you are using a Raspberry Pi with a Waveshare e-paper display or need GPIO support (e.g. CPU temperature monitoring, modem reset), include the `display` and `rpi` extras:
+If you are using a Raspberry Pi with a Waveshare e-paper display, install with the `display` extra (which also includes `rpi` dependencies). If you only need GPIO support without a display (e.g. CPU temperature monitoring, modem reset), include the `rpi` extra:
 
 ```sh
-uv tool install "yaroc[display,rpi]"
+uv tool install "yaroc[display]"
+# or for headless with GPIO only:
+uv tool install "yaroc[rpi]"
 ```
 
 To install a beta version, use the `--pre` flag:

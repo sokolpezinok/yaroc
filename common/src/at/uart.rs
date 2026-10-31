@@ -137,10 +137,7 @@ pub trait RxWithIdle {
     ///
     /// # Returns
     /// The number of bytes read.
-    fn read_until_idle(
-        &mut self,
-        buf: &mut [u8],
-    ) -> impl Future<Output = Result<usize>>;
+    fn read_until_idle(&mut self, buf: &mut [u8]) -> impl Future<Output = Result<usize>>;
 }
 
 #[cfg(feature = "std")]

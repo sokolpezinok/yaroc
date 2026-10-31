@@ -311,10 +311,7 @@ mod test {
     #[test]
     fn test_topics_without_msh() {
         let macs = [MacAddress::Meshtastic(0x12345678)];
-        assert_eq!(
-            topics(macs.iter(), None),
-            vec!["yar/2/e/serial/!12345678"]
-        );
+        assert_eq!(topics(macs.iter(), None), vec!["yar/2/e/serial/!12345678"]);
     }
 
     #[test]

@@ -10,8 +10,8 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
-use tokio_util::sync::DropGuard;
 use tokio_stream::wrappers::{IntervalStream, UnboundedReceiverStream};
+use tokio_util::sync::DropGuard;
 use yaroc_common::punch::{RawPunch, SiPunch};
 use yaroc_common::si_uart::{BAUD_RATE, SiUart};
 use yaroc_common::{error::Error, si_uart::RxWithIdle};
