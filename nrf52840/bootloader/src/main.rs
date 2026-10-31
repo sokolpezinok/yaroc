@@ -3,16 +3,13 @@
 
 use core::cell::RefCell;
 
-use cortex_m::peripheral::NVIC;
 use defmt::info;
 use embassy_boot::{
     AlignedBuffer, BlockingFirmwareUpdater, BootLoader, BootLoaderConfig, FirmwareUpdaterConfig,
     State,
 };
-use embassy_executor::Spawner;
 use embassy_nrf::config::{Config as NrfConfig, HfclkSource};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::interrupt::Interrupt;
 use embassy_nrf::nvmc::{Nvmc, PAGE_SIZE};
 use embassy_nrf::usb::vbus_detect::HardwareVbusDetect;
 use embassy_nrf::usb::{self, Driver};
@@ -22,6 +19,7 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_usb::Builder;
 use embassy_usb_dfu::consts::DfuAttributes;
 use embassy_usb_dfu::{ResetImmediate, new_state, usb_dfu};
+use static_cell::StaticCell;
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -34,17 +32,16 @@ bind_interrupts!(struct Irqs {
     CLOCK_POWER => usb::vbus_detect::InterruptHandler;
 });
 
-#[embassy_executor::main]
-async fn main(_spawner: Spawner) -> ! {
-    let cp = unsafe { cortex_m::Peripherals::steal() };
-    unsafe { cp.SCB.vtor.write(BOOTLOADER_START) };
+type FlashMutex = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
 
-    let mut config = NrfConfig::default();
-    config.hfclk_source = HfclkSource::ExternalXtal;
-    let p = embassy_nrf::init(config);
+static FLASH: StaticCell<FlashMutex> = StaticCell::new();
+static EXECUTOR: StaticCell<embassy_executor::Executor> = StaticCell::new();
 
-    let flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(Nvmc::new(p.NVMC)));
-    let boot_config = BootLoaderConfig::from_linkerfile_blocking(&flash, &flash, &flash);
+#[cortex_m_rt::entry]
+fn main() -> ! {
+    let nvmc = unsafe { peripherals::NVMC::steal() };
+    let flash = FLASH.init(Mutex::new(RefCell::new(Nvmc::new(nvmc))));
+    let boot_config = BootLoaderConfig::from_linkerfile_blocking(flash, flash, flash);
 
     let mut page_buf = AlignedBuffer([0; PAGE_SIZE]);
     let mut boot = BootLoader::new(boot_config);
@@ -60,54 +57,65 @@ async fn main(_spawner: Spawner) -> ! {
     if state == State::DfuDetach || !active_present {
         info!("Entering USB DFU bootloader mode (state: {})", state);
 
-        // Turn on both green and blue LEDs (active-low) to indicate DFU mode.
-        let _green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
-        let _blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
+        let mut config = NrfConfig::default();
+        config.hfclk_source = HfclkSource::ExternalXtal;
+        let p = embassy_nrf::init(config);
 
-        let updater_config = FirmwareUpdaterConfig::from_linkerfile_blocking(&flash, &flash);
-        let mut magic_buf = AlignedBuffer([0; 4]);
-        let updater = BlockingFirmwareUpdater::new(updater_config, magic_buf.as_mut());
-
-        let driver = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
-        let mut usb_config = embassy_usb::Config::new(0xc0de, 0xcafe);
-        usb_config.manufacturer = Some("Sokol Pezinok");
-        usb_config.product = Some("Yaroc DFU Bootloader");
-
-        let mut config_descriptor = [0; 64];
-        let mut bos_descriptor = [0; 32];
-        let mut msos_descriptor = [0; 64];
-        let mut control_buf = [0; PAGE_SIZE];
-
-        let mut dfu_state = new_state::<_, _, _, PAGE_SIZE>(
-            updater,
-            DfuAttributes::CAN_DOWNLOAD | DfuAttributes::WILL_DETACH,
-            ResetImmediate,
-        );
-
-        let mut builder = Builder::new(
-            driver,
-            usb_config,
-            &mut config_descriptor,
-            &mut bos_descriptor,
-            &mut msos_descriptor,
-            &mut control_buf,
-        );
-
-        usb_dfu(&mut builder, &mut dfu_state, |_| {});
-
-        let mut dev = builder.build();
-        dev.run().await
+        let executor = EXECUTOR.init(embassy_executor::Executor::new());
+        executor.run(|spawner| {
+            spawner.spawn(dfu_task(p, flash).unwrap());
+        });
     }
 
     info!(
         "Booting application at 0x{:08x} (state: {})",
         active_start, state
     );
-    NVIC::mask(Interrupt::RTC1);
     unsafe {
-        cp.SCB.vtor.write(0);
+        cortex_m::Peripherals::steal().SCB.vtor.write(0);
         embassy_boot_nrf::BootLoader::<PAGE_SIZE>.load(active_start)
     }
+}
+
+#[embassy_executor::task]
+async fn dfu_task(p: embassy_nrf::Peripherals, flash: &'static FlashMutex) -> ! {
+    // Turn on both green and blue LEDs (active-low) to indicate DFU mode.
+    let _green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
+    let _blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
+
+    let updater_config = FirmwareUpdaterConfig::from_linkerfile_blocking(flash, flash);
+    let mut magic_buf = AlignedBuffer([0; 4]);
+    let updater = BlockingFirmwareUpdater::new(updater_config, magic_buf.as_mut());
+
+    let driver = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
+    let mut usb_config = embassy_usb::Config::new(0xc0de, 0xcafe);
+    usb_config.manufacturer = Some("Sokol Pezinok");
+    usb_config.product = Some("Yaroc DFU Bootloader");
+
+    let mut config_descriptor = [0; 64];
+    let mut bos_descriptor = [0; 32];
+    let mut msos_descriptor = [0; 64];
+    let mut control_buf = [0; PAGE_SIZE];
+
+    let mut dfu_state = new_state::<_, _, _, PAGE_SIZE>(
+        updater,
+        DfuAttributes::CAN_DOWNLOAD | DfuAttributes::WILL_DETACH,
+        ResetImmediate,
+    );
+
+    let mut builder = Builder::new(
+        driver,
+        usb_config,
+        &mut config_descriptor,
+        &mut bos_descriptor,
+        &mut msos_descriptor,
+        &mut control_buf,
+    );
+
+    usb_dfu(&mut builder, &mut dfu_state, |_| {});
+
+    let mut dev = builder.build();
+    dev.run().await
 }
 
 #[defmt::panic_handler]

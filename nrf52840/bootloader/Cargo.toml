@@ -7,7 +7,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = "0.7"
+cortex-m-rt = { version = "0.7", features = ["set-vtor"] }
 defmt = { workspace = true }
 defmt-rtt = { version = "1.1", features = ["disable-blocking-mode"] }
 embassy-boot = { workspace = true, features = ["defmt"] }
