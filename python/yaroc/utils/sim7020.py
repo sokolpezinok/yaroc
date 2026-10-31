@@ -97,7 +97,14 @@ class SIM7020Interface:
         if raspberrypi_model() == RaspberryModel.Unknown:
             logging.error("Cannot power on the module, press the power button")
         else:
-            import RPi.GPIO as GPIO
+            try:
+                import RPi.GPIO as GPIO
+            except ImportError as err:
+                logging.error(
+                    f"RPi.GPIO is required to power on SIM7020: {err}. "
+                    "Install with 'uv tool install \"yaroc[rpi]\"' or 'pip install \"yaroc[rpi]\"'"
+                )
+                return
 
             POWER_KEY = 4
             GPIO.setmode(GPIO.BCM)

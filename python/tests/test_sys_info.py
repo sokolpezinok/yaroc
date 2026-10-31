@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 from yaroc.rs import RaspberryModel, find_config_file
 from yaroc.utils.sys_info import (
+    create_sys_minicallhome,
     eth_mac_addr,
     is_windows,
     local_ip,
@@ -65,6 +66,14 @@ class TestSysInfo(unittest.TestCase):
     def test_raspberrypi_model_not_found(self, mock_file):
         model = raspberrypi_model()
         self.assertEqual(model, RaspberryModel.Unknown)
+
+    @patch("yaroc.utils.sys_info.raspberrypi_model", return_value=RaspberryModel.V3B)
+    @patch.dict("sys.modules", {"gpiozero": None})
+    def test_create_sys_minicallhome_rpi_no_gpiozero(self, mock_rpi_model):
+        with self.assertLogs("root", level="WARNING") as cm:
+            mch = create_sys_minicallhome()
+            self.assertIsNotNone(mch)
+        self.assertTrue(any("yaroc[rpi]" in msg for msg in cm.output))
 
     def test_find_config_file_local(self):
         import tempfile

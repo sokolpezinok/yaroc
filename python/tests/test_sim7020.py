@@ -82,3 +82,16 @@ class TestSIM7020(unittest.IsolatedAsyncioTestCase):
             "lpwa.vodafone.com",
             [8, 20],
         )
+
+    @patch("yaroc.utils.sim7020.raspberrypi_model")
+    @patch.dict("sys.modules", {"RPi": None, "RPi.GPIO": None})
+    async def test_sim7020_power_on_rpi_no_gpio(self, mock_rpi_model):
+        from yaroc.rs import RaspberryModel
+
+        mock_rpi_model.return_value = RaspberryModel.V3B
+        async_at = AsyncMock(spec=AsyncATCom)
+        async_at.call.return_value = ATResponse(full_response=[], success=False)
+        sim = SIM7020Interface(async_at, "status", "host", 10, "broker", 1883, "apn")
+        with self.assertLogs("root", level="ERROR") as cm:
+            await sim.power_on()
+        self.assertTrue(any("yaroc[rpi]" in msg for msg in cm.output))

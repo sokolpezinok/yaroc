@@ -81,16 +81,21 @@ def create_sys_minicallhome() -> MiniCallHome:
 
     model = raspberrypi_model()
     if model != RaspberryModel.Unknown:
-        import gpiozero
+        try:
+            import gpiozero
 
-        mch.cpu_temperature = gpiozero.CPUTemperature().temperature
+            mch.cpu_temperature = gpiozero.CPUTemperature().temperature
+        except ImportError as err:
+            logging.warning(
+                f"gpiozero is required for CPU temperature monitoring: {err}. "
+                "Install with 'uv tool install \"yaroc[rpi]\"' or 'pip install \"yaroc[rpi]\"'"
+            )
         try:
             result = subprocess.run(shlex.split("vcgencmd measure_volts"), capture_output=True)
             volts_v = result.stdout.decode("utf-8").split("=")[1]
             mch.millivolts = int(1000 * float(volts_v.split("V")[0]))
         except Exception as err:
             logging.error(err)
-            logging.error(result.stdout)
 
     elif not is_windows():
         temperatures = psutil.sensors_temperatures()

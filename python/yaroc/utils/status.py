@@ -27,7 +27,7 @@ def _init_epd(model: str, busy_pin: int | None) -> Any:
         except ImportError as err:
             raise ImportError(
                 "gpiozero is required when busy_pin is set. "
-                "Install with 'uv tool install \"yaroc[rpi]\"' or 'pip install \"yaroc[rpi]\"'"
+                "Install with 'uv tool install \"yaroc[display]\"' or 'pip install \"yaroc[display]\"'"
             ) from err
 
         original_button = gpiozero.Button
