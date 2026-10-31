@@ -79,9 +79,9 @@ fn main() -> ! {
 
 #[embassy_executor::task]
 async fn dfu_task(p: embassy_nrf::Peripherals, flash: &'static FlashMutex) -> ! {
-    // Turn on both green and blue LEDs (active-low) to indicate DFU mode.
-    let _green_led = Output::new(p.P1_03, Level::Low, OutputDrive::Standard);
-    let _blue_led = Output::new(p.P1_04, Level::Low, OutputDrive::Standard);
+    // Turn on both green and blue LEDs (active-high) to indicate DFU mode.
+    let _green_led = Output::new(p.P1_03, Level::High, OutputDrive::Standard);
+    let _blue_led = Output::new(p.P1_04, Level::High, OutputDrive::Standard);
 
     let updater_config = FirmwareUpdaterConfig::from_linkerfile_blocking(flash, flash);
     let mut magic_buf = AlignedBuffer([0; 4]);

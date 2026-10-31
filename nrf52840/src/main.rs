@@ -34,17 +34,17 @@ use yaroc_nrf52840::{
 async fn led_task(mut led: Output<'static>, mut status: Receiver<'static, RawMutex, bool, 1>) {
     loop {
         let connected = status.try_get().unwrap_or_default();
-        let (period_ms, on_ms) = if connected { (3500, 500) } else { (332, 166) };
+        let (period_ms, off_ms) = if connected { (3500, 500) } else { (332, 166) };
 
         let now_ms = Instant::now().as_millis();
         let phase_ms = now_ms % period_ms;
-        let (turn_on, delay_ms) = if phase_ms < on_ms {
-            (true, on_ms - phase_ms)
+        let (turn_off, delay_ms) = if phase_ms < off_ms {
+            (true, off_ms - phase_ms)
         } else {
             (false, period_ms - phase_ms)
         };
 
-        if turn_on {
+        if turn_off {
             led.set_low();
         } else {
             led.set_high();
