@@ -1,4 +1,5 @@
 use defmt::error;
+use embassy_boot::{FirmwareState, FirmwareUpdaterError};
 use embassy_embedded_hal::flash::partition::Partition;
 use embassy_sync::mutex::Mutex;
 use femtopb::Message as _;
@@ -8,6 +9,7 @@ use sequential_storage::{
     map::{MapConfig, MapStorage},
     queue::{QueueConfig, QueueIterator, QueueStorage},
 };
+use static_cell::StaticCell;
 
 type NoCache<KEY = ()> = Cache<Uncached, Uncached, Uncached, KEY>;
 
@@ -24,6 +26,8 @@ unsafe extern "C" {
     // These symbols are provided by the linker script (memory.x)
     unsafe static _data_flash_start: u32;
     unsafe static _data_flash_size: u32;
+    unsafe static __bootloader_state_start: u32;
+    unsafe static __bootloader_state_end: u32;
 }
 
 /// A wrapper that ensures its inner byte array is 4-byte (word) aligned.
@@ -110,6 +114,39 @@ impl<'a> NrfFlash<'a> {
             at_log_storage,
             buffer: AlignedBuffer::default(),
         }
+    }
+}
+
+static STATE_BUFFER: StaticCell<AlignedBuffer<4>> = StaticCell::new();
+
+/// Manages the bootloader state partition for rollback protection and DFU detach signaling.
+pub struct BootloaderState<'a> {
+    state: FirmwareState<'a, SdPartition<'a>>,
+}
+
+// nrf_softdevice::Flash is !Send because it contains a *mut (), but on nRF52840
+// (single core) it is safe to move between tasks as they all run in Thread Mode.
+unsafe impl Send for BootloaderState<'_> {}
+
+impl<'a> BootloaderState<'a> {
+    /// Creates a new `BootloaderState` instance
+    pub fn new(flash: &'a Mutex<RawMutex, SdFlash>) -> Self {
+        let start = unsafe { &__bootloader_state_start as *const u32 as u32 };
+        let end = unsafe { &__bootloader_state_end as *const u32 as u32 };
+        let partition = Partition::new(flash, start, end - start);
+        let buffer = STATE_BUFFER.init(AlignedBuffer::default()).as_mut();
+        let state = FirmwareState::new(partition, buffer);
+        Self { state }
+    }
+
+    /// Marks the active firmware as successfully booted to prevent rollback.
+    pub async fn mark_booted(&mut self) -> Result<(), FirmwareUpdaterError> {
+        self.state.mark_booted().await
+    }
+
+    /// Marks the bootloader state to enter USB DFU mode on next boot.
+    pub async fn mark_dfu(&mut self) -> Result<(), FirmwareUpdaterError> {
+        self.state.mark_dfu().await
     }
 }
 

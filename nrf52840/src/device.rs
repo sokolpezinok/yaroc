@@ -14,7 +14,7 @@ use heapless::String;
 use static_cell::StaticCell;
 
 use crate::ble::Ble;
-use crate::flash::NrfFlash;
+use crate::flash::{BootloaderState, NrfFlash};
 use crate::usb::Usb;
 use yaroc_common::RawMutex;
 use yaroc_common::at::uart::AtUart;
@@ -53,6 +53,8 @@ pub struct Device {
     pub ble: Ble,
     /// The NRF flash.
     pub flash: NrfFlash<'static>,
+    /// The bootloader state partition.
+    pub bootloader_state: BootloaderState<'static>,
     /// The USB device
     pub usb: Usb,
     /// Device config.
@@ -74,6 +76,10 @@ impl Device {
         let ble = Ble::new();
         let flash_mutex = FLASH_MUTEX.init(Mutex::new(ble.flash()));
         let mut flash = NrfFlash::new(flash_mutex);
+        let mut bootloader_state = BootloaderState::new(flash_mutex);
+        if let Err(err) = bootloader_state.mark_booted().await {
+            error!("Failed to mark firmware as booted: {:?}", err);
+        }
         let device_config = match flash.read::<DeviceConfig>().await {
             Ok(config) => config.unwrap_or_default(),
             Err(err) => {
@@ -128,6 +134,7 @@ impl Device {
             saadc,
             ble,
             flash,
+            bootloader_state,
             usb,
             device_config,
         }

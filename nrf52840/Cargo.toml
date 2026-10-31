@@ -18,6 +18,7 @@ femtopb = { workspace = true }
 
 defmt = { workspace = true }
 defmt-rtt = { version = "1.1", features = ["disable-blocking-mode"] }
+embassy-boot = { workspace = true }
 embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
 embassy-embedded-hal = { workspace = true }
 embassy-executor = { workspace = true, features = ["platform-cortex-m", "defmt"] }
@@ -26,7 +27,7 @@ embassy-nrf = { workspace = true, features = ["defmt"] }
 embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-usb = { workspace = true, features = ["defmt"] }
-embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu"] }
+embassy-usb-dfu = { workspace = true, features = ["defmt", "application"] }
 embassy-usb-logger = { version = "0.6.0" }
 heapless =  { workspace = true }
 log = { workspace = true }

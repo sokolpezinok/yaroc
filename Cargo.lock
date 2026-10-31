@@ -3432,6 +3432,7 @@ dependencies = [
  "cortex-m-semihosting",
  "defmt 1.1.1",
  "defmt-rtt",
+ "embassy-boot",
  "embassy-boot-nrf",
  "embassy-embedded-hal",
  "embassy-executor",

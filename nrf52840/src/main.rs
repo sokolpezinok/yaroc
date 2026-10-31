@@ -68,6 +68,7 @@ async fn main(spawner: Spawner) {
         usb,
         saadc,
         mut flash,
+        bootloader_state: _bootloader_state,
         device_config,
     } = device;
     blue_led.set_high();
