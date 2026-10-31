@@ -68,13 +68,17 @@ async fn main(spawner: Spawner) {
         usb,
         saadc,
         mut flash,
-        bootloader_state: _bootloader_state,
+        mut bootloader_state,
         device_config,
     } = device;
     blue_led.set_high();
     green_led.set_high();
 
     ble.spawn(spawner);
+
+    if let Err(err) = bootloader_state.mark_booted().await {
+        error!("Failed to mark firmware as booted: {:?}", err);
+    }
 
     let mut mqtt_config = MqttClientConfig {
         name: format!(24; "nrf52840-{mac_address}").unwrap(),

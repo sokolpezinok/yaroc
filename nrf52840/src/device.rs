@@ -76,10 +76,7 @@ impl Device {
         let ble = Ble::new();
         let flash_mutex = FLASH_MUTEX.init(Mutex::new(ble.flash()));
         let mut flash = NrfFlash::new(flash_mutex);
-        let mut bootloader_state = BootloaderState::new(flash_mutex);
-        if let Err(err) = bootloader_state.mark_booted().await {
-            error!("Failed to mark firmware as booted: {:?}", err);
-        }
+        let bootloader_state = BootloaderState::new(flash_mutex);
         let device_config = match flash.read::<DeviceConfig>().await {
             Ok(config) => config.unwrap_or_default(),
             Err(err) => {
