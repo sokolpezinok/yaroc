@@ -1,0 +1,23 @@
+[package]
+name = "yaroc-nrf52840-bootloader"
+version = "0.1.0"
+authors = ["Lukáš Poláček <lukas@polacek.email>"]
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+defmt = { workspace = true }
+defmt-rtt = { version = "1.1", features = ["disable-blocking-mode"] }
+embassy-boot = { workspace = true, features = ["defmt"] }
+embassy-boot-nrf = { workspace = true, features = ["defmt", "softdevice"] }
+embassy-embedded-hal = { workspace = true }
+embassy-executor = { workspace = true, features = ["platform-cortex-m", "defmt"] }
+embassy-nrf = { workspace = true, features = ["defmt"] }
+embassy-sync = { workspace = true, features = ["defmt"] }
+embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-usb = { workspace = true, features = ["defmt"] }
+embassy-usb-dfu = { workspace = true, features = ["defmt", "dfu", "cortex-m"] }
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+static_cell = { workspace = true }

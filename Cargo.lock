@@ -795,6 +795,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e36d3678d16e1e71b052d00f7518620b5839a878f2bdab2019b81d984fb2a74f"
 dependencies = [
  "bitflags 2.13.1",
+ "cortex-m",
  "defmt 1.1.1",
  "embassy-boot",
  "embassy-futures",
@@ -3452,6 +3453,27 @@ dependencies = [
  "static_cell",
  "thiserror 2.0.20",
  "yaroc-common",
+]
+
+[[package]]
+name = "yaroc-nrf52840-bootloader"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt 1.1.1",
+ "defmt-rtt",
+ "embassy-boot",
+ "embassy-boot-nrf",
+ "embassy-embedded-hal",
+ "embassy-executor",
+ "embassy-nrf",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-usb",
+ "embassy-usb-dfu",
+ "panic-probe",
+ "static_cell",
 ]
 
 [[package]]
