@@ -1,5 +1,6 @@
 use chrono::{Days, prelude::*};
 use heapless::Vec;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
@@ -52,6 +53,63 @@ pub struct SiPunch {
     pub idx: u8,
     /// The total count of punches on the card. Always 0 for "Send last record".
     pub cnt: u8,
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for SiPunch {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "SiPunch {{ card: {}, code: {}, time: {=i64}, mode: {} }}",
+            self.card,
+            self.code,
+            self.time.timestamp_millis(),
+            self.mode,
+        );
+    }
+}
+
+/// A punch record stored in flash, containing the raw 20-byte record and the timestamp when it was received.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LoggedPunch {
+    /// The timestamp when the punch was received.
+    pub timestamp: DateTime<FixedOffset>,
+    /// The raw 20-byte record.
+    pub raw: RawPunch,
+}
+
+impl LoggedPunch {
+    /// Creates a new `LoggedPunch`.
+    pub fn new(timestamp: DateTime<FixedOffset>, raw: RawPunch) -> Self {
+        Self { timestamp, raw }
+    }
+
+    /// Parses the raw punch data into an `SiPunch` using the stored timestamp.
+    pub fn to_si_punch(&self) -> SiPunch {
+        SiPunch::from_raw(
+            self.raw,
+            self.timestamp.date_naive(),
+            self.timestamp.offset(),
+        )
+    }
+}
+
+impl From<LoggedPunch> for SiPunch {
+    fn from(logged: LoggedPunch) -> Self {
+        logged.to_si_punch()
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for LoggedPunch {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "LoggedPunch {{ timestamp_ms: {}, raw: {=[u8]} }}",
+            self.timestamp.timestamp_millis(),
+            self.raw,
+        );
+    }
 }
 
 const EARLY_SERIES_COMPLEMENT: u32 = 100_000 - (1 << 16);
@@ -494,7 +552,10 @@ mod test_checksum {
 mod test_punch {
     use chrono::prelude::*;
 
-    use crate::{error::Error, punch::SiPunch};
+    use crate::{
+        error::Error,
+        punch::{LoggedPunch, SiPunch},
+    };
 
     #[test]
     fn test_bytes_to_card() {
@@ -595,5 +656,17 @@ mod test_punch {
             b"\x02\xd3\x0d\x00\x2f\x00\x1a\x2b\x3c\x08\x8c\xa3\xcb\x02\x00\x01\x50\xe3";
         let res = SiPunch::find_punch_data(too_short_payload);
         assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_postcard_serialization() {
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch = SiPunch::new(1715004, 47, time, 2, 1, 3);
+        let mut buf = [0u8; 256];
+        let logged = LoggedPunch::new(time, punch.raw);
+        let logged_slice = postcard::to_slice(&logged, &mut buf).unwrap();
+        let deserialized_logged: LoggedPunch = postcard::from_bytes(logged_slice).unwrap();
+        assert_eq!(logged, deserialized_logged);
+        assert_eq!(punch, deserialized_logged.to_si_punch());
     }
 }

@@ -132,6 +132,7 @@ pub async fn flash_log_task() {
                         .await
                         .inspect_err(|e| error!("Failed to log MiniCallHome: {}", e));
                 }
+                FlashLog::Punch(_) => {}
             }
         }
     }

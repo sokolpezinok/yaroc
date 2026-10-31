@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Error, Result};
 use crate::RawMutex;
+use crate::punch::LoggedPunch;
 use crate::status::MiniCallHome;
 use embassy_sync::channel::Channel;
 use embassy_time::Instant;
@@ -382,10 +383,11 @@ pub struct PendingLoggedAtResponse {
 pub enum FlashLog {
     AtResponse(PendingLoggedAtResponse),
     MiniCallHome(MiniCallHome),
+    Punch(LoggedPunch),
 }
 
 /// A channel for logging messages to flash.
-pub static FLASH_LOG_CHANNEL: Channel<RawMutex, FlashLog, 3> = Channel::new();
+pub static FLASH_LOG_CHANNEL: Channel<RawMutex, FlashLog, 16> = Channel::new();
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for LoggedAtResponse {
