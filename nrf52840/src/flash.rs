@@ -59,7 +59,7 @@ pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, SdPartition<'a>, NoCache<u8>>,
     mch_storage: QueueStorage<SdPartition<'a>, NoCache>,
     punch_storage: QueueStorage<SdPartition<'a>, NoCache>,
-    queue_storage: QueueStorage<SdPartition<'a>, NoCache>,
+    at_log_storage: QueueStorage<SdPartition<'a>, NoCache>,
     buffer: AlignedBuffer<512>,
 }
 
@@ -96,14 +96,18 @@ impl<'a> NrfFlash<'a> {
             data_start + MAP_SIZE + MCH_SIZE + PUNCH_SIZE,
             queue_size,
         );
-        let queue_config = QueueConfig::new(0..queue_size);
-        let queue_storage = QueueStorage::new(queue_partition, queue_config, Cache::new_uncached());
+        let at_log_storage_config = QueueConfig::new(0..queue_size);
+        let at_log_storage = QueueStorage::new(
+            queue_partition,
+            at_log_storage_config,
+            Cache::new_uncached(),
+        );
 
         Self {
             map_storage,
             mch_storage,
             punch_storage,
-            queue_storage,
+            at_log_storage,
             buffer: AlignedBuffer::default(),
         }
     }
@@ -116,7 +120,7 @@ impl<'a> Flash for NrfFlash<'a> {
         self.map_storage.erase_all().await.map_err(|_| Error::FlashError)?;
         self.mch_storage.erase_all().await.map_err(|_| Error::FlashError)?;
         self.punch_storage.erase_all().await.map_err(|_| Error::FlashError)?;
-        self.queue_storage.erase_all().await.map_err(|_| Error::FlashError)
+        self.at_log_storage.erase_all().await.map_err(|_| Error::FlashError)
     }
 
     /// Stores a value in the flash memory.
@@ -153,7 +157,7 @@ impl<'a> Flash for NrfFlash<'a> {
             response: response.response,
         };
         let serialized = postcard::to_slice(&logged_response, self.buffer.as_mut())?;
-        self.queue_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
+        self.at_log_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
     }
 
     async fn log_punch(&mut self, punch: LoggedPunch) -> crate::Result<()> {
@@ -189,7 +193,7 @@ impl<'a> Flash for NrfFlash<'a> {
         Self: 'b;
 
     async fn logged_at_response_iter(&mut self) -> crate::Result<Self::LoggedAtResponseIter<'_>> {
-        let iter = self.queue_storage.iter().await.map_err(|_| Error::FlashError)?;
+        let iter = self.at_log_storage.iter().await.map_err(|_| Error::FlashError)?;
         Ok(NrfLoggedAtResponseIter {
             iter,
             buffer: AlignedBuffer::default(),
