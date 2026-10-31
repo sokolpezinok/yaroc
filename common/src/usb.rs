@@ -16,8 +16,9 @@ use crate::RawMutex;
 use crate::bg77::modem::Modem;
 use crate::bg77::modem_manager::ModemConfig;
 use crate::error::Error;
-use crate::flash::{Flash, FlashGuard, LoggedAtResponseIterator, MchIterator};
+use crate::flash::{Flash, FlashGuard, LoggedAtResponseIterator, MchIterator, PunchIterator};
 use crate::mqtt::MqttConfig;
+use crate::punch::LoggedPunch;
 use crate::send_punch::{DeviceConfig, SendPunch};
 
 #[cfg(feature = "nrf")]
@@ -46,6 +47,8 @@ pub enum UsbCommand {
     GetMiniCallHomeLogs,
     /// Get LoggedAtResponse logs.
     GetLoggedAtResponseLogs,
+    /// Get Punch logs.
+    GetPunchLogs,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -68,6 +71,8 @@ pub enum UsbResponse {
     MiniCallHomeLog(Vec<u8, 54>),
     /// LoggedAtResponse log.
     LoggedAtResponseLog(Vec<u8, 384>),
+    /// Punch log.
+    PunchLog(LoggedPunch),
 }
 
 /// Abstraction over the CDC ACM class.
@@ -307,6 +312,25 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
                 }
                 self.write_response(UsbResponse::Ok).await?;
             }
+            UsbCommand::GetPunchLogs => {
+                info!("Request to read all Punch logs");
+                let mut flash = self.lock_flash().await;
+                let mut iter = flash.punch_iter().await?;
+                loop {
+                    self.write_response(UsbResponse::PartialOk(3000)).await?;
+                    match iter.next().await {
+                        Ok(Some(punch)) => {
+                            self.write_response(UsbResponse::PunchLog(punch)).await?;
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            error!("Error reading punch log from flash: {}", e);
+                            break;
+                        }
+                    }
+                }
+                self.write_response(UsbResponse::Ok).await?;
+            }
         }
         Ok(())
     }
@@ -471,5 +495,22 @@ mod tests {
         let bytes = to_vec::<_, 16>(&response_ok).unwrap();
         let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
         assert_eq!(decoded, UsbResponse::Ok);
+    }
+
+    #[test]
+    fn test_punch_logs_serialization() {
+        use chrono::DateTime;
+
+        let command = UsbCommand::GetPunchLogs;
+        let bytes = to_vec::<_, 8>(&command).unwrap();
+        let decoded: UsbCommand = from_bytes(bytes.as_slice()).unwrap();
+        assert_matches!(decoded, UsbCommand::GetPunchLogs);
+
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let logged_punch = LoggedPunch::new(time, [0; 20]);
+        let response = UsbResponse::PunchLog(logged_punch);
+        let bytes = to_vec::<_, 64>(&response).unwrap();
+        let decoded: UsbResponse = from_bytes(bytes.as_slice()).unwrap();
+        assert_eq!(decoded, UsbResponse::PunchLog(logged_punch));
     }
 }

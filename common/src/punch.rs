@@ -70,7 +70,7 @@ impl defmt::Format for SiPunch {
 }
 
 /// A punch record stored in flash, containing the raw 20-byte record and the timestamp when it was received.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoggedPunch {
     /// The timestamp when the punch was received.
     pub timestamp: DateTime<FixedOffset>,
