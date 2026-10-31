@@ -112,7 +112,7 @@ pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPu
     backoff_retries.r#loop().await;
 }
 
-/// A task that logs AT responses and MiniCallHome messages to flash without locking `SEND_PUNCH_MUTEX`.
+/// A task that logs AT responses, MiniCallHome messages, and SI punches to flash without locking `SEND_PUNCH_MUTEX`.
 #[embassy_executor::task]
 pub async fn flash_log_task() {
     loop {
@@ -132,7 +132,12 @@ pub async fn flash_log_task() {
                         .await
                         .inspect_err(|e| error!("Failed to log MiniCallHome: {}", e));
                 }
-                FlashLog::Punch(_) => {}
+                FlashLog::Punch(punch) => {
+                    let _ = flash
+                        .log_punch(punch)
+                        .await
+                        .inspect_err(|e| error!("Failed to log punch: {}", e));
+                }
             }
         }
     }

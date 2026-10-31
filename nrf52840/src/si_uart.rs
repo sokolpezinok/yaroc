@@ -3,9 +3,10 @@ use embassy_nrf::uarte::UarteRxWithIdle;
 use embassy_time::Instant;
 use heapless::format;
 use yaroc_common::{
+    at::response::{FLASH_LOG_CHANNEL, FlashLog},
     backoff::{BackoffCommand, CMD_FOR_BACKOFF},
     bg77::system_info,
-    punch::SiPunch,
+    punch::{LoggedPunch, SiPunch},
     si_uart::SiUart,
 };
 
@@ -31,6 +32,9 @@ pub async fn read_si_uart(mut si_uart: SiUart<UarteRxWithIdle<'static>>) {
 
                     let today = time.date_naive();
                     for punch in punches {
+                        let _ = FLASH_LOG_CHANNEL
+                            .try_send(FlashLog::Punch(LoggedPunch::new(time, punch)))
+                            .inspect_err(|e| error!("Failed to send punch for logging: {:?}", e));
                         let punch = SiPunch::from_raw(punch, today, time.offset());
                         info!(
                             "{} punched {} at {}, ID={}",
