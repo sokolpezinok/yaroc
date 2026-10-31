@@ -5,7 +5,7 @@ use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_nrf::gpio::Output;
 use embassy_sync::watch::Receiver;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use heapless::format;
 use yaroc_common::{
     RawMutex,
@@ -34,21 +34,22 @@ use yaroc_nrf52840::{
 async fn led_task(mut led: Output<'static>, mut status: Receiver<'static, RawMutex, bool, 1>) {
     loop {
         let connected = status.try_get().unwrap_or_default();
-        let delay = if connected {
-            Duration::from_millis(3000)
-        } else {
-            Duration::from_millis(166)
-        };
-        Timer::after(delay).await;
-        led.set_low();
+        let (period_ms, on_ms) = if connected { (3500, 500) } else { (332, 166) };
 
-        let delay = if connected {
-            Duration::from_millis(500)
+        let now_ms = Instant::now().as_millis();
+        let phase_ms = now_ms % period_ms;
+        let (turn_on, delay_ms) = if phase_ms < on_ms {
+            (true, on_ms - phase_ms)
         } else {
-            Duration::from_millis(166)
+            (false, period_ms - phase_ms)
         };
-        Timer::after(delay).await;
-        led.set_high();
+
+        if turn_on {
+            led.set_low();
+        } else {
+            led.set_high();
+        }
+        Timer::after(Duration::from_millis(delay_ms)).await;
     }
 }
 
