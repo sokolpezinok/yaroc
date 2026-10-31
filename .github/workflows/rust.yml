@@ -47,8 +47,12 @@ jobs:
         rustup target add thumbv7em-none-eabihf
         cargo check
         cargo build -r
+        cargo check -p yaroc-nrf52840-bootloader
+        cargo build -r -p yaroc-nrf52840-bootloader
     - name: Run clippy
-      run: cargo clippy -- -D warnings
+      run: |
+        cargo clippy -- -D warnings
+        cargo clippy -p yaroc-nrf52840-bootloader -- -D warnings
 
   release:
     name: Release
@@ -73,18 +77,27 @@ jobs:
         DEFMT_LOG: debug
       run: |
         cargo objcopy --release -p yaroc-nrf52840 --target thumbv7em-none-eabihf -- -O ihex target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.hex
+        cargo objcopy --release -p yaroc-nrf52840 --target thumbv7em-none-eabihf -- -O binary target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.bin
         cp target/thumbv7em-none-eabihf/release/yaroc-nrf52840 target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${VERSION}.elf
+        cargo objcopy --release -p yaroc-nrf52840-bootloader --target thumbv7em-none-eabihf -- -O ihex target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${VERSION}.hex
+        cp target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${VERSION}.elf
     - name: Upload firmware artifacts
       uses: actions/upload-artifact@v6
       with:
         name: yaroc-nrf52840-${{ env.VERSION }}
         path: |
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.bin
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.elf
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${{ env.VERSION }}.elf
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
         prerelease: ${{ contains(github.ref_name, 'beta') }}
         files: |
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.bin
           target/thumbv7em-none-eabihf/release/yaroc-nrf52840-${{ env.VERSION }}.elf
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${{ env.VERSION }}.hex
+          target/thumbv7em-none-eabihf/release/yaroc-nrf52840-bootloader-${{ env.VERSION }}.elf

@@ -99,7 +99,10 @@ async fn main(_spawner: Spawner) -> ! {
         dev.run().await
     }
 
-    info!("Booting application at 0x{:08x} (state: {})", active_start, state);
+    info!(
+        "Booting application at 0x{:08x} (state: {})",
+        active_start, state
+    );
     NVIC::mask(Interrupt::RTC1);
     unsafe {
         cp.SCB.vtor.write(0);
