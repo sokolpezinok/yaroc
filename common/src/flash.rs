@@ -5,6 +5,7 @@ use sequential_storage::map::Value;
 use crate::RawMutex;
 use crate::at::response::{LoggedAtResponse, PendingLoggedAtResponse};
 use crate::proto::MiniCallHome as MiniCallHomeProto;
+use crate::punch::LoggedPunch;
 use crate::status::MiniCallHome;
 
 /// A guard providing mutable access to the flash instance while holding the mutex lock.
@@ -60,6 +61,9 @@ pub trait Flash {
         response: PendingLoggedAtResponse,
     ) -> impl Future<Output = crate::Result<()>>;
 
+    /// Stores a logged punch in flash.
+    fn log_punch(&mut self, punch: LoggedPunch) -> impl Future<Output = crate::Result<()>>;
+
     /// Fetches a value from the flash memory.
     fn read<V: FlashValue>(&mut self) -> impl Future<Output = crate::Result<Option<V>>>;
 
@@ -78,6 +82,13 @@ pub trait Flash {
     fn logged_at_response_iter(
         &mut self,
     ) -> impl Future<Output = crate::Result<Self::LoggedAtResponseIter<'_>>>;
+
+    type PunchIter<'a>: PunchIterator
+    where
+        Self: 'a;
+
+    /// Returns an iterator over the stored punches.
+    fn punch_iter(&mut self) -> impl Future<Output = crate::Result<Self::PunchIter<'_>>>;
 }
 
 pub trait MchIterator {
@@ -87,4 +98,8 @@ pub trait MchIterator {
 
 pub trait LoggedAtResponseIterator {
     fn next(&mut self) -> impl Future<Output = crate::Result<Option<LoggedAtResponse>>>;
+}
+
+pub trait PunchIterator {
+    fn next(&mut self) -> impl Future<Output = crate::Result<Option<LoggedPunch>>>;
 }

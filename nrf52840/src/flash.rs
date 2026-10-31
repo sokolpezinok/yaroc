@@ -13,8 +13,11 @@ type NoCache<KEY = ()> = Cache<Uncached, Uncached, Uncached, KEY>;
 
 use yaroc_common::at::response::{LoggedAtResponse, PendingLoggedAtResponse};
 use yaroc_common::bg77::system_info::time_from_instant;
-use yaroc_common::flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator};
+use yaroc_common::flash::{
+    Flash, FlashValue, LoggedAtResponseIterator, MchIterator, PunchIterator,
+};
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
+use yaroc_common::punch::LoggedPunch;
 use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
 unsafe extern "C" {
@@ -55,6 +58,7 @@ type SdPartition<'a> = Partition<'a, RawMutex, SdFlash>;
 pub struct NrfFlash<'a> {
     map_storage: MapStorage<u8, SdPartition<'a>, NoCache<u8>>,
     mch_storage: QueueStorage<SdPartition<'a>, NoCache>,
+    punch_storage: QueueStorage<SdPartition<'a>, NoCache>,
     queue_storage: QueueStorage<SdPartition<'a>, NoCache>,
     buffer: AlignedBuffer<512>,
 }
@@ -65,6 +69,7 @@ unsafe impl Send for NrfFlash<'_> {}
 
 const MAP_SIZE: u32 = 8 * 1024;
 const MCH_SIZE: u32 = 64 * 1024;
+const PUNCH_SIZE: u32 = 32 * 1024;
 
 impl<'a> NrfFlash<'a> {
     /// Creates a new NrfFlash instance
@@ -72,7 +77,7 @@ impl<'a> NrfFlash<'a> {
         let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
         let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
 
-        let queue_size = data_size - MAP_SIZE - MCH_SIZE;
+        let queue_size = data_size - MAP_SIZE - MCH_SIZE - PUNCH_SIZE;
 
         let map_partition = Partition::new(flash, data_start, MAP_SIZE);
         let config = MapConfig::new(0..MAP_SIZE);
@@ -82,13 +87,22 @@ impl<'a> NrfFlash<'a> {
         let mch_config = QueueConfig::new(0..MCH_SIZE);
         let mch_storage = QueueStorage::new(mch_partition, mch_config, Cache::new_uncached());
 
-        let queue_partition = Partition::new(flash, data_start + MAP_SIZE + MCH_SIZE, queue_size);
+        let punch_partition = Partition::new(flash, data_start + MAP_SIZE + MCH_SIZE, PUNCH_SIZE);
+        let punch_config = QueueConfig::new(0..PUNCH_SIZE);
+        let punch_storage = QueueStorage::new(punch_partition, punch_config, Cache::new_uncached());
+
+        let queue_partition = Partition::new(
+            flash,
+            data_start + MAP_SIZE + MCH_SIZE + PUNCH_SIZE,
+            queue_size,
+        );
         let queue_config = QueueConfig::new(0..queue_size);
         let queue_storage = QueueStorage::new(queue_partition, queue_config, Cache::new_uncached());
 
         Self {
             map_storage,
             mch_storage,
+            punch_storage,
             queue_storage,
             buffer: AlignedBuffer::default(),
         }
@@ -101,6 +115,7 @@ impl<'a> Flash for NrfFlash<'a> {
         // TODO: wrap and propagate the error
         self.map_storage.erase_all().await.map_err(|_| Error::FlashError)?;
         self.mch_storage.erase_all().await.map_err(|_| Error::FlashError)?;
+        self.punch_storage.erase_all().await.map_err(|_| Error::FlashError)?;
         self.queue_storage.erase_all().await.map_err(|_| Error::FlashError)
     }
 
@@ -141,6 +156,11 @@ impl<'a> Flash for NrfFlash<'a> {
         self.queue_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
     }
 
+    async fn log_punch(&mut self, punch: LoggedPunch) -> crate::Result<()> {
+        let serialized = postcard::to_slice(&punch, self.buffer.as_mut())?;
+        self.punch_storage.push(serialized, true).await.map_err(|_| Error::FlashError)
+    }
+
     /// Fetches a value from the flash memory.
     async fn read<V: FlashValue>(&mut self) -> crate::Result<Option<V>> {
         let key = V::VALUE_INDEX as u8;
@@ -171,6 +191,19 @@ impl<'a> Flash for NrfFlash<'a> {
     async fn logged_at_response_iter(&mut self) -> crate::Result<Self::LoggedAtResponseIter<'_>> {
         let iter = self.queue_storage.iter().await.map_err(|_| Error::FlashError)?;
         Ok(NrfLoggedAtResponseIter {
+            iter,
+            buffer: AlignedBuffer::default(),
+        })
+    }
+
+    type PunchIter<'b>
+        = NrfPunchIter<'b, 'a>
+    where
+        Self: 'b;
+
+    async fn punch_iter(&mut self) -> crate::Result<Self::PunchIter<'_>> {
+        let iter = self.punch_storage.iter().await.map_err(|_| Error::FlashError)?;
+        Ok(NrfPunchIter {
             iter,
             buffer: AlignedBuffer::default(),
         })
@@ -210,6 +243,31 @@ impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
                     Err(e) => {
                         error!(
                             "Failed to deserialize LoggedAtResponse entry from flash: {}, skipping",
+                            e
+                        );
+                        continue;
+                    }
+                },
+                None => return Ok(None),
+            }
+        }
+    }
+}
+
+pub struct NrfPunchIter<'s, 'a> {
+    iter: QueueIterator<'s, SdPartition<'a>, NoCache>,
+    buffer: AlignedBuffer<512>,
+}
+
+impl<'s, 'a> PunchIterator for NrfPunchIter<'s, 'a> {
+    async fn next(&mut self) -> crate::Result<Option<LoggedPunch>> {
+        loop {
+            match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
+                Some(entry) => match postcard::from_bytes(entry.into_buf()) {
+                    Ok(punch) => return Ok(Some(punch)),
+                    Err(e) => {
+                        error!(
+                            "Failed to deserialize LoggedPunch entry from flash: {}, skipping",
                             e
                         );
                         continue;

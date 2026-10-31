@@ -352,7 +352,8 @@ mod tests {
             connection::ConnectionState, modem::Bg77, modem_manager::FakePin,
             system_info::BOOT_TIME,
         },
-        flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator},
+        flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator, PunchIterator},
+        punch::{LoggedPunch, SiPunch},
         status::{BATTERY, TEMPERATURE},
     };
 
@@ -383,6 +384,10 @@ mod tests {
             Ok(())
         }
 
+        async fn log_punch(&mut self, _punch: LoggedPunch) -> crate::Result<()> {
+            Ok(())
+        }
+
         async fn read<V: FlashValue>(&mut self) -> crate::Result<Option<V>> {
             Ok(None)
         }
@@ -400,6 +405,12 @@ mod tests {
         ) -> crate::Result<Self::LoggedAtResponseIter<'_>> {
             Ok(FakeLoggedAtResponseIter)
         }
+
+        type PunchIter<'a> = FakePunchIter;
+
+        async fn punch_iter(&mut self) -> crate::Result<Self::PunchIter<'_>> {
+            Ok(FakePunchIter)
+        }
     }
 
     struct FakeMchIter;
@@ -414,6 +425,14 @@ mod tests {
 
     impl LoggedAtResponseIterator for FakeLoggedAtResponseIter {
         async fn next(&mut self) -> crate::Result<Option<crate::at::response::LoggedAtResponse>> {
+            Ok(None)
+        }
+    }
+
+    struct FakePunchIter;
+
+    impl PunchIterator for FakePunchIter {
+        async fn next(&mut self) -> crate::Result<Option<LoggedPunch>> {
             Ok(None)
         }
     }
@@ -516,6 +535,18 @@ mod tests {
         let mch = block_on(send_punch.send_mini_call_home()).unwrap();
         let logged_item = FLASH_LOG_CHANNEL.try_receive().unwrap();
         assert_eq!(logged_item, FlashLog::MiniCallHome(mch));
+    }
+
+    #[test]
+    fn si_punch_flash_log_channel_test() {
+        let time =
+            chrono::DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
+        let punch = SiPunch::new(1715004, 47, time, 2, 1, 3);
+        let logged = LoggedPunch::new(time, punch.raw);
+        FLASH_LOG_CHANNEL.clear();
+        assert!(FLASH_LOG_CHANNEL.try_send(FlashLog::Punch(logged)).is_ok());
+        let received = FLASH_LOG_CHANNEL.try_receive().unwrap();
+        assert_eq!(received, FlashLog::Punch(logged));
     }
 
     #[test]
