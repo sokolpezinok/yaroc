@@ -113,7 +113,7 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    usb.spawn(spawner);
+    usb.spawn(spawner, bootloader_state);
     spawner.spawn(
         minicallhome_loop(device_config.minicallhome_interval).expect("Failed to spawn task"),
     );

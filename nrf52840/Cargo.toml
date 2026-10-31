@@ -26,7 +26,7 @@ embassy-futures = { workspace = true, features = ["defmt"] }
 embassy-nrf = { workspace = true, features = ["defmt"] }
 embassy-sync = { workspace = true, features = ["defmt"] }
 embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-usb = { workspace = true, features = ["defmt"] }
+embassy-usb = { workspace = true, features = ["defmt", "max-interface-count-8", "max-handler-count-8"] }
 embassy-usb-dfu = { workspace = true, features = ["defmt", "application"] }
 embassy-usb-logger = { version = "0.6.0" }
 heapless =  { workspace = true }
