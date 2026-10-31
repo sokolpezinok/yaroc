@@ -45,7 +45,7 @@ jobs:
     - name: Build
       run: |
         rustup target add thumbv7em-none-eabihf
-        cargo build
+        cargo check
         cargo build -r
     - name: Run clippy
       run: cargo clippy -- -D warnings
