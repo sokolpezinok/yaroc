@@ -148,23 +148,10 @@ fn send_command<S: Read + Write + SetTimeout>(
     serial: &mut S,
     command: UsbCommand,
 ) -> Result<UsbResponse, String> {
-    let buf = to_stdvec(&command).map_err(|e| format!("Serialization failed: {e}"))?;
-    serial
-        .write_all(buf.as_slice())
-        .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
-
-    let mut reader = PostcardReader::new(serial);
-    loop {
-        let response = reader
-            .read_one()?
-            .ok_or_else(|| "Serial port closed before receiving response".to_string())?;
-        match response {
-            UsbResponse::PartialOk(timeout_ms) => {
-                reader.set_timeout(Duration::from_millis(timeout_ms as u64))?;
-            }
-            resp => return Ok(resp),
-        }
-    }
+    let mut reader = send_command_responses(serial, command)?;
+    reader
+        .read_next_response()?
+        .ok_or_else(|| "Serial port closed before receiving response".to_string())
 }
 
 fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String> {
@@ -180,28 +167,50 @@ fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String>
     }
 }
 
-fn send_command_multiple_responses<S: Read + Write + SetTimeout>(
-    serial: &mut S,
+impl<'a, S: Read + SetTimeout> PostcardReader<'a, S> {
+    /// Reads the next response frame, automatically extending the timeout on `PartialOk`.
+    fn read_next_response(&mut self) -> Result<Option<UsbResponse>, String> {
+        loop {
+            match self.read_one::<UsbResponse>()? {
+                Some(UsbResponse::PartialOk(timeout_ms)) => {
+                    self.set_timeout(Duration::from_millis(timeout_ms as u64))?;
+                }
+                other => return Ok(other),
+            }
+        }
+    }
+}
+
+impl<'a, S: Read + SetTimeout> Iterator for PostcardReader<'a, S> {
+    type Item = Result<UsbResponse, String>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.read_next_response() {
+            Ok(Some(UsbResponse::Ok)) | Ok(None) => None,
+            Ok(Some(response)) => Some(Ok(response)),
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
+fn send_command_responses<'a, S: Read + Write + SetTimeout>(
+    serial: &'a mut S,
     command: UsbCommand,
-) -> Result<Vec<UsbResponse>, String> {
+) -> Result<PostcardReader<'a, S>, String> {
     let buf = to_stdvec(&command).map_err(|e| format!("Serialization failed: {e}"))?;
     serial
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
 
-    let mut reader = PostcardReader::new(serial);
-    let mut responses = Vec::new();
+    Ok(PostcardReader::new(serial))
+}
+
+fn send_command_multiple_responses<S: Read + Write + SetTimeout>(
+    serial: &mut S,
+    command: UsbCommand,
+) -> Result<Vec<UsbResponse>, String> {
     info!("Awaiting logs from the device");
-    while let Some(response) = reader.read_one()? {
-        match response {
-            UsbResponse::PartialOk(timeout_ms) => {
-                reader.set_timeout(Duration::from_millis(timeout_ms as u64))?;
-            }
-            UsbResponse::Ok => break,
-            other => responses.push(other),
-        }
-    }
-    Ok(responses)
+    send_command_responses(serial, command)?.collect()
 }
 
 fn write_mch_logs_to_csv<W: Write>(
@@ -585,7 +594,7 @@ mod tests {
     }
 
     #[test]
-    fn test_send_command_multiple_responses_fragmented_and_fused() {
+    fn test_send_command_responses_fragmented_and_fused() {
         let resp1 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[1, 2, 3, 4]).unwrap());
         let resp2 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[5, 6, 7, 8]).unwrap());
         let resp_ok = UsbResponse::Ok;
@@ -601,25 +610,27 @@ mod tests {
             read_offset: 0,
             chunk_size: 1,
         };
-        let res =
-            send_command_multiple_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
+        let res: Vec<_> =
+            send_command_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
                 .unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], resp1);
         assert_eq!(res[1], resp2);
 
-        // Test 2: Fused reads (all bytes in 1 read)
+        // Test 2: Fused reads (all bytes in 1 read) paired with incremental iteration
         let mut fused_stream = FragmentedStream {
             data: stream_bytes,
             read_offset: 0,
             chunk_size: 1024,
         };
-        let res =
-            send_command_multiple_responses(&mut fused_stream, UsbCommand::GetMiniCallHomeLogs)
-                .unwrap();
-        assert_eq!(res.len(), 2);
-        assert_eq!(res[0], resp1);
-        assert_eq!(res[1], resp2);
+        let mut iter =
+            send_command_responses(&mut fused_stream, UsbCommand::GetMiniCallHomeLogs).unwrap();
+        assert_eq!(iter.next(), Some(Ok(resp1)));
+        assert_eq!(iter.next(), Some(Ok(resp2)));
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
