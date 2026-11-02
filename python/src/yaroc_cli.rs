@@ -6,7 +6,7 @@ use bytes::{Buf, BytesMut};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use femtopb::Message as _;
-use log::{error, info};
+use log::{error, info, warn};
 use postcard::{from_bytes, take_from_bytes, to_stdvec};
 use pyo3::prelude::*;
 use yaroc_common::at::response::LoggedAtResponse;
@@ -205,25 +205,22 @@ fn send_command_responses<'a, S: Read + Write + SetTimeout>(
     Ok(PostcardReader::new(serial))
 }
 
-fn send_command_multiple_responses<S: Read + Write + SetTimeout>(
-    serial: &mut S,
-    command: UsbCommand,
-) -> Result<Vec<UsbResponse>, String> {
-    info!("Awaiting logs from the device");
-    send_command_responses(serial, command)?.collect()
-}
-
-fn write_mch_logs_to_csv<W: Write>(
-    responses: &[UsbResponse],
+fn write_mch_logs_to_csv<I, W>(
+    responses: I,
     writer: &mut W,
-) -> Result<(), String> {
+) -> Result<(), String>
+where
+    I: IntoIterator<Item = Result<UsbResponse, String>>,
+    W: Write,
+{
     writeln!(
         writer,
         "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
     )
     .map_err(|e| format!("Failed to write CSV header: {e}"))?;
 
-    for response in responses {
+    for item in responses {
+        let response = item?;
         if let UsbResponse::MiniCallHomeLog(buf) = response {
             let mch = MiniCallHomeProto::decode(buf.as_slice())
                 .map_err(From::from)
@@ -279,17 +276,27 @@ fn write_mch_logs_to_csv<W: Write>(
     Ok(())
 }
 
-fn dump_logged_at_response_logs(responses: Vec<UsbResponse>) {
-    for response in responses {
-        if let UsbResponse::LoggedAtResponseLog(buf) = response {
-            match from_bytes::<LoggedAtResponse>(buf.as_slice()) {
-                Ok(mut log) => {
-                    log.timestamp = log.timestamp.with_timezone(&Local).fixed_offset();
-                    info!("{:?}", log);
+fn dump_logged_at_response_logs<I>(responses: I)
+where
+    I: IntoIterator<Item = Result<UsbResponse, String>>,
+{
+    for item in responses {
+        match item {
+            Ok(UsbResponse::LoggedAtResponseLog(buf)) => {
+                match from_bytes::<LoggedAtResponse>(buf.as_slice()) {
+                    Ok(mut log) => {
+                        log.timestamp = log.timestamp.with_timezone(&Local).fixed_offset();
+                        info!("{:?}", log);
+                    }
+                    Err(e) => {
+                        error!("Failed to deserialize LoggedAtResponse: {e}");
+                    }
                 }
-                Err(e) => {
-                    error!("Failed to deserialize LoggedAtResponse: {e}");
-                }
+            }
+            Ok(r) => warn!("Unexpected response: {r:?}"),
+            Err(e) => {
+                error!("Error reading log: {e}");
+                break;
             }
         }
     }
@@ -390,19 +397,24 @@ pub fn yaroc_cli() {
         }
         Command::DumpLogs { log_type } => match log_type {
             LogType::Mch { gpx } => {
-                match send_command_multiple_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs)
-                {
+                match send_command_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
                     Ok(responses) => {
+                        info!("Awaiting logs from the device");
                         let mut stdout = std::io::stdout();
                         if let Some(ref gpx_path) = gpx {
-                            if let Err(e) = crate::gnss_geotag::geotag_mch_responses(
-                                gpx_path,
-                                &responses,
-                                &mut stdout,
-                            ) {
-                                error!("Failed to geotag MiniCallHome logs: {e}");
+                            match responses.collect::<Result<Vec<_>, _>>() {
+                                Ok(responses) => {
+                                    if let Err(e) = crate::gnss_geotag::geotag_mch_responses(
+                                        gpx_path,
+                                        &responses,
+                                        &mut stdout,
+                                    ) {
+                                        error!("Failed to geotag MiniCallHome logs: {e}");
+                                    }
+                                }
+                                Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
                             }
-                        } else if let Err(e) = write_mch_logs_to_csv(&responses, &mut stdout) {
+                        } else if let Err(e) = write_mch_logs_to_csv(responses, &mut stdout) {
                             error!("Failed to write MiniCallHome logs to stdout: {e}");
                         }
                     }
@@ -410,11 +422,11 @@ pub fn yaroc_cli() {
                 }
             }
             LogType::Modem => {
-                match send_command_multiple_responses(
-                    &mut serial,
-                    UsbCommand::GetLoggedAtResponseLogs,
-                ) {
-                    Ok(responses) => dump_logged_at_response_logs(responses),
+                match send_command_responses(&mut serial, UsbCommand::GetLoggedAtResponseLogs) {
+                    Ok(responses) => {
+                        info!("Awaiting logs from the device");
+                        dump_logged_at_response_logs(responses);
+                    }
                     Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
                 }
             }
@@ -453,10 +465,10 @@ mod tests {
 
         let response =
             UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&buf[..encoded_len]).unwrap());
-        let responses = vec![response];
+        let responses = vec![Ok(response)];
 
         let mut csv_buf = Vec::new();
-        write_mch_logs_to_csv(&responses, &mut csv_buf).unwrap();
+        write_mch_logs_to_csv(responses, &mut csv_buf).unwrap();
 
         let csv_str = String::from_utf8(csv_buf).unwrap();
         let lines: Vec<&str> = csv_str.trim().split('\n').collect();
@@ -482,12 +494,14 @@ mod tests {
     fn test_csv_serialization_edge_cases() {
         // Non-MCH Log variants and corrupted payloads should be skipped
         let responses = vec![
-            UsbResponse::Ok,
+            Ok(UsbResponse::Ok),
             // Invalid protobuf payload
-            UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[0xFF; 10]).unwrap()),
+            Ok(UsbResponse::MiniCallHomeLog(
+                heapless::Vec::from_slice(&[0xFF; 10]).unwrap(),
+            )),
         ];
         let mut csv_buf = Vec::new();
-        write_mch_logs_to_csv(&responses, &mut csv_buf).unwrap();
+        write_mch_logs_to_csv(responses, &mut csv_buf).unwrap();
         let csv_str = String::from_utf8(csv_buf).unwrap();
         assert_eq!(
             csv_str.trim(),
