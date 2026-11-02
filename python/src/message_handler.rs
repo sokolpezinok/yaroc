@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use yaroc_receiver::logs::{CellularLogMessage, SiPunchLog as SiPunchLogRs};
 use yaroc_receiver::meshtastic::MESHTASTIC_MQTT_PREFIX;
 use yaroc_receiver::message_handler::{
     FakePunchConfig, MessageHandler as MessageHandlerRs,
@@ -56,15 +55,28 @@ pub enum Event {
     DeviceEvnt { added: bool, device: String },
 }
 
-impl From<Vec<SiPunchLogRs>> for Event {
-    fn from(logs: Vec<SiPunchLogRs>) -> Self {
-        Self::SiPunchLogs(logs.into_iter().map(SiPunchLog::from).collect())
-    }
-}
-
-impl From<CellularLogMessage> for Event {
-    fn from(log: CellularLogMessage) -> Self {
-        Self::CellularLog(log.into())
+impl From<EventRs> for Event {
+    fn from(message: EventRs) -> Self {
+        match message {
+            EventRs::CellularLog(cellular_log) => Event::CellularLog(cellular_log.into()),
+            EventRs::SiPunches(si_punch_logs) => {
+                Event::SiPunchLogs(si_punch_logs.into_iter().map(SiPunchLog::from).collect())
+            }
+            EventRs::SiPunchesMeshtastic(si_punch_logs, service_envelope) => {
+                Event::MeshtasticPunches(MeshtasticPunches {
+                    punch_logs: si_punch_logs.into_iter().map(SiPunchLog::from).collect(),
+                    service_envelope,
+                })
+            }
+            EventRs::SiPunch(si_punch) => Event::SiPunch(si_punch.into()),
+            EventRs::MeshtasticLog(meshtastic_log, service_envelope) => {
+                Event::MeshtasticLog(MeshtasticLog::new(meshtastic_log, service_envelope))
+            }
+            EventRs::NodeInfos(node_infos) => {
+                Event::NodeInfos(node_infos.into_iter().map(From::from).collect())
+            }
+            EventRs::DeviceEvent { added, device } => Event::DeviceEvnt { added, device },
+        }
     }
 }
 
@@ -135,25 +147,7 @@ impl MessageHandler {
             let mut handler = inner.lock().await;
             let message =
                 handler.next_event().await.map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-            let event = match message {
-                EventRs::CellularLog(cellular_log) => cellular_log.into(),
-                EventRs::SiPunches(si_punch_logs) => si_punch_logs.into(),
-                EventRs::SiPunchesMeshtastic(si_punch_logs, service_envelope) => {
-                    Event::MeshtasticPunches(MeshtasticPunches {
-                        punch_logs: si_punch_logs.into_iter().map(SiPunchLog::from).collect(),
-                        service_envelope,
-                    })
-                }
-                EventRs::SiPunch(si_punch) => Event::SiPunch(si_punch.into()),
-                EventRs::MeshtasticLog(meshtastic_log, service_envelope) => {
-                    Event::MeshtasticLog(MeshtasticLog::new(meshtastic_log, service_envelope))
-                }
-                EventRs::NodeInfos(node_infos) => {
-                    Event::NodeInfos(node_infos.into_iter().map(From::from).collect())
-                }
-                EventRs::DeviceEvent { added, device } => Event::DeviceEvnt { added, device },
-            };
-            Ok(event)
+            Ok(message.into())
         })
         .await
     }
