@@ -36,6 +36,7 @@ serialport = { workspace = true }
 thiserror = { workspace = true, default-features = true }
 tokio.workspace = true
 tokio-serial.workspace = true
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 toml = "1.1"
 roxmltree = "0.20"

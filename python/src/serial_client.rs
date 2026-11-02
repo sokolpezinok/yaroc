@@ -3,8 +3,8 @@ use std::time::Duration;
 use std::{future, sync::Arc};
 
 use either::Either;
-use futures::FutureExt as _;
 use futures::future::BoxFuture;
+use futures::{FutureExt as _, StreamExt as _};
 use log::{debug, error, info, warn};
 use pyo3::exceptions::PyConnectionError;
 use pyo3::prelude::*;
@@ -12,9 +12,10 @@ use pyo3::prelude::*;
 use tokio::io::{
     AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadHalf, WriteHalf, split,
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio::{io::AsyncWriteExt, sync::Mutex};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use yaroc_receiver::error::Error;
 
 use crate::message_handler::MeshtasticPunches;
@@ -26,7 +27,7 @@ use yaroc_receiver::usb_serial_manager::UsbSerialFactory;
 
 type ReadMutex<R> = Arc<Mutex<BufReader<ReadHalf<R>>>>;
 type WriteMutex<W> = Arc<Mutex<WriteHalf<W>>>;
-type MiniReaderConnectRx = Arc<Mutex<UnboundedReceiver<String>>>;
+type MiniReaderConnectRx = Arc<Mutex<UnboundedReceiverStream<String>>>;
 
 /// A client for interacting with a serial port, typically for SportIdent (SI) devices.
 ///
@@ -38,7 +39,7 @@ pub struct SerialClient {
     computer_rx: ReadMutex<SerialStream>,
     computer_tx: WriteMutex<SerialStream>,
     mini_reader: Arc<Mutex<Option<SerialStream>>>,
-    mini_reader_connect_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+    mini_reader_connect_rx: MiniReaderConnectRx,
     mini_reader_connect_tx: UnboundedSender<String>,
     port: String,
     retry_times: Vec<Duration>,
@@ -99,7 +100,7 @@ impl SerialClient {
         let mut rx = computer_rx.lock().await;
         let mut query = Vec::new();
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
-        let mini_reader_connect_rx_closed = mini_reader_connect_rx.is_closed();
+        let mini_reader_connect_rx_closed = mini_reader_connect_rx.as_ref().is_closed();
 
         tokio::select! {
             res = rx.read_until(ETX, &mut query) => {
@@ -159,7 +160,7 @@ impl SerialClient {
                     .inspect_err(|e| error!("Communication with software failed: {e}"));
                 None
             }
-            device = mini_reader_connect_rx.recv(), if !mini_reader_connect_rx_closed => {
+            device = mini_reader_connect_rx.next(), if !mini_reader_connect_rx_closed => {
                 match device {
                     Some(device) => Some(device),
                     None => {
@@ -195,7 +196,7 @@ impl SerialClient {
         let mut tx_guard = None;
         let mut rx = computer_rx.lock().await;
         let mut mini_reader_connect_rx = mini_reader_connect_rx.lock().await;
-        let mut mini_reader_connect_rx_closed = mini_reader_connect_rx.is_closed();
+        let mut mini_reader_connect_rx_closed = mini_reader_connect_rx.as_ref().is_closed();
         loop {
             //TODO: Consider using the `bytes` crate.
             let mut reader_buffer = Vec::with_capacity(280);
@@ -252,7 +253,7 @@ impl SerialClient {
                         }
                     }
                 }
-                device = mini_reader_connect_rx.recv(), if !mini_reader_connect_rx_closed => {
+                device = mini_reader_connect_rx.next(), if !mini_reader_connect_rx_closed => {
                     match device {
                         Some(device) => return Some(device),
                         None => {
@@ -344,7 +345,9 @@ impl SerialClient {
                 computer_rx: Arc::new(Mutex::new(rx)),
                 computer_tx: Arc::new(Mutex::new(tx)),
                 mini_reader: Arc::default(),
-                mini_reader_connect_rx: Arc::new(Mutex::new(mini_reader_connect_rx)),
+                mini_reader_connect_rx: Arc::new(Mutex::new(UnboundedReceiverStream::new(
+                    mini_reader_connect_rx,
+                ))),
                 mini_reader_connect_tx,
                 port: computer_port,
                 retry_times,
@@ -572,6 +575,11 @@ mod tests {
         (computer_rx, computer_tx, test_serial)
     }
 
+    fn init_connect_channel() -> (UnboundedSender<String>, MiniReaderConnectRx) {
+        let (tx, rx) = unbounded_channel();
+        (tx, Arc::new(Mutex::new(UnboundedReceiverStream::new(rx))))
+    }
+
     fn spawn_respond_task(
         rx: &ReadMutex<DuplexStream>,
         tx: &WriteMutex<DuplexStream>,
@@ -586,8 +594,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_blue_srr_meos() {
         let (computer_rx, computer_tx, mut test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
@@ -613,8 +620,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_blue_srr_sportident_reader() {
         let (computer_rx, computer_tx, mut test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
@@ -656,8 +662,7 @@ mod tests {
 
         for (hello, ack) in cases {
             let (computer_rx, computer_tx, mut test_serial) = init_channels();
-            let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-            let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+            let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
             let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
@@ -681,8 +686,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_blue_srr_unknown_software() {
         let (computer_rx, computer_tx, mut test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
@@ -705,8 +709,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_blue_srr_mini_reader_connect() {
         let (computer_rx, computer_tx, _test_serial) = init_channels();
-        let (mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let handle = spawn_respond_task(&computer_rx, &computer_tx, &mini_reader_connect_rx);
 
@@ -720,8 +723,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_blue_srr_disconnected() {
         let (computer_rx, computer_tx, test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         // Drop the other end immediately to simulate disconnected serial port (EOF / Ok(0))
         drop(test_serial);
@@ -734,8 +736,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_mini_reader_fatal_read_error() {
         let (computer_rx, computer_tx, _test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let stream = futures::stream::iter(vec![Err::<&[u8], io::Error>(io::Error::other(
             "mock error",
@@ -757,8 +758,7 @@ mod tests {
     #[tokio::test]
     async fn test_respond_as_mini_reader_disconnected() {
         let (computer_rx, computer_tx, _test_serial) = init_channels();
-        let (_mini_reader_connect_tx, mini_reader_connect_rx) = unbounded_channel();
-        let mini_reader_connect_rx = Arc::new(Mutex::new(mini_reader_connect_rx));
+        let (_mini_reader_connect_tx, mini_reader_connect_rx) = init_connect_channel();
 
         let (mut mini_reader, peer) = duplex(4096);
         // Drop the other end immediately to simulate disconnected mini-reader (EOF / Ok(0))

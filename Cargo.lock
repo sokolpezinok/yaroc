@@ -3504,6 +3504,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-serial",
+ "tokio-stream",
  "tokio-util",
  "toml",
  "walkdir",

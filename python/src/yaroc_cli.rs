@@ -205,10 +205,7 @@ fn send_command_responses<'a, S: Read + Write + SetTimeout>(
     Ok(PostcardReader::new(serial))
 }
 
-fn write_mch_logs_to_csv<I, W>(
-    responses: I,
-    writer: &mut W,
-) -> Result<(), String>
+fn write_mch_logs_to_csv<I, W>(responses: I, writer: &mut W) -> Result<(), String>
 where
     I: IntoIterator<Item = Result<UsbResponse, String>>,
     W: Write,
@@ -624,11 +621,10 @@ mod tests {
             read_offset: 0,
             chunk_size: 1,
         };
-        let res: Vec<_> =
-            send_command_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
-                .unwrap()
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
+        let res: Vec<_> = send_command_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], resp1);
         assert_eq!(res[1], resp2);
