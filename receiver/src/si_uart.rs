@@ -167,7 +167,9 @@ impl SportIdentFactory {
         let serialport::SerialPortType::UsbPort(usb_info) = &port.port_type else {
             return false;
         };
-        dev_serial == usb_info.serial_number.as_deref() && usb_info.vid == SILABS_VID
+        dev_serial == usb_info.serial_number.as_deref()
+            && usb_info.vid == SILABS_VID
+            && !port.port_name.starts_with("/dev/tty.")
     }
 
     /// Spawns the serial reading background loop for the given SportIdent serial device and
@@ -255,6 +257,16 @@ mod tests {
 
         // Match
         assert!(SportIdentFactory::detect_device_inner(Some("12345"), &port));
+
+        // Match macOS cu.* callout port, ignore tty.* dial-in duplicate
+        port.port_name = "/dev/cu.SLAB_USBtoUART".to_owned();
+        assert!(SportIdentFactory::detect_device_inner(Some("12345"), &port));
+        port.port_name = "/dev/tty.SLAB_USBtoUART".to_owned();
+        assert!(!SportIdentFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
+        port.port_name = "/dev/ttyUSB0".to_owned();
 
         // Mismatch serial
         assert!(!SportIdentFactory::detect_device_inner(

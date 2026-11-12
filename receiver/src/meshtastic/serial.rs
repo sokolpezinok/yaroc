@@ -97,13 +97,15 @@ impl MeshtasticFactory {
         let is_sportident = usb_info.vid == SILABS_VID;
         sn_matches
             && !is_sportident
-            && (port.port_name.contains("ACM") || port.port_name.contains("COM"))
+            && (port.port_name.contains("ACM")
+                || port.port_name.contains("COM")
+                || port.port_name.contains("cu.usbmodem"))
     }
 }
 
 impl UsbSerialFactory for MeshtasticFactory {
     /// Checks if a USB device matches a Meshtastic serial device by comparing serial numbers
-    /// and ensuring the port name is an ACM/COM interface.
+    /// and ensuring the port name is an ACM/COM/cu.usbmodem interface.
     fn detect_device(&self, dev: &nusb::DeviceInfo, port: &serialport::SerialPortInfo) -> bool {
         Self::detect_device_inner(dev.serial_number(), port)
     }
@@ -202,6 +204,15 @@ mod tests {
         // Match COM port
         port.port_name = "COM3".to_owned();
         assert!(MeshtasticFactory::detect_device_inner(Some("12345"), &port));
+
+        // Match macOS cu.usbmodem port, ignore tty.usbmodem dial-in duplicate
+        port.port_name = "/dev/cu.usbmodem12345".to_owned();
+        assert!(MeshtasticFactory::detect_device_inner(Some("12345"), &port));
+        port.port_name = "/dev/tty.usbmodem12345".to_owned();
+        assert!(!MeshtasticFactory::detect_device_inner(
+            Some("12345"),
+            &port
+        ));
 
         // Not USB
         port.port_type = SerialPortType::PciPort;

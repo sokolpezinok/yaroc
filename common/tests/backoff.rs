@@ -167,6 +167,10 @@ async fn fake_send_punch_fn(
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "wall-clock timer jitter on macOS runners"
+)]
 fn backoff_test() {
     let executor = EXECUTOR.init(Executor::new());
     executor.run_until(
