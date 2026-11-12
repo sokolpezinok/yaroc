@@ -66,10 +66,10 @@ def create_sys_minicallhome() -> MiniCallHome:
     mch = MiniCallHome()
     mch.time.millis_epoch = current_timestamp_millis()
 
-    cpu_freq = psutil.cpu_freq()
-    mch.freq = floor(cpu_freq.current / FREQ_MULTIPLIER)
-    mch.max_freq = floor(cpu_freq.max / FREQ_MULTIPLIER)
-    mch.min_freq = floor(cpu_freq.min / FREQ_MULTIPLIER)
+    if hasattr(psutil, "cpu_freq") and (cpu_freq := psutil.cpu_freq()) is not None:
+        mch.freq = floor(cpu_freq.current / FREQ_MULTIPLIER)
+        mch.max_freq = floor(cpu_freq.max / FREQ_MULTIPLIER)
+        mch.min_freq = floor(cpu_freq.min / FREQ_MULTIPLIER)
 
     net_counters = psutil.net_io_counters()
     mch.totaldatarx = net_counters.bytes_recv
@@ -97,11 +97,12 @@ def create_sys_minicallhome() -> MiniCallHome:
         except Exception as err:
             logging.error(err)
 
-    elif not is_windows():
+    elif hasattr(psutil, "sensors_temperatures"):
         temperatures = psutil.sensors_temperatures()
         # TODO: make this more general than ThinkPad
-        cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
-        mch.cpu_temperature = cpu_temp.current
+        if "thinkpad" in temperatures:
+            cpu_temp = next(filter(lambda x: x.label == "CPU", temperatures["thinkpad"]))
+            mch.cpu_temperature = cpu_temp.current
     return mch
 
 

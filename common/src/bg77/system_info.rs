@@ -138,8 +138,9 @@ impl<M: AtUartTrait> SystemInfo<M> {
         if boot_time.is_none() {
             let time = Self::get_modem_time(bg77).await.ok()?;
             Self::set_boot_time(time);
+            return Some(time);
         }
-        BOOT_TIME.receiver().unwrap().try_get().map(|boot_time| {
+        boot_time.map(|boot_time| {
             let delta = TimeDelta::milliseconds(Instant::now().as_millis() as i64);
             boot_time.checked_add_signed(delta).unwrap()
         })
