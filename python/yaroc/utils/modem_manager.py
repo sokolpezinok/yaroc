@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from dbus_next import Variant
-from dbus_next.aio import MessageBus
-from dbus_next.constants import BusType
+from dbus_fast import Variant
+from dbus_fast.aio import MessageBus
+from dbus_fast.constants import BusType
 
 from ..pb.status_pb2 import CellNetworkType, Status
 from .sys_info import NetworkType

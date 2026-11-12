@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -5,9 +6,11 @@ import shlex
 import socket
 import subprocess
 import sys
+from collections.abc import Coroutine
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from math import floor
+from typing import Any
 
 import psutil
 
@@ -60,6 +63,14 @@ def raspberrypi_model() -> RaspberryModel:
 
 def is_windows() -> bool:
     return sys.platform.lower() == "win32" or os.name.lower() == "nt"
+
+
+def run_asyncio(coro: Coroutine[Any, Any, None]) -> None:
+    if is_windows():
+        with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
+            runner.run(coro)
+    else:
+        asyncio.run(coro)
 
 
 def create_sys_minicallhome() -> MiniCallHome:

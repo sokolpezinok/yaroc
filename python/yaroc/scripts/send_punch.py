@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import socket
 import tomllib
@@ -6,7 +5,7 @@ import tomllib
 from ..rs import HostInfo, find_config_file
 from ..utils.container import Container, create_clients
 from ..utils.forwarder import Forwarder
-from ..utils.sys_info import eth_mac_addr, is_windows
+from ..utils.sys_info import eth_mac_addr, run_asyncio
 
 
 async def main_loop():
@@ -52,14 +51,5 @@ async def main_loop():
     await forwarder.loop()
 
 
-if is_windows():
-    from asyncio import (  # type: ignore[attr-defined]
-        WindowsSelectorEventLoopPolicy,
-        set_event_loop_policy,
-    )
-
-    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
-
-
 def main():
-    asyncio.run(main_loop())
+    run_asyncio(main_loop())

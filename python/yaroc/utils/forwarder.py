@@ -173,7 +173,7 @@ class Forwarder:
                 logging.info(f"Received signal {signal_name} ({signum}). Initiating shutdown...")
             shutdown_event.set()
 
-        asyncio.get_event_loop().set_exception_handler(handle_exception)
+        asyncio.get_running_loop().set_exception_handler(handle_exception)
         shutdown_event = asyncio.Event()
 
         if is_windows():
