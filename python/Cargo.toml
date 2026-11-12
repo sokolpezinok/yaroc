@@ -8,9 +8,6 @@ rust-version = { workspace = true }
 default = ["udev"]
 udev = ["yaroc-receiver/udev"]
 
-[build-dependencies]
-walkdir = "2.3.2"
-
 [dependencies]
 
 bytes = { workspace = true }
@@ -19,7 +16,6 @@ clap = { workspace = true }
 critical-section = { version = "1", features = ["std"] }
 either = { workspace = true }
 embassy-time = { workspace = true }
-env_logger = { workspace = true }
 femtopb = { workspace = true }
 futures = { workspace = true }
 heapless = { workspace = true }
