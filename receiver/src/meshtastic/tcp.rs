@@ -50,7 +50,7 @@ mod tests {
     use crate::system_info::MacAddress;
     use crate::test_utils::encode_from_radio;
     use meshtastic::protobufs::{FromRadio, MeshPacket, MyNodeInfo, from_radio};
-    use tokio::io::AsyncWriteExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
     #[tokio::test]
@@ -102,6 +102,14 @@ mod tests {
             };
             let buf3 = encode_from_radio(from_radio_channel);
             socket.write_all(&buf3).await.unwrap();
+
+            // Half-close the write side (sending a clean TCP FIN after the packets) and drain
+            // incoming data (e.g. WantConfigId from configure()) until the client closes so the
+            // OS does not reset the connection (TCP RST) with unread data on macOS/BSD.
+            let (mut read_half, mut write_half) = socket.into_split();
+            write_half.shutdown().await.unwrap();
+            let mut discard = [0u8; 256];
+            while matches!(read_half.read(&mut discard).await, Ok(n) if n > 0) {}
         });
 
         // Connect client
