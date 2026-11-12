@@ -53,15 +53,23 @@ jobs:
     - name: Install npm dependencies
       run: npm install
     - name: Build NPM package
-      run: npx napi build --cargo-cwd ../napi --js index.js --dts index.d.ts --target ${{ matrix.settings.target }} ${{ matrix.settings.args }} --strip
+      run: |
+        npx napi build --cargo-cwd ../napi --js index.js --dts index.d.ts --target ${{ matrix.settings.target }} ${{ matrix.settings.args }} --strip
+        node -e "const fs = require('fs'); fs.appendFileSync('index.d.ts', fs.readFileSync('header.d.ts'));"
     - name: Run typecheck
       if: matrix.settings.target == 'x86_64-unknown-linux-gnu'
       run: npm run typecheck
+    - name: Run tests
+      if: "!matrix.settings.use_zig"
+      run: npm test
     - name: Upload artifact
       uses: actions/upload-artifact@v6
       with:
         name: bindings-${{ matrix.settings.target }}
-        path: typescript/*.node
+        path: |
+          typescript/*.node
+          typescript/index.js
+          typescript/index.d.ts
 
   release:
     name: Release
@@ -94,6 +102,13 @@ jobs:
         cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/*.node npm/linux-x64-gnu/
         cp npm-artifacts/bindings-aarch64-unknown-linux-gnu/*.node npm/linux-arm64-gnu/
         cp npm-artifacts/bindings-x86_64-pc-windows-msvc/*.node npm/win32-x64-msvc/
+        cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/index.js .
+        cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/index.d.ts .
+    - name: Verify package contents
+      run: |
+        test -f index.js
+        test -f index.d.ts
+        npm pack --dry-run
     - name: Publish to NPM
       run: npm publish
       env:
