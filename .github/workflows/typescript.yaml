@@ -27,6 +27,9 @@ jobs:
             target: aarch64-unknown-linux-gnu
             args: --platform --release --zig
             use_zig: true
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            args: --platform --release
     name: Typescript (${{ matrix.settings.target }})
     runs-on: ${{ matrix.settings.host }}
     defaults:
@@ -102,6 +105,7 @@ jobs:
         cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/*.node npm/linux-x64-gnu/
         cp npm-artifacts/bindings-aarch64-unknown-linux-gnu/*.node npm/linux-arm64-gnu/
         cp npm-artifacts/bindings-x86_64-pc-windows-msvc/*.node npm/win32-x64-msvc/
+        cp npm-artifacts/bindings-aarch64-apple-darwin/*.node npm/darwin-arm64/
         cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/index.js .
         cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/index.d.ts .
     - name: Verify package contents

@@ -30,7 +30,8 @@
       "additional": [
         "x86_64-unknown-linux-gnu",
         "x86_64-pc-windows-msvc",
-        "aarch64-unknown-linux-gnu"
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin"
       ]
     }
   },
@@ -45,6 +46,7 @@
     "typescript": "^5.5.2"
   },
   "optionalDependencies": {
+    "@lukasp47/yaroc-darwin-arm64": "0.1.3",
     "@lukasp47/yaroc-linux-arm64-gnu": "0.1.3",
     "@lukasp47/yaroc-linux-x64-gnu": "0.1.3",
     "@lukasp47/yaroc-win32-x64-msvc": "0.1.3"
