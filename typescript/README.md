@@ -29,6 +29,7 @@ The native binaries are defined in `optionalDependencies` and downloaded automat
 * **Windows (x64)**: `@lukasp47/yaroc-win32-x64-msvc`
 * **Linux (x64)**: `@lukasp47/yaroc-linux-x64-gnu`
 * **Linux (ARM64)**: `@lukasp47/yaroc-linux-arm64-gnu`
+* **macOS (ARM64)**: `@lukasp47/yaroc-darwin-arm64`
 
 > [!NOTE]
 > Because of this architecture, the main `@lukasp47/yaroc` package is very small (~1.4 kB), as it does not bundle the binary files directly. The actual native code (~4-5 MB) is downloaded dynamically based on your platform.
