@@ -7,7 +7,7 @@
 # Run ideally with buildah:
 # buildah bud -t yaroc --layers --platform linux/arm64 -v ~/.cache/sccache:/root/.cache/sccache .
 
-FROM rust:1.96-slim AS chef
+FROM rust:1.100-slim AS chef
 RUN apt update && apt install -y python3 sccache protobuf-compiler pkg-config libudev-dev
 ENV RUSTC_WRAPPER=sccache
 RUN cargo install cargo-chef

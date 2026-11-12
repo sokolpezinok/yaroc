@@ -51,9 +51,9 @@ pub enum Error {
     NotConnected,
 }
 
-impl From<core::convert::Infallible> for Error {
-    fn from(x: core::convert::Infallible) -> Self {
-        match x {}
+impl From<!> for Error {
+    fn from(x: !) -> Self {
+        x
     }
 }
 

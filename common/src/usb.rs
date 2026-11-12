@@ -336,7 +336,7 @@ impl<T: CdcAcm, M: Modem + 'static, F: Flash + 'static> SendPunchUsb<T, M, F> {
     }
 
     /// Continuously reads commands from USB and handles them.
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> ! {
         loop {
             self.reader.wait_connection().await;
             info!("Connected to USB");

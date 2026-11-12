@@ -102,7 +102,7 @@ impl AtRxBroker {
     ///
     /// # Arguments
     /// * `rx` - The UART receiver to read from.
-    pub async fn broker_loop(&self, mut rx: impl RxWithIdle) {
+    pub async fn broker_loop(&self, mut rx: impl RxWithIdle) -> ! {
         const AT_BUF_SIZE: usize = 300;
         let mut buf = [0; AT_BUF_SIZE];
         loop {

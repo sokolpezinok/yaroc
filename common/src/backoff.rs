@@ -224,7 +224,7 @@ impl<S: SendPunchFn + Clone> BackoffRetries<S> {
     /// The main loop for handling punch sending and retries.
     ///
     /// This should run in a separate task.
-    pub async fn r#loop(&mut self) {
+    pub async fn r#loop(&mut self) -> ! {
         loop {
             // Important: none of these match arms should be blocking, we need to consume
             // `CMD_FOR_BACKOFF` as fast as possible.

@@ -198,7 +198,7 @@ impl SiPunch {
     pub fn from_bytes<'a>(
         bytes: &'a [u8],
         today: NaiveDate,
-        offset: &'_ FixedOffset,
+        offset: &FixedOffset,
     ) -> Option<(Self, &'a [u8])> {
         let (raw, rest) = Self::find_punch_data(bytes)?;
         Some((Self::from_raw(raw, today, offset), rest))
@@ -388,18 +388,9 @@ impl SiPunch {
         for i in (2..message.len()).step_by(2) {
             let mut val = u16::from_be_bytes([msg[i], msg[i + 1]]);
             for _ in 0..16 {
-                if chksum & 0x08000 > 0 {
-                    chksum <<= 1;
-                    if val & 0x8000 > 0 {
-                        chksum += 1;
-                    }
-                    chksum ^= 0x8005;
-                } else {
-                    chksum <<= 1;
-                    if val & 0x8000 > 0 {
-                        chksum += 1;
-                    }
-                }
+                let xor = if chksum & 0x8000 != 0 { 0x8005 } else { 0 };
+                let top_bit = u16::from(val & 0x8000 != 0);
+                chksum = ((chksum << 1) | top_bit) ^ xor;
                 val <<= 1;
             }
         }
