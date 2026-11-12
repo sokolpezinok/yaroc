@@ -250,7 +250,8 @@ impl MessageHandlerBuilder {
                 self.dns,
                 self.node_infos_interval,
                 self.meshtastic_timeout,
-            ),
+            )
+            .with_timezone(self.timezone),
             mesh_streams,
             si_streams,
             mqtt_streams,
@@ -461,6 +462,45 @@ mod tests {
                 assert_eq!(punch_logs.len(), 1);
                 assert_eq!(punch_logs[0].punch.code, 47);
                 assert_eq!(punch_logs[0].punch.card, 1715004);
+            }
+            _ => panic!("Expected Event::SiPunches"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_message_handler_builder_timezone_mqtt_punch() {
+        let time = DateTime::parse_from_rfc3339("2023-11-23T10:00:03.793+02:00").unwrap();
+        let punch = SiPunch::new_send_last_record(1715004, 47, time, 2).raw;
+        let punches_slice: &[&[u8]] = &[&punch];
+        let punches = Punches {
+            punches: Repeated::from_slice(punches_slice),
+            ..Default::default()
+        };
+        let mut buf = vec![0u8; punches.encoded_len()];
+        punches.encode(&mut buf.as_mut_slice()).unwrap();
+
+        let tz = FixedOffset::west_opt(5 * 3600).unwrap();
+        let now = DateTime::parse_from_rfc3339("2023-11-23T17:05:00+02:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let mut handler = MessageHandlerBuilder::new().with_timezone(tz).build();
+        let event = handler
+            .fleet_state
+            .process_mqtt_message(crate::mqtt::Message::Punches(
+                MacAddress::default(),
+                now,
+                buf,
+            ))
+            .expect("process_mqtt_message failed")
+            .expect("expected an Event");
+
+        match event {
+            Event::SiPunches(punch_logs) => {
+                assert_eq!(punch_logs.len(), 1);
+                assert_eq!(
+                    punch_logs[0].punch.time.to_rfc3339(),
+                    "2023-11-23T10:00:03.792968750-05:00"
+                );
             }
             _ => panic!("Expected Event::SiPunches"),
         }

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import IntEnum
 from typing import ClassVar as _ClassVar
 from typing import List, Tuple
@@ -144,6 +144,7 @@ class MessageHandlerBuilder(object):
     def with_fake_punch(
         self, interval: timedelta, card: int, code: int
     ) -> "MessageHandlerBuilder": ...
+    def with_timezone(self, timezone: tzinfo) -> "MessageHandlerBuilder": ...
     def build(self) -> "MessageHandler": ...
 
 class MessageHandler(object):

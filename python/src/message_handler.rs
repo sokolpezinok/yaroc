@@ -1,3 +1,4 @@
+use chrono::FixedOffset;
 use meshtastic::Message as _;
 use meshtastic::protobufs::ServiceEnvelope;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -165,6 +166,7 @@ pub struct MessageHandlerBuilder {
     sportident_factory: Option<Py<PyUsbSerialFactory>>,
     meshtastic_tcp: Option<String>,
     fake_punch_config: Option<FakePunchConfig>,
+    timezone: Option<FixedOffset>,
 }
 
 #[pymethods]
@@ -181,6 +183,7 @@ impl MessageHandlerBuilder {
             sportident_factory: None,
             meshtastic_tcp: None,
             fake_punch_config: None,
+            timezone: None,
         }
     }
 
@@ -270,6 +273,14 @@ impl MessageHandlerBuilder {
         self_
     }
 
+    pub fn with_timezone<'py>(
+        mut self_: PyRefMut<'py, Self>,
+        timezone: FixedOffset,
+    ) -> PyRefMut<'py, Self> {
+        self_.timezone = Some(timezone);
+        self_
+    }
+
     pub fn build(&self, py: Python<'_>) -> PyResult<MessageHandler> {
         let sportident = if let Some(ref factory_py) = self.sportident_factory {
             let factory_bound = factory_py.bind(py);
@@ -301,6 +312,10 @@ impl MessageHandlerBuilder {
         if let Some(config) = &self.fake_punch_config {
             builder =
                 builder.with_fake_punch(config.interval, Some(config.card), Some(config.code));
+        }
+
+        if let Some(tz) = self.timezone {
+            builder = builder.with_timezone(tz);
         }
 
         let message_handler_rs = crate::python::get_tokio_rt().block_on(builder.into_future());
