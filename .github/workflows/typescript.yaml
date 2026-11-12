@@ -25,7 +25,7 @@ jobs:
             args: --platform --release
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            args: --platform --release --zig
+            args: --platform --release -x
             use_zig: true
           - host: macos-latest
             target: aarch64-apple-darwin
@@ -47,6 +47,11 @@ jobs:
     - name: Set up Zig
       if: matrix.settings.use_zig
       uses: xyzzylabs/setup-zig@v1
+    - name: Install cargo-zigbuild
+      if: matrix.settings.use_zig
+      env:
+        RUSTFLAGS: ""
+      run: cargo install --locked cargo-zigbuild
     - name: Set up Node.js
       uses: actions/setup-node@v6
       with:
@@ -57,7 +62,7 @@ jobs:
       run: npm install
     - name: Build NPM package
       run: |
-        npx napi build --cargo-cwd ../napi --js index.js --dts index.d.ts --target ${{ matrix.settings.target }} ${{ matrix.settings.args }} --strip
+        npx napi build --manifest-path ../napi/Cargo.toml --output-dir . --js index.js --dts index.d.ts --target ${{ matrix.settings.target }} ${{ matrix.settings.args }} --strip
         node -e "const fs = require('fs'); fs.appendFileSync('index.d.ts', fs.readFileSync('header.d.ts'));"
     - name: Run typecheck
       if: matrix.settings.target == 'x86_64-unknown-linux-gnu'
@@ -101,7 +106,7 @@ jobs:
         path: typescript/npm-artifacts
     - name: Move artifacts to target locations
       run: |
-        npx napi create-npm-dir -t .
+        npx napi create-npm-dirs
         cp npm-artifacts/bindings-x86_64-unknown-linux-gnu/*.node npm/linux-x64-gnu/
         cp npm-artifacts/bindings-aarch64-unknown-linux-gnu/*.node npm/linux-arm64-gnu/
         cp npm-artifacts/bindings-x86_64-pc-windows-msvc/*.node npm/win32-x64-msvc/

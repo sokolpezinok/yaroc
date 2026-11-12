@@ -1,6 +1,6 @@
 use log::error;
 use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -169,14 +169,20 @@ impl MqttClient {
     #[napi]
     pub fn start(
         &mut self,
-        #[napi(ts_arg_type = "(err: Error | null, event: YarocEvent) => void")]
-        callback: JsFunction,
+        #[napi(ts_arg_type = "(err: Error | null, event: YarocEvent) => void")] callback: Function<
+            '_,
+            serde_json::Value,
+            (),
+        >,
     ) -> Result<()> {
-        let tsfn: ThreadsafeFunction<serde_json::Value, ErrorStrategy::CalleeHandled> = callback
-            .create_threadsafe_function(0, |ctx| {
-                let js_val = ctx.env.to_js_value(&ctx.value)?;
-                Ok(vec![js_val])
-            })?;
+        let tsfn: ThreadsafeFunction<
+            std::result::Result<serde_json::Value, napi::Error>,
+            (),
+            serde_json::Value,
+        > = callback
+            .build_threadsafe_function::<std::result::Result<serde_json::Value, napi::Error>>()
+            .callee_handled::<true>()
+            .build_callback(|ctx| ctx.value)?;
 
         let _ = env_logger::builder()
             .filter_level(log::LevelFilter::Debug)
@@ -189,7 +195,7 @@ impl MqttClient {
         let cancel_token = self.cancel_token.clone();
         let timezone = self.timezone.clone();
 
-        napi::tokio::spawn(async move {
+        napi::bindgen_prelude::spawn(async move {
             let dns = dns
                 .into_iter()
                 .map(|entry| {
@@ -224,7 +230,7 @@ impl MqttClient {
                     Err(err) => {
                         error!("{}", err);
                         let napi_err = napi::Error::from_reason(err);
-                        tsfn.call(Err(napi_err), ThreadsafeFunctionCallMode::Blocking);
+                        tsfn.call(Ok(Err(napi_err)), ThreadsafeFunctionCallMode::Blocking);
                         return;
                     }
                 }
@@ -234,7 +240,7 @@ impl MqttClient {
             let init_status = serde_json::json!({
                 "status": "initialized"
             });
-            tsfn.call(Ok(init_status), ThreadsafeFunctionCallMode::Blocking);
+            tsfn.call(Ok(Ok(init_status)), ThreadsafeFunctionCallMode::Blocking);
 
             cancel_token
                 .run_until_cancelled(async move {
@@ -245,14 +251,17 @@ impl MqttClient {
                                 if let Some(js_event) = js_event {
                                     // TODO: emit Vec<SiPunchLog> as multiple events
                                     if let Ok(js_val) = serde_json::to_value(&js_event) {
-                                        tsfn.call(Ok(js_val), ThreadsafeFunctionCallMode::Blocking);
+                                        tsfn.call(
+                                            Ok(Ok(js_val)),
+                                            ThreadsafeFunctionCallMode::Blocking,
+                                        );
                                     }
                                 }
                             }
                             Err(err) => {
                                 log::error!("{}", err);
                                 let napi_err = napi::Error::from_reason(format!("{}", err));
-                                tsfn.call(Err(napi_err), ThreadsafeFunctionCallMode::Blocking);
+                                tsfn.call(Ok(Err(napi_err)), ThreadsafeFunctionCallMode::Blocking);
                             }
                         }
                     }

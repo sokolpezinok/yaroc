@@ -16,31 +16,28 @@
     "*.node"
   ],
   "scripts": {
-    "build": "napi build --platform --release --cargo-cwd ../napi --js index.js --dts index.d.ts && cat header.d.ts >> index.d.ts",
-    "build:debug": "napi build --platform --cargo-cwd ../napi --js index.js --dts index.d.ts && cat header.d.ts >> index.d.ts",
-    "prepublishOnly": "napi prepublish -t npm --skip-gh-release",
+    "build": "napi build --platform --release --manifest-path ../napi/Cargo.toml --output-dir . --js index.js --dts index.d.ts && cat header.d.ts >> index.d.ts",
+    "build:debug": "napi build --platform --manifest-path ../napi/Cargo.toml --output-dir . --js index.js --dts index.d.ts && cat header.d.ts >> index.d.ts",
+    "prepublishOnly": "napi pre-publish -t npm --no-gh-release",
     "typecheck": "tsc --noEmit --target es2020 --moduleResolution node examples/mqtt_example.ts test/smoke.test.ts",
     "test": "tsx --test test/smoke.test.ts",
     "mqtt_example": "tsx examples/mqtt_example.ts"
   },
   "napi": {
-    "name": "index",
-    "triples": {
-      "defaults": false,
-      "additional": [
-        "x86_64-unknown-linux-gnu",
-        "x86_64-pc-windows-msvc",
-        "aarch64-unknown-linux-gnu",
-        "aarch64-apple-darwin"
-      ]
-    }
+    "binaryName": "index",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-apple-darwin"
+    ]
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4",
+    "@napi-rs/cli": "^3.10.12",
     "@types/node": "^20.14.9",
     "tsx": "^4.19.0",
     "typescript": "^5.5.2"
