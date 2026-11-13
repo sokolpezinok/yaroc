@@ -51,7 +51,7 @@ async function main() {
     meshtasticChannel: mshChannel ?? undefined,
   };
   console.log('Starting Yaroc Native TypeScript client...');
-  const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2], "+02:00");
+  const client = new MqttClient(parsedDns, [mqttConfig1, mqttConfig2]);
 
   client.start((err, event) => {
     if (err) {
