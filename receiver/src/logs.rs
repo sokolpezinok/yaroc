@@ -145,23 +145,20 @@ impl CellularLogMessage {
             CellularLogMessage::MCH(mini_call_home_log) => {
                 Some(mini_call_home_log.mini_call_home.to_proto())
             }
-            _ => None,
+            CellularLogMessage::Disconnected { .. } => None,
         }?;
 
         let len = status.encoded_len();
         let mut buffer = std::vec![0u8; len];
-        if status.encode(&mut buffer.as_mut_slice()).is_ok() {
-            Some(buffer)
-        } else {
-            None
-        }
+        status.encode(&mut buffer.as_mut_slice()).ok()?;
+        Some(buffer)
     }
 
     pub fn mac_address(&self) -> MacAddress {
         match self {
-            CellularLogMessage::Disconnected { host_info, .. } => host_info.mac_address,
+            CellularLogMessage::Disconnected { host_info, .. }
+            | CellularLogMessage::DeviceEvent { host_info, .. } => host_info.mac_address,
             CellularLogMessage::MCH(mini_call_home_log) => mini_call_home_log.host_info.mac_address,
-            CellularLogMessage::DeviceEvent { host_info, .. } => host_info.mac_address,
         }
     }
 }

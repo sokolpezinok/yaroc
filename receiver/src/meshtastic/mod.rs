@@ -164,7 +164,7 @@ impl MeshtasticLog {
                 ..
             } => {
                 let mac_address = MacAddress::Meshtastic(from);
-                let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
+                let name = dns.get(&mac_address).map_or("Unknown", String::as_str);
                 Self::parse_data(
                     data,
                     HostInfo {
@@ -208,7 +208,7 @@ impl MeshtasticLog {
             MeshPacket {
                 payload_variant: None,
                 ..
-            } => Err(yaroc_common::error::Error::ValueError)?,
+            } => Err(yaroc_common::error::Error::ValueError.into()),
         }
     }
 
@@ -265,16 +265,13 @@ impl MeshtasticLog {
             lat: position.latitude_i? as f32 / 10_000_000.,
             lon: position.longitude_i? as f32 / 10_000_000.,
             elevation: position.altitude?,
-            timestamp: Self::timestamp(position.time),
+            timestamp,
         };
-        let distance = recv_position.as_ref().map(|other| position.distance_m(&other.position));
-        if let Some(Ok(distance)) = distance
+        if let Some(recv) = recv_position
             && let Some(rssi_snr) = rssi_snr.as_mut()
+            && let Ok(distance) = position.distance_m(&recv.position)
         {
-            rssi_snr.add_distance(
-                distance as f32,
-                &recv_position.map_or(String::new(), |x| x.name),
-            );
+            rssi_snr.add_distance(distance as f32, &recv.name);
         }
 
         Some(Self {
@@ -345,7 +342,7 @@ pub fn punches_from_mesh_packet(
         });
     };
 
-    let name = dns.get(&mac_address).map(String::as_str).unwrap_or("Unknown");
+    let name = dns.get(&mac_address).map_or("Unknown", String::as_str);
     let host_info = HostInfo {
         name: name.to_owned(),
         mac_address,
@@ -353,7 +350,7 @@ pub fn punches_from_mesh_packet(
 
     let mut result = Vec::with_capacity(payload.len() / 20);
     let punches = SiPunch::punches_from_payload::<100>(&payload, now.date_naive(), now.offset());
-    for punch in punches.into_iter() {
+    for punch in punches {
         match punch {
             Ok(punch) => {
                 result.push(SiPunchLog {

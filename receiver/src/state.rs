@@ -124,7 +124,7 @@ impl CellularNodeStatus {
         };
 
         NodeInfo {
-            name: self.host_info.name.to_string(),
+            name: self.host_info.name.clone(),
             signal_info,
             battery_percentage: self.battery_percentage,
             codes: self.codes.iter().copied().collect(),
@@ -209,13 +209,13 @@ impl MeshtasticNodeStatus {
 
     /// Serializes this Meshtastic node status into a standard [`NodeInfo`].
     pub fn serialize(&self) -> NodeInfo {
-        let signal_info = if !self.connected {
-            SignalInfo::Unknown
-        } else {
+        let signal_info = if self.connected {
             match &self.rssi_snr {
                 Some(rssi_snr) => SignalInfo::Meshtastic(rssi_snr.clone()),
                 None => SignalInfo::MeshtasticOverWire,
             }
+        } else {
+            SignalInfo::Unknown
         };
         NodeInfo {
             name: self.name.clone(),
@@ -398,7 +398,7 @@ impl FleetState {
         mac_address: MacAddress,
         now: DateTime<FixedOffset>,
     ) -> crate::Result<CellularLogMessage> {
-        let status_proto = Status::decode(payload).map_err(Error::FemtopbDecodeError)?;
+        let status_proto = Status::decode(payload)?;
         let log_message =
             CellularLogMessage::from_proto(status_proto, self.resolve(mac_address), now)?;
 
@@ -416,7 +416,7 @@ impl FleetState {
             CellularLogMessage::Disconnected { .. } => {
                 status.disconnect(now);
             }
-            _ => {}
+            CellularLogMessage::DeviceEvent { .. } => {}
         }
         Ok(log_message)
     }
@@ -434,7 +434,7 @@ impl FleetState {
         mac_address: MacAddress,
         now: DateTime<FixedOffset>,
     ) -> Result<Vec<SiPunchLog>, Error> {
-        let punches = Punches::decode(payload).map_err(Error::FemtopbDecodeError)?;
+        let punches = Punches::decode(payload)?;
         let host_info = self.resolve(mac_address);
         let status = self.cellular_node_status(mac_address);
         let mut result = Vec::with_capacity(punches.punches.len());
@@ -457,14 +457,10 @@ impl FleetState {
     /// Retrieves or creates a status tracker for a given Meshtastic host, resetting its timeout.
     fn msh_node_status(&mut self, host_info: &HostInfo) -> &mut MeshtasticNodeStatus {
         let mac_addr = host_info.mac_address;
-        let mut is_new = false;
         let status = self.meshtastic_statuses.entry(mac_addr).or_insert_with(|| {
-            is_new = true;
-            MeshtasticNodeStatus::new(host_info.name.to_string())
-        });
-        if is_new {
             self.new_node.notify_one();
-        }
+            MeshtasticNodeStatus::new(host_info.name.clone())
+        });
         if let Some(key) = &status.timeout_key {
             self.meshtastic_timeouts.reset(key, self.meshtastic_timeout);
         } else {
@@ -476,7 +472,7 @@ impl FleetState {
 
     /// Resolves a given MAC address into a full [`HostInfo`] structure containing its name.
     fn resolve(&self, mac_address: MacAddress) -> HostInfo {
-        let name = self.dns.get(&mac_address).map(|x| x.as_str()).unwrap_or("Unknown");
+        let name = self.dns.get(&mac_address).map_or("Unknown", String::as_str);
         HostInfo::new(name, mac_address)
     }
 

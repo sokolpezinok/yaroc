@@ -340,9 +340,7 @@ mod tests {
         };
         tx.send(packet.clone()).await.unwrap();
         let recv_envelope = proto_stream.next().await.unwrap();
-        let gateway_id =
-            recv_envelope.gateway_id.strip_prefix('!').unwrap_or(&recv_envelope.gateway_id);
-        let recv_mac = MacAddress::try_from(gateway_id).unwrap();
+        let recv_mac = MacAddress::try_from(recv_envelope.gateway_id.as_str()).unwrap();
         assert_eq!(recv_mac, MacAddress::default());
         assert_eq!(recv_envelope.packet.unwrap(), packet);
 

@@ -24,3 +24,9 @@ pub enum Error {
     #[error("MQTT client error: {0}")]
     MqttClientError(#[from] rumqttc::ClientError),
 }
+
+impl From<femtopb::error::DecodeError> for Error {
+    fn from(err: femtopb::error::DecodeError) -> Self {
+        Self::FemtopbDecodeError(err)
+    }
+}

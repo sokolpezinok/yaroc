@@ -199,21 +199,29 @@ impl MqttReceiver {
         (receiver, stream)
     }
 
-    /// Extracts the cellular MAC address from the topic name.
-    fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
-        if topic.len() < 16 {
-            return Err(Error::ParseError.into());
+    /// Parses a cellular MQTT topic (`"yar/<mac>/<subtopic>"`) into its MAC address and subtopic.
+    fn parse_cell_topic(topic: &str) -> crate::Result<(MacAddress, &str)> {
+        let rest = topic.strip_prefix("yar/").ok_or(Error::ParseError)?;
+        let (mac_str, subtopic) = rest.split_once('/').ok_or(Error::ParseError)?;
+        match MacAddress::try_from(mac_str)? {
+            mac @ MacAddress::Full(_) if !mac_str.starts_with('!') => Ok((mac, subtopic)),
+            _ => Err(Error::ParseError.into()),
         }
-        MacAddress::try_from(&topic[4..16])
+    }
+
+    /// Extracts the cellular MAC address from the topic name.
+    #[cfg(test)]
+    fn extract_cell_mac(topic: &str) -> crate::Result<MacAddress> {
+        Self::parse_cell_topic(topic).map(|(mac, _)| mac)
     }
 
     /// Extracts the Meshtastic node MAC address from the topic name.
     fn extract_msh_mac(topic: &str) -> crate::Result<MacAddress> {
-        if topic.len() <= 10 {
-            // 8 for MAC, 2 for '/!'
-            return Err(Error::ParseError.into());
+        let (_, mac_str) = topic.rsplit_once("/!").ok_or(Error::ParseError)?;
+        match MacAddress::try_from(mac_str)? {
+            mac @ MacAddress::Meshtastic(_) => Ok(mac),
+            MacAddress::Full(_) => Err(Error::ParseError.into()),
         }
-        MacAddress::try_from(&topic[topic.len() - 8..])
     }
 
     /// Processes an incoming MQTT message payload and topic, converting it into a structured `Message`.
@@ -223,31 +231,26 @@ impl MqttReceiver {
         payload: &[u8],
     ) -> crate::Result<Message> {
         if let Some(topic) = topic.strip_prefix(MESHTASTIC_MQTT_PREFIX) {
-            let channel = topic.split_once("/");
-            match channel {
-                Some(("serial", _)) => {
-                    let recv_mac_address = Self::extract_msh_mac(topic)?;
-                    Ok(Message::MeshtasticSerial(
-                        recv_mac_address,
-                        now,
-                        payload.into(),
-                    ))
-                }
-                _ => {
-                    let recv_mac_address = Self::extract_msh_mac(topic)?;
-                    Ok(Message::MeshtasticStatus(
-                        recv_mac_address,
-                        now,
-                        payload.into(),
-                    ))
-                }
+            let recv_mac_address = Self::extract_msh_mac(topic)?;
+            if matches!(topic.split_once('/'), Some(("serial", _))) {
+                Ok(Message::MeshtasticSerial(
+                    recv_mac_address,
+                    now,
+                    payload.into(),
+                ))
+            } else {
+                Ok(Message::MeshtasticStatus(
+                    recv_mac_address,
+                    now,
+                    payload.into(),
+                ))
             }
         } else {
-            let mac_address = Self::extract_cell_mac(topic)?;
-            match &topic[16..] {
-                "/status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
-                "/p" => Ok(Message::Punches(mac_address, now, payload.into())),
-                "/will" => {
+            let (mac_address, subtopic) = Self::parse_cell_topic(topic)?;
+            match subtopic {
+                "status" => Ok(Message::CellularStatus(mac_address, now, payload.into())),
+                "p" => Ok(Message::Punches(mac_address, now, payload.into())),
+                "will" => {
                     let status = Status {
                         msg: Some(Msg::Disconnected(Disconnected {
                             client_name: str::from_utf8(payload).map_err(|_| Error::ParseError)?,
@@ -319,14 +322,17 @@ mod test {
         let mac_address = MqttReceiver::extract_cell_mac("yar/deadbeef9876/p").unwrap();
         assert_eq!("deadbeef9876", format!("{mac_address}"));
         assert!(MqttReceiver::extract_cell_mac("yar/deadbeef987").is_err());
+        assert!(MqttReceiver::extract_cell_mac("yar/12345678/p").is_err());
+        assert!(MqttReceiver::extract_cell_mac("other/deadbeef9876/p").is_err());
     }
 
     #[test]
     fn test_extract_msh_mac() {
         let mac_address = MqttReceiver::extract_msh_mac("cha/!12345678").unwrap();
         assert_eq!("12345678", format!("{mac_address}"));
-        assert!(MqttReceiver::extract_cell_mac("cha/!1234567").is_err());
-        assert!(MqttReceiver::extract_cell_mac("!12345678").is_err());
+        assert!(MqttReceiver::extract_msh_mac("cha/!1234567").is_err());
+        assert!(MqttReceiver::extract_msh_mac("!12345678").is_err());
+        assert!(MqttReceiver::extract_msh_mac("cha/!😀2345678").is_err());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use chrono::{FixedOffset, Local};
 use futures::{
-    StreamExt,
+    FutureExt as _, StreamExt,
+    future::BoxFuture,
     stream::{BoxStream, SelectAll},
 };
 use log::error;
@@ -52,11 +53,7 @@ impl MessageHandler {
         service_envelope: ServiceEnvelope,
     ) -> crate::Result<Option<Event>> {
         let now = Local::now().with_timezone(&self.timezone);
-        let gateway_id = service_envelope
-            .gateway_id
-            .strip_prefix('!')
-            .unwrap_or(&service_envelope.gateway_id);
-        let mac_address = MacAddress::try_from(gateway_id)?;
+        let mac_address = MacAddress::try_from(service_envelope.gateway_id.as_str())?;
         self.local_macs.insert(mac_address);
         for mqtt_receiver in &self.mqtt_receivers {
             let _ = mqtt_receiver
@@ -266,14 +263,15 @@ impl MessageHandlerBuilder {
 
 impl IntoFuture for MessageHandlerBuilder {
     type Output = MessageHandler;
-    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = MessageHandler> + Send>>;
+    type IntoFuture = BoxFuture<'static, MessageHandler>;
 
     fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move {
+        async move {
             let mut handler = self.build();
             handler.init();
             handler
-        })
+        }
+        .boxed()
     }
 }
 
