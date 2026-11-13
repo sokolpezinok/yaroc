@@ -95,12 +95,12 @@ impl<'de> Deserialize<'de> for RatToml {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?.to_lowercase().replace("-", "");
+        let s = String::deserialize(deserializer)?.to_lowercase().replace('-', "");
         match s.as_str() {
             "ltem" => Ok(RatToml::Ltem),
             "nbiot" => Ok(RatToml::NbIot),
             "both" | "all" | "ltemnbiot" => Ok(RatToml::LtemNbIot),
-            _ => Err(serde::de::Error::custom(format!("Unknown RAT: {}", s))),
+            _ => Err(serde::de::Error::custom(format!("Unknown RAT: {s}"))),
         }
     }
 }
@@ -156,7 +156,7 @@ impl<'de> Deserialize<'de> for SrrRxPin {
             "scl" => Ok(SrrRxPin::Scl),
             "sda" => Ok(SrrRxPin::Sda),
             "ain1" => Ok(SrrRxPin::Ain1),
-            _ => Err(serde::de::Error::custom(format!("Unknown pin: {}", s))),
+            _ => Err(serde::de::Error::custom(format!("Unknown pin: {s}"))),
         }
     }
 }

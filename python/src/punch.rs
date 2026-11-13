@@ -102,7 +102,7 @@ impl fmt::Display for SiPunchLog {
             )?;
         }
         let millis = self.latency.num_milliseconds() as f64 / 1000.0;
-        write!(f, ", latency {:4.2}s", millis)
+        write!(f, ", latency {millis:4.2}s")
     }
 }
 

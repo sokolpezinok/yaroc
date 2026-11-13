@@ -1,11 +1,12 @@
 use chrono::Local;
 use pyo3::prelude::*;
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
 pub fn get_tokio_rt() -> &'static Runtime {
-    static RT: OnceLock<Runtime> = OnceLock::new();
-    RT.get_or_init(|| tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap())
+    static RT: LazyLock<Runtime> =
+        LazyLock::new(|| tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap());
+    &RT
 }
 
 pub async fn run_on_tokio<F, O>(f: F) -> O
@@ -42,8 +43,9 @@ pub enum RaspberryModel {
 impl RaspberryModel {
     #[staticmethod]
     pub fn from_string(model: &str) -> RaspberryModel {
-        let re = regex::Regex::new("Raspberry Pi ([1-5]) Model ([AB])").unwrap();
-        if let Some(captures) = re.captures(model) {
+        static RE: LazyLock<regex::Regex> =
+            LazyLock::new(|| regex::Regex::new("Raspberry Pi ([1-5]) Model ([AB])").unwrap());
+        if let Some(captures) = RE.captures(model) {
             let captures_vec: Vec<_> =
                 captures.iter().skip(1).filter_map(|m| m.map(|matc| matc.as_str())).collect();
             match captures_vec.as_slice() {

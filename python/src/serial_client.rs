@@ -116,18 +116,15 @@ impl SerialClient {
                     Ok(_) => {}
                 }
                 let (cleaned, is_meos) = Self::parse_si_packet(query.as_slice());
-                match cleaned {
-                    b"\xf0\x01Mm\n\x03" => {
-                        if is_meos {
-                            info!("Responding to orienteering software - MeOS");
-                        } else {
-                            info!("Responding to orienteering software - SportIdent Reader");
-                        }
+                if cleaned == b"\xf0\x01Mm\n\x03" {
+                    if is_meos {
+                        info!("Responding to orienteering software - MeOS");
+                    } else {
+                        info!("Responding to orienteering software - SportIdent Reader");
                     }
-                    _ => {
-                        error!("Contacted by unknown orienteering software");
-                        return None;
-                    }
+                } else {
+                    error!("Contacted by unknown orienteering software");
+                    return None;
                 }
 
                 let mut tx = computer_tx.lock().await;
@@ -161,13 +158,10 @@ impl SerialClient {
                 None
             }
             device = mini_reader_connect_rx.next(), if !mini_reader_connect_rx_closed => {
-                match device {
-                    Some(device) => Some(device),
-                    None => {
-                        error!("Notification stream unexpectedly ended.");
-                        None
-                    }
+                if device.is_none() {
+                    error!("Notification stream unexpectedly ended.");
                 }
+                device
             }
         }
     }
@@ -215,12 +209,11 @@ impl SerialClient {
                             return None;
                         }
                         Ok(_) => {
-                            let mut tx = match tx_guard.take() {
-                                Some(t) => t,
-                                None => {
-                                    info!("Locking UART TX to the computer");
-                                    computer_tx.lock().await
-                                }
+                            let mut tx = if let Some(t) = tx_guard.take() {
+                                t
+                            } else {
+                                info!("Locking UART TX to the computer");
+                                computer_tx.lock().await
                             };
                             debug!("Read {} bytes from mini-reader", reader_buffer.len());
                             let _ = tx
@@ -231,7 +224,7 @@ impl SerialClient {
                             // transaction can complete and not be interrupted.
                             tx_guard = Some(tx);
                         }
-                    };
+                    }
                 }
                 len = rx.read_buf(&mut buffer) => {
                     match len {
@@ -241,7 +234,7 @@ impl SerialClient {
                             return None;
                         }
                         Ok(len) => {
-                            debug!("Writing {} bytes to mini-reader", len);
+                            debug!("Writing {len} bytes to mini-reader");
                             let _ = mini_reader
                                 .write_all(buffer.as_slice())
                                 .await
@@ -254,15 +247,13 @@ impl SerialClient {
                     }
                 }
                 device = mini_reader_connect_rx.next(), if !mini_reader_connect_rx_closed => {
-                    match device {
-                        Some(device) => return Some(device),
-                        None => {
-                            error!("Notification stream unexpectedly ended. UsbSerialFactory must have crashed.");
-                            mini_reader_connect_rx_closed = true;
-                        }
+                    if let Some(device) = device {
+                        return Some(device);
                     }
+                    error!("Notification stream unexpectedly ended. UsbSerialFactory must have crashed.");
+                    mini_reader_connect_rx_closed = true;
                 }
-                _ = tokio::time::sleep(Duration::from_millis(800)), if tx_guard.is_some() => {
+                () = tokio::time::sleep(Duration::from_millis(800)), if tx_guard.is_some() => {
                     // Release lock on computer_tx if enough time has passed.
                     info!("Releasing the lock of the UART TX");
                     tx_guard = None;
@@ -278,15 +269,14 @@ impl SerialClient {
     ///
     /// # Returns
     /// A `PyResult` containing the open `SerialStream` on success.
-    fn connect_to_mini_reader(port: String) -> PyResult<SerialStream> {
-        let builder = tokio_serial::new(&port, BAUD_RATE);
+    fn connect_to_mini_reader(port: &str) -> PyResult<SerialStream> {
+        let builder = tokio_serial::new(port, BAUD_RATE);
         builder
             .open_native_async()
             .inspect(|_| info!("Connected to mini-reader at {port}"))
             .map_err(|e| {
                 PyConnectionError::new_err(format!(
-                    "Error connecting to SportIdent device {}: {e}",
-                    port
+                    "Error connecting to SportIdent device {port}: {e}"
                 ))
             })
     }
@@ -299,11 +289,8 @@ impl SerialClient {
         let raw_punch = punch_log.punch.raw;
         let card = punch_log.punch.card;
         match computer_tx.write_all(&raw_punch).await {
-            Ok(()) => info!(
-                "Punch of card {} sent via serial port, try #{}",
-                card, try_no
-            ),
-            Err(e) => error!("serial failed to send punch {card}, try {}: {e}", try_no),
+            Ok(()) => info!("Punch of card {card} sent via serial port, try #{try_no}"),
+            Err(e) => error!("serial failed to send punch {card}, try {try_no}: {e}"),
         }
     }
 }
@@ -324,7 +311,7 @@ impl SerialClient {
         crate::python::run_on_tokio(async move {
             let builder = tokio_serial::new(&computer_port, BAUD_RATE);
             let computer_serial = builder.open_native_async().map_err(|e| {
-                PyConnectionError::new_err(format!("Error connecting to {}: {e}", computer_port))
+                PyConnectionError::new_err(format!("Error connecting to {computer_port}: {e}"))
             })?;
             info!("Connected to SRR sink at {computer_port}");
             let (rx, tx) = split(computer_serial);
@@ -388,7 +375,7 @@ impl SerialClient {
                     Self::respond_as_blue_srr(&computer_rx, &computer_tx, &mini_reader_connect_rx)
                         .await
                 };
-                let res = device.map(Self::connect_to_mini_reader).transpose();
+                let res = device.as_deref().map(Self::connect_to_mini_reader).transpose();
                 match res {
                     Ok(mini_reader_stream) => *mini_reader = mini_reader_stream,
                     Err(e) => {

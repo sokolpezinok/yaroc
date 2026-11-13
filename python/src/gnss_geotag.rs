@@ -127,7 +127,7 @@ pub fn geotag_mch_logs<W: Write>(
                 info.rsrp_dbm.to_string(),
                 format!("{:.1}", info.snr_cb as f32 / 10.0),
                 format!("{:?}", info.network_type),
-                info.cellid.map(|id| format!("{id:X}")).unwrap_or_else(|| "N/A".to_string()),
+                info.cellid.map_or_else(|| "N/A".to_string(), |id| format!("{id:X}")),
             )
         } else {
             (
@@ -231,7 +231,7 @@ mod tests {
         geotag_mch_logs(&gpx_points, &mch_records, &mut buf).unwrap();
         let csv = String::from_utf8(buf).unwrap();
 
-        let lines: Vec<&str> = csv.trim().split('\n').collect();
+        let lines: Vec<&str> = csv.trim().lines().collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "lat,lon,time,rsrp,snr,ecl,cellid");
         let expected_time1 = DateTime::parse_from_rfc3339("2026-07-25T10:05:00Z")

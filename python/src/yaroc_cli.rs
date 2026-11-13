@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use bytes::{Buf, BytesMut};
@@ -97,9 +97,8 @@ impl<'a, S: Read> PostcardReader<'a, S> {
             if n == 0 {
                 if self.buf.is_empty() {
                     return Ok(None);
-                } else {
-                    return Err("Serial port closed with incomplete response".to_owned());
                 }
+                return Err("Serial port closed with incomplete response".to_owned());
             }
             self.buf.extend_from_slice(&temp_buf[..n]);
         }
@@ -128,7 +127,7 @@ impl<'a, S: Read> PostcardReader<'a, S> {
     }
 }
 
-impl<'a, S: SetTimeout> PostcardReader<'a, S> {
+impl<S: SetTimeout> PostcardReader<'_, S> {
     fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
         self.stream.set_timeout(timeout)
     }
@@ -146,7 +145,7 @@ impl<T: serialport::SerialPort> SetTimeout for T {
 
 fn send_command<S: Read + Write + SetTimeout>(
     serial: &mut S,
-    command: UsbCommand,
+    command: &UsbCommand,
 ) -> Result<UsbResponse, String> {
     let mut reader = send_command_responses(serial, command)?;
     reader
@@ -155,7 +154,7 @@ fn send_command<S: Read + Write + SetTimeout>(
 }
 
 fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String> {
-    match send_command(serial, UsbCommand::Handshake)? {
+    match send_command(serial, &UsbCommand::Handshake)? {
         UsbResponse::Handshake(magic, version) => {
             if magic.as_str() != "YAROC" {
                 return Err(format!("Unexpected magic string: {magic}"));
@@ -167,7 +166,7 @@ fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String>
     }
 }
 
-impl<'a, S: Read + SetTimeout> PostcardReader<'a, S> {
+impl<S: Read + SetTimeout> PostcardReader<'_, S> {
     /// Reads the next response frame, automatically extending the timeout on `PartialOk`.
     fn read_next_response(&mut self) -> Result<Option<UsbResponse>, String> {
         loop {
@@ -181,12 +180,12 @@ impl<'a, S: Read + SetTimeout> PostcardReader<'a, S> {
     }
 }
 
-impl<'a, S: Read + SetTimeout> Iterator for PostcardReader<'a, S> {
+impl<S: Read + SetTimeout> Iterator for PostcardReader<'_, S> {
     type Item = Result<UsbResponse, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_response() {
-            Ok(Some(UsbResponse::Ok)) | Ok(None) => None,
+            Ok(Some(UsbResponse::Ok) | None) => None,
             Ok(Some(response)) => Some(Ok(response)),
             Err(e) => Some(Err(e)),
         }
@@ -195,9 +194,9 @@ impl<'a, S: Read + SetTimeout> Iterator for PostcardReader<'a, S> {
 
 fn send_command_responses<'a, S: Read + Write + SetTimeout>(
     serial: &'a mut S,
-    command: UsbCommand,
+    command: &UsbCommand,
 ) -> Result<PostcardReader<'a, S>, String> {
-    let buf = to_stdvec(&command).map_err(|e| format!("Serialization failed: {e}"))?;
+    let buf = to_stdvec(command).map_err(|e| format!("Serialization failed: {e}"))?;
     serial
         .write_all(buf.as_slice())
         .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
@@ -224,15 +223,11 @@ where
                 .and_then(MiniCallHome::try_from);
             match mch {
                 Ok(mch) => {
-                    let timestamp_str = mch
-                        .timestamp
-                        .map(|t| t.with_timezone(&Local).to_rfc3339())
-                        .unwrap_or_default();
-                    let batt_mv_str = mch.batt_mv.map(|v| v.to_string()).unwrap_or_default();
-                    let batt_percents_str =
-                        mch.batt_percents().map(|p| p.to_string()).unwrap_or_default();
-                    let cpu_temp_str =
-                        mch.cpu_temperature.map(|t| t.to_string()).unwrap_or_default();
+                    let timestamp_str =
+                        mch.timestamp.map_or_default(|t| t.with_timezone(&Local).to_rfc3339());
+                    let batt_mv_str = mch.batt_mv.map_or_default(|v| v.to_string());
+                    let batt_percents_str = mch.batt_percents().map_or_default(|p| p.to_string());
+                    let cpu_temp_str = mch.cpu_temperature.map_or_default(|t| t.to_string());
 
                     let (network_type_str, rsrp_dbm_str, snr_db_str, cellid_str) =
                         if let Some(ref signal_info) = mch.signal_info {
@@ -240,10 +235,7 @@ where
                                 format!("{:?}", signal_info.network_type),
                                 signal_info.rsrp_dbm.to_string(),
                                 format!("{:.1}", signal_info.snr_cb as f32 / 10.0),
-                                signal_info
-                                    .cellid
-                                    .map(|id| format!("{:X}", id))
-                                    .unwrap_or_default(),
+                                signal_info.cellid.map_or_default(|id| format!("{id:X}")),
                             )
                         } else {
                             (String::new(), String::new(), String::new(), String::new())
@@ -251,15 +243,7 @@ where
 
                     writeln!(
                         writer,
-                        "{},{},{},{},{},{},{},{}",
-                        timestamp_str,
-                        batt_mv_str,
-                        batt_percents_str,
-                        cpu_temp_str,
-                        network_type_str,
-                        rsrp_dbm_str,
-                        snr_db_str,
-                        cellid_str
+                        "{timestamp_str},{batt_mv_str},{batt_percents_str},{cpu_temp_str},{network_type_str},{rsrp_dbm_str},{snr_db_str},{cellid_str}",
                     )
                     .map_err(|e| format!("Failed to write CSV row: {e}"))?;
                 }
@@ -283,7 +267,7 @@ where
                 match from_bytes::<LoggedAtResponse>(buf.as_slice()) {
                     Ok(mut log) => {
                         log.timestamp = log.timestamp.with_timezone(&Local).fixed_offset();
-                        info!("{:?}", log);
+                        info!("{log:?}");
                     }
                     Err(e) => {
                         error!("Failed to deserialize LoggedAtResponse: {e}");
@@ -299,19 +283,19 @@ where
     }
 }
 
-fn configure<S: Read + Write + SetTimeout>(config: PathBuf, mut serial: S) {
-    let config_path = crate::config::find_config_file(&config);
+fn configure<S: Read + Write + SetTimeout>(config: &Path, mut serial: S) {
+    let config_path = crate::config::find_config_file(config);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
             let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
             let modem_config: ModemConfig = config.modem.into();
-            match send_command(&mut serial, UsbCommand::ConfigureModem(modem_config)) {
+            match send_command(&mut serial, &UsbCommand::ConfigureModem(modem_config)) {
                 Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
                 Ok(r) => error!("Unexpected response from modem configuration: {r:?}"),
                 Err(e) => error!("Failed to configure modem: {e}"),
             }
             if let Some(mqtt) = config.mqtt {
-                match send_command(&mut serial, UsbCommand::ConfigureMqtt(mqtt.into())) {
+                match send_command(&mut serial, &UsbCommand::ConfigureMqtt(mqtt.into())) {
                     Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
                     Ok(r) => error!("Unexpected response from MQTT configuration: {r:?}"),
                     Err(e) => error!("Failed to configure MQTT: {e}"),
@@ -325,7 +309,7 @@ fn configure<S: Read + Write + SetTimeout>(config: PathBuf, mut serial: S) {
                 srr_rx_pin: config.srr_rx_pin.into(),
                 ..Default::default()
             };
-            match send_command(&mut serial, UsbCommand::ConfigureDevice(device_config)) {
+            match send_command(&mut serial, &UsbCommand::ConfigureDevice(device_config)) {
                 Ok(UsbResponse::Ok) => info!("Device configuration successful"),
                 Ok(r) => error!("Unexpected response from device configuration: {r:?}"),
                 Err(e) => error!("Failed to configure device: {e}"),
@@ -373,7 +357,7 @@ pub fn yaroc_cli() {
     }
 
     match args.command {
-        Command::ExportConfig => match send_command(&mut serial, UsbCommand::GetConfig) {
+        Command::ExportConfig => match send_command(&mut serial, &UsbCommand::GetConfig) {
             Ok(UsbResponse::Config(device_config, modem_config, mqtt_config)) => {
                 let config = Config::from_configs(device_config, modem_config, mqtt_config);
                 match toml::to_string_pretty(&config) {
@@ -384,17 +368,17 @@ pub fn yaroc_cli() {
             Ok(r) => error!("Unexpected response from export-config: {r:?}"),
             Err(e) => error!("Failed to get config from device: {e}"),
         },
-        Command::EraseFlash => match send_command(&mut serial, UsbCommand::EraseFlash) {
+        Command::EraseFlash => match send_command(&mut serial, &UsbCommand::EraseFlash) {
             Ok(UsbResponse::Ok) => info!("Flash erase successful"),
             Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
             Err(e) => error!("Failed to erase flash: {e}"),
         },
         Command::Configure { config } => {
-            configure(config, serial);
+            configure(&config, serial);
         }
         Command::DumpLogs { log_type } => match log_type {
             LogType::Mch { gpx } => {
-                match send_command_responses(&mut serial, UsbCommand::GetMiniCallHomeLogs) {
+                match send_command_responses(&mut serial, &UsbCommand::GetMiniCallHomeLogs) {
                     Ok(responses) => {
                         info!("Awaiting logs from the device");
                         let mut stdout = std::io::stdout();
@@ -419,7 +403,7 @@ pub fn yaroc_cli() {
                 }
             }
             LogType::Modem => {
-                match send_command_responses(&mut serial, UsbCommand::GetLoggedAtResponseLogs) {
+                match send_command_responses(&mut serial, &UsbCommand::GetLoggedAtResponseLogs) {
                     Ok(responses) => {
                         info!("Awaiting logs from the device");
                         dump_logged_at_response_logs(responses);
@@ -468,7 +452,7 @@ mod tests {
         write_mch_logs_to_csv(responses, &mut csv_buf).unwrap();
 
         let csv_str = String::from_utf8(csv_buf).unwrap();
-        let lines: Vec<&str> = csv_str.trim().split('\n').collect();
+        let lines: Vec<&str> = csv_str.trim().lines().collect();
 
         assert_eq!(lines.len(), 2);
         assert_eq!(
@@ -621,10 +605,11 @@ mod tests {
             read_offset: 0,
             chunk_size: 1,
         };
-        let res: Vec<_> = send_command_responses(&mut frag_stream, UsbCommand::GetMiniCallHomeLogs)
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let res: Vec<_> =
+            send_command_responses(&mut frag_stream, &UsbCommand::GetMiniCallHomeLogs)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], resp1);
         assert_eq!(res[1], resp2);
@@ -636,7 +621,7 @@ mod tests {
             chunk_size: 1024,
         };
         let mut iter =
-            send_command_responses(&mut fused_stream, UsbCommand::GetMiniCallHomeLogs).unwrap();
+            send_command_responses(&mut fused_stream, &UsbCommand::GetMiniCallHomeLogs).unwrap();
         assert_eq!(iter.next(), Some(Ok(resp1)));
         assert_eq!(iter.next(), Some(Ok(resp2)));
         assert_eq!(iter.next(), None);
@@ -697,7 +682,7 @@ mod tests {
             read_offset: 0,
             chunk_size: 1024,
         };
-        let res = send_command(&mut stream, UsbCommand::EraseFlash).unwrap();
+        let res = send_command(&mut stream, &UsbCommand::EraseFlash).unwrap();
         assert_eq!(res, UsbResponse::Ok);
     }
 }

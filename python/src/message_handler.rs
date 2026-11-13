@@ -187,10 +187,10 @@ impl MessageHandlerBuilder {
         }
     }
 
-    pub fn with_dns<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_dns(
+        mut self_: PyRefMut<'_, Self>,
         dns: Vec<(String, String)>,
-    ) -> PyResult<PyRefMut<'py, Self>> {
+    ) -> PyResult<PyRefMut<'_, Self>> {
         self_.dns = dns
             .into_iter()
             .map(|(mac, name)| -> PyResult<(String, MacAddress)> {
@@ -205,42 +205,36 @@ impl MessageHandlerBuilder {
         Ok(self_)
     }
 
-    pub fn with_mqtt_configs<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_mqtt_configs(
+        mut self_: PyRefMut<'_, Self>,
         mqtt_configs: Vec<MqttConfig>,
-    ) -> PyRefMut<'py, Self> {
+    ) -> PyRefMut<'_, Self> {
         self_.mqtt_configs = mqtt_configs;
         self_
     }
 
-    pub fn with_node_info_interval<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_node_info_interval(
+        mut self_: PyRefMut<'_, Self>,
         interval: Duration,
-    ) -> PyRefMut<'py, Self> {
+    ) -> PyRefMut<'_, Self> {
         self_.node_info_interval = interval;
         self_
     }
 
-    pub fn with_meshtastic_timeout<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_meshtastic_timeout(
+        mut self_: PyRefMut<'_, Self>,
         timeout: Duration,
-    ) -> PyRefMut<'py, Self> {
+    ) -> PyRefMut<'_, Self> {
         self_.meshtastic_timeout = timeout;
         self_
     }
 
-    pub fn with_meshtastic<'py>(
-        mut self_: PyRefMut<'py, Self>,
-        enable: bool,
-    ) -> PyRefMut<'py, Self> {
+    pub fn with_meshtastic(mut self_: PyRefMut<'_, Self>, enable: bool) -> PyRefMut<'_, Self> {
         self_.enable_meshtastic = enable;
         self_
     }
 
-    pub fn with_sportident<'py>(
-        mut self_: PyRefMut<'py, Self>,
-        enable: bool,
-    ) -> PyRefMut<'py, Self> {
+    pub fn with_sportident(mut self_: PyRefMut<'_, Self>, enable: bool) -> PyRefMut<'_, Self> {
         self_.enable_sportident = enable;
         self_
     }
@@ -249,21 +243,21 @@ impl MessageHandlerBuilder {
         mut self_: PyRefMut<'py, Self>,
         factory: Option<Bound<'py, PyUsbSerialFactory>>,
     ) -> PyRefMut<'py, Self> {
-        self_.sportident_factory = factory.map(|f| f.unbind());
+        self_.sportident_factory = factory.map(Bound::unbind);
         self_
     }
 
-    pub fn with_tcp<'py>(mut self_: PyRefMut<'py, Self>, host: String) -> PyRefMut<'py, Self> {
+    pub fn with_tcp(mut self_: PyRefMut<'_, Self>, host: String) -> PyRefMut<'_, Self> {
         self_.meshtastic_tcp = Some(host);
         self_
     }
 
-    pub fn with_fake_punch<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_fake_punch(
+        mut self_: PyRefMut<'_, Self>,
         interval: Duration,
         card: u32,
         code: u16,
-    ) -> PyRefMut<'py, Self> {
+    ) -> PyRefMut<'_, Self> {
         let config = FakePunchConfig {
             interval,
             card,
@@ -273,15 +267,15 @@ impl MessageHandlerBuilder {
         self_
     }
 
-    pub fn with_timezone<'py>(
-        mut self_: PyRefMut<'py, Self>,
+    pub fn with_timezone(
+        mut self_: PyRefMut<'_, Self>,
         timezone: FixedOffset,
-    ) -> PyRefMut<'py, Self> {
+    ) -> PyRefMut<'_, Self> {
         self_.timezone = Some(timezone);
         self_
     }
 
-    pub fn build(&self, py: Python<'_>) -> PyResult<MessageHandler> {
+    pub fn build(&self, py: Python<'_>) -> MessageHandler {
         let sportident = if let Some(ref factory_py) = self.sportident_factory {
             let factory_bound = factory_py.bind(py);
             let factory = factory_bound.borrow().clone();
@@ -320,6 +314,6 @@ impl MessageHandlerBuilder {
 
         let message_handler_rs = crate::python::get_tokio_rt().block_on(builder.into_future());
         let inner = Arc::new(Mutex::new(message_handler_rs));
-        Ok(MessageHandler { inner })
+        MessageHandler { inner }
     }
 }
