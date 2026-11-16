@@ -17,6 +17,9 @@ use heapless::{String, format};
 use log::{error, info};
 
 pub(crate) static BOOT_TIME: Watch<RawMutex, DateTime<FixedOffset>, 1> = Watch::new();
+#[cfg(all(feature = "std", test))]
+pub(crate) static TEST_MUTEX: embassy_sync::mutex::Mutex<RawMutex, ()> =
+    embassy_sync::mutex::Mutex::new(());
 
 /// Returns the calendar time corresponding to the given `instant`,
 /// based on the synchronized boot time. Returns `None` if the boot time has not been synchronized yet.
@@ -217,9 +220,6 @@ mod test {
     use super::*;
 
     use embassy_futures::block_on;
-    use embassy_sync::mutex::Mutex;
-
-    static TEST_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
 
     #[test]
     fn test_mini_call_home() {

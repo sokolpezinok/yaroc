@@ -441,7 +441,7 @@ mod test {
     use embassy_time::Instant;
 
     use crate::at::fake_modem::FakeModem;
-    use crate::bg77::system_info::{BOOT_TIME, time_from_instant};
+    use crate::bg77::system_info::{BOOT_TIME, TEST_MUTEX, time_from_instant};
     use crate::send_punch::COMMAND_CHANNEL;
 
     #[test]
@@ -534,19 +534,29 @@ mod test {
 
     #[test]
     fn test_urc_handler_qntp_updates_boot_time() {
+        let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
         assert!(BOOT_TIME.receiver().unwrap().try_get().is_none());
 
+        let before = Instant::now();
         let resp = CommandResponse::new("+QNTP: 0,\"2026/08/16,17:10:41+08\"").unwrap();
         let handled = ModemManager::<FakeModem>::urc_handler(&resp, COMMAND_CHANNEL.sender());
         assert!(handled);
+        let after = Instant::now();
 
         let expected = DateTime::parse_from_rfc3339("2026-08-16T19:10:41+02:00").unwrap();
-        assert_eq!(time_from_instant(Instant::now()), expected);
+        let low = time_from_instant(before);
+        let high = time_from_instant(after);
+        assert_eq!(low.offset(), expected.offset());
+        assert!(
+            low <= expected && expected <= high,
+            "expected {expected} to be in [{low}, {high}]"
+        );
     }
 
     #[test]
     fn test_urc_handler_qntp_error_handled() {
+        let _lock = block_on(TEST_MUTEX.lock());
         BOOT_TIME.sender().clear();
 
         let resp = CommandResponse::new("+QNTP: 565").unwrap();

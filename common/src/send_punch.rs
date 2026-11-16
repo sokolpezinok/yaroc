@@ -349,8 +349,10 @@ mod tests {
     use crate::{
         at::{fake_modem::FakeModem, response::PendingLoggedAtResponse},
         bg77::{
-            connection::ConnectionState, modem::Bg77, modem_manager::FakePin,
-            system_info::BOOT_TIME,
+            connection::ConnectionState,
+            modem::Bg77,
+            modem_manager::FakePin,
+            system_info::{BOOT_TIME, TEST_MUTEX},
         },
         flash::{Flash, FlashValue, LoggedAtResponseIterator, MchIterator, PunchIterator},
         punch::{LoggedPunch, SiPunch},
@@ -438,8 +440,6 @@ mod tests {
     }
 
     static FAKE_FLASH_MUTEX: Mutex<RawMutex, Option<FakeFlash>> = Mutex::new(None);
-
-    static TEST_MUTEX: Mutex<RawMutex, ()> = Mutex::new(());
 
     #[test]
     fn send_punch_instantiation_test() {
@@ -539,6 +539,7 @@ mod tests {
 
     #[test]
     fn si_punch_flash_log_channel_test() {
+        let _lock = block_on(TEST_MUTEX.lock());
         let time =
             chrono::DateTime::parse_from_rfc3339("2023-11-23T10:00:03.792968750+01:00").unwrap();
         let punch = SiPunch::new(1715004, 47, time, 2, 1, 3);
