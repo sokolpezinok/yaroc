@@ -123,7 +123,7 @@ impl MqttClient {
         mqtt_configs: Vec<MqttConfig>,
         timezone: Option<String>,
     ) -> Self {
-        MqttClient {
+        Self {
             dns,
             mqtt_configs,
             timezone,
@@ -137,12 +137,13 @@ impl MqttClient {
                 let CellularLogMessage::MCH(ref mch) = cell_log else {
                     return None;
                 };
-                let rsrp = mch.mini_call_home.signal_info.as_ref().map(|s| s.rsrp_dbm as i32);
-                let snr = mch.mini_call_home.signal_info.as_ref().map(|s| s.snr_cb as f64 / 10.0);
-                let battery = mch.mini_call_home.batt_percents().map(|b| b as u32);
+                let rsrp = mch.mini_call_home.signal_info.as_ref().map(|s| i32::from(s.rsrp_dbm));
+                let snr =
+                    mch.mini_call_home.signal_info.as_ref().map(|s| f64::from(s.snr_cb) / 10.0);
+                let battery = mch.mini_call_home.batt_percents().map(u32::from);
                 Some(YarocEvent::CellularLog(CellularLogPayload {
                     mac_address: cell_log.mac_address().to_string(),
-                    text: format!("{}", cell_log),
+                    text: format!("{cell_log}"),
                     rsrp_dbm: rsrp,
                     snr,
                     battery_percentage: battery,
@@ -151,10 +152,10 @@ impl MqttClient {
             EventRs::SiPunches(si_punches) | EventRs::SiPunchesMeshtastic(si_punches, _) => Some(
                 YarocEvent::SiPunches(si_punches.into_iter().map(to_js_punch_log).collect()),
             ),
-            EventRs::SiPunch(si_punch) => Some(YarocEvent::SiPunch(to_js_punch(si_punch))),
+            EventRs::SiPunch(si_punch) => Some(YarocEvent::SiPunch(to_js_punch(&si_punch))),
             EventRs::MeshtasticLog(msh_log, service_envelope) => {
                 Some(YarocEvent::MeshtasticLog(MeshtasticLogPayload {
-                    text: format!("{}", msh_log),
+                    text: format!("{msh_log}"),
                     channel: service_envelope.channel_id,
                     gateway_id: service_envelope.gateway_id,
                 }))
@@ -175,12 +176,8 @@ impl MqttClient {
             (),
         >,
     ) -> Result<()> {
-        let tsfn: ThreadsafeFunction<
-            std::result::Result<serde_json::Value, napi::Error>,
-            (),
-            serde_json::Value,
-        > = callback
-            .build_threadsafe_function::<std::result::Result<serde_json::Value, napi::Error>>()
+        let tsfn: ThreadsafeFunction<Result<serde_json::Value>, (), serde_json::Value> = callback
+            .build_threadsafe_function::<Result<serde_json::Value>>()
             .callee_handled::<true>()
             .build_callback(|ctx| ctx.value)?;
 
@@ -214,7 +211,7 @@ impl MqttClient {
                         (Some(u), Some(p)) => Some((u, p)),
                         _ => None,
                     },
-                    keep_alive: Duration::from_secs(config.keep_alive_secs as u64),
+                    keep_alive: Duration::from_secs(u64::from(config.keep_alive_secs)),
                     meshtastic_channel: config.meshtastic_channel,
                 })
                 .collect::<Vec<_>>();
@@ -228,7 +225,7 @@ impl MqttClient {
                         builder = builder.with_timezone(parsed_tz);
                     }
                     Err(err) => {
-                        error!("{}", err);
+                        error!("{err}");
                         let napi_err = napi::Error::from_reason(err);
                         tsfn.call(Ok(Err(napi_err)), ThreadsafeFunctionCallMode::Blocking);
                         return;
@@ -247,20 +244,16 @@ impl MqttClient {
                     loop {
                         match handler.next_event().await {
                             Ok(event) => {
-                                let js_event = Self::convert_event(event);
-                                if let Some(js_event) = js_event {
+                                if let Some(js_event) = Self::convert_event(event)
+                                    && let Ok(js_val) = serde_json::to_value(&js_event)
+                                {
                                     // TODO: emit Vec<SiPunchLog> as multiple events
-                                    if let Ok(js_val) = serde_json::to_value(&js_event) {
-                                        tsfn.call(
-                                            Ok(Ok(js_val)),
-                                            ThreadsafeFunctionCallMode::Blocking,
-                                        );
-                                    }
+                                    tsfn.call(Ok(Ok(js_val)), ThreadsafeFunctionCallMode::Blocking);
                                 }
                             }
                             Err(err) => {
-                                log::error!("{}", err);
-                                let napi_err = napi::Error::from_reason(format!("{}", err));
+                                log::error!("{err}");
+                                let napi_err = napi::Error::from_reason(format!("{err}"));
                                 tsfn.call(Ok(Err(napi_err)), ThreadsafeFunctionCallMode::Blocking);
                             }
                         }
@@ -278,25 +271,25 @@ impl MqttClient {
     }
 }
 
-fn to_js_punch(punch: SiPunchRs) -> SiPunch {
+fn to_js_punch(punch: &SiPunchRs) -> SiPunch {
     SiPunch {
         card: punch.card,
-        code: punch.code as u32,
+        code: u32::from(punch.code),
         time: punch.time.to_rfc3339(),
-        mode: punch.mode as u32,
+        mode: u32::from(punch.mode),
     }
 }
 
 fn to_js_punch_log(log: yaroc_receiver::logs::SiPunchLog) -> SiPunchLog {
-    let rssi_dbm = log.rssi_snr.as_ref().map(|r| r.rssi_dbm as i32);
-    let snr = log.rssi_snr.as_ref().map(|r| r.snr as f64);
-    let hop_count = log.rssi_snr.as_ref().map(|r| r.hop_count as u32);
+    let rssi_dbm = log.rssi_snr.as_ref().map(|r| i32::from(r.rssi_dbm));
+    let snr = log.rssi_snr.as_ref().map(|r| f64::from(r.snr));
+    let hop_count = log.rssi_snr.as_ref().map(|r| u32::from(r.hop_count));
 
     SiPunchLog {
-        punch: to_js_punch(log.punch),
+        punch: to_js_punch(&log.punch),
         latency_ms: log.latency.num_milliseconds() as f64,
         host_info: HostInfo {
-            name: log.host_info.name.clone(),
+            name: log.host_info.name,
             mac_address: log.host_info.mac_address.to_string(),
         },
         rssi_dbm,
@@ -316,7 +309,7 @@ fn to_js_node_info(node: yaroc_receiver::state::NodeInfo) -> NodeInfo {
     NodeInfo {
         name: node.name,
         signal_strength: signal_strength.to_string(),
-        battery_percentage: node.battery_percentage.map(|b| b as u32),
+        battery_percentage: node.battery_percentage.map(u32::from),
         codes: node.codes,
         last_update: node.last_update.map(|t| t.to_rfc3339()),
         last_punch: node.last_punch.map(|t| t.to_rfc3339()),
@@ -358,8 +351,7 @@ fn parse_timezone(tz: &str) -> std::result::Result<FixedOffset, String> {
     }
 
     Err(format!(
-        "Invalid timezone offset format: '{}'. Supported formats are '+HH:MM', '-HH:MM', '+HHMM', '-HHMM', 'UTC' and 'GMT'.",
-        tz
+        "Invalid timezone offset format: '{tz}'. Supported formats are '+HH:MM', '-HH:MM', '+HHMM', '-HHMM', 'UTC' and 'GMT'."
     ))
 }
 
