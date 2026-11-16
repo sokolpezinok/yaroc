@@ -37,6 +37,10 @@ type FlashMutex = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
 static FLASH: StaticCell<FlashMutex> = StaticCell::new();
 static EXECUTOR: StaticCell<embassy_executor::Executor> = StaticCell::new();
 
+unsafe extern "C" {
+    static __bootloader_active_start: u32;
+}
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let nvmc = unsafe { peripherals::NVMC::steal() };
@@ -47,11 +51,9 @@ fn main() -> ! {
     let mut boot = BootLoader::new(boot_config);
     let state = boot.prepare_boot(page_buf.as_mut()).expect("Boot prepare error");
 
-    unsafe extern "C" {
-        static __bootloader_active_start: u32;
-    }
-    let active_start = &raw const __bootloader_active_start as u32;
-    let active_present = unsafe { (active_start as *const u32).read_volatile() != 0xFFFF_FFFF };
+    let active_start_ptr = &raw const __bootloader_active_start;
+    let active_start = active_start_ptr as u32;
+    let active_present = unsafe { active_start_ptr.read_volatile() != 0xFFFF_FFFF };
 
     // TODO: Detect double-click on hardware reset button (via POWER.GPREGRET) to manually force DFU mode.
     if state == State::DfuDetach || !active_present {
