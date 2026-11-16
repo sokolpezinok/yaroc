@@ -3405,14 +3405,12 @@ dependencies = [
 name = "yaroc-nrf52840"
 version = "0.1.4"
 dependencies = [
- "chrono",
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-semihosting",
  "defmt 1.1.1",
  "defmt-rtt",
  "embassy-boot",
- "embassy-boot-nrf",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
@@ -3429,9 +3427,7 @@ dependencies = [
  "panic-probe",
  "postcard",
  "sequential-storage",
- "serde",
  "static_cell",
- "thiserror 2.0.20",
  "yaroc-common",
 ]
 

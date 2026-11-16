@@ -27,8 +27,8 @@ impl Handler for DfuRuntimeHandler {
 ///
 /// This task manages the USB device and must be spawned for USB to work.
 #[embassy_executor::task]
-pub async fn usb_task(mut usb: UsbDevice<'static, UsbDriver>) {
-    usb.run().await;
+pub async fn usb_task(mut usb: UsbDevice<'static, UsbDriver>) -> ! {
+    usb.run().await
 }
 
 static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
@@ -38,7 +38,7 @@ static MSOS_DESCRIPTOR: StaticCell<[u8; 128]> = StaticCell::new();
 static MAIN_STATE: StaticCell<State<'static>> = StaticCell::new();
 static LOG_STATE: StaticCell<State<'static>> = StaticCell::new();
 static DFU_STATE: StaticCell<DfuState<DfuRuntimeHandler>> = StaticCell::new();
-const PACKET_LEN: usize = 64;
+const PACKET_LEN: u16 = 64;
 
 fn builder(driver: UsbDriver) -> Builder<'static, UsbDriver> {
     // TODO: figure out how to pick vendor and product ID
@@ -69,8 +69,8 @@ impl Usb {
         let mut builder = builder(driver);
         let state = MAIN_STATE.init(State::new());
         let logger_state = LOG_STATE.init(State::new());
-        let main_class = CdcAcmClass::new(&mut builder, state, PACKET_LEN as u16);
-        let log_class = CdcAcmClass::new(&mut builder, logger_state, PACKET_LEN as u16);
+        let main_class = CdcAcmClass::new(&mut builder, state, PACKET_LEN);
+        let log_class = CdcAcmClass::new(&mut builder, logger_state, PACKET_LEN);
         let dfu_state = DFU_STATE.init(DfuState::new(
             DfuRuntimeHandler,
             DfuAttributes::WILL_DETACH,
@@ -105,7 +105,7 @@ impl Usb {
 }
 
 #[embassy_executor::task]
-async fn dfu_detach_task(mut bootloader_state: BootloaderState<'static>) {
+async fn dfu_detach_task(mut bootloader_state: BootloaderState<'static>) -> ! {
     DFU_DETACH_SIGNAL.wait().await;
     info!("USB DFU detach requested, resetting into bootloader...");
     if let Err(e) = bootloader_state.mark_dfu().await {
@@ -119,11 +119,11 @@ type SendPunchUsbType = SendPunchUsb<CdcAcmClass<'static, UsbDriver>, Bg77Type, 
 
 /// A task that reads packets from the USB and handles them.
 #[embassy_executor::task]
-async fn usb_packet_reader_loop(usb_packet_reader: SendPunchUsbType) {
-    usb_packet_reader.run().await;
+async fn usb_packet_reader_loop(usb_packet_reader: SendPunchUsbType) -> ! {
+    usb_packet_reader.run().await
 }
 
 #[embassy_executor::task]
-async fn usb_logger_loop(log_class: CdcAcmClass<'static, UsbDriver>) {
-    embassy_usb_logger::with_class!(1024, log::LevelFilter::Debug, log_class).await;
+async fn usb_logger_loop(log_class: CdcAcmClass<'static, UsbDriver>) -> ! {
+    embassy_usb_logger::with_class!(1024, log::LevelFilter::Debug, log_class).await
 }

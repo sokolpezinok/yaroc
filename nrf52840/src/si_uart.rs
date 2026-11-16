@@ -17,7 +17,7 @@ use yaroc_common::{
 /// punches from their processing, which is important because the processing might
 /// involve waiting for the modem, which can be a long operation.
 #[embassy_executor::task]
-pub async fn read_si_uart(mut si_uart: SiUart<UarteRxWithIdle<'static>>) {
+pub async fn read_si_uart(mut si_uart: SiUart<UarteRxWithIdle<'static>>) -> ! {
     let mut punch_cnt = 0;
     loop {
         match si_uart.read_grouped_punches().await {

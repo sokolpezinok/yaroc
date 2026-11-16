@@ -24,10 +24,10 @@ use yaroc_common::{RawMutex, error::Error, status::MiniCallHome};
 
 unsafe extern "C" {
     // These symbols are provided by the linker script (memory.x)
-    unsafe static _data_flash_start: u32;
-    unsafe static _data_flash_size: u32;
-    unsafe static __bootloader_state_start: u32;
-    unsafe static __bootloader_state_end: u32;
+    static _data_flash_start: u32;
+    static _data_flash_size: u32;
+    static __bootloader_state_start: u32;
+    static __bootloader_state_end: u32;
 }
 
 /// A wrapper that ensures its inner byte array is 4-byte (word) aligned.
@@ -76,10 +76,10 @@ const MCH_SIZE: u32 = 64 * 1024;
 const PUNCH_SIZE: u32 = 32 * 1024;
 
 impl<'a> NrfFlash<'a> {
-    /// Creates a new NrfFlash instance
+    /// Creates a new `NrfFlash` instance
     pub fn new(flash: &'a Mutex<RawMutex, SdFlash>) -> Self {
-        let data_start = unsafe { &_data_flash_start as *const u32 as u32 };
-        let data_size = unsafe { &_data_flash_size as *const u32 as u32 };
+        let data_start = &raw const _data_flash_start as u32;
+        let data_size = &raw const _data_flash_size as u32;
 
         let queue_size = data_size - MAP_SIZE - MCH_SIZE - PUNCH_SIZE;
 
@@ -131,8 +131,8 @@ unsafe impl Send for BootloaderState<'_> {}
 impl<'a> BootloaderState<'a> {
     /// Creates a new `BootloaderState` instance
     pub fn new(flash: &'a Mutex<RawMutex, SdFlash>) -> Self {
-        let start = unsafe { &__bootloader_state_start as *const u32 as u32 };
-        let end = unsafe { &__bootloader_state_end as *const u32 as u32 };
+        let start = &raw const __bootloader_state_start as u32;
+        let end = &raw const __bootloader_state_end as u32;
         let partition = Partition::new(flash, start, end - start);
         let buffer = STATE_BUFFER.init(AlignedBuffer::default()).as_mut();
         let state = FirmwareState::new(partition, buffer);
@@ -169,12 +169,11 @@ impl<'a> Flash for NrfFlash<'a> {
             .map_err(|_| Error::FlashError)
     }
 
-    /// Stores a MiniCallHome in flash (serialized as a proto).
+    /// Stores a `MiniCallHome` in flash (serialized as a proto).
     async fn log_minicallhome(&mut self, mch: MiniCallHome) -> crate::Result<()> {
         let status = mch.to_proto();
-        let mch_proto = match status.msg {
-            Some(yaroc_common::proto::status::Msg::MiniCallHome(p)) => p,
-            _ => return Err(Error::ValueError),
+        let Some(yaroc_common::proto::status::Msg::MiniCallHome(mch_proto)) = status.msg else {
+            return Err(Error::ValueError);
         };
 
         let buf = self.buffer.as_mut();
@@ -256,8 +255,8 @@ pub struct NrfMchIter<'s, 'a> {
     buffer: AlignedBuffer<256>,
 }
 
-impl<'s, 'a> MchIterator for NrfMchIter<'s, 'a> {
-    async fn next<'b>(&'b mut self) -> crate::Result<Option<MiniCallHomeProto<'b>>> {
+impl MchIterator for NrfMchIter<'_, '_> {
+    async fn next(&mut self) -> crate::Result<Option<MiniCallHomeProto<'_>>> {
         match self.iter.next(self.buffer.as_mut()).await {
             Ok(Some(entry)) => {
                 let mch_proto =
@@ -275,7 +274,7 @@ pub struct NrfLoggedAtResponseIter<'s, 'a> {
     buffer: AlignedBuffer<512>,
 }
 
-impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
+impl LoggedAtResponseIterator for NrfLoggedAtResponseIter<'_, '_> {
     async fn next(&mut self) -> crate::Result<Option<LoggedAtResponse>> {
         loop {
             match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
@@ -286,7 +285,6 @@ impl<'s, 'a> LoggedAtResponseIterator for NrfLoggedAtResponseIter<'s, 'a> {
                             "Failed to deserialize LoggedAtResponse entry from flash: {}, skipping",
                             e
                         );
-                        continue;
                     }
                 },
                 None => return Ok(None),
@@ -300,7 +298,7 @@ pub struct NrfPunchIter<'s, 'a> {
     buffer: AlignedBuffer<512>,
 }
 
-impl<'s, 'a> PunchIterator for NrfPunchIter<'s, 'a> {
+impl PunchIterator for NrfPunchIter<'_, '_> {
     async fn next(&mut self) -> crate::Result<Option<LoggedPunch>> {
         loop {
             match self.iter.next(self.buffer.as_mut()).await.map_err(|_| Error::FlashError)? {
@@ -311,7 +309,6 @@ impl<'s, 'a> PunchIterator for NrfPunchIter<'s, 'a> {
                             "Failed to deserialize LoggedPunch entry from flash: {}, skipping",
                             e
                         );
-                        continue;
                     }
                 },
                 None => return Ok(None),

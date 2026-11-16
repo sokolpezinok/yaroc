@@ -31,7 +31,7 @@ use yaroc_nrf52840::{
 };
 
 #[embassy_executor::task(pool_size = 2)]
-async fn led_task(mut led: Output<'static>, mut status: Receiver<'static, RawMutex, bool, 1>) {
+async fn led_task(mut led: Output<'static>, mut status: Receiver<'static, RawMutex, bool, 1>) -> ! {
     loop {
         let connected = status.try_get().unwrap_or_default();
         let (period_ms, off_ms) = if connected { (3500, 500) } else { (332, 166) };

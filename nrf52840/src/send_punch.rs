@@ -75,7 +75,7 @@ async fn bg77_send_punch_fn(
         send_punch_fn,
         send_punch_timeout,
     )
-    .await
+    .await;
 }
 
 impl SendPunchFn for Bg77SendPunchFn {
@@ -108,13 +108,13 @@ impl SendPunchFn for Bg77SendPunchFn {
 
 /// A task that runs the backoff retries loop.
 #[embassy_executor::task]
-pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) {
-    backoff_retries.r#loop().await;
+pub async fn backoff_retries_loop(mut backoff_retries: BackoffRetries<Bg77SendPunchFn>) -> ! {
+    backoff_retries.r#loop().await
 }
 
-/// A task that logs AT responses, MiniCallHome messages, and SI punches to flash without locking `SEND_PUNCH_MUTEX`.
+/// A task that logs AT responses, `MiniCallHome` messages, and SI punches to flash without locking `SEND_PUNCH_MUTEX`.
 #[embassy_executor::task]
-pub async fn flash_log_task() {
+pub async fn flash_log_task() -> ! {
     loop {
         let item = FLASH_LOG_CHANNEL.receive().await;
         let mut flash = FLASH_MUTEX.lock().await;
@@ -148,7 +148,7 @@ pub async fn flash_log_task() {
 /// This task listens for events from `MCH_SIGNAL` and `COMMAND_CHANNEL` and
 /// dispatches them to the `SendPunch` instance.
 #[embassy_executor::task]
-pub async fn send_punch_event_handler() {
+pub async fn send_punch_event_handler() -> ! {
     {
         let mut send_punch_unlocked = SEND_PUNCH_MUTEX.lock().await;
         let send_punch = send_punch_unlocked.as_mut().unwrap();
@@ -171,7 +171,7 @@ pub async fn send_punch_event_handler() {
             let send_punch = send_punch_unlocked.as_mut().unwrap();
             match signal {
                 Either3::First(command) => send_punch.execute_command(command).await,
-                Either3::Second(_) => {
+                Either3::Second(()) => {
                     next_network_check = Instant::now() + Duration::from_secs(600);
                     send_punch.check_connection().await;
                 }

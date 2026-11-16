@@ -24,8 +24,8 @@ impl SoftdeviceTemp {
 }
 
 impl Temp for SoftdeviceTemp {
-    async fn cpu_temperature(&mut self) -> crate::Result<f32> {
-        self.ble.temperature()
+    fn cpu_temperature(&mut self) -> impl Future<Output = crate::Result<f32>> {
+        core::future::ready(self.ble.temperature())
     }
 }
 
@@ -34,7 +34,7 @@ pub type OwnTemp = SoftdeviceTemp;
 
 /// A task that periodically updates the system info.
 #[embassy_executor::task]
-pub async fn sysinfo_update(mut temp: OwnTemp) {
+pub async fn sysinfo_update(mut temp: OwnTemp) -> ! {
     // Initial commands to get measurements
     COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await;
 
@@ -43,19 +43,19 @@ pub async fn sysinfo_update(mut temp: OwnTemp) {
     let mut time_sync_ticker = Ticker::every(Duration::from_secs(1800));
     loop {
         match select(temperature_ticker.next(), time_sync_ticker.next()).await {
-            Either::First(_) => {
+            Either::First(()) => {
                 let _ = temp
                     .cpu_temperature()
                     .await
                     .map(|t| temp_sender.send(t))
                     .inspect_err(|err| error!("Temperature update failed: {}", err));
             }
-            Either::Second(_) => COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await,
+            Either::Second(()) => COMMAND_CHANNEL.send(SendPunchCommand::SynchronizeTime).await,
         }
     }
 }
 
-/// A signal used to trigger a MiniCallHome event.
+/// A signal used to trigger a `MiniCallHome` event.
 pub static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 
 /// A task that periodically triggers a `MiniCallHome` event.
@@ -64,7 +64,7 @@ pub static MCH_SIGNAL: Signal<RawMutex, Instant> = Signal::new();
 ///
 /// * `minicallhome_interval`: The interval at which to trigger the `MiniCallHome` event.
 #[embassy_executor::task]
-pub async fn minicallhome_loop(minicallhome_interval: Duration) {
+pub async fn minicallhome_loop(minicallhome_interval: Duration) -> ! {
     let mut mch_ticker = Ticker::every(minicallhome_interval);
     loop {
         // We use Signal, so that MiniCallHome requests do not queue up. If we do not fulfill a few
@@ -78,8 +78,8 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
 
 /// A task that periodically updates the battery voltage.
 ///
-/// The battery voltage calculation is based on the WisBlock RAK4630 implementation:
-/// https://github.com/RAKWireless/WisBlock/blob/master/examples/RAK4630/power/RAK4630_Battery_Level_Detect/Read_Battery_Level/Read_Battery_Level.ino
+/// The battery voltage calculation is based on the `WisBlock` RAK4630 implementation:
+/// <https://github.com/RAKWireless/WisBlock/blob/master/examples/RAK4630/power/RAK4630_Battery_Level_Detect/Read_Battery_Level/Read_Battery_Level.ino>
 ///
 /// Hardware constants:
 /// - ADC resolution: 12-bit (0-4095)
@@ -87,7 +87,7 @@ pub async fn minicallhome_loop(minicallhome_interval: Duration) {
 /// - Voltage divider factor: 1.6667 (hardware divider to bring Vbat within ADC range: 1M / (1M + 1.5M))
 /// - Multiplier: (3000mV / 4096) * 1.6667 = 0.732421875 * 1.6666666667 ≈ 1.220703125
 #[embassy_executor::task]
-pub async fn battery_update(mut saadc: Saadc<'static, 1>) {
+pub async fn battery_update(mut saadc: Saadc<'static, 1>) -> ! {
     saadc.calibrate().await;
     let mut buf = [0; 1];
     let battery_sender = BATTERY.sender();
@@ -99,7 +99,7 @@ pub async fn battery_update(mut saadc: Saadc<'static, 1>) {
         // WisBlock uses a 1.6667 voltage divider and 12-bit ADC with 3.0V reference.
         // The raw value is in buf[0].
         let raw = buf[0].max(0);
-        let mv = (f32::from(raw) * 1.2207031) as u16;
+        let mv = (f32::from(raw) * 1.220_703_1) as u16;
         info!("Battery voltage: {} mV", mv);
         battery_sender.send(BatteryInfo { mv });
         ticker.next().await;

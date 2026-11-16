@@ -69,7 +69,7 @@ static FLASH_MUTEX: StaticCell<Mutex<RawMutex, nrf_softdevice::Flash>> = StaticC
 impl Device {
     /// Initializes all the drivers and peripherals of the device with the given configuration
     pub async fn new() -> Self {
-        let mut config: NrfConfig = Default::default();
+        let mut config = NrfConfig::default();
         config.time_interrupt_priority = Priority::P2;
         let p = embassy_nrf::init(config);
 
@@ -95,7 +95,7 @@ impl Device {
             UartRxPin::Sda => p.P0_13.into::<AnyPin>(),
         };
         let uart0 = uarte::Uarte::new(p.UARTE0, rx_pin, p.P0_20, Irqs, config);
-        let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, Default::default());
+        let uart1 = uarte::Uarte::new(p.UARTE1, p.P0_15, p.P0_16, Irqs, uarte::Config::default());
         let (_tx0, rx0) = uart0.split_with_idle(p.TIMER2, p.PPI_CH2, p.PPI_CH3);
         let (tx1, rx1) = uart1.split_with_idle(p.TIMER1, p.PPI_CH0, p.PPI_CH1);
         let _io3 = Input::new(p.P0_21, Pull::Up);

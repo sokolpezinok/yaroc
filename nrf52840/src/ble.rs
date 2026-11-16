@@ -44,7 +44,7 @@ impl Ble {
                 _bitfield_1: raw::ble_gap_cfg_role_count_t::new_bitfield_1(0),
             }),
             gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
-                p_value: b"YAROC" as *const u8 as _,
+                p_value: b"YAROC".as_ptr().cast_mut(),
                 current_len: 5,
                 max_len: 5,
                 write_perm: unsafe { core::mem::zeroed() },
@@ -72,7 +72,7 @@ impl Ble {
         let bytes = ble::get_address(self.softdevice).bytes();
         let mut res = String::new();
         for b in bytes.iter().rev() {
-            write!(&mut res, "{:02x}", b).expect("Unexpected length, this is a bug");
+            write!(&mut res, "{b:02x}").expect("Unexpected length, this is a bug");
         }
         res
     }
