@@ -81,7 +81,7 @@ class Container(containers.DeclarativeContainer):
         datefmt="%H:%M:%S",
     )
 
-    async_at = providers.Resource(AsyncATCom.from_port, config.client.sim7020.port)
+    async_at = providers.Singleton(AsyncATCom.from_port, config.client.sim7020.port)
 
     client_factories: providers.FactoryAggregate[Client] = providers.FactoryAggregate(
         serial=providers.Callable(
