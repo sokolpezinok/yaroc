@@ -13,6 +13,7 @@ env:
 
 jobs:
   build:
+    if: matrix.settings.host != 'macos-latest' || startsWith(github.ref, 'refs/tags/ts-v')
     strategy:
       fail-fast: false
       matrix:
