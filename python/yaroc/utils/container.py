@@ -57,7 +57,9 @@ def create_message_handler(
         builder = builder.with_tcp(meshtastic_tcp)
     if config.get("fake", {}).get("enable", False):
         fake_config = config.get("fake", {})
-        interval = fake_config.get("interval")
+        if "interval" not in fake_config:
+            logging.warning("Fake punch interval not specified, using default of 10s")
+        interval = fake_config.get("interval", 10)
         card = fake_config.get("card", 46283)
         code = fake_config.get("code", 47)
         logging.info(

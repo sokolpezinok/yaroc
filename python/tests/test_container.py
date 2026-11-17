@@ -113,7 +113,6 @@ class TestContainer(unittest.IsolatedAsyncioTestCase):
             "punch_source": {
                 "fake": {
                     "enable": True,
-                    "interval": 10,
                 },
             },
         }
