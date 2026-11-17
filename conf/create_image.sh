@@ -21,6 +21,7 @@ cleanup() {
     echo "Cleaning up..."
     if [ -n "$COPIED_QEMU" ] && [ -e "$COPIED_QEMU" ]; then
         sudo rm -f "$COPIED_QEMU" 2>/dev/null || true
+        COPIED_QEMU=""
     fi
     sudo umount -l "$MOUNT_POINT/dev/shm" 2>/dev/null || true
     sudo umount -l "$MOUNT_POINT/dev/pts" 2>/dev/null || true
@@ -129,7 +130,7 @@ fi
 sudo chroot "$MOUNT_POINT" env DEBIAN_FRONTEND=noninteractive bash -c '
   set -e
   apt-get update
-  apt-get install -y locales-all vim git build-essential python3-dev curl gpg
+  apt-get install -y --no-install-recommends locales-all vim git build-essential python3-dev curl gpg
   touch /boot/firmware/ssh
   echo "pi:$1" | chpasswd
 ' _ "$PI_PASSWORD"
@@ -167,6 +168,21 @@ sudo rm -f "$MOUNT_POINT/tmp/setup_yaroc.sh"
 if [ -n "$WHEEL_NAME" ]; then
     sudo rm -f "$MOUNT_POINT/tmp/$WHEEL_NAME"
 fi
+
+echo "Cleaning caches and build dependencies inside chroot..."
+sudo chroot "$MOUNT_POINT" env DEBIAN_FRONTEND=noninteractive bash -c '
+  set -e
+  apt-get purge -y build-essential python3-dev
+  apt-get autoremove -y --purge
+  apt-get clean
+  rm -rf /var/lib/apt/lists/* /root/.cache /home/pi/.cache/uv /tmp/* /var/tmp/*
+'
+
+echo "Zeroing free space..."
+sudo dd if=/dev/zero of="$MOUNT_POINT/zero.fill" bs=1M status=none 2>/dev/null || true
+sync
+sudo rm -f "$MOUNT_POINT/zero.fill"
+sync
 
 # Unmount before optional compression
 cleanup

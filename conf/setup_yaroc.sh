@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "Installing and configuring meshtasticd..."
 apt update
-apt install -y curl gpg
+apt install -y --no-install-recommends curl gpg
 
 # Enable SPI and I2C for RAK6421 Pi HAT
 if [ -f /boot/firmware/config.txt ]; then
@@ -38,7 +38,7 @@ echo "Configuring meshtasticd repository for ${REPO_TARGET} (${ARCH})..."
 echo "deb http://download.opensuse.org/repositories/network:/Meshtastic:/beta/${REPO_TARGET}/ /" > /etc/apt/sources.list.d/network:Meshtastic:beta.list
 curl -fsSL "https://download.opensuse.org/repositories/network:Meshtastic:beta/${REPO_TARGET}/Release.key" | gpg --dearmor > /etc/apt/trusted.gpg.d/network_Meshtastic_beta.gpg
 apt update
-apt install -y meshtasticd
+apt install -y --no-install-recommends meshtasticd
 
 # Configure for RAK6421 and RAK13300 in slot 2
 mkdir -p /etc/meshtasticd/config.d
@@ -53,7 +53,7 @@ runuser -u pi -- bash -c '
   YAROC_SPEC="$1"
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export UV_LINK_MODE=copy
-  "$HOME/.local/bin/uv" tool install --force "$YAROC_SPEC" \
+  "$HOME/.local/bin/uv" tool install --force --no-cache "$YAROC_SPEC" \
     --extra-index-url https://www.piwheels.org/simple \
     --index-strategy unsafe-best-match
   if ! grep -q "\.local/bin" "$HOME/.bashrc"; then
