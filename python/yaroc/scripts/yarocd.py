@@ -1,11 +1,12 @@
 import datetime
 import logging
 import socket
+import sys
 import tomllib
 
 from ..clients.mqtt import BROKER_PORT, BROKER_URL
 from ..rs import HostInfo, MessageHandlerBuilder, MqttConfig, SerialClient, find_config_file
-from ..utils.container import Container, create_clients
+from ..utils.container import Container, create_clients, validate_config
 from ..utils.forwarder import Forwarder
 from ..utils.status import StatusDrawer
 from ..utils.sys_info import eth_mac_addr, run_asyncio
@@ -35,6 +36,9 @@ async def main_loop() -> None:
         mqtt_config.url = mqtt_toml_conf.get("broker_url", BROKER_URL)
         mqtt_config.port = mqtt_toml_conf.get("broker_port", BROKER_PORT)
         if "password" in mqtt_toml_conf:
+            if "username" not in mqtt_toml_conf:
+                logging.error("Missing required field 'mqtt.username' (required when 'mqtt.password' is set)")
+                sys.exit(1)
             mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
         mqtt_configs.append(mqtt_config)
 
@@ -42,6 +46,7 @@ async def main_loop() -> None:
     if "client" in config:
         config["client"].pop("mqtt", None)  # Disallow MQTT forwarding to break infinite loops
         config["client"].pop("sim7020", None)  # ... also for SIM7020
+    validate_config(config)
     client_group = await create_clients(container.client_factories, mac_addresses)
     if client_group.len() == 0:
         logging.info("Listening without forwarding")
