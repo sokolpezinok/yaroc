@@ -60,7 +60,7 @@ The tables below summarize the maturity and field-testing status of different co
 | **SportIdent USB / SRR** | `send-punch` | 🟢 Stable | Main physical punch receiver; highly tested over 2+ seasons. |
 | **MQTT Broker** | `yarocd` | 🟢 Stable | Receives punches bridged from remote units or Meshtastic; well tested over 2+ seasons. |
 | **Meshtastic (USB)** | `yarocd`, `send-punch` | 🟢 Stable | Direct USB connection to a Meshtastic node; well tested over 1.5+ seasons. |
-| **Meshtastic (TCP)** | `yarocd`, `send-punch` | 🟡 Alpha | Network TCP connection to `meshtasticd` is a new feature and not well tested yet. |
+| **Meshtastic (TCP)** | `yarocd`, `send-punch` | 🟡 Beta | Network TCP connection to `meshtasticd` is a new feature and not well tested yet. |
 
 ### Output Clients
 
