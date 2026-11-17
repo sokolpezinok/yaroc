@@ -1,9 +1,10 @@
 import logging
 import socket
+import sys
 import tomllib
 
 from ..rs import HostInfo, find_config_file
-from ..utils.container import Container, create_clients
+from ..utils.container import Container, create_clients, validate_config
 from ..utils.forwarder import Forwarder
 from ..utils.sys_info import eth_mac_addr, run_asyncio
 
@@ -13,8 +14,8 @@ async def main_loop():
     with open(config_path, "rb") as f:
         config = tomllib.load(f)
 
-    if "mac_addr" not in config:
-        config["mac_addr"] = eth_mac_addr()
+    if "mac_address" not in config:
+        config["mac_address"] = eth_mac_addr()
 
     client_config = config.get("client", {})
 
@@ -23,13 +24,16 @@ async def main_loop():
         return isinstance(client, dict) and client.get("enable", False)
 
     if is_client_enabled("mqtt") or is_client_enabled("sim7020") or is_client_enabled("roc"):
-        assert config["mac_addr"] is not None, (
-            "MAC address is required for MQTT, SIM7020, and ROC clients"
-        )
-    elif config["mac_addr"] is None:
+        if config["mac_address"] is None:
+            print(
+                "Error: MAC address is required for MQTT, SIM7020, and ROC clients",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    elif config["mac_address"] is None:
         # Irrelevant setting that will be ignored.
         # TODO: refactor Client class so that this hack is not needed
-        config["mac_addr"] = "000000000000"
+        config["mac_address"] = "000000000000"
 
     hostname = socket.gethostname()
     config["hostname"] = hostname
@@ -37,13 +41,14 @@ async def main_loop():
     container = Container()
     container.config.from_dict(config)
     container.init_resources()
+    validate_config(config)
     container.wire(modules=["yaroc.utils.container", __name__])
-    logging.info(f"Starting SendPunch for {hostname}/{config['mac_addr']}")
+    logging.info(f"Starting SendPunch for {hostname}/{config['mac_address']}")
 
     client_group = await create_clients(container.client_factories)
     if client_group.len() == 0:
         logging.warning("No clients enabled, will listen to punches but nothing will be sent")
-    host_info = HostInfo.new(hostname, config["mac_addr"])
+    host_info = HostInfo.new(hostname, config["mac_address"])
     mch_interval = config.get("call_home_interval", 30)
     handler = container.message_handler()
 

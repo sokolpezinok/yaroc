@@ -30,6 +30,35 @@ def get_log_level(log_level: str | None) -> int:
         sys.exit(1)
 
 
+REQUIRED_CLIENT_FIELDS: dict[str, tuple[str, ...]] = {
+    "serial": ("port",),
+    "sim7020": ("port",),
+    "sirap": ("ip", "port"),
+    "mop": ("api_key", "mop_xml"),
+}
+
+
+def validate_config(config: Dict[str, Any]) -> None:
+    """Validate required config fields for send-punch, exiting with a readable error on failure."""
+    client_config = config.get("client", {})
+    errors: list[str] = []
+
+    for client_name, required_fields in REQUIRED_CLIENT_FIELDS.items():
+        client = client_config.get(client_name, {})
+        if isinstance(client, dict) and client.get("enable", False):
+            for field in required_fields:
+                if client.get(field) is None:
+                    errors.append(
+                        f"Missing required field 'client.{client_name}.{field}' "
+                        f"(required when client.{client_name}.enable = true)"
+                    )
+
+    if errors:
+        for err in errors:
+            logging.error(err)
+        sys.exit(1)
+
+
 def create_message_handler(
     config: Dict[str, Any] | None,
     meshtastic_config: Dict[str, Any] | None = None,
@@ -89,9 +118,13 @@ class Container(containers.DeclarativeContainer):
         ),
         sirap=providers.Factory(SirapClient, config.client.sirap.ip, config.client.sirap.port),
         mop=providers.Factory(MopClient, config.client.mop.api_key, config.client.mop.mop_xml),
-        mqtt=providers.Factory(MqttClient, config.hostname, config.mac_addr, config.client.mqtt),
+        mqtt=providers.Factory(MqttClient, config.hostname, config.mac_address, config.client.mqtt),
         sim7020=providers.Factory(
-            SIM7020MqttClient, config.hostname, config.mac_addr, async_at, config.client.sim7020
+            SIM7020MqttClient,
+            config.hostname,
+            config.mac_address,
+            async_at,
+            config.client.sim7020,
         ),
         roc=providers.Factory(RocClient),
     )

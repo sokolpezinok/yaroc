@@ -2,7 +2,7 @@ import unittest
 from datetime import timedelta
 from unittest.mock import patch
 
-from yaroc.utils.container import Container, create_clients
+from yaroc.utils.container import Container, create_clients, validate_config
 
 
 class TestContainer(unittest.IsolatedAsyncioTestCase):
@@ -147,3 +147,14 @@ class TestContainer(unittest.IsolatedAsyncioTestCase):
         mock_logging_error.assert_called_once_with(
             "Cannot override MAC for spr05: device not found in mac-addresses"
         )
+
+    def test_validate_config_valid(self):
+        validate_config({"client": {"sim7020": {"enable": False}, "mqtt": {"enable": True}}})
+        validate_config({"client": {"serial": {"enable": True, "port": "/dev/ttyUSB0"}}})
+
+    @patch("yaroc.utils.container.logging.error")
+    def test_validate_config_missing_required(self, mock_logging_error):
+        with self.assertRaises(SystemExit) as cm:
+            validate_config({"client": {"serial": {"enable": True}, "sirap": {"enable": True}}})
+        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(mock_logging_error.call_count, 3)
