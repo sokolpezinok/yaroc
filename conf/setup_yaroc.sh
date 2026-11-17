@@ -3,11 +3,15 @@
 set -e
 
 REPO_URL=${1:-"https://github.com/sokolpezinok/yaroc"}
+YAROC_SPEC=${2:-${YAROC_SPEC:-"yaroc[display]"}}
+YAROC_REF=${YAROC_REF:-}
 
 if [ ! -d "/etc/systemd/system" ]; then
     echo "Error: This script must be run on a system with /etc/systemd/system directory."
     exit 1
 fi
+
+export DEBIAN_FRONTEND=noninteractive
 
 echo "Installing and configuring meshtasticd..."
 apt update
@@ -43,18 +47,27 @@ if [ -f /etc/meshtasticd/available.d/lora-RAK6421-13300-slot2.yaml ]; then
 fi
 
 
-echo "Installing uv and yaroc for pi user..."
-runuser -u pi -- bash -c "
+echo "Installing uv and $YAROC_SPEC for pi user..."
+runuser -u pi -- bash -c '
   set -e
+  YAROC_SPEC="$1"
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export UV_LINK_MODE=copy
-  \$HOME/.local/bin/uv tool install yaroc --extra-index-url https://www.piwheels.org/simple --index-strategy unsafe-best-match
-  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> \$HOME/.bashrc
-"
+  "$HOME/.local/bin/uv" tool install --force "$YAROC_SPEC" \
+    --extra-index-url https://www.piwheels.org/simple \
+    --index-strategy unsafe-best-match
+  if ! grep -q "\.local/bin" "$HOME/.bashrc"; then
+    echo '\''export PATH="$HOME/.local/bin:$PATH"'\'' >> "$HOME/.bashrc"
+  fi
+' _ "$YAROC_SPEC"
 
 echo "Cloning $REPO_URL..."
 TEMP_DIR=$(mktemp -d)
-git clone --depth 1 "$REPO_URL" "$TEMP_DIR"
+if [ -n "$YAROC_REF" ]; then
+    git clone --depth 1 --branch "$YAROC_REF" "$REPO_URL" "$TEMP_DIR"
+else
+    git clone --depth 1 "$REPO_URL" "$TEMP_DIR"
+fi
 
 echo "Copying service files to /etc/systemd/system/..."
 cp "$TEMP_DIR/conf/send-punch.service" "/etc/systemd/system/"
