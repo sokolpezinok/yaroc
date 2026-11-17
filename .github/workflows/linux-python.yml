@@ -127,6 +127,7 @@ jobs:
   rpi-image:
     name: rpi-image (${{ matrix.deb_arch }})
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/py-v')
     needs: [linux-cross]
     defaults:
       run:
@@ -156,8 +157,20 @@ jobs:
           COMPRESS: 1
           YAROC_REF: ${{ github.head_ref || github.ref_name }}
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/py-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#py-v}"
+          else
+            VERSION="${GITHUB_SHA::7}"
+          fi
+          OUTPUT_IMAGE="yaroc-raspios-${{ matrix.deb_arch }}-${VERSION}.img"
           WHEEL_FILE=$(ls "$GITHUB_WORKSPACE"/dist-wheel/*.whl)
-          YAROC_WHEEL="$WHEEL_FILE" ./conf/create_image.sh
+          OUTPUT_IMAGE="$OUTPUT_IMAGE" YAROC_WHEEL="$WHEEL_FILE" ./conf/create_image.sh
+      - name: Upload RPi image artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: rpi-image-${{ matrix.deb_arch }}
+          path: yaroc-raspios-${{ matrix.deb_arch }}-*.img.xz
+          retention-days: 7
 
   release:
     name: Release
