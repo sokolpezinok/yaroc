@@ -56,7 +56,7 @@ find_qemu_bin() {
     done
 
     echo "Could not find QEMU user-mode binary (checked: ${candidates[*]})." >&2
-    echo "Install qemu-user-static (Debian/Ubuntu) or qemu-user (Arch)." >&2
+    echo "Install qemu-user and qemu-user-binfmt (Debian/Ubuntu) or qemu-user (Arch)." >&2
     exit 1
 }
 
@@ -77,7 +77,7 @@ fi
 # Download if missing
 if [ ! -f "$IMAGE_FILE" ]; then
     echo "Downloading $IMAGE_FILE..."
-    wget -O "${IMAGE_FILE}.tmp" "$URL"
+    wget --progress=dot:giga -O "${IMAGE_FILE}.tmp" "$URL"
     mv "${IMAGE_FILE}.tmp" "$IMAGE_FILE"
 else
     echo "$IMAGE_FILE already exists, skipping download."
@@ -127,8 +127,14 @@ if ! sudo grep -qF "127.0.0.1 $HOST_NAME" "$MOUNT_POINT/etc/hosts"; then
     echo "127.0.0.1 $HOST_NAME" | sudo tee -a "$MOUNT_POINT/etc/hosts" >/dev/null
 fi
 
-sudo chroot "$MOUNT_POINT" env DEBIAN_FRONTEND=noninteractive bash -c '
+sudo chroot "$MOUNT_POINT" env -i \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  HOME=/root \
+  DEBIAN_FRONTEND=noninteractive \
+  bash -c '
   set -e
+  echo "Acquire::Retries \"5\"; Acquire::http::Timeout \"15\";" > /etc/apt/apt.conf.d/99-ci-retries
+  sed -i "s|http://raspbian.raspberrypi.com/raspbian|http://archive.raspbian.org/raspbian|g" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
   apt-get update
   apt-get install -y --no-install-recommends locales-all vim git build-essential python3-dev curl gpg
   touch /boot/firmware/ssh
@@ -159,12 +165,15 @@ else
 fi
 
 sudo chmod +x "$MOUNT_POINT/tmp/setup_yaroc.sh"
-sudo chroot "$MOUNT_POINT" env \
+sudo chroot "$MOUNT_POINT" env -i \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    HOME=/root \
     DEBIAN_FRONTEND=noninteractive \
     YAROC_REF="$YAROC_REF" \
     /tmp/setup_yaroc.sh "$REPO_URL" "$YAROC_SPEC"
 
-sudo rm -f "$MOUNT_POINT/tmp/setup_yaroc.sh"
+sudo sed -i "s|http://archive.raspbian.org/raspbian|http://raspbian.raspberrypi.com/raspbian|g" "$MOUNT_POINT"/etc/apt/sources.list "$MOUNT_POINT"/etc/apt/sources.list.d/* 2>/dev/null || true
+sudo rm -f "$MOUNT_POINT/etc/apt/apt.conf.d/99-ci-retries" "$MOUNT_POINT/tmp/setup_yaroc.sh"
 if [ -n "$WHEEL_NAME" ]; then
     sudo rm -f "$MOUNT_POINT/tmp/$WHEEL_NAME"
 fi

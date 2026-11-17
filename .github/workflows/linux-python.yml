@@ -124,6 +124,41 @@ jobs:
           name: wheels-sdist
           path: python/dist
 
+  rpi-image:
+    name: rpi-image (${{ matrix.deb_arch }})
+    runs-on: ubuntu-latest
+    needs: [linux-cross]
+    defaults:
+      run:
+        working-directory: .
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - deb_arch: arm64
+            wheel_artifact: wheels-linux-aarch64
+          - deb_arch: armhf
+            wheel_artifact: wheels-linux-armv7
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download built wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.wheel_artifact }}
+          path: dist-wheel
+      - name: Install image build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user qemu-user-binfmt parted dosfstools e2fsprogs xz-utils wget
+      - name: Build RPi image
+        env:
+          DEB_ARCH: ${{ matrix.deb_arch }}
+          COMPRESS: 1
+          YAROC_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          WHEEL_FILE=$(ls "$GITHUB_WORKSPACE"/dist-wheel/*.whl)
+          YAROC_WHEEL="$WHEEL_FILE" ./conf/create_image.sh
+
   release:
     name: Release
     runs-on: ubuntu-latest

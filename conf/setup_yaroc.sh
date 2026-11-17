@@ -50,6 +50,8 @@ fi
 echo "Installing uv and $YAROC_SPEC for pi user..."
 runuser -u pi -- bash -c '
   set -e
+  export HOME=/home/pi
+  unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME
   YAROC_SPEC="$1"
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export UV_LINK_MODE=copy
