@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Configuration
 IMAGE_TYPE=${IMAGE_TYPE:-lite} # "lite" or "desktop"
 DEB_ARCH=${DEB_ARCH:-armhf}    # "armhf" or "arm64"
@@ -136,14 +134,7 @@ sudo chroot "$MOUNT_POINT" env DEBIAN_FRONTEND=noninteractive bash -c '
   echo "pi:$1" | chpasswd
 ' _ "$PI_PASSWORD"
 
-# Copy local setup_yaroc.sh if present, otherwise download it from GitHub
-if [ -f "$SCRIPT_DIR/setup_yaroc.sh" ]; then
-    echo "Using local setup_yaroc.sh from $SCRIPT_DIR/setup_yaroc.sh"
-    sudo cp "$SCRIPT_DIR/setup_yaroc.sh" "$MOUNT_POINT/tmp/setup_yaroc.sh"
-else
-    echo "Downloading setup_yaroc.sh from GitHub ($YAROC_REF)..."
-    sudo chroot "$MOUNT_POINT" curl -fsSL "https://raw.githubusercontent.com/sokolpezinok/yaroc/${YAROC_REF}/conf/setup_yaroc.sh" -o /tmp/setup_yaroc.sh
-fi
+sudo cp "$(dirname "$0")/setup_yaroc.sh" "$MOUNT_POINT/tmp/setup_yaroc.sh"
 
 WHEEL_NAME=""
 if [ -n "$YAROC_WHEEL" ]; then
