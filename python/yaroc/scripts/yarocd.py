@@ -37,7 +37,9 @@ async def main_loop() -> None:
         mqtt_config.port = mqtt_toml_conf.get("broker_port", BROKER_PORT)
         if "password" in mqtt_toml_conf:
             if "username" not in mqtt_toml_conf:
-                logging.error("Missing required field 'mqtt.username' (required when 'mqtt.password' is set)")
+                logging.error(
+                    "Missing required field 'mqtt.username' (required when 'mqtt.password' is set)"
+                )
                 sys.exit(1)
             mqtt_config.credentials = (mqtt_toml_conf["username"], mqtt_toml_conf["password"])
         mqtt_configs.append(mqtt_config)
