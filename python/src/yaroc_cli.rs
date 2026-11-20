@@ -1,15 +1,15 @@
 pub mod cli;
+pub mod transport;
 
 use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
-use bytes::{Buf, BytesMut};
 use chrono::Local;
 use clap::Parser as _;
 use femtopb::Message as _;
 use log::{error, info, warn};
-use postcard::{from_bytes, take_from_bytes, to_stdvec};
+use postcard::{from_bytes, to_stdvec};
 use pyo3::prelude::*;
 use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
@@ -21,84 +21,10 @@ use yaroc_common::{
 };
 
 pub use cli::{Args, Command, LogType};
+use transport::PostcardReader;
+pub use transport::SetTimeout;
 
 use crate::config::Config;
-
-struct PostcardReader<'a, S> {
-    stream: &'a mut S,
-    buf: BytesMut,
-}
-
-impl<'a, S: Read> PostcardReader<'a, S> {
-    fn new(stream: &'a mut S) -> Self {
-        Self {
-            stream,
-            buf: BytesMut::with_capacity(1024),
-        }
-    }
-
-    /// Read a frame from the connection.
-    ///
-    /// Returns `None` if EOF is reached.
-    fn read_one<T: serde::de::DeserializeOwned>(&mut self) -> Result<Option<T>, String> {
-        let mut temp_buf = [0u8; 1024];
-        loop {
-            if let Some(item) = self.parse_frame() {
-                return Ok(Some(item));
-            }
-
-            let n = self
-                .stream
-                .read(&mut temp_buf)
-                .map_err(|e| format!("Reading from USB serial failed: {e}"))?;
-            if n == 0 {
-                if self.buf.is_empty() {
-                    return Ok(None);
-                }
-                return Err("Serial port closed with incomplete response".to_owned());
-            }
-            self.buf.extend_from_slice(&temp_buf[..n]);
-        }
-    }
-
-    fn parse_frame<T: serde::de::DeserializeOwned>(&mut self) -> Option<T> {
-        loop {
-            if self.buf.is_empty() {
-                return None;
-            }
-            match take_from_bytes::<T>(&self.buf) {
-                Ok((item, rest)) => {
-                    let consumed = self.buf.len() - rest.len();
-                    self.buf.advance(consumed);
-                    return Some(item);
-                }
-                Err(postcard::Error::DeserializeUnexpectedEnd) => {
-                    return None;
-                }
-                Err(e) => {
-                    error!("Failed to parse response: {e}");
-                    self.buf.advance(1);
-                }
-            }
-        }
-    }
-}
-
-impl<S: SetTimeout> PostcardReader<'_, S> {
-    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
-        self.stream.set_timeout(timeout)
-    }
-}
-
-pub trait SetTimeout {
-    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String>;
-}
-
-impl<T: serialport::SerialPort> SetTimeout for T {
-    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
-        serialport::SerialPort::set_timeout(self, timeout).map_err(|e| e.to_string())
-    }
-}
 
 fn send_command<S: Read + Write + SetTimeout>(
     serial: &mut S,
@@ -120,32 +46,6 @@ fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String>
             Ok(())
         }
         resp => Err(format!("Unexpected response to handshake: {resp:?}")),
-    }
-}
-
-impl<S: Read + SetTimeout> PostcardReader<'_, S> {
-    /// Reads the next response frame, automatically extending the timeout on `PartialOk`.
-    fn read_next_response(&mut self) -> Result<Option<UsbResponse>, String> {
-        loop {
-            match self.read_one::<UsbResponse>()? {
-                Some(UsbResponse::PartialOk(timeout_ms)) => {
-                    self.set_timeout(Duration::from_millis(timeout_ms as u64))?;
-                }
-                other => return Ok(other),
-            }
-        }
-    }
-}
-
-impl<S: Read + SetTimeout> Iterator for PostcardReader<'_, S> {
-    type Item = Result<UsbResponse, String>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.read_next_response() {
-            Ok(Some(UsbResponse::Ok) | None) => None,
-            Ok(Some(response)) => Some(Ok(response)),
-            Err(e) => Some(Err(e)),
-        }
     }
 }
 
@@ -441,39 +341,7 @@ mod tests {
         );
     }
 
-    struct FragmentedStream {
-        data: Vec<u8>,
-        read_offset: usize,
-        chunk_size: usize,
-    }
-
-    impl Read for FragmentedStream {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            if self.read_offset >= self.data.len() {
-                return Ok(0);
-            }
-            let to_read = self.chunk_size.min(self.data.len() - self.read_offset).min(buf.len());
-            buf[..to_read]
-                .copy_from_slice(&self.data[self.read_offset..self.read_offset + to_read]);
-            self.read_offset += to_read;
-            Ok(to_read)
-        }
-    }
-
-    impl Write for FragmentedStream {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl SetTimeout for FragmentedStream {
-        fn set_timeout(&mut self, _timeout: Duration) -> Result<(), String> {
-            Ok(())
-        }
-    }
+    use super::transport::test_utils::MockSerialStream;
 
     #[test]
     fn test_send_command_responses_fragmented_and_fused() {
@@ -487,11 +355,7 @@ mod tests {
         stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
 
         // Test 1: Fragmented reads (1 byte per read)
-        let mut frag_stream = FragmentedStream {
-            data: stream_bytes.clone(),
-            read_offset: 0,
-            chunk_size: 1,
-        };
+        let mut frag_stream = MockSerialStream::new(stream_bytes.clone()).with_chunk_size(1);
         let res: Vec<_> =
             send_command_responses(&mut frag_stream, &UsbCommand::GetMiniCallHomeLogs)
                 .unwrap()
@@ -502,11 +366,7 @@ mod tests {
         assert_eq!(res[1], resp2);
 
         // Test 2: Fused reads (all bytes in 1 read) paired with incremental iteration
-        let mut fused_stream = FragmentedStream {
-            data: stream_bytes,
-            read_offset: 0,
-            chunk_size: 1024,
-        };
+        let mut fused_stream = MockSerialStream::new(stream_bytes);
         let mut iter =
             send_command_responses(&mut fused_stream, &UsbCommand::GetMiniCallHomeLogs).unwrap();
         assert_eq!(iter.next(), Some(Ok(resp1)));
@@ -520,11 +380,7 @@ mod tests {
         let magic = heapless::String::try_from("YAROC").unwrap();
         let resp = UsbResponse::Handshake(magic, 1);
         let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = FragmentedStream {
-            data: stream_bytes,
-            read_offset: 0,
-            chunk_size: 1024,
-        };
+        let mut stream = MockSerialStream::new(stream_bytes);
         assert!(handshake(&mut stream).is_ok());
     }
 
@@ -533,11 +389,7 @@ mod tests {
         let magic = heapless::String::try_from("OTHER").unwrap();
         let resp = UsbResponse::Handshake(magic, 1);
         let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = FragmentedStream {
-            data: stream_bytes,
-            read_offset: 0,
-            chunk_size: 1024,
-        };
+        let mut stream = MockSerialStream::new(stream_bytes);
         let err = handshake(&mut stream).unwrap_err();
         assert!(err.contains("Unexpected magic string"));
     }
@@ -546,11 +398,7 @@ mod tests {
     fn test_send_command_unexpected_response() {
         let resp = UsbResponse::Ok;
         let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = FragmentedStream {
-            data: stream_bytes,
-            read_offset: 0,
-            chunk_size: 1024,
-        };
+        let mut stream = MockSerialStream::new(stream_bytes);
         let err = handshake(&mut stream).unwrap_err();
         assert!(err.contains("Unexpected response to handshake"));
     }
@@ -564,11 +412,7 @@ mod tests {
         stream_bytes.extend_from_slice(&to_stdvec(&resp_partial).unwrap());
         stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
 
-        let mut stream = FragmentedStream {
-            data: stream_bytes,
-            read_offset: 0,
-            chunk_size: 1024,
-        };
+        let mut stream = MockSerialStream::new(stream_bytes);
         let res = send_command(&mut stream, &UsbCommand::EraseFlash).unwrap();
         assert_eq!(res, UsbResponse::Ok);
     }
