@@ -24,20 +24,33 @@ impl<T: serialport::SerialPort> SetTimeout for T {
 ///
 /// Handles arbitrary read fragmentation and fused frames by accumulating incoming bytes
 /// in an internal buffer until complete frames can be deserialized.
-pub struct PostcardReader<'a, S> {
-    stream: &'a mut S,
+pub struct PostcardReader<S> {
+    stream: S,
     buf: BytesMut,
 }
 
-impl<'a, S: Read> PostcardReader<'a, S> {
-    /// Creates a new `PostcardReader` wrapping the given readable stream.
-    pub fn new(stream: &'a mut S) -> Self {
+impl<S> PostcardReader<S> {
+    /// Creates a new `PostcardReader` wrapping the given stream.
+    pub fn new(stream: S) -> Self {
         Self {
             stream,
             buf: BytesMut::with_capacity(1024),
         }
     }
 
+    /// Returns a shared reference to the underlying stream.
+    #[cfg(test)]
+    pub fn get_ref(&self) -> &S {
+        &self.stream
+    }
+
+    /// Returns a mutable reference to the underlying stream.
+    pub fn get_mut(&mut self) -> &mut S {
+        &mut self.stream
+    }
+}
+
+impl<S: Read> PostcardReader<S> {
     /// Reads and deserializes the next Postcard frame from the stream.
     ///
     /// Returns `Ok(None)` if EOF is reached cleanly with no buffered trailing bytes,
@@ -90,14 +103,14 @@ impl<'a, S: Read> PostcardReader<'a, S> {
     }
 }
 
-impl<S: SetTimeout> PostcardReader<'_, S> {
+impl<S: SetTimeout> PostcardReader<S> {
     /// Updates the underlying stream timeout.
     fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
         self.stream.set_timeout(timeout)
     }
 }
 
-impl<S: Read + SetTimeout> PostcardReader<'_, S> {
+impl<S: Read + SetTimeout> PostcardReader<S> {
     /// Reads the next [`UsbResponse`] frame, automatically extending the stream timeout
     /// whenever a [`UsbResponse::PartialOk`] keep-alive is received.
     pub fn read_next_response(&mut self) -> Result<Option<UsbResponse>, String> {
@@ -113,7 +126,7 @@ impl<S: Read + SetTimeout> PostcardReader<'_, S> {
 }
 
 /// Iterates over streamed [`UsbResponse`] frames until [`UsbResponse::Ok`] or EOF is reached.
-impl<S: Read + SetTimeout> Iterator for PostcardReader<'_, S> {
+impl<S: Read + SetTimeout> Iterator for PostcardReader<S> {
     type Item = Result<UsbResponse, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -209,16 +222,15 @@ mod tests {
         stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
 
         // Fragmented reads (1 byte per read)
-        let mut frag_stream = MockSerialStream::new(stream_bytes.clone()).with_chunk_size(1);
-        let res: Vec<_> =
-            PostcardReader::new(&mut frag_stream).collect::<Result<Vec<_>, _>>().unwrap();
+        let frag_stream = MockSerialStream::new(stream_bytes.clone()).with_chunk_size(1);
+        let res: Vec<_> = PostcardReader::new(frag_stream).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], resp1);
         assert_eq!(res[1], resp2);
 
         // Fused reads (all bytes in 1 read) paired with incremental iteration
-        let mut fused_stream = MockSerialStream::new(stream_bytes);
-        let mut iter = PostcardReader::new(&mut fused_stream);
+        let fused_stream = MockSerialStream::new(stream_bytes);
+        let mut iter = PostcardReader::new(fused_stream);
         assert_eq!(iter.next(), Some(Ok(resp1)));
         assert_eq!(iter.next(), Some(Ok(resp2)));
         assert_eq!(iter.next(), None);
@@ -234,17 +246,17 @@ mod tests {
         stream_bytes.extend_from_slice(&to_stdvec(&resp_partial).unwrap());
         stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
 
-        let mut stream = MockSerialStream::new(stream_bytes);
-        let mut reader = PostcardReader::new(&mut stream);
+        let stream = MockSerialStream::new(stream_bytes);
+        let mut reader = PostcardReader::new(stream);
         let res = reader.read_next_response().unwrap();
         assert_eq!(res, Some(UsbResponse::Ok));
-        assert_eq!(stream.timeouts, vec![Duration::from_millis(150_000)]);
+        assert_eq!(reader.get_ref().timeouts, vec![Duration::from_millis(150_000)]);
     }
 
     #[test]
     fn test_postcard_reader_eof_clean_and_incomplete() {
-        let mut empty_stream = MockSerialStream::new(Vec::new());
-        let mut reader = PostcardReader::new(&mut empty_stream);
+        let empty_stream = MockSerialStream::new(Vec::new());
+        let mut reader = PostcardReader::new(empty_stream);
         assert_eq!(reader.read_next_response().unwrap(), None);
 
         // Truncated Handshake frame
@@ -253,8 +265,8 @@ mod tests {
             1,
         ))
         .unwrap();
-        let mut truncated_stream = MockSerialStream::new(full[..full.len() - 2].to_vec());
-        let mut reader = PostcardReader::new(&mut truncated_stream);
+        let truncated_stream = MockSerialStream::new(full[..full.len() - 2].to_vec());
+        let mut reader = PostcardReader::new(truncated_stream);
         let err = reader.read_next_response().unwrap_err();
         assert!(err.contains("incomplete response"));
     }
@@ -265,8 +277,8 @@ mod tests {
         let mut stream_bytes = vec![0x7F, 0x7E]; // invalid enum discriminant bytes for UsbResponse
         stream_bytes.extend_from_slice(&to_stdvec(&valid_resp).unwrap());
 
-        let mut stream = MockSerialStream::new(stream_bytes);
-        let mut reader = PostcardReader::new(&mut stream);
+        let stream = MockSerialStream::new(stream_bytes);
+        let mut reader = PostcardReader::new(stream);
         assert_eq!(reader.read_next_response().unwrap(), Some(valid_resp));
     }
 }

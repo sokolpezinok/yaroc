@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod client;
 pub mod transport;
 
 use std::io::{Read, Write};
@@ -9,57 +10,18 @@ use chrono::Local;
 use clap::Parser as _;
 use femtopb::Message as _;
 use log::{error, info, warn};
-use postcard::{from_bytes, to_stdvec};
+use postcard::from_bytes;
 use pyo3::prelude::*;
 use yaroc_common::at::response::LoggedAtResponse;
 use yaroc_common::proto::MiniCallHome as MiniCallHomeProto;
-use yaroc_common::send_punch::DeviceConfig;
 use yaroc_common::status::MiniCallHome;
-use yaroc_common::{
-    bg77::modem_manager::ModemConfig,
-    usb::{UsbCommand, UsbResponse},
-};
+use yaroc_common::usb::UsbResponse;
 
 pub use cli::{Args, Command, LogType};
-use transport::PostcardReader;
+pub use client::UsbDeviceClient;
 pub use transport::SetTimeout;
 
 use crate::config::Config;
-
-fn send_command<S: Read + Write + SetTimeout>(
-    serial: &mut S,
-    command: &UsbCommand,
-) -> Result<UsbResponse, String> {
-    let mut reader = send_command_responses(serial, command)?;
-    reader
-        .read_next_response()?
-        .ok_or_else(|| "Serial port closed before receiving response".to_string())
-}
-
-fn handshake<S: Read + Write + SetTimeout>(serial: &mut S) -> Result<(), String> {
-    match send_command(serial, &UsbCommand::Handshake)? {
-        UsbResponse::Handshake(magic, version) => {
-            if magic.as_str() != "YAROC" {
-                return Err(format!("Unexpected magic string: {magic}"));
-            }
-            info!("Connected to YAROC device (protocol v{version})");
-            Ok(())
-        }
-        resp => Err(format!("Unexpected response to handshake: {resp:?}")),
-    }
-}
-
-fn send_command_responses<'a, S: Read + Write + SetTimeout>(
-    serial: &'a mut S,
-    command: &UsbCommand,
-) -> Result<PostcardReader<'a, S>, String> {
-    let buf = to_stdvec(command).map_err(|e| format!("Serialization failed: {e}"))?;
-    serial
-        .write_all(buf.as_slice())
-        .map_err(|e| format!("Writing to USB serial failed: {e}"))?;
-
-    Ok(PostcardReader::new(serial))
-}
 
 fn write_mch_logs_to_csv<I, W>(responses: I, writer: &mut W) -> Result<(), String>
 where
@@ -140,36 +102,13 @@ where
     }
 }
 
-fn configure<S: Read + Write + SetTimeout>(config: &Path, mut serial: S) {
+fn configure<S: Read + Write + SetTimeout>(config: &Path, client: &mut UsbDeviceClient<S>) {
     let config_path = crate::config::find_config_file(config);
     match std::fs::read_to_string(&config_path) {
         Ok(config_str) => {
             let config: Config = toml::from_str(&config_str).expect("Unable to parse config file");
-            let modem_config: ModemConfig = config.modem.into();
-            match send_command(&mut serial, &UsbCommand::ConfigureModem(modem_config)) {
-                Ok(UsbResponse::Ok) => info!("Modem configuration successful"),
-                Ok(r) => error!("Unexpected response from modem configuration: {r:?}"),
-                Err(e) => error!("Failed to configure modem: {e}"),
-            }
-            if let Some(mqtt) = config.mqtt {
-                match send_command(&mut serial, &UsbCommand::ConfigureMqtt(mqtt.into())) {
-                    Ok(UsbResponse::Ok) => info!("MQTT configuration successful"),
-                    Ok(r) => error!("Unexpected response from MQTT configuration: {r:?}"),
-                    Err(e) => error!("Failed to configure MQTT: {e}"),
-                }
-            }
-
-            let device_config = DeviceConfig {
-                minicallhome_interval: embassy_time::Duration::from_secs(
-                    config.minicallhome_interval,
-                ),
-                srr_rx_pin: config.srr_rx_pin.into(),
-                ..Default::default()
-            };
-            match send_command(&mut serial, &UsbCommand::ConfigureDevice(device_config)) {
-                Ok(UsbResponse::Ok) => info!("Device configuration successful"),
-                Ok(r) => error!("Unexpected response from device configuration: {r:?}"),
-                Err(e) => error!("Failed to configure device: {e}"),
+            if let Err(e) = client.apply_config(config) {
+                error!("{e}");
             }
         }
         Err(e) => {
@@ -197,71 +136,66 @@ pub fn yaroc_cli() {
     });
 
     info!("Opening serial port {}", args.port);
-    let mut serial = tokio_serial::new(&args.port, 112800)
+    let serial = tokio_serial::new(&args.port, 112800)
         .timeout(Duration::from_millis(1500))
         .open_native()
         .expect("Unable to open serial port");
+    let mut client = UsbDeviceClient::new(serial);
 
-    if let Err(e) = handshake(&mut serial) {
-        error!("USB handshake failed, you probably selected the wrong device: {e}");
-        return;
+    match client.handshake() {
+        Ok(version) => info!("Connected to YAROC device (protocol v{version})"),
+        Err(e) => {
+            error!("USB handshake failed, you probably selected the wrong device: {e}");
+            return;
+        }
     }
 
     match args.command {
-        Command::ExportConfig => match send_command(&mut serial, &UsbCommand::GetConfig) {
-            Ok(UsbResponse::Config(device_config, modem_config, mqtt_config)) => {
-                let config = Config::from_configs(device_config, modem_config, mqtt_config);
-                match toml::to_string_pretty(&config) {
-                    Ok(toml_str) => print!("{toml_str}"),
-                    Err(e) => error!("Failed to serialize config to TOML: {e}"),
-                }
-            }
-            Ok(r) => error!("Unexpected response from export-config: {r:?}"),
-            Err(e) => error!("Failed to get config from device: {e}"),
+        Command::ExportConfig => match client.export_config() {
+            Ok(config) => match toml::to_string_pretty(&config) {
+                Ok(toml_str) => print!("{toml_str}"),
+                Err(e) => error!("Failed to serialize config to TOML: {e}"),
+            },
+            Err(e) => error!("{e}"),
         },
-        Command::EraseFlash => match send_command(&mut serial, &UsbCommand::EraseFlash) {
-            Ok(UsbResponse::Ok) => info!("Flash erase successful"),
-            Ok(r) => error!("Unexpected response from flash erase: {r:?}"),
-            Err(e) => error!("Failed to erase flash: {e}"),
+        Command::EraseFlash => match client.erase_flash() {
+            Ok(()) => info!("Flash erase successful"),
+            Err(e) => error!("{e}"),
         },
         Command::Configure { config } => {
-            configure(&config, serial);
+            configure(&config, &mut client);
         }
         Command::DumpLogs { log_type } => match log_type {
-            LogType::Mch { gpx } => {
-                match send_command_responses(&mut serial, &UsbCommand::GetMiniCallHomeLogs) {
-                    Ok(responses) => {
-                        info!("Awaiting logs from the device");
-                        let mut stdout = std::io::stdout();
-                        if let Some(ref gpx_path) = gpx {
-                            match responses.collect::<Result<Vec<_>, _>>() {
-                                Ok(responses) => {
-                                    if let Err(e) = crate::gnss_geotag::geotag_mch_responses(
-                                        gpx_path,
-                                        &responses,
-                                        &mut stdout,
-                                    ) {
-                                        error!("Failed to geotag MiniCallHome logs: {e}");
-                                    }
+            LogType::Mch { gpx } => match client.stream_mch_logs() {
+                Ok(responses) => {
+                    info!("Awaiting logs from the device");
+                    let mut stdout = std::io::stdout();
+                    if let Some(ref gpx_path) = gpx {
+                        match responses.collect::<Result<Vec<_>, _>>() {
+                            Ok(responses) => {
+                                if let Err(e) = crate::gnss_geotag::geotag_mch_responses(
+                                    gpx_path,
+                                    &responses,
+                                    &mut stdout,
+                                ) {
+                                    error!("Failed to geotag MiniCallHome logs: {e}");
                                 }
-                                Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
                             }
-                        } else if let Err(e) = write_mch_logs_to_csv(responses, &mut stdout) {
-                            error!("Failed to write MiniCallHome logs to stdout: {e}");
+                            Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
                         }
+                    } else if let Err(e) = write_mch_logs_to_csv(responses, &mut stdout) {
+                        error!("Failed to write MiniCallHome logs to stdout: {e}");
                     }
-                    Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
                 }
-            }
-            LogType::Modem => {
-                match send_command_responses(&mut serial, &UsbCommand::GetLoggedAtResponseLogs) {
-                    Ok(responses) => {
-                        info!("Awaiting logs from the device");
-                        dump_logged_at_response_logs(responses);
-                    }
-                    Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
+                Err(e) => error!("Failed to get MiniCallHome logs: {e}"),
+            },
+            LogType::Modem => match client.stream_modem_logs() {
+                Ok(responses) => {
+                    info!("Awaiting logs from the device");
+                    dump_logged_at_response_logs(responses);
                 }
-            }
+                Err(e) => error!("Failed to get LoggedAtResponse logs: {e}"),
+            },
         },
     }
 }
@@ -339,81 +273,5 @@ mod tests {
             csv_str.trim(),
             "timestamp,batt_mv,batt_percents,cpu_temperature,network_type,rsrp_dbm,snr_db,cellid"
         );
-    }
-
-    use super::transport::test_utils::MockSerialStream;
-
-    #[test]
-    fn test_send_command_responses_fragmented_and_fused() {
-        let resp1 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[1, 2, 3, 4]).unwrap());
-        let resp2 = UsbResponse::MiniCallHomeLog(heapless::Vec::from_slice(&[5, 6, 7, 8]).unwrap());
-        let resp_ok = UsbResponse::Ok;
-
-        let mut stream_bytes = Vec::new();
-        stream_bytes.extend_from_slice(&to_stdvec(&resp1).unwrap());
-        stream_bytes.extend_from_slice(&to_stdvec(&resp2).unwrap());
-        stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
-
-        // Test 1: Fragmented reads (1 byte per read)
-        let mut frag_stream = MockSerialStream::new(stream_bytes.clone()).with_chunk_size(1);
-        let res: Vec<_> =
-            send_command_responses(&mut frag_stream, &UsbCommand::GetMiniCallHomeLogs)
-                .unwrap()
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
-        assert_eq!(res.len(), 2);
-        assert_eq!(res[0], resp1);
-        assert_eq!(res[1], resp2);
-
-        // Test 2: Fused reads (all bytes in 1 read) paired with incremental iteration
-        let mut fused_stream = MockSerialStream::new(stream_bytes);
-        let mut iter =
-            send_command_responses(&mut fused_stream, &UsbCommand::GetMiniCallHomeLogs).unwrap();
-        assert_eq!(iter.next(), Some(Ok(resp1)));
-        assert_eq!(iter.next(), Some(Ok(resp2)));
-        assert_eq!(iter.next(), None);
-        assert_eq!(iter.next(), None);
-    }
-
-    #[test]
-    fn test_handshake_success() {
-        let magic = heapless::String::try_from("YAROC").unwrap();
-        let resp = UsbResponse::Handshake(magic, 1);
-        let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = MockSerialStream::new(stream_bytes);
-        assert!(handshake(&mut stream).is_ok());
-    }
-
-    #[test]
-    fn test_handshake_invalid_magic() {
-        let magic = heapless::String::try_from("OTHER").unwrap();
-        let resp = UsbResponse::Handshake(magic, 1);
-        let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = MockSerialStream::new(stream_bytes);
-        let err = handshake(&mut stream).unwrap_err();
-        assert!(err.contains("Unexpected magic string"));
-    }
-
-    #[test]
-    fn test_send_command_unexpected_response() {
-        let resp = UsbResponse::Ok;
-        let stream_bytes = to_stdvec(&resp).unwrap();
-        let mut stream = MockSerialStream::new(stream_bytes);
-        let err = handshake(&mut stream).unwrap_err();
-        assert!(err.contains("Unexpected response to handshake"));
-    }
-
-    #[test]
-    fn test_send_command_with_partial_ok() {
-        let resp_partial = UsbResponse::PartialOk(150_000);
-        let resp_ok = UsbResponse::Ok;
-
-        let mut stream_bytes = Vec::new();
-        stream_bytes.extend_from_slice(&to_stdvec(&resp_partial).unwrap());
-        stream_bytes.extend_from_slice(&to_stdvec(&resp_ok).unwrap());
-
-        let mut stream = MockSerialStream::new(stream_bytes);
-        let res = send_command(&mut stream, &UsbCommand::EraseFlash).unwrap();
-        assert_eq!(res, UsbResponse::Ok);
     }
 }
