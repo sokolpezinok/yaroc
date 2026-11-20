@@ -250,7 +250,10 @@ mod tests {
         let mut reader = PostcardReader::new(stream);
         let res = reader.read_next_response().unwrap();
         assert_eq!(res, Some(UsbResponse::Ok));
-        assert_eq!(reader.get_ref().timeouts, vec![Duration::from_millis(150_000)]);
+        assert_eq!(
+            reader.get_ref().timeouts,
+            vec![Duration::from_millis(150_000)]
+        );
     }
 
     #[test]
