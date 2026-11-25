@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 
-use log::info;
+use log::{error, info};
 use postcard::to_stdvec;
 use yaroc_common::bg77::modem_manager::ModemConfig;
 use yaroc_common::send_punch::DeviceConfig;
@@ -93,11 +93,9 @@ impl<S: Read + Write + SetTimeout> UsbDeviceClient<S> {
 
     /// Applies modem, optional MQTT, and device settings to the connected device.
     ///
-    /// Attempts all configuration steps even if an earlier step fails, returning any
-    /// collected error messages.
-    pub fn apply_config(&mut self, config: Config) -> Result<(), String> {
-        let mut errors = Vec::new();
-
+    /// Attempts all configuration steps even if an earlier step fails, logging
+    /// each step's success or failure immediately.
+    pub fn apply_config(&mut self, config: Config) {
         let modem_config: ModemConfig = config.modem.into();
         match self.expect_ok(
             &UsbCommand::ConfigureModem(modem_config),
@@ -105,7 +103,7 @@ impl<S: Read + Write + SetTimeout> UsbDeviceClient<S> {
             "configure modem",
         ) {
             Ok(()) => info!("Modem configuration successful"),
-            Err(e) => errors.push(e),
+            Err(e) => error!("{e}"),
         }
 
         if let Some(mqtt) = config.mqtt {
@@ -115,7 +113,7 @@ impl<S: Read + Write + SetTimeout> UsbDeviceClient<S> {
                 "configure MQTT",
             ) {
                 Ok(()) => info!("MQTT configuration successful"),
-                Err(e) => errors.push(e),
+                Err(e) => error!("{e}"),
             }
         }
 
@@ -130,13 +128,7 @@ impl<S: Read + Write + SetTimeout> UsbDeviceClient<S> {
             "configure device",
         ) {
             Ok(()) => info!("Device configuration successful"),
-            Err(e) => errors.push(e),
-        }
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors.join("\n"))
+            Err(e) => error!("{e}"),
         }
     }
 
@@ -322,7 +314,7 @@ mod tests {
         ]));
         let mut client = UsbDeviceClient::new(stream);
 
-        client.apply_config(config).unwrap();
+        client.apply_config(config);
 
         let cmds = decode_written_commands(&client.reader.get_ref().written);
         assert_eq!(cmds.len(), 3);
@@ -347,7 +339,7 @@ mod tests {
         let stream = MockSerialStream::new(encode_responses(&[UsbResponse::Ok, UsbResponse::Ok]));
         let mut client = UsbDeviceClient::new(stream);
 
-        client.apply_config(config).unwrap();
+        client.apply_config(config);
 
         let cmds = decode_written_commands(&client.reader.get_ref().written);
         assert_eq!(cmds.len(), 2);
@@ -383,8 +375,7 @@ mod tests {
         ]));
         let mut client = UsbDeviceClient::new(stream);
 
-        let err = client.apply_config(config).unwrap_err();
-        assert!(err.contains("Unexpected response from modem configuration"));
+        client.apply_config(config);
 
         // Verify all 3 commands were still sent despite the first one failing
         let cmds = decode_written_commands(&client.reader.get_ref().written);

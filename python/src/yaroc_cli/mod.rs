@@ -30,7 +30,8 @@ fn configure<S: Read + Write + SetTimeout>(
         .map_err(|e| format!("Unable to read config file {}: {e}", config_path.display()))?;
     let parsed_config: Config = toml::from_str(&config_str)
         .map_err(|e| format!("Unable to parse config file {}: {e}", config_path.display()))?;
-    client.apply_config(parsed_config)
+    client.apply_config(parsed_config);
+    Ok(())
 }
 
 /// Executes a parsed CLI [`Command`] against a connected [`UsbDeviceClient`], writing any
@@ -124,9 +125,7 @@ pub fn yaroc_cli() {
 
     let mut stdout = std::io::stdout();
     if let Err(err) = execute_command(&mut client, args.command, &mut stdout) {
-        for line in err.lines() {
-            error!("{line}");
-        }
+        error!("{err}");
     }
 }
 
